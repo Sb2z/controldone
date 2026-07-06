@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ControlDOne</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="toolbar" aria-label="ControlDOne">
+        <div>
+          <h1>ControlDOne</h1>
+          <p>Controle declaration, facture marchandise et facture de prestation.</p>
+        </div>
+        <div class="runtime {{ 'ok' if health.tesseract else 'warn' }}">
+          <span class="dot"></span>
+          <span title="{{ health.tesseract_path if health.tesseract else 'Installe Tesseract OCR puis relance ControlDOne.' }}">
+            {{ health.tesseract_version if health.tesseract else 'OCR Tesseract non detecte' }}
+          </span>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form class="panel control-panel" action="/run" method="post" enctype="multipart/form-data">
+          <div class="panel-title">
+            <h2>Analyse</h2>
+            <span>PDF, Excel, ZIP ou dossier</span>
+          </div>
+
+          <label class="drop-zone">
+            <input type="file" name="files" multiple accept=".pdf,.xlsx,.xls,.zip">
+            <strong>Selection fichiers ou ZIP</strong>
+            <span>Prestations, declarations, factures marchandise</span>
+          </label>
+
+          <label class="folder-zone">
+            <input type="file" name="files" webkitdirectory directory multiple>
+            <span>Selection dossier complet</span>
+          </label>
+
+          <div class="path-row">
+            <label for="local_path">Chemin local</label>
+            <input id="local_path" name="local_path" type="text" placeholder="/chemin/vers/dossier ou C:\Dossiers\...">
+          </div>
+
+          <button class="primary-button" type="submit">Lancer l'analyse</button>
+        </form>
+
+        <section class="panel result-panel" aria-label="Resultats">
+          <div class="panel-title">
+            <h2>Resultat</h2>
+            {% if summary %}
+              <span>{{ summary.bundles }} dossiers</span>
+            {% else %}
+              <span>En attente</span>
+            {% endif %}
+          </div>
+
+          {% if fatal_error %}
+            <div class="alert error">{{ fatal_error }}</div>
+          {% endif %}
+
+          {% if not health.tesseract %}
+            <div class="alert warn">
+              Tesseract OCR n'est pas detecte. Les PDF image/scannes peuvent sortir en
+              <strong>OK_A_CONTROLER</strong> ou avec des champs manquants.
+              Installe Tesseract OCR sur ce PC puis relance ControlDOne.
+            </div>
+          {% endif %}
+
+          {% if summary %}
+            <div class="metrics">
+              <div>
+                <span>Documents</span>
+                <strong>{{ summary.documents }}</strong>
+              </div>
+              <div>
+                <span>Dossiers</span>
+                <strong>{{ summary.bundles }}</strong>
+              </div>
+              <div>
+                <span>Erreurs lecture</span>
+                <strong>{{ summary.errors }}</strong>
+              </div>
+            </div>
+
+            <div class="status-grid">
+              {% for status, count in summary.statuses %}
+                <div class="status-card {{ status|lower }}">
+                  <span>{{ status }}</span>
+                  <strong>{{ count }}</strong>
+                </div>
+              {% endfor %}
+            </div>
+
+            <a class="download-button" href="{{ report_url }}">Telecharger le rapport Excel</a>
+          {% else %}
+            <div class="empty-state">
+              <span>Aucun rapport genere sur cette session.</span>
+            </div>
+          {% endif %}
+
+          {% if errors %}
+            <details class="errors-list">
+              <summary>Erreurs de lecture</summary>
+              {% for path, error in errors %}
+                <div>
+                  <strong>{{ path }}</strong>
+                  <pre>{{ error }}</pre>
+                </div>
+              {% endfor %}
+            </details>
+          {% endif %}
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+# ============================================================================
+#  PROFIL CLIENT — modèle à remplir
+# ============================================================================
+#
+#  Comment l'utiliser :
+#    1. Copier le dossier  config/clients/_template/  vers  config/clients/<nom>/
+#       (ex. config/clients/macompagnie/).
+#    2. Remplir CE fichier avec VOS entités, et hs_scope.txt avec VOS codes HS.
+#    3. Lancer le contrôle en sélectionnant le client :
+#         - via la variable d'environnement  CONTROLDONE_CLIENT=<nom>
+#         - ou automatiquement si c'est le seul dossier client présent.
+#
+#  Le moteur ne contient AUCUNE donnée client : tout vit dans ce profil.
+#  Ce dossier <nom>/ n'est jamais committé (cf. .gitignore) — il vous appartient.
+# ============================================================================
+
+# Nom logique de l'entité contrôlée, affiché dans les rapports.
+entity_name: "Mon Entité (FR)"
+
+# Mots-clés (MAJUSCULES) présents sur les documents propres à votre entité
+# (sa raison sociale, sa marque...) — sert à reconnaître ses factures/proformas
+# et à orienter l'OCR. Optionnel mais recommandé.
+invoice_keywords:
+  - "MON ENTITÉ"
+  # - "MA MARQUE"
+
+# Entités contrôlées : pour chacune, sa TVA, son SIREN (9 chiffres) et un
+# libellé lisible. Le SIREN imprimé fait foi (l'OCR abîme la clé FR mais
+# rarement les 9 chiffres du SIREN).
+entities:
+  - label: "MON ENTITÉ PRINCIPALE"
+    vat: "FR00000000000"
+    siren: "000000000"
+  # - label: "AUTRE ÉTABLISSEMENT"
+  #   vat: "FR11111111111"
+  #   siren: "111111111"
+
+# TVA acceptées sur la facture marchandise (côté acheteur). Toute autre TVA
+# déclenche un statut hors-scope. Doit correspondre aux `vat` ci-dessus.
+our_vats:
+  - "FR00000000000"
+
+# Alias par NOM/CODE → TVA. Le moteur cherche ces chaînes (en MAJUSCULES, par
+# inclusion) dans le texte OCR pour identifier l'entité acheteuse.
+# L'ORDRE COMPTE : placer le plus spécifique d'abord (un alias contenu dans un
+# autre, ex. "ABC" et "XABC", doit être listé après le plus long).
+name_aliases:
+  - ["MON ENTITÉ PRINCIPALE", "FR00000000000"]
+  # - ["CODE INTERNE", "FR00000000000"]
+
+# Alias par ADRESSE / marqueur de site → TVA (même logique d'inclusion).
+address_aliases:
+  - ["1 RUE EXEMPLE", "FR00000000000"]
+  # - ["NOM DE SITE", "FR00000000000"]
+
+# TVA "même groupe mais hors scope" — pour signaler un dossier mal aiguillé
+# plutôt qu'un simple "non concerné". Laisser vide si inutile.
+related_but_out_of_scope_vats: []
+
+# EORI de référence (informatif uniquement, ne sert pas à valider).
+informational_eoris: []
+
+# Numéros connus présents dans vos documents et qui ne sont PAS des codes HS
+# (TVA/SIREN/EORI de transitaires, variantes bruitées OCR). Évite qu'un tel
+# numéro soit lu par erreur comme un code douanier. Optionnel.
+# (Les TVA/SIREN de vos propres entités sont déjà gérés automatiquement.)
+known_non_hs_ids: []
+
+# Préfixes de chiffres qui disqualifient d'office un nombre comme code HS
+# (en plus des SIREN de vos entités, ajoutés automatiquement). Optionnel.
+hs_exclude_prefixes: []

@@ -1,0 +1,11 @@
+# Codes HS6 (6 chiffres) du périmètre produit de ce client — un par ligne.
+# L'extraction HS des factures est filtrée contre cette liste : un code dont
+# les 6 premiers chiffres n'y figurent pas est rejeté (bruit OCR, TVA, n° tél).
+#
+# Lignes vides et lignes commençant par # ignorées. Seuls les 6 chiffres sont
+# pris en compte (la ponctuation est nettoyée).
+#
+# Exemple :
+# 420221
+# 640351
+# 711719

@@ -1,0 +1,65 @@
+==========================================================
+ ControlDOne v4.30 - Installation sur un PC Windows
+==========================================================
+
+TOUT EST INCLUS DANS CE DOSSIER. Il faut seulement :
+  - Python 3 installe sur le PC (https://www.python.org/downloads/,
+    cocher "Add Python to PATH" pendant l'installation) ;
+  - une connexion internet au premier lancement (telechargement
+    des bibliotheques Python).
+
+----------------------------------------------------------
+ Etapes
+----------------------------------------------------------
+
+1. Copier le dossier ControlDOne complet sur le PC
+   (par exemple dans Documents). Ne pas le laisser dans un zip.
+
+2. Double-cliquer sur :  Lancer_ControlDOne_Windows.bat
+
+3. Au premier lancement :
+   - les bibliotheques Python s'installent automatiquement ;
+   - si Tesseract OCR n'est pas present sur le PC, l'installateur
+     fourni (dossier setup\) s'ouvre tout seul : cliquer Suivant
+     en laissant les choix par defaut, puis revenir a la fenetre
+     noire et appuyer sur une touche.
+
+4. Le navigateur s'ouvre sur http://127.0.0.1:8765
+   Garder la fenetre noire ouverte pendant l'utilisation.
+
+----------------------------------------------------------
+ Ce que contient le dossier setup\
+----------------------------------------------------------
+
+- tesseract-ocr-w64-setup-5.4.0.20240606.exe
+    Installateur officiel Tesseract OCR (UB Mannheim).
+    Lance automatiquement par le .bat si Tesseract est absent.
+    Si ce fichier n'est pas present (dossier recupere depuis GitHub,
+    qui n'accepte pas les gros fichiers), le .bat le telecharge
+    automatiquement au premier lancement.
+
+- tessdata\fra.traineddata, eng.traineddata, osd.traineddata
+    Langues OCR (francais, anglais, detection d'orientation).
+    Utilisees automatiquement : meme si le Tesseract du PC n'a
+    pas le pack francais, ControlDOne fonctionne a l'identique
+    chez tous les utilisateurs.
+
+----------------------------------------------------------
+ Problemes courants
+----------------------------------------------------------
+
+- "127.0.0.1 refused to connect" dans le navigateur :
+    le serveur n'est pas lance. Relancer le .bat et garder
+    la fenetre noire ouverte.
+
+- "OCR Tesseract non detecte" dans l'interface :
+    relancer le .bat ; il proposera l'installateur du dossier
+    setup\. Apres l'installation, fermer et relancer le .bat.
+
+- L'installateur Tesseract demande des droits administrateur :
+    choisir "Install for me only" (installation utilisateur)
+    si le PC est verrouille par l'IT.
+
+- Envoi du dossier a un autre utilisateur :
+    passer par OneDrive / SharePoint / Teams / lien Drive.
+    Gmail bloque les zips contenant des .exe ou .bat.

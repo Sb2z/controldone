@@ -1,0 +1,30 @@
+# Profil de démonstration — données 100 % fictives (ACME).
+# Sert à essayer le moteur immédiatement après clonage :
+#   CONTROLDONE_CLIENT=demo python main.py --input <dossier> --json
+# Pour un vrai déploiement, copier _template/ et suivre ses instructions.
+
+entity_name: "ACME Europe (démo)"
+
+invoice_keywords:
+  - "ACME"
+  - "ACME EUROPE"
+
+entities:
+  - label: "ACME EUROPE SAS"
+    vat: "FR93123456789"
+    siren: "123456789"
+
+our_vats:
+  - "FR93123456789"
+
+name_aliases:
+  - ["ACME EUROPE SAS", "FR93123456789"]
+  - ["ACME EUROPE", "FR93123456789"]
+
+address_aliases:
+  - ["12 RUE DE LA DEMO", "FR93123456789"]
+
+related_but_out_of_scope_vats: []
+informational_eoris: []
+known_non_hs_ids: []
+hs_exclude_prefixes: []

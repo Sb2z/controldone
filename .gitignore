@@ -1,0 +1,55 @@
+# Python
+.venv/
+__pycache__/
+**/__pycache__/
+.pycache_compile/
+*.py[cod]
+*.egg-info/
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Local configuration
+settings.local.json
+.env
+.env.*
+
+# Private business documents and generated artifacts
+data/input/
+data/batches/
+data/app_jobs/
+data/output/
+data/cache/
+data/cache_sparse/
+archive/
+*.xlsx
+*.xls
+*.pdf
+*.zip
+*.csv
+
+# Keep empty repo folders when explicitly tracked with .gitkeep
+!data/.gitkeep
+!data/input/
+!data/input/.gitkeep
+!data/app_jobs/
+!data/app_jobs/.gitkeep
+!data/output/
+!data/output/.gitkeep
+!data/cache/
+!data/cache/.gitkeep
+
+# Tesseract installer: too large for GitHub web upload; the Windows
+# launcher downloads it automatically on first run when missing.
+setup/*.exe
+
+# Client profiles hold REAL client data (VAT/SIREN, names, addresses, HS scope)
+# and must never be committed.  Only the blank _template/ — the file a new
+# client fills in — is tracked.
+config/clients/*
+!config/clients/_template
+!config/clients/_template/**
+!config/clients/demo
+!config/clients/demo/**

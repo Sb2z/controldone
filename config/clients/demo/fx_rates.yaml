@@ -1,0 +1,13 @@
+# OPTIONNEL — surcharge des taux de change indicatifs pour CE client.
+#
+# Le moteur part de taux par défaut (intégrés) puis applique config/rules/
+# fx_rates.yaml (taux partagés), et ENFIN ce fichier. Ne renseigner ici que
+# les devises dont vous voulez forcer le taux. Supprimer ce fichier si inutile.
+#
+# Ces taux ne reconvertissent pas précisément : ils détectent seulement les
+# erreurs grossières de devise (mauvais ordre de grandeur).
+#
+# Format : 1 EUR = X devise
+# rates:
+#   USD: 1.08
+#   CHF: 0.95

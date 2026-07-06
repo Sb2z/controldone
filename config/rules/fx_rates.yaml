@@ -1,0 +1,56 @@
+# Taux de change approximatifs pour détecter les erreurs grossières
+# de devise (ex: 10 000 JPY déclarés comme 10 000 EUR).
+#
+# Format : <code ISO> : <taux 1 EUR = X devise>
+# Tolérance : ±25 % par défaut (configurable par devise via tolerance_pct)
+#
+# Note : ces taux ne servent PAS à reconvertir précisément des montants.
+# Ils servent uniquement à détecter quand un montant est totalement
+# incohérent avec la devise déclarée (mauvais ordre de grandeur).
+
+base: EUR
+
+default_tolerance_pct: 25.0   # ±25 % par défaut
+
+rates:
+  # 1 EUR = X devise (ordre de grandeur, mis à jour 2026)
+  USD: 1.08
+  GBP: 0.84
+  CHF: 0.95
+  CAD: 1.50
+  JPY: 165.0
+  CNY: 7.85
+  HKD: 8.45
+  KRW: 1480.0
+  SGD: 1.45
+  AUD: 1.65
+  NZD: 1.80
+  MXN: 22.0
+  BRL: 5.50
+  INR: 90.0
+  AED: 3.97
+  SAR: 4.05
+  TWD: 34.5
+  THB: 38.0
+  IDR: 17000.0
+  MYR: 5.10
+  PHP: 62.0
+  TRY: 36.0
+  ZAR: 20.0
+  ILS: 4.05
+  CZK: 25.2
+  PLN: 4.30
+  HUF: 400.0
+  RON: 4.97
+  DKK: 7.45
+  NOK: 11.5
+  SEK: 11.4
+  RUB: 100.0    # peu fiable, marché restreint
+
+# Tolérances spécifiques (override de default_tolerance_pct) pour les devises volatiles
+tolerance_overrides:
+  RUB: 60.0
+  TRY: 50.0
+  IDR: 35.0
+  KRW: 30.0
+  JPY: 20.0

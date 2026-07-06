@@ -1,0 +1,38 @@
+# SYNTHETIC test profile — no real client data. Mirrors the structure a real
+# profile uses so the regression tests exercise the profile-driven code paths.
+entity_name: "ACME CORP"
+
+invoice_keywords:
+  - "ACME"
+
+entities:
+  - label: "ACME COORDINATION"
+    vat: "FR00000000001"
+    siren: "000000001"
+  - label: "ACME SAS"
+    vat: "FR00000000002"
+    siren: "000000002"
+
+our_vats:
+  - "FR00000000001"
+  - "FR00000000002"
+
+# Specific-first ordering: "CCODE" must win over "CODE" (substring).
+name_aliases:
+  - ["ACME COORDINATION", "FR00000000001"]
+  - ["CCODE", "FR00000000001"]
+  - ["ACME SAS", "FR00000000002"]
+  - ["CODE", "FR00000000002"]
+
+address_aliases:
+  - ["1 RUE ALPHA", "FR00000000001"]
+  - ["2 RUE BETA", "FR00000000002"]
+
+related_but_out_of_scope_vats: []
+informational_eoris:
+  - "FR00000000100099"
+
+known_non_hs_ids:
+  - "99999999999"
+hs_exclude_prefixes:
+  - "999999999"
