@@ -1,4 +1,4 @@
-# OPTIONNEL — surcharge des taux de change indicatifs pour CE client.
+# OPTIONNEL, surcharge des taux de change indicatifs pour CE client.
 #
 # Le moteur part de taux par défaut (intégrés) puis applique config/rules/
 # fx_rates.yaml (taux partagés), et ENFIN ce fichier. Ne renseigner ici que

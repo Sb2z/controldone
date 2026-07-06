@@ -11,7 +11,7 @@ Delta IE:
   * Multiple MRN support from DOCUMENT PRECEDENT blocks.
 
 H7:
-  * Improved Box 34 (origin country) extraction — multiple pattern attempts.
+  * Improved Box 34 (origin country) extraction, multiple pattern attempts.
   * Improved Box 22 (amount) with broader OCR-tolerance patterns.
 
 DAU:
@@ -20,7 +20,7 @@ DAU:
 
 All formats:
   * VAT number extraction from REFERENCE FISCALES : FR7 FRxxx
-  * Graceful fallback (None) for any missing field — never crashes.
+  * Graceful fallback (None) for any missing field, never crashes.
 """
 from __future__ import annotations
 
@@ -144,7 +144,7 @@ def _parse_delta_ie(text: str) -> Declaration:
         d.total_amount = round(sum(v for v, _ in art_amounts), 2)
         d.currency = art_amounts[0][1]
     else:
-        # fallback — scan full text
+        # fallback, scan full text
         m = re.search(
             rf"MONTANT TOTAL A PAYER\s*:?\s*\n\s*([\d.,\s]+?)\s+({CURRENCY_RE})",
             text, flags=re.I,
@@ -196,7 +196,7 @@ def _parse_delta_ie(text: str) -> Declaration:
         or _first(r"EXPEDITION\s*:?\s*([A-Z]{2})\b", text)
     )
 
-    # N380 accompanying docs — may be multiple
+    # N380 accompanying docs, may be multiple
     for m in re.finditer(r"N380\s*[,:\s]\s*([A-Z0-9\-/]{3,40})", text, flags=re.I):
         ref = m.group(1).strip().rstrip(",;:")
         if ref and ref not in d.accompanying_docs:
@@ -207,7 +207,7 @@ def _parse_delta_ie(text: str) -> Declaration:
     if awb:
         d.transport_doc = awb.rstrip(",;:")
 
-    # N785 previous doc — may reference multiple MRNs across articles
+    # N785 previous doc, may reference multiple MRNs across articles
     prev = _first(r"N785\s*[,:\s]\s*([A-Z0-9\-/]{3,40})", text)
     if prev:
         d.previous_doc = prev.rstrip(",;:")
@@ -222,7 +222,7 @@ def _parse_delta_ie(text: str) -> Declaration:
         if not d.importer.eori:
             d.importer.eori = d.destinataire.eori
 
-    # VAT number — REFERENCE FISCALES : FR7 FRxxx
+    # VAT number, REFERENCE FISCALES : FR7 FRxxx
     vat = (
         _first(r"FR7\s*[,\s]\s*(FR\d{11})", text)
         or _first(r"REFERENCE(?:S)?\s+FISC(?:ALES?)?\s*:.*?(FR\d{11})", text)
@@ -231,7 +231,7 @@ def _parse_delta_ie(text: str) -> Declaration:
     if vat:
         d.importer.vat = vat
 
-    # Liquidation — primary: labeled values; fallback: tabular LIQUIDATION block
+    # Liquidation, primary: labeled values; fallback: tabular LIQUIDATION block
     d.dd = _to_float(_first(r"\bDD\s+([\d\s.,]+)", text))
     d.dump = _to_float(_first(r"\bDUMP\s+([\d\s.,]+)", text))
     d.at = _to_float(_first(r"\bAT\s+([\d\s.,]+)", text))
@@ -278,7 +278,7 @@ def _parse_h7(text: str) -> Declaration:
 
     d.mrn = _find_mrn(text)
 
-    # Box 22 Monnaie et montant total facturé — try multiple patterns
+    # Box 22 Monnaie et montant total facturé, try multiple patterns
     m = re.search(
         r"22[\.\s]*Monnaie et montant total\s*factur[eé]\s*\n?\s*([A-Z]{3})\s*[\n\s]+([\d\s.,]+)",
         text, flags=re.I,
@@ -315,14 +315,14 @@ def _parse_h7(text: str) -> Declaration:
         text,
     ))
 
-    # Box 33 Code marchandise (HS) — single article for H7
+    # Box 33 Code marchandise (HS), single article for H7
     hs = _first(r"33\s*Code des marchandises\s*\n?\s*(\d{8,10})", text)
     if not hs:
         hs = _first(r"33[^\n]{0,20}\n\s*(\d{8,10})", text)
     if hs:
         d.lines.append(Line(item_no=1, hs_code=hs))
 
-    # Box 34 Code P. origine — try several layouts produced by OCR
+    # Box 34 Code P. origine, try several layouts produced by OCR
     origin = _first(r"34\s*Code\s*P\.?\s*origine\s*\n?\s*(?:35[^\n]+\n?)?\s*([A-Z]{2})\b", text)
     if not origin:
         # OCR sometimes puts 34 and 35 on the same line or collapses them
@@ -491,7 +491,7 @@ def _parse_dau(text: str) -> Declaration:
     if prev:
         d.previous_doc = prev.rstrip(",;:")
 
-    # Box 47 — DONNÉES COMPTABLES: DD / AT / TG
+    # Box 47, DONNÉES COMPTABLES: DD / AT / TG
     # Try multiple patterns for the accounting block
     d.dd = _to_float(_first(r"\bDD\s+([\d\s.,]+)", text))
     d.dump = _to_float(_first(r"\bDUMP\s+([\d\s.,]+)", text))

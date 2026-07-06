@@ -130,7 +130,7 @@ def _detect_format(text: str) -> str:
 def _parse_entity(text: str) -> Invoice:
     inv = Invoice(invoice_format="entity")
 
-    # Invoice number — try multiple regional formats
+    # Invoice number, try multiple regional formats
     inv.invoice_number = _extract_entity_invoice_number(text)
 
     inv.invoice_date = _first(r"Date\s*[:\.]*\s*(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4})", text)
@@ -163,7 +163,7 @@ def _parse_entity(text: str) -> Invoice:
         # fallback: take last (bottom of page) currency amount
         _, inv.total_amount, inv.currency = amounts_by_pos[-1]
 
-    # -------- HS codes — extract ALL hs codes ----------------------------
+    # -------- HS codes, extract ALL hs codes ----------------------------
     hs_codes: List[tuple] = []  # (hs_digits, origin)
     # Pattern 1: "HS CODE: 6403591100" or "HS CODE 64.03.59.11.00"
     for m in re.finditer(r"HS\s*CODE[\s\-:]*([0-9][\d\.\s]{7,14}\d)", text, flags=re.I):
@@ -171,7 +171,7 @@ def _parse_entity(text: str) -> Invoice:
         digits = "".join(c for c in raw if c.isdigit())
         if 8 <= len(digits) <= 10:
             hs_codes.append((digits, None))
-    # Pattern 2: column value — 8-10 digit number on its own
+    # Pattern 2: column value, 8-10 digit number on its own
     if not hs_codes:
         hs = _first(r"HS\s*Code\s*\n?[^\d]*(\d{8,10})", text)
         if hs:
@@ -305,7 +305,7 @@ def _parse_entity_delivery_note(text: str) -> Invoice:
     if eori:
         inv.importer.eori = eori
 
-    # Total — prefer last TOTAL row
+    # Total, prefer last TOTAL row
     total_val, _ = _find_last_total(text)
     if total_val:
         inv.total_amount = total_val
@@ -368,7 +368,7 @@ def _parse_dhl_commercial(text: str) -> Invoice:
             inv.total_amount = _to_float(m.group(1))
             inv.currency = m.group(2).upper()
 
-    # HS code — aggressively exclude AWB, phone numbers, invoice numbers
+    # HS code, aggressively exclude AWB, phone numbers, invoice numbers
     awb_digits = _digits_only(inv.awb_number) or ""
     inv_digits = _digits_only(inv.invoice_number) if inv.invoice_number else ""
 
@@ -406,7 +406,7 @@ def _parse_generic(text: str) -> Invoice:
     if m:
         inv.invoice_number = m.group(1)
 
-    # Currency and total — try several patterns
+    # Currency and total, try several patterns
     # 1. Currency code followed by amount at end of line
     for cur in CURRENCY_CODES:
         m = re.search(rf"\b{cur}\b\s*([\d.,]+)\s*$", text, flags=re.I | re.M)

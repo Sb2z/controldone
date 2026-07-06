@@ -6,9 +6,9 @@ format which has a different layout). Identifiable by the header
 
 Layout reference (from a real declaration)
 ------------------------------------------
-Page 1 — header, intervenants, transport, document references, totals
-Page 2 — per-article: nomenclature, weights, values, liquidation
-Page 3 — annexe (barcode, identifier)
+Page 1, header, intervenants, transport, document references, totals
+Page 2, per-article: nomenclature, weights, values, liquidation
+Page 3, annexe (barcode, identifier)
 """
 from __future__ import annotations
 
@@ -192,7 +192,7 @@ def _parse_akanea_liquidation_total(text: str, d: Document) -> None:
     block = m.group(1)
     lines = [ln.strip() for ln in block.splitlines() if ln.strip()]
 
-    # Locate codes (T.Nat values) — they all match [UAMG]\d{3}
+    # Locate codes (T.Nat values), they all match [UAMG]\d{3}
     code_indices = [
         i for i, ln in enumerate(lines)
         if re.fullmatch(r"[UAMGE]\d{3}", ln)
@@ -216,7 +216,7 @@ def _parse_akanea_liquidation_total(text: str, d: Document) -> None:
         if attr and amount is not None and getattr(d, attr) is None:
             setattr(d, attr, amount)
 
-    # Total line — "Total\n896.00"
+    # Total line, "Total\n896.00"
     for i, ln in enumerate(lines):
         if ln.lower() == "total" and i + 1 < len(lines):
             v = to_float(lines[i + 1])
@@ -241,7 +241,7 @@ def _parse_party_block(text: str, label_alt: str) -> Party:
     p = Party()
 
     # vat/eori - name
-    m2 = re.match(r"([A-Z]{2}\d{9,17})\s*[-–]\s*(.+)$", line, flags=re.I)
+    m2 = re.match(r"([A-Z]{2}\d{9,17})\s*[--]\s*(.+)$", line, flags=re.I)
     if m2:
         ref = m2.group(1).upper()
         p.eori = ref

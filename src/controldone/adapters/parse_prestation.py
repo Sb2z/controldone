@@ -93,7 +93,7 @@ def _parse_dhl(text: str) -> Prestation:
         r"Code TVA\s*FR\s*(\d{11})", text
     )
 
-    # ---- Aggregated amounts — try primary then fallback patterns --------
+    # ---- Aggregated amounts, try primary then fallback patterns --------
     # The DHL 3-column table typically linearises as:
     #   "Droits de Douane\n136,00\nZ\n..."
     # or on one line: "Droits de Douane  136,00 Z"
@@ -245,7 +245,7 @@ def _parse_schenker_or_dsv(text: str, forwarder: str) -> Prestation:
     # Forwarder VAT
     p.forwarder_vat = _first(r"TVA-?Id:\s*(FR\d{11})", text)
 
-    # AWB — handle "176/EK 23456344" (with space) and "172/CV00059264" (no space)
+    # AWB, handle "176/EK 23456344" (with space) and "172/CV00059264" (no space)
     awb_raw = _first(
         r"AWB\s*No\s*:?\s*([0-9]{3}/[A-Z]{2}[\s]?[0-9\s]{6,12})", text
     )
@@ -278,7 +278,7 @@ def _parse_schenker_or_dsv(text: str, forwarder: str) -> Prestation:
     if p.tva_total is None:
         p.tva_total = _to_float(_first(r"T\.V\.A\.?\s*([\d.,]+)", text))
 
-    # Total débours — try multiple label variants
+    # Total débours, try multiple label variants
     p.total_debours = (
         _to_float(_first(r"Total\s+D[eé]bours?\s*([\d.,]+)", text))
         or _to_float(_first(r"TOTAL\s+D[EÉ]BOURS?\s*([\d.,]+)", text))

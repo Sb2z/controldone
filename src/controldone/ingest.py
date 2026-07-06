@@ -1,4 +1,4 @@
-"""Ingest layer — read PDF or Excel files and yield page-level text.
+"""Ingest layer, read PDF or Excel files and yield page-level text.
 
 For PDFs we delegate to `controldone.ocr.extract_text_per_page`, which handles
 native text, OCR fallback, caching and parallelism.
@@ -75,7 +75,7 @@ def _excel_sheet_to_text(ws) -> str:
 
     Conventions:
         - each row is one line
-        - cells separated by `\t` (tabs) — preserves column alignment hints
+        - cells separated by `\t` (tabs), preserves column alignment hints
         - empty cells are represented by an empty string (not "None")
     """
     out_lines = []
@@ -97,7 +97,7 @@ def _read_excel(path: str) -> IngestedDocument:
     if not _OPENPYXL_OK:
         return IngestedDocument(
             path=path, kind="excel", pages=[],
-            error="ImportError: openpyxl manquant — pip install openpyxl",
+            error="ImportError: openpyxl manquant, pip install openpyxl",
         )
     try:
         wb = load_workbook(path, data_only=True, read_only=True)

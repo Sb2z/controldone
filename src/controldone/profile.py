@@ -110,7 +110,7 @@ class ClientProfile:
             if match in up:
                 return vat
         # Tail: any entity SIREN or full VAT digits present (first wins, no
-        # uniqueness requirement — matches the legacy fallback behaviour).
+        # uniqueness requirement, matches the legacy fallback behaviour).
         digits = _digits(text)
         for vat, siren in self.siren_by_vat:
             if (siren and siren in digits) or _digits(vat) in digits:
@@ -201,7 +201,7 @@ def load_profile(name: str | None = None, *, client_dir: Path | str | None = Non
         cdir = _CLIENTS_DIR / name
     if not (cdir / "entities.yaml").exists():
         raise ProfileError(
-            f"profil client introuvable: {cdir}/entities.yaml — "
+            f"profil client introuvable: {cdir}/entities.yaml, "
             "créer le dossier à partir de config/clients/_template/"
         )
     ent = _read_yaml(cdir / "entities.yaml")
@@ -267,10 +267,10 @@ def resolve_default_profile() -> ClientProfile:
     if len(candidates) > 1:
         names = ", ".join(d.name for d in candidates)
         raise ProfileError(
-            f"plusieurs profils clients ({names}) — définir CONTROLDONE_CLIENT"
+            f"plusieurs profils clients ({names}), définir CONTROLDONE_CLIENT"
         )
     raise ProfileError(
-        "aucun profil client — créer config/clients/<client>/ à partir de _template"
+        "aucun profil client, créer config/clients/<client>/ à partir de _template"
     )
 
 
@@ -289,7 +289,7 @@ def current_profile() -> ClientProfile:
 
     If none was injected (the normal path injects via ``use_profile`` at the
     pipeline edge), the default profile is resolved as a convenience for direct
-    callers and scripts — without being pinned to the current context.
+    callers and scripts, without being pinned to the current context.
     """
     profile = _active.get()
     if profile is None:

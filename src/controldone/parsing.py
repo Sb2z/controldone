@@ -36,7 +36,7 @@ from controldone.paths import data_dir
 
 
 # Entity identification data (our VATs/SIRENs, name & address aliases) is loaded
-# from the active client profile — see controldone.profile.ClientProfile.  No
+# from the active client profile, see controldone.profile.ClientProfile.  No
 # client data is hard-coded here.
 
 

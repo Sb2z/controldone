@@ -76,7 +76,7 @@ def _has(up: str, *needles: str) -> bool:
 def classify_page(text: str, kind_hint: str = "pdf") -> str:
     """Classify a single page (or Excel sheet) of text.
 
-    `kind_hint` is "pdf" or "excel" — Excel sheets get extra heuristics.
+    `kind_hint` is "pdf" or "excel", Excel sheets get extra heuristics.
     """
     up = text.upper()
 
@@ -91,7 +91,7 @@ def classify_page(text: str, kind_hint: str = "pdf") -> str:
     if "DHL" in up and _has(up, "DROITS ET TAXES") and "IMPORTATION" in up:
         return "prestation_dhl"
 
-    # Worldnet prestation (NEW) — distinct from "Method of Dispatch: Worldnet"
+    # Worldnet prestation (NEW), distinct from "Method of Dispatch: Worldnet"
     # which appears in shipper invoices using Worldnet as carrier.
     # Must have a Worldnet-as-billing-entity signature.
     if _has(up, "WORLDNET INTERNATIONAL FRANCE", "WORLDNET INTERNATIONAL LTD") \
@@ -130,7 +130,7 @@ def classify_page(text: str, kind_hint: str = "pdf") -> str:
     # DECLARATIONS
     # =======================================================================
 
-    # AKANEA Delta IE (NEW) — has its own header signature
+    # AKANEA Delta IE (NEW), has its own header signature
     if _has(up, "AKANEA DOUANE", "ÉDITION AKANEA", "EDITION AKANEA") and "DELTA IE" in up:
         return "declaration_delta_ie_akanea"
     if _has(up, "AKANEA") and _has(up, "DELTA IE") and _has(up, "MRN", "CRN"):
@@ -176,7 +176,7 @@ def classify_page(text: str, kind_hint: str = "pdf") -> str:
     # INVOICES
     # =======================================================================
 
-    # LaunchMetrics (NEW) — Excel supplier export format
+    # LaunchMetrics (NEW), Excel supplier export format
     if "LAUNCHMETRICS" in up and _has(up, "INVOICE", "SHIP FROM", "SHIP TO"):
         return "invoice_launchmetrics"
     # LaunchMetrics fallback: signature columns
@@ -184,7 +184,7 @@ def classify_page(text: str, kind_hint: str = "pdf") -> str:
             and _has(up, "STYLE", "BARCODE", "CUSTOM CODE"):
         return "invoice_launchmetrics"
 
-    # Parfumerie Versailles (NEW) — Mexican Spanish supplier
+    # Parfumerie Versailles (NEW), Mexican Spanish supplier
     if _has(up, "PARFUMERIE VERSAILLES") and _has(up, "PVE891221", "FACTURA", "COPIA DE FACTURA", "FACTURE"):
         return "invoice_parfumerie_versailles"
     # FAI invoice number prefix (Parfumerie Versailles only)
@@ -212,7 +212,7 @@ def classify_page(text: str, kind_hint: str = "pdf") -> str:
     if _has(up, "COMMERCIAL INVOICE") and _has(up, "AWB", "HAWB", "WAYBILL"):
         return "invoice_dhl_hawb"
 
-    # Generic invoice — has HS code + INVOICE / FACTURE label
+    # Generic invoice, has HS code + INVOICE / FACTURE label
     if _has(up, "INVOICE", "FACTURE") and _has(up, "HS CODE", "HS-CODE", "CUSTOMS CODE"):
         return "invoice_generic"
     if _has(up, "INVOICE PROFORMA", "PROFORMA INVOICE") and _has(up, "VALUE FOR CUSTOMS", "CUSTOMS ONLY"):
@@ -238,7 +238,7 @@ _MRN_RE = re.compile(r"\b(\d{2}[A-Z]{2}[A-Z0-9]{12,16})\b")
 
 
 def _decl_id(text: str) -> Optional[str]:
-    """Stable 15-char prefix of MRN — same for MRN/CRN variants of one decl."""
+    """Stable 15-char prefix of MRN, same for MRN/CRN variants of one decl."""
     m = _MRN_RE.search(text.upper())
     return m.group(1)[:15] if m else None
 

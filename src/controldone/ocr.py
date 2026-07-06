@@ -566,7 +566,7 @@ def _ocr_page(page: "fitz.Page") -> str:
         gray = np.rot90(gray, k=(360 - rotation) // 90).copy()
 
     if _CV2_AVAILABLE and gray is not None:
-        # Adaptive threshold (CLAHE + deskew) — best on faint or skewed scans.
+        # Adaptive threshold (CLAHE + deskew), best on faint or skewed scans.
         pre = _preprocess_cv2(pix) if not rotation else None
         if pre is None:
             try:
@@ -581,7 +581,7 @@ def _ocr_page(page: "fitz.Page") -> str:
                 pre = None
         if pre is not None:
             candidates.append(_ocr_pil_image(pre, collector=all_passes))
-        # Grid-line removal at higher DPI — recovers bordered table rows with
+        # Grid-line removal at higher DPI, recovers bordered table rows with
         # tiny print (HS codes, totals), validated on bordered proforma scans.
         gray_hi = _gray_from_pix(_get_pix(page, dpi=400))
         if gray_hi is not None and rotation:

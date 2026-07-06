@@ -107,7 +107,7 @@ def main() -> int:
             code = reporting_json.post_webhook(args.webhook, payload)
             print(f"Webhook {args.webhook} -> HTTP {code}", file=sys.stderr)
         except Exception as exc:
-            print(f"Webhook en echec ({exc}) — rapport genere malgre tout.", file=sys.stderr)
+            print(f"Webhook en echec ({exc}), rapport genere malgre tout.", file=sys.stderr)
 
     if args.exit_zero:
         return 0

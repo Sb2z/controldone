@@ -125,7 +125,7 @@ def find_awb(text: str) -> Optional[str]:
     m = re.search(r"\b(\d{3}[\s\-]\d{8})\b", text)
     if m:
         return m.group(1).replace(" ", "-")
-    # 8-12 digit standalone (skip phone numbers — must be 10-11 digits)
+    # 8-12 digit standalone (skip phone numbers, must be 10-11 digits)
     return None
 
 

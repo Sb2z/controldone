@@ -136,8 +136,7 @@ Shared, non-client rules live in `config/rules`:
 - `severities.yaml`: severity mapping.
 
 The engine carries no client data. A `ClientProfile` (see `controldone.profile`)
-is resolved and injected at the pipeline edge — `analyze(input, profile=...)` —
-and propagated to the parsing/validation layers through contextvars, so several
+is resolved and injected at the pipeline edge, `analyze(input, profile=...)` : and propagated to the parsing/validation layers through contextvars, so several
 clients can run in the same process without shared state (multi-tenant). Select
 the active profile with `CONTROLDONE_CLIENT=<client>`, or rely on auto-detection
 when a single client folder is present.

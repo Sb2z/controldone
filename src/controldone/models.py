@@ -2,21 +2,21 @@
 
 Design principles
 -----------------
-* `Document` is the universal carrier — invoice, declaration or prestation.
+* `Document` is the universal carrier, invoice, declaration or prestation.
   Each format-specific parser produces a Document with the right `kind` and
   `format` set, plus the common fields populated.
 * `Bundle` regroups docs that belong together (1+ invoice + 1+ decl + 0/1 presta)
   and carries the rule-engine output (`checks`) and the resolved status.
-* `CheckResult` is the unit of validation output — one line per rule.
+* `CheckResult` is the unit of validation output, one line per rule.
 
 Status semantics (Bundle)
 -------------------------
-OK             — all checks pass
-OK_A_CONTROLER — key invoice data was not OCR-readable but declaration data is coherent
-KO             — at least one NOK non-critical
-KO_BLOQUANT    — at least one CRITICAL NOK (valeur/devise/entité/HS/préférence)
-NON_CONCERNE   — TVA on invoice not in our scope (still reported, not actionable)
-MANQUE_DOC     — missing mandatory document(s) (invoice or declaration)
+OK, all checks pass
+OK_A_CONTROLER, key invoice data was not OCR-readable but declaration data is coherent
+KO, at least one NOK non-critical
+KO_BLOQUANT, at least one CRITICAL NOK (valeur/devise/entité/HS/préférence)
+NON_CONCERNE, TVA on invoice not in our scope (still reported, not actionable)
+MANQUE_DOC, missing mandatory document(s) (invoice or declaration)
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ class Party:
 
 
 # ---------------------------------------------------------------------------
-# Document — universal carrier
+# Document, universal carrier
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -145,7 +145,7 @@ class Document:
 
 
 # ---------------------------------------------------------------------------
-# CheckResult — one rule evaluation
+# CheckResult, one rule evaluation
 # ---------------------------------------------------------------------------
 
 STATUS_OK = "OK"
@@ -176,7 +176,7 @@ class CheckResult:
 
 
 # ---------------------------------------------------------------------------
-# Bundle — what we report on
+# Bundle, what we report on
 # ---------------------------------------------------------------------------
 
 BUNDLE_OK = "OK"

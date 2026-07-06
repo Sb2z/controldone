@@ -1,4 +1,4 @@
-# SYNTHETIC test profile — no real client data. Mirrors the structure a real
+# SYNTHETIC test profile, no real client data. Mirrors the structure a real
 # profile uses so the regression tests exercise the profile-driven code paths.
 entity_name: "ACME CORP"
 

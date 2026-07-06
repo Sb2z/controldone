@@ -1,5 +1,5 @@
 # ============================================================================
-#  PROFIL CLIENT — modèle à remplir
+#  PROFIL CLIENT, modèle à remplir
 # ============================================================================
 #
 #  Comment l'utiliser :
@@ -11,14 +11,14 @@
 #         - ou automatiquement si c'est le seul dossier client présent.
 #
 #  Le moteur ne contient AUCUNE donnée client : tout vit dans ce profil.
-#  Ce dossier <nom>/ n'est jamais committé (cf. .gitignore) — il vous appartient.
+#  Ce dossier <nom>/ n'est jamais committé (cf. .gitignore), il vous appartient.
 # ============================================================================
 
 # Nom logique de l'entité contrôlée, affiché dans les rapports.
 entity_name: "Mon Entité (FR)"
 
 # Mots-clés (MAJUSCULES) présents sur les documents propres à votre entité
-# (sa raison sociale, sa marque...) — sert à reconnaître ses factures/proformas
+# (sa raison sociale, sa marque...), sert à reconnaître ses factures/proformas
 # et à orienter l'OCR. Optionnel mais recommandé.
 invoice_keywords:
   - "MON ENTITÉ"
@@ -53,7 +53,7 @@ address_aliases:
   - ["1 RUE EXEMPLE", "FR00000000000"]
   # - ["NOM DE SITE", "FR00000000000"]
 
-# TVA "même groupe mais hors scope" — pour signaler un dossier mal aiguillé
+# TVA "même groupe mais hors scope", pour signaler un dossier mal aiguillé
 # plutôt qu'un simple "non concerné". Laisser vide si inutile.
 related_but_out_of_scope_vats: []
 

@@ -6,7 +6,7 @@ required: `pytest` answers in seconds whether a code change reintroduced one
 of the old bugs.
 
 Client-specific values (VAT/SIREN, HS scope, name aliases) come from the
-synthetic ``acme`` profile activated by ``conftest.py`` — never real data.
+synthetic ``acme`` profile activated by ``conftest.py`` : never real data.
 """
 from controldone.adapters.parse_invoice import _find_last_total, _to_float
 from controldone.hs import is_in_scope, normalize_hs, normalize_hs_many

@@ -8,9 +8,9 @@ Le moteur n'en contient aucune en dur : il lit le profil actif au lancement.
 1. Copier ce dossier `_template/` en `config/clients/<nom>/`
    (ex. `config/clients/macompagnie/`).
 2. Remplir :
-   - `entities.yaml` — vos entités, TVA/SIREN, alias de noms et d'adresses, scope ;
-   - `hs_scope.txt` — vos codes HS6 (un par ligne) ;
-   - `fx_rates.yaml` — *optionnel*, surcharge de taux de change.
+   - `entities.yaml` : vos entités, TVA/SIREN, alias de noms et d'adresses, scope ;
+   - `hs_scope.txt` : vos codes HS6 (un par ligne) ;
+   - `fx_rates.yaml` : *optionnel*, surcharge de taux de change.
 3. Sélectionner le client au lancement :
    - `CONTROLDONE_CLIENT=<nom>` (variable d'environnement), **ou**
    - automatiquement si `config/clients/` ne contient qu'un seul dossier client.

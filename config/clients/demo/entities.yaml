@@ -1,4 +1,4 @@
-# Profil de démonstration — données 100 % fictives (ACME).
+# Profil de démonstration, données 100 % fictives (ACME).
 # Sert à essayer le moteur immédiatement après clonage :
 #   CONTROLDONE_CLIENT=demo python main.py --input <dossier> --json
 # Pour un vrai déploiement, copier _template/ et suivre ses instructions.
