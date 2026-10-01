@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+var/
+bench/corpus/
+bench/out/
+!bench/corpus/README.md
+.coverage
+htmlcov/
+dist/
+build/
