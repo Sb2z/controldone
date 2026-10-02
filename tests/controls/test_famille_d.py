@@ -149,7 +149,7 @@ def test_d1_conforme_et_arrondi():
 
 def test_d1_total_ht_superieur_a_la_somme():
     f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00")
-    r = [x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht"][0]
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     c = r.constat
     assert r.outcome is Outcome.ecart_certain and c.montant_en_jeu == D("5.00")
     assert c.nature_montant is NatureMontant.recouvrable and "155,00 EUR" in lib(c)

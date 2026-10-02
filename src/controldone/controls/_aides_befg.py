@@ -118,7 +118,7 @@ def emetteur_de(ctx: ControlContext, doc: Document) -> str | None:
 
 
 def memes_emetteurs(a: str | None, b: str | None) -> bool:
-    """Émetteurs égaux ; un émetteur illisible d'un côté n'empêche pas le rapprochement (D-3xx)."""
+    """Émetteurs égaux ; un émetteur illisible d'un côté n'empêche pas le rapprochement (D-305)."""
     return a is None or b is None or a == b
 
 

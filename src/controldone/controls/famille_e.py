@@ -428,7 +428,7 @@ def _composante_constat(r: ResultatControle) -> Composante | None:
 
 
 def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | None]]:
-    """Écarts candidats : registre de recouvrement (reste recalculé depuis le montant initial, D-3xx) et
+    """Écarts candidats : registre de recouvrement (reste recalculé depuis le montant initial, D-306) et
     constats ``recouvrable`` positifs des contrôles déjà exécutés (C, D). Retourne (écart, constat_id)."""
     out: list[tuple[EcartImputable, str | None]] = []
     vus: set[str] = set()
@@ -541,7 +541,7 @@ def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
     imputés du dossier ; reste à recouvrer > ``T_DEBOURS``. ``a_verifier`` ; montant ``recouvrable`` = reste.
 
     Ce constat remplace le montant de l'écart d'origine dans les totaux : ``details.remplace_constat_id``
-    désigne le constat d'origine (à exclure des totaux par le consommateur, D-3xx)."""
+    désigne le constat d'origine (à exclure des totaux par le consommateur, D-306)."""
     avoirs = ctx.avoirs()
     if not avoirs:
         return _sans_avoir(ctx, "E6")
