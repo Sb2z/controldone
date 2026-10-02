@@ -50,7 +50,7 @@ def masse_kg(v: ValeurSourcee | None) -> Decimal | None:
         return None
     if d < 0:
         return None
-    return (d * facteur).quantize(Decimal("0.001"))
+    return (d * facteur).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
 
 def _txt(v: ValeurSourcee | None) -> str | None:

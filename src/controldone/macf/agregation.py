@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from controldone.formatage import format_nombre
 from controldone.guardrails import PHRASE_RENVOI, assert_clean
@@ -71,12 +71,12 @@ class SyntheseSeuil:
 
     @property
     def masse_cumulee_t(self) -> Decimal:
-        return (self.masse_cumulee_kg / _MILLE).quantize(Decimal("0.001"))
+        return (self.masse_cumulee_kg / _MILLE).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
     @property
     def difference_t(self) -> Decimal:
         """Seuil moins masse cumulée lue (négatif si la masse lue est supérieure au seuil)."""
-        return (self.seuil_t - self.masse_cumulee_t).quantize(Decimal("0.001"))
+        return (self.seuil_t - self.masse_cumulee_t).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
     @property
     def texte(self) -> str:
