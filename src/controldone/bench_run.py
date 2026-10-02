@@ -56,11 +56,16 @@ class DossierBanc:
     client_id: str | None
 
 
-def lister_dossiers(corpus: Path, split: str, limit: int | None = None) -> list[Path]:
+def lister_dossiers(
+    corpus: Path, split: str, limit: int | None = None, only: Sequence[str] | None = None
+) -> list[Path]:
     base = corpus / split
     if not base.is_dir():
         raise FileNotFoundError(f"split introuvable : {base}")
     dossiers = sorted(p for p in base.iterdir() if p.is_dir() and (p / "docs").is_dir())
+    if only:
+        voulus = set(only)
+        dossiers = [p for p in dossiers if p.name in voulus]
     return dossiers[:limit] if limit else dossiers
 
 
@@ -269,7 +274,7 @@ def _findings_vide(dossier_id: str, prep: LotPrepare) -> Findings:
 
 def executer_banc(
     corpus: Path, split: str, out: Path, *, limit: int | None = None, workers: int = 4,
-    composants: Composants | None = None,
+    composants: Composants | None = None, only: Sequence[str] | None = None,
 ) -> dict:
     """Passes 1 et 2 sur le split ; écrit les ``findings.json`` et ``run.json``. ``composants`` : doubles
     (tests) ; par défaut, composants publiés par les équipes ingestion et extraction."""
@@ -278,7 +283,7 @@ def executer_banc(
     debut = time.perf_counter()
     out.mkdir(parents=True, exist_ok=True)
     _CLIENTS = _clients(corpus)
-    dossiers = assigner_clients(lister_dossiers(corpus, split, limit), corpus, _CLIENTS)
+    dossiers = assigner_clients(lister_dossiers(corpus, split, limit, only), corpus, _CLIENTS)
     _CLIENT_DE = {d.dossier_id: d.client_id for d in dossiers}
     erreurs: dict[str, str] = {}
     ctx = mp.get_context("fork") if "fork" in mp.get_all_start_methods() else mp.get_context()
@@ -335,11 +340,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=None, help="bench/out/<run_id> (défaut : horodaté)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--only", default=None, help="sous-ensemble de dossiers : BX0001,BX0002 (score sur ce seul "
+                    "sous-ensemble non significatif ; utiliser --no-score)")
     ap.add_argument("--no-score", action="store_true", help="ne pas appeler le correcteur")
     args = ap.parse_args(argv)
     out = args.out or Path("bench/out") / time.strftime("run_%Y%m%d_%H%M%S")
     try:
-        bilan = executer_banc(args.corpus, args.split, out, limit=args.limit, workers=args.workers)
+        only = [x.strip() for x in args.only.split(",") if x.strip()] if args.only else None
+        bilan = executer_banc(args.corpus, args.split, out, limit=args.limit, workers=args.workers, only=only)
     except FileNotFoundError as e:
         print(str(e), file=sys.stderr)
         return 2

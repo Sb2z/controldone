@@ -677,12 +677,37 @@ def _a2(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
                 refs.append(r.reference)
         for art in dec.dec.articles:
             refs.extend(v for v in art.references_facture if ctx.utilisable(v))
+    entrees = {f"numero_{i}": v for i, v in enumerate(numeros) if v is not None}
     if not refs:
-        return [ctx.non_verifiable(cid, RaisonCode.valeur_absente, details={"motif": "aucune_reference_facture"},
-                                   **commun)]
+        # Aucune référence de facture citée (§10 A2 : « sinon constat »). On ne conclut que si la liste des
+        # documents produits a bien été lue : export structuré, ou au moins une autre référence lue (titre de
+        # transport, autoliquidation…). Sinon la section a pu échapper à la lecture : non vérifiable (D-803).
+        autres = [r for dec in c.decs for r in dec.dec.documents_references if ctx.utilisable(r.reference)]
+        structuree = any(dec.dec.mrn is not None and dec.dec.mrn.est_structuree for dec in c.decs)
+        lus = [v for v in numeros if v is not None]
+        if not (autres or structuree) or not lus:
+            return [ctx.non_verifiable(cid, RaisonCode.valeur_absente,
+                                       details={"motif": "aucune_reference_facture"}, **commun)]
+        cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=lus,
+                          documents=c.doc_ids)
+        nums = ", ".join(f"{v.valeur} (page {v.page})" if v.page else str(v.valeur) for v in lus)
+        cites = ", ".join(dict.fromkeys(
+            " ".join(x for x in ((r.type_code.valeur if r.type_code else None), r.reference.valeur) if x)
+            for r in autres if r.reference is not None))
+        libelle = (
+            f"Le numéro de facture commerciale {nums} n'est pas cité sur {_refs_dec(c.decs)} : aucune référence "
+            f"de facture ne figure parmi les documents produits"
+            + (f" (documents cités : {cites})." if cites else ".")
+        )
+        return [ctx.constat(
+            cid, cl, libelle=libelle, prochaine_action=ACTION_A2,
+            preuves=[preuve(v, RolePreuve.valeur_a) for v in lus]
+            + [preuve(r.reference, RolePreuve.valeur_b) for r in autres if r.reference is not None],
+            entrees=entrees, attendu=",".join(v.valeur or "" for v in lus), constate=cites or "aucune",
+            details={"motif": "aucune_reference_facture"}, **commun,
+        )]
     absents = [(fc, v) for fc, v in zip(c.fcs, numeros, strict=True)
                if v is not None and not any(ref_compatibles(v.valeur, r.valeur) for r in refs)]
-    entrees = {f"numero_{i}": v for i, v in enumerate(numeros) if v is not None}
     if not absents:
         return [ctx.conforme(cid, entrees=entrees, **commun)]
     cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None,

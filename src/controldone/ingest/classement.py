@@ -508,12 +508,16 @@ def classer_page(
             return res(TypeDocument.document_non_exploitable, None, 0.85, motif_p2)
         return res(TypeDocument.declaration, st.value, 0.5 + score_decl * 0.5)
 
-    if motif_p2 is None and n_titre_facture and P2_CORPS.search(texte):
-        motif_p2, n_p2 = MotifNonExploitable.liste_expedition, n_titre_facture
-        for motif, rx in NON_EXPLOITABLE:  # le motif nommé dans le texte l'emporte
-            if rx.search(texte):
-                motif_p2 = motif
-                break
+    if n_titre_facture and n_p2 < n_titre_facture and P2_CORPS.search(texte):
+        # Mention explicite « ce document n'est pas la facture » : elle l'emporte sur l'intitulé « facture »
+        # (ex. « FACTURE - BON DE LIVRAISON » + « document sans valeur commerciale »), motif déjà lu conservé.
+        if motif_p2 is None:
+            motif_p2 = MotifNonExploitable.liste_expedition
+            for motif, rx in NON_EXPLOITABLE:  # le motif nommé dans le texte l'emporte
+                if rx.search(texte):
+                    motif_p2 = motif
+                    break
+        n_p2 = n_titre_facture
     # 2. Non exploitables (P2) : intitulé de devis, bon de commande, pré-alerte… (l'emporte sur « facture »
     #    à niveau d'intitulé égal ou supérieur).
     if motif_p2 is not None and n_p2 >= n_titre_facture and n_p2 >= n_support:

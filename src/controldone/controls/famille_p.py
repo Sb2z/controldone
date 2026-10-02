@@ -305,6 +305,10 @@ def p1_completude(ctx: ControlContext) -> list[ResultatControle]:
             phrases.append(f"aucune {nom} exploitable")
     libelle = "Le dossier est incomplet : " + " ; ".join(phrases) + "."
     details["documents_manquants"] = [t.value for t in manquants]
+    # Documents concernés : ceux qui restent sans contrepartie (facture sans déclaration, déclaration sans
+    # facture) et les documents non exploitables tenant lieu du document manquant (D-801).
+    concernes = [d.id for d in (*ctx.factures_commerciales(), *ctx.declarations())]
+    concernes += [d.id for t in manquants for d in non_exploitables.get(t, [])]
     return [
         ctx.constat(
             "P1",
@@ -312,6 +316,7 @@ def p1_completude(ctx: ControlContext) -> list[ResultatControle]:
             libelle=libelle,
             prochaine_action=ACTION_P1,
             preuves=preuves,
+            documents=list(dict.fromkeys(concernes)),
             attendu=",".join(t.value for t in manquants),
             constate="absent",
             details=details,
@@ -416,6 +421,11 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
         unite = cle_unite(lien=lien.document_id)
         signaux = [s.value for s in lien.signaux]
         details = {"force": lien.force.value, "signaux": signaux}
+        if doc.doublon_de:
+            # Copie d'un document déjà présent (F1) : écartée des contrôles, son lien suit celui de l'original.
+            resultats.append(ctx.non_applicable("P4", RaisonCode.couvert_par_autre_controle, unite=unite,
+                                                documents=[doc.id], details={**details, "doublon_de": doc.doublon_de}))
+            continue
         if lien.force is not ForceLien.faible:
             resultats.append(ctx.conforme("P4", unite=unite, documents=[doc.id], details=details))
             continue
