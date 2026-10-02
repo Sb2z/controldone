@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -36,8 +35,14 @@ from controldone.facturation.modele import (
     Remise,
     mentions_obligatoires,
 )
-from controldone.facturation.offres import CatalogueOffres, Consentement, CouponRefuse, arrondi, charger_offres
-from controldone.facturation.pa import FactureADeposer, PlateformeAgreee, PlateformeAgreeeBouchon
+from controldone.facturation.offres import (
+    CatalogueOffres,
+    Consentement,
+    CouponRefuse,
+    arrondi,
+    charger_offres,
+)
+from controldone.facturation.pa import AccuseDepot, FactureADeposer, PlateformeAgreee, PlateformeAgreeeBouchon
 from controldone.facturation.paiements import FournisseurPaiement, SessionPaiement, fournisseur_depuis_env
 from controldone.facturation.pdf import assembler_facturx, rendre_pdf
 from controldone.formatage import format_montant
@@ -73,29 +78,29 @@ def _d(x: Any, defaut: str = "0") -> Decimal:
     return Decimal(str(x if x not in (None, "") else defaut))
 
 
-@dataclass
 class ExpediteurFacture:
     """Expéditeur de la file sortante pour ``facture_emise`` : dépôt de la facture **émise** sur la PA
-    partenaire du fondateur (idempotent par numéro) et copie locale du PDF Factur-X."""
+    partenaire du fondateur (idempotent par numéro) et copie locale du PDF Factur-X. Aucune écriture en
+    base ici (l'envoi s'exécute sous le verrou de la file sortante) : la facture est lue avant."""
 
-    service: ServiceFacturation
-    nom: str = "plateforme_agreee"
+    nom = "plateforme_agreee"
+
+    def __init__(self, pa: PlateformeAgreee, facture: FactureEmise, dossier_sorties: Path | None) -> None:
+        self.pa, self.facture, self.dossier_sorties = pa, facture, dossier_sorties
+        self.accuse: AccuseDepot | None = None
 
     def envoyer(self, action: ActionSortante) -> str:
-        f = stock.facture_par_outbox(self.service.db, action.id)
-        if f is None:
-            raise EmissionRefusee("facture non émise : émettre avant de déposer")
-        accuse = self.service.pa.deposer_facture(FactureADeposer(
+        f = self.facture
+        if f.outbox_id != action.id:
+            raise EmissionRefusee("facture et action ne correspondent pas")
+        self.accuse = self.pa.deposer_facture(FactureADeposer(
             numero=f.numero, facture_id=f.id, siren_acheteur=str((f.contenu.get("acheteur") or {}).get("siren", "")),
             contenu=f.pdf))
-        stock.enregistrer_statut_pa(self.service.db, facture_id=f.id, numero=f.numero,
-                                    identifiant_pa=accuse.identifiant_pa, code=accuse.code, libelle="Déposée",
-                                    horodatage=accuse.horodatage)
-        if self.service.dossier_sorties is not None:
-            d = Path(self.service.dossier_sorties) / "facture_emise"
+        if self.dossier_sorties is not None:
+            d = Path(self.dossier_sorties) / "facture_emise"
             d.mkdir(parents=True, exist_ok=True, mode=0o700)
             (d / f"{_NOM_RE.sub('_', f.numero)}.pdf").write_bytes(f.pdf)
-        return f"pa:{self.service.pa.nom}:{accuse.identifiant_pa}"
+        return f"pa:{self.pa.nom}:{self.accuse.identifiant_pa}"
 
 
 class ServiceFacturation:
@@ -221,7 +226,7 @@ class ServiceFacturation:
         f = stock.facture(self.db, facture_id)
         if f is None or f.type_code != TYPE_FACTURE:
             raise AccesRefuse("facture introuvable")
-        deja = sum((a.total_ht for a in stock.factures(self.db, client_id=f.client_id)
+        deja = sum((abs(a.total_ht) for a in stock.factures(self.db, client_id=f.client_id)
                     if a.facture_origine_id == f.id), Decimal("0.00"))
         montant = arrondi(montant_ht) if montant_ht is not None else f.total_ht - deja
         if montant <= 0 or deja + montant > f.total_ht:
@@ -235,21 +240,26 @@ class ServiceFacturation:
         return self._proposer(f.client_id, payload, acteur, f"avoir:{f.id}:{n + 1}")
 
     # --- émission ------------------------------------------------------------------------------------------
-    def _facture(self, numero: str, a: ActionSortante, d: date) -> tuple[Facture, dict[str, Any]]:
+    def _origine(self, a: ActionSortante) -> FactureEmise | None:
+        p = a.payload_effectif
+        if p.get("type_facture") != "avoir":
+            return None
+        fx = dict(p.get("facturation") or {})
+        origine = stock.facture(self.db, str(fx.get("facture_origine_id") or ""))
+        if origine is None or origine.client_id != a.tenant_id:
+            raise EmissionRefusee("facture d'origine introuvable")
+        return origine
+
+    def _facture(self, numero: str, a: ActionSortante, d: date, acheteur: Acheteur,
+                 origine: FactureEmise | None) -> tuple[Facture, dict[str, Any]]:
+        """Facture à partir du brouillon (pur : aucune lecture en base, appelé sous le verrou d'écriture)."""
         p = a.payload_effectif
         fx = dict(p.get("facturation") or {})
         lignes = tuple(Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1"))
                        for x in p.get("lignes") or [])
         remises = tuple(Remise(str(r["libelle"]), _d(r.get("montant"))) for r in p.get("remises") or [])
-        acheteur, _ = self.acheteur(a.tenant_id or "")
         c = self.catalogue
-        origine = None
-        type_code = TYPE_FACTURE
-        if p.get("type_facture") == "avoir":
-            origine = stock.facture(self.db, str(fx.get("facture_origine_id") or ""))
-            if origine is None:
-                raise EmissionRefusee("facture d'origine introuvable")
-            type_code = TYPE_AVOIR
+        type_code = TYPE_AVOIR if origine is not None else TYPE_FACTURE
         echeance = d + timedelta(days=c.paiement.delai_jours)
         deja_paye = _d(fx.get("deja_paye"))
         if deja_paye:
@@ -286,8 +296,18 @@ class ServiceFacturation:
         fx_payload = dict(a.payload_effectif.get("facturation") or {})
         facture_id = nouvel_id("fac")
 
+        acheteur, _ = self.acheteur(a.tenant_id)
+        origine = self._origine(a)
+        if origine is not None:  # cumul des avoirs revérifié à l'émission
+            deja = sum((abs(x.total_ht) for x in stock.factures(self.db, client_id=origine.client_id)
+                        if x.facture_origine_id == origine.id), Decimal("0.00"))
+            montant = sum((Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1")).montant_ht
+                           for x in a.payload_effectif.get("lignes") or []), Decimal("0.00"))
+            if deja + montant > origine.total_ht:
+                raise EmissionRefusee("cumul des avoirs supérieur à la facture d'origine")
+
         def construire(numero: str) -> dict[str, Any]:
-            f, fx = self._facture(numero, a, d)
+            f, fx = self._facture(numero, a, d, acheteur, origine)
             xml = generer_xml(f)
             valider_xsd(xml)
             pdf = assembler_facturx(rendre_pdf(f, non_valable=not vendeur.complet), xml, numero=numero,
@@ -331,7 +351,15 @@ class ServiceFacturation:
     def deposer(self, action_id: str, acteur: Acteur) -> ActionSortante:
         """Envoi de l'action (facture déjà émise) : dépôt sur la PA partenaire, copie locale."""
         _exiger_fondateur(acteur)
-        return FileSortante(self.db).envoyer(action_id, ExpediteurFacture(self), acteur)
+        f = stock.facture_par_outbox(self.db, action_id)
+        if f is None:
+            raise EmissionRefusee("facture non émise : émettre avant de déposer")
+        exp = ExpediteurFacture(self.pa, f, self.dossier_sorties)
+        envoyee = FileSortante(self.db).envoyer(action_id, exp, acteur)
+        if exp.accuse is not None:
+            stock.enregistrer_statut_pa(self.db, facture_id=f.id, numero=f.numero, identifiant_pa=exp.accuse.identifiant_pa,
+                                        code=exp.accuse.code, libelle="Déposée", horodatage=exp.accuse.horodatage)
+        return envoyee
 
     def emettre_et_deposer(self, action_id: str, acteur: Acteur, *, le: date | None = None) -> FactureEmise:
         f = self.emettre(action_id, acteur, le=le)

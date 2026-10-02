@@ -532,3 +532,21 @@ def test_cle_idempotence_independante_de_l_ordre():
 @pytest.mark.parametrize("vide", [[], None])
 def test_lot_vide(vide):
     assert regrouper(vide or []).dossiers == []
+
+
+# --- D-708 : documents support co-localisés, lettre d'accompagnement de la facture transitaire ----------------
+
+
+def test_support_co_localise_lien_moyen_sans_alerte_p4():
+    lot = Lot()
+    lot.fc("fc1", "docs/envoi.pdf")
+    lot.dec("dec1", "docs/dec.pdf", refs=[("N380", "INV-10001")])
+    lot.ft("ft1", "docs/envoi.pdf", numero="FAC-7700")
+    lot.support("cg1", "docs/envoi.pdf")  # conditions générales dans le même PDF
+    lot.support("lettre1", "docs/envoi.pdf", refs_facture=["FAC-7700"])  # lettre d'accompagnement
+    lot.support("mail1", "docs/courriel.pdf")  # seul dossier de la frontière
+    d = _dossier_de(lot.regrouper(), "cg1")
+    assert _lien(d, "cg1").force is ForceLien.moyenne
+    assert _lien(d, "mail1").force is ForceLien.moyenne
+    lettre = _lien(d, "lettre1")
+    assert lettre.force is ForceLien.forte and SignalLien.ref_facture_citee in lettre.signaux

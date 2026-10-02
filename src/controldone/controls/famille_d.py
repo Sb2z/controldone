@@ -439,6 +439,10 @@ def _d1_resultat(
     )
     if abs(ecart) <= tol:
         return ctx.conforme("D1", **commun)
+    if ligne_non_lue and ecart > 0:
+        # Les totaux imprimés se confirment entre eux : une ligne non lue explique l'écart (D-706).
+        return ctx.non_verifiable("D1", RaisonCode.valeur_absente, **{
+            **commun, "details": {"motif": "ligne_probablement_non_lue"}})
     montant = ecart if avec_montant and ecart > 0 else None
 
     def acc_operande(o: ValeurSourcee):
@@ -450,7 +454,6 @@ def _d1_resultat(
         confusion=[Confusion(imprime, accepte=lambda x: any(abs(x - c) <= tol for c in candidats)),
                    *(Confusion(o, accepte=acc_operande(o)) for o in operandes)],
         documents=[f.id], montant=ecart,
-        raisons_supplementaires=[RaisonCode.total_reconstruit] if ligne_non_lue and ecart > 0 else [],
     )
     libelle = (
         f"Sur {_la_facture(f)}{_par(page_txt([imprime]))}, {objet} "
@@ -522,19 +525,29 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
     s_prest = _somme(v.decimal_signe() for v in prestations)
 
     td = ft.total_debours
-    if toutes_lisibles and debours and _dec(ctx, td) is not None and td is not None and not td.est_reconstruite:
+    tht = ft.total_ht
+    v_td = _dec(ctx, td) if td is not None and not td.est_reconstruite else None
+    v_tht = _dec(ctx, tht)
+    # Même écart positif sur deux totaux imprimés indépendants (total des débours et total HT débours
+    # compris) : une ligne de débours non lue, pas une erreur d'addition (D-706).
+    meme_ecart = (
+        v_td is not None and v_tht is not None and debours
+        and v_td - s_deb > tol.t_somme(len(debours))
+        and abs((v_tht - s_tout) - (v_td - s_deb)) <= tol.t_somme(len(montants))
+    )
+    if toutes_lisibles and debours and v_td is not None and td is not None:
         out.append(_d1_resultat(
             ctx, f, "total_debours", unite_f, td, s_deb, debours, tol.t_somme(len(debours)),
             "le total des débours imprimé", f"somme des {len(debours)} lignes de débours", avec_montant=True,
+            ligne_non_lue=bool(meme_ecart),
         ))
-    tht = ft.total_ht
-    if toutes_lisibles and montants and _dec(ctx, tht) is not None and tht is not None:
+    if toutes_lisibles and montants and v_tht is not None and tht is not None:
         alternatives = [s_prest] if debours and prestations else []
         out.append(_d1_resultat(
             ctx, f, "total_ht", unite_f, tht, s_tout, [v for _, v in montants], tol.t_somme(len(montants)),
             "le total HT imprimé", f"somme des {len(montants)} montants HT", avec_montant=True,
             alternatives=alternatives,
-            ligne_non_lue=_tva_confirme_total(ctx, ft, tht.decimal_signe(), s_deb, s_prest, prestations),
+            ligne_non_lue=bool(meme_ecart) or _tva_confirme_total(ctx, ft, v_tht, s_deb, s_prest, prestations),
         ))
     ttc, ht, tva = _dec(ctx, ft.total_ttc), _dec(ctx, ft.total_ht), _dec(ctx, ft.total_tva)
     if ttc is not None and ht is not None and tva is not None:
@@ -548,7 +561,8 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
     net = _dec(ctx, ft.net_a_payer)
     if net is not None and ttc is not None:
         assert ft.net_a_payer is not None and ft.total_ttc is not None
-        acompte = _dec(ctx, ft.acomptes) or ZERO
+        # Un acompte est une déduction, qu'il soit imprimé en positif ou précédé d'un signe moins.
+        acompte = abs(_dec(ctx, ft.acomptes) or ZERO)
         ops = [ft.total_ttc] + ([ft.acomptes] if ft.acomptes is not None and _dec(ctx, ft.acomptes) is not None else [])
         out.append(_d1_resultat(
             ctx, f, "net_a_payer", unite_f, ft.net_a_payer, ttc - acompte, ops, tol.t_somme(len(ops)),

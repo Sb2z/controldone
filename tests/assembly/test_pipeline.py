@@ -210,3 +210,24 @@ def test_controle_en_erreur_isole(lot):
         res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1), composants=_composants())
     r = next(x for x in res[0].resultats if x.controle_id == "B2")
     assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.erreur_interne
+
+
+def test_fichier_en_double_rattache_et_signale(lot):
+    """D-802 : un fichier identique (sha256) n'est pas retraité, mais il est rattaché au lot (mention « doublon
+    de fichier ») comme copie de l'original : F1 le signale, aucun montant n'est compté deux fois."""
+    (lot / "docs" / "courriel").mkdir()
+    (lot / "docs" / "courriel" / "ft_facture.pdf").write_bytes((lot / "docs" / "ft_facture.pdf").read_bytes())
+    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, dossier_id_sortie="BX9001",
+                                                                       annee=2026), composants=_composants())
+    assert len(res) == 1
+    r = res[0]
+    doubles = [n.fichier for n in r.non_lus if n.motif == "doublon_de_fichier"]
+    assert len(doubles) == 1 and doubles[0].endswith("ft_facture.pdf")
+    copies = [d for d in r.documents.values() if d.doublon_de]
+    assert len(copies) == 1 and copies[0].type is TypeDocument.facture_transitaire
+    assert {"docs/courriel/ft_facture.pdf", "docs/ft_facture.pdf"} <= {d.file for d in r.findings.documents}
+    f1 = [c for c in r.findings.constats if c.controle_id == "F1"]
+    assert len(f1) == 1 and f1[0].documents_concernes == [copies[0].id] and f1[0].niveau == "a_verifier"
+    # une seule facture transitaire comptée par les contrôles (pas de second C1/C5 ni de second P4)
+    assert len([x for x in r.resultats if x.controle_id == "C1" and x.constat is not None]) <= 1
+    assert not [c for c in r.findings.constats if c.controle_id == "P4" and copies[0].id in c.documents_concernes]

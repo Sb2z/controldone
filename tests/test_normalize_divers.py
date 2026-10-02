@@ -177,6 +177,9 @@ def test_ref_egales_compatibles():
     assert ref_compatibles("INV-2026-0815", "2026-0815")  # inclusion, 8 caractères
     assert ref_compatibles("FAC-000815", "815-X") is False
     assert ref_compatibles("INV-0001234", "INV-1234")  # zéros de tête d'un segment numérique
+    assert ref_compatibles("FAC/2026/0001-0", "0001-0")  # troncature, forme norm_ref de 5 caractères (D-805)
+    assert ref_compatibles("EXP-26-00950", "6-00950")
+    assert not ref_compatibles("FAC/2026/0001-0", "001-0")  # 4 caractères : trop court
     assert not ref_compatibles("INV-1234", "1234")  # la plus courte a moins de 5 caractères
     assert ref_compatibles("12345", "AB12345CD")
 

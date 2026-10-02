@@ -982,7 +982,11 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
         if _c3_declenche(ctx, unite):
             exclues.add(CategorieTaxe.tva)
             details["tva_exclue"] = "C3"
-        forfait_separe = bool(u.lignes_categorie(CategorieTaxe.forfait_petits_envois))
+        # Le forfait n'est retiré des deux côtés que si chaque déclaration en porte une ligne lue ; sinon le
+        # retirer de la seule facture fausserait la comparaison (le total liquidé l'inclut) — D-711.
+        forfait_separe = bool(u.lignes_categorie(CategorieTaxe.forfait_petits_envois)) and all(
+            CategorieTaxe.forfait_petits_envois not in refs[x.id].sans_ligne
+            and CategorieTaxe.forfait_petits_envois not in refs[x.id].indisponibles for x in u.declarations)
         if forfait_separe:
             exclues.add(CategorieTaxe.forfait_petits_envois)
             details["forfait_exclu"] = "G4"
@@ -1412,7 +1416,11 @@ def _refs_transport_dossier(ctx: ControlContext) -> list[ValeurSourcee]:
 
 
 _CONFUSIONS_REF: dict[str, set[str]] = {}
-for _a, _b in [*LETTRES_CHIFFRES.items(), *((x, y) for cl in CLASSES_CONFUSION for x in cl for y in cl if x != y)]:
+#: Confusions de lecture d'un identifiant alphanumérique : celles de §8.5.4, plus les lettres de forme voisine
+#: (I/J/L, O/Q, U/V) qu'une lecture OCR confond aussi dans une référence (D-709).
+_LETTRES_VOISINES = (("I", "J"), ("I", "L"), ("J", "1"), ("L", "1"), ("O", "Q"), ("Q", "0"), ("U", "V"))
+for _a, _b in [*LETTRES_CHIFFRES.items(), *_LETTRES_VOISINES,
+               *((x, y) for cl in CLASSES_CONFUSION for x in cl for y in cl if x != y)]:
     _CONFUSIONS_REF.setdefault(_a.upper(), set()).add(_b.upper())
     _CONFUSIONS_REF.setdefault(_b.upper(), set()).add(_a.upper())
 
@@ -1448,17 +1456,26 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
         return [ctx.non_applicable("C7", RaisonCode.facture_transitaire_absente)]
     prefixes_vals = [d.dec.mrn for d in ctx.declarations(dernieres_versions=False)
                      if d.dec.mrn_prefixe and d.dec.mrn is not None]
-    prefixes = {d.dec.mrn_prefixe for d in ctx.declarations(dernieres_versions=False) if d.dec.mrn_prefixe}
-    prefixes |= _prefixes_autres_dossiers(ctx)
+    prefixes_vals += [d.dec.mrn for a in ctx.autres_dossiers for d in a.documents.values()
+                      if _est_declaration(d) and d.dec.mrn is not None and d.dec.mrn_prefixe]
+    # Sans déclaration dans le dossier, les MRN cités ne peuvent pas être rapprochés (P1 : contrôles C
+    # dépendant du document manquant non vérifiables).
+    mrn_verifiable = bool(ctx.declarations(dernieres_versions=False))
+    prefixes_propres = {d.dec.mrn_prefixe for d in ctx.declarations(dernieres_versions=False) if d.dec.mrn_prefixe}
     refs_propres = _refs_transport_dossier(ctx)
     out = []
+    groupes: dict[frozenset[str], tuple[list[Document], list[ValeurSourcee], list[ValeurSourcee], dict]] = {}
     for f in factures:
         unite = cle_unite(ft=f.id)
         if not dossier_principal(ctx, f.id):
             out.append(ctx.non_applicable("C7", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[f.id],
                                           details={"motif": "facture_evaluee_dans_un_autre_dossier"}))
             continue
+        # Autres dossiers qui contiennent la même facture (relevé réparti) : leurs déclarations et références
+        # comptent ; un MRN d'un dossier sans lien avec la facture reste « sans correspondance » (D-709).
         freres = [a for a in ctx.autres_dossiers if f.id in a.documents]
+        prefixes = prefixes_propres | {d.dec.mrn_prefixe for a in freres for d in a.documents.values()
+                                       if _est_declaration(d) and d.dec.mrn_prefixe}
         refs_dossier = refs_propres + _refs_transport_documents(
             d for a in freres for d in a.documents.values() if d.id != f.id)
         ft = f.ft
@@ -1470,7 +1487,7 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
             continue
         sans: list[ValeurSourcee] = []
         vus: set[str] = set()
-        for v in mrns:
+        for v in (mrns if mrn_verifiable else []):
             p = mrn_prefixe(v.valeur)
             if p in vus:
                 continue
@@ -1498,26 +1515,43 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
                     continue
                 transports_sans.append(v)
         details = {"mrn_cites": len(vus), "refs_transport_verifiees": verifiable_transport}
-        entrees = {f"ref_{i}": v for i, v in enumerate(sans + transports_sans)}
         if not sans and not transports_sans:
-            if not mrns and not verifiable_transport:
+            if not (mrns and mrn_verifiable) and not verifiable_transport:
                 out.append(ctx.non_verifiable("C7", RaisonCode.valeur_absente, unite=unite, documents=[f.id],
                                               details=details))
             else:
                 out.append(ctx.conforme("C7", unite=unite, documents=[f.id], details=details))
             continue
+        # Factures du dossier qui citent les mêmes références sans correspondance (facture de débours et
+        # facture de prestations d'un même envoi) : un seul constat (D-709).
+        cle = frozenset({"mrn:" + mrn_prefixe(v.valeur) for v in sans}
+                        | {"tr:" + norm_ref_transport(v.valeur) for v in transports_sans})
+        g = groupes.setdefault(cle, ([], [], [], details))
+        g[0].append(f)
+        g[1].extend(sans)
+        g[2].extend(transports_sans)
+    for fs, sans, transports_sans, details in groupes.values():
+        ids = [f.id for f in fs]
+        unite = cle_unite(ft=ids[0] if len(ids) == 1 else ids)
+        entrees = {f"ref_{i}": v for i, v in enumerate(sans + transports_sans)}
         classement = ctx.classify("C7", ecart=None, tolerance=None, seuil_certitude=None,
-                                  valeurs_cles=sans + transports_sans, documents=[f.id])
-        morceaux = [f"MRN {v.valeur_brute or v.valeur}{_entre_parentheses(page_txt([v]))}" for v in sans]
-        morceaux += [f"référence de transport {v.valeur_brute or v.valeur}{_entre_parentheses(page_txt([v]))}"
-                     for v in transports_sans]
+                                  valeurs_cles=sans + transports_sans, documents=ids)
+        vus_txt: set[str] = set()
+        morceaux = []
+        for nom, v in [*(("MRN", v) for v in sans), *(("référence de transport", v) for v in transports_sans)]:
+            k = nom + norm_ref(v.valeur)
+            if k in vus_txt:
+                continue
+            vus_txt.add(k)
+            morceaux.append(f"{nom} {v.valeur_brute or v.valeur}{_entre_parentheses(page_txt([v]))}")
+        cite = "cite" if len(fs) == 1 else "citent"
         libelle = (
-            f"{libelle_facture([f])} cite des références sans correspondance parmi les documents du dossier : "
+            f"{libelle_facture(fs)} {cite} des références sans correspondance parmi les documents du dossier : "
             f"{' ; '.join(morceaux)}."
         )
         out.append(ctx.constat(
             "C7", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_C7,
-            preuves=[preuve(v, RolePreuve.valeur_b) for v in sans + transports_sans], documents=[f.id],
+            preuves=[preuve(v, RolePreuve.valeur_b) for v in sans + transports_sans], documents=ids,
             entrees=entrees, details=details,
         ))
     return out

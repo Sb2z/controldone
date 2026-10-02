@@ -190,6 +190,11 @@ def mettre_a_disposition(plateforme: Plateforme, action_id: str, acteur: Acteur)
     if a.kind in (TypeAction.rapport_publication, TypeAction.reclamation_dossier) and a.statut in (
             StatutAction.approuve, StatutAction.corrige):
         fs.envoyer(action_id, ExpediteurFichier(plateforme.dossier_sorties), acteur)
+    elif a.kind is TypeAction.facture_emise and a.statut in (StatutAction.approuve, StatutAction.corrige):
+        # facture approuvée : émission (numéro, Factur-X) puis dépôt sur la plateforme agréée partenaire
+        from controldone.facturation import service_pour
+
+        service_pour(plateforme).emettre_et_deposer(action_id, acteur)
 
 
 def piece(plateforme: Plateforme, acteur: Acteur, action_id: str, fmt: str,

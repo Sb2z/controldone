@@ -539,3 +539,90 @@ Numérotation D-500 et suivantes. Code : `src/controldone/web/`, `src/controldon
 
 - **Choix** : le moteur, le banc et l'exploitation tournent de bout en bout ; la mise au point de la précision (seuil 0,97) se fait en parallèle par deux agents dédiés. Les niveaux 3 et 4 (facturation, finance, site, documents juridiques, prospection) ne modifient pas le moteur et ont été répartis entre sous-agents à ce moment.
 - **Garde-fou** : le niveau 1 n'est déclaré « vert » qu'après la mesure finale sur le corpus tenu à l'écart (voir rapport du matin).
+
+# Facturation
+
+Numérotation D-1001 et suivantes. Détails : `docs/FACTURATION.md` ; code : `src/controldone/facturation/`.
+
+## D-1001 — Offres configurables en YAML
+
+- **Choix** : `config/offres.yaml` lu par `charger_offres` (diagnostic 390 EUR HT, commission 20 %, paliers 99 / 199 / 349 EUR HT pour 20 / 60 / 150 dossiers par mois — valeurs de départ à ajuster, coupon, TVA, numérotation, conditions de paiement, vendeur). L'identité du vendeur peut être remplacée par `CONTROLDONE_VENDEUR_<CHAMP>`. Les valeurs « À COMPLÉTER » donnent un PDF « NON VALABLE » et un refus d'émission en production.
+- **Écarté** : une table d'offres en base. Le fondateur est seul, les offres changent peu, et un fichier versionné est relu en revue.
+- **Lien** : les réglages par client existants (`diagnostic_prix_eur`, `abonnement_mensuel_eur`, `commission_taux`) restent ceux de l'agent `facturation` (D-610).
+
+## D-1002 — Tables de facturation de niveau plateforme, immuables
+
+- **Choix** : `factures`, `compteurs_factures`, `evenements_paiement`, `comptes_paiement`, `coupons_utilisations` et `statuts_factures_pa`, sans `TenantMixin`. `client_id` est une colonne simple, sans clé étrangère : les pièces comptables survivent à l'effacement d'un client (conservation de 10 ans, art. L123-22 C. com.), comme le journal d'audit.
+- **Immuabilité** : `factures`, `evenements_paiement`, `coupons_utilisations` et `statuts_factures_pa` sont `AppendOnly`. `factures` est en plus protégée par des déclencheurs SQL (UPDATE et DELETE refusés). Les tables sont définies dans `storage/models_facturation.py`, importé par `controldone.storage` : `models.py` n'est pas modifié.
+
+## D-1003 — Numérotation continue sous verrou
+
+- **Choix** : une série par (entité légale, préfixe, année) : `F-AAAA-NNNN` pour les factures, `AV-AAAA-NNNN` pour les avoirs.
+- **Mécanisme** : le compteur est lu `FOR UPDATE` dans une transaction d'écriture unique (`BEGIN IMMEDIATE` en SQLite). Dans cette même transaction, la facture est construite (XML validé, PDF), insérée, et le coupon est consommé. Tout échec annule la transaction : pas de trou. Une date d'émission antérieure à la dernière de la série est refusée. L'émission est idempotente par action sortante.
+- **Test** : 8 fils × 5 émissions donnent la séquence 1..40.
+- **Hypothèse** : une série séparée pour les avoirs (à confirmer avec l'expert-comptable).
+
+## D-1004 — Brouillon d'abord, émission après approbation
+
+- **Choix** : toute facture naît en brouillon `facture_emise`. Les clés d'idempotence sont partagées avec l'agent et les litiges. L'émission (numéro, Factur-X) n'a lieu que sur un brouillon `approuve` ou `corrige`, par le fondateur. Elle est déclenchée après l'approbation (`publication.mettre_a_disposition`, ajout rétrocompatible) ou par le bouton « Émettre et déposer ».
+- **Erreurs** : une erreur d'émission après approbation est affichée au fondateur (`routes_admin._sortie` intercepte `ValueError`). La facture reste à émettre.
+- **Corrections** : une correction passe par un avoir, dont le cumul est plafonné au HT d'origine et revérifié à l'émission.
+
+## D-1005 — XML CII écrit à la main, validé par le XSD
+
+- **Choix** : le XML CII D16B (profil EN 16931) est construit avec lxml, dans l'ordre du XSD Factur-X. Données françaises :
+  - BT-23 `S1` ;
+  - SIREN `0002` ;
+  - adresses `0225` ;
+  - notes `PMD`, `PMT`, `AAB`, `TXD`, `BAR=B2B`, `REG` ;
+  - BT-8 = `5` si l'option sur les débits est retenue ;
+  - `ShipToTradeParty` si l'adresse de livraison diffère.
+- **Validation** : `facturx.xml_check_xsd` à chaque émission. Le PDF est produit par ReportLab (polices DejaVu embarquées), puis `facturx.generate_from_binary` (PDF/A-3, `en16931`).
+- **Écarté** : `facturx.generate_xml`, dont l'API par dictionnaire de BT est moins lisible et moins testable ici.
+- **Limite** : schématrons EN 16931 et BR-FR non exécutés (XSLT 2.0) ; seul un sous-ensemble de règles BR-FR est codé (`controles_reforme`).
+
+## D-1006 — Coupon de lancement
+
+- **Choix** : la remise de document (BG-20) est de 100 %. Le coupon exige un accord de publication signé (drapeau, signataire, date, référence du document). Quota global (3) et usage unique par client sont vérifiés à la création du brouillon, puis revérifiés sous verrou à l'émission. La consommation est append-only et cite le consentement.
+- **Hypothèse fiscale** : un service rendu contre un droit de publication peut être un échange imposable. À faire valider avant le premier usage.
+
+## D-1007 — Stripe en mode test, bouchon par défaut
+
+- **Choix** : `fournisseur_depuis_env` renvoie `PaiementStripe` si `STRIPE_SECRET_KEY` est présent, sinon `PaiementBouchon`.
+- **Clés** : une clé `sk_live_` n'est acceptée qu'avec `CONTROLDONE_ENV=prod` et `STRIPE_LIVE_OK=1`. Le message d'erreur ne cite jamais la clé.
+- **Bouchon** : il signe ses événements au format Stripe. Ils passent par le même `stripe.Webhook.construct_event` que les vrais.
+- **Facture légale** : c'est toujours la facture Factur-X. Stripe encaisse seulement le TTC calculé par notre code, sans Stripe Tax.
+- **Webhooks** : `POST /webhooks/stripe`, public, signature obligatoire, idempotence par identifiant d'événement. Les effets (compte, brouillon du mois « déjà payé », alerte d'échec) sont idempotents.
+- **Tests** : le client Stripe est simulé, aucun appel réseau.
+
+## D-1008 — Plateforme agréée du fondateur : interface et bouchon
+
+- **Choix** : protocole `PlateformeAgreee` (`deposer_facture`, `statut`, `recevoir_statuts`). Bouchon `PlateformeAgreeeBouchon` dans `var/pa_bouchon/`.
+- **Dépôt** : `ExpediteurFacture` dépose la facture comme expéditeur de la file sortante. Il ne fait aucune écriture en base pendant l'envoi : la file tient le verrou d'écrivain SQLite. Le statut 200 est enregistré après l'envoi.
+- **Positionnement** : ControlDOne n'est pas une plateforme agréée et ne le prétend pas. La liste complète des statuts reste une hypothèse (D-631).
+
+## D-1009 — Contrôle avant paiement par l'API
+
+- **Choix** : `POST /api/v1/einvoices` met aussi en file `controle_avant_paiement`, avec la clé `controle_avant_paiement:<client>:api:<lot>`. C'est le même chemin que le connecteur PA (D-631). Le numéro et l'échéance sont lus dans le XML comme des données : analyseur sans entités, sans DTD, sans réseau ; Factur-X via `facturx.get_xml_from_pdf`.
+- **Worker intégré** : le worker de `controldone serve` charge aussi `connecteurs.jobs`.
+- **Test** : un test de bout en bout couvre la route, la file, le worker et le brouillon `statut_litige_pa` adressé au client.
+
+## D-1010 — Suivi financier
+
+- **Définitions** :
+  - CA HT = factures − avoirs, à la date d'émission ;
+  - encaissé = événements de paiement réussis ;
+  - coût IA = `ai_usage`, par client, mois et dossier (lecture transversale journalisée `lire_couts_ia`) ;
+  - marge brute = CA HT − coût IA.
+- **Implémentation** : fonction pure `calculer_marges`. Export CSV au format tableur français (`;`, virgule décimale, BOM), avec neutralisation des formules.
+- **Hypothèse** : hébergement et frais Stripe non ventilés par client.
+
+## D-1011 — Page « Finances »
+
+- **Choix** : routeur `web/routes_finances.py` (`/admin/finances`, fondateur avec second facteur ; un client reçoit 404). Il reprend les gabarits et le CSS existants. Lien « Finances » ajouté au menu du fondateur.
+- **Contenu** : formulaires de brouillon (diagnostic avec coupon et consentement, abonnement, commission), émission, avoir, lien de paiement, relevé des statuts PA, paiement simulé du bouchon. Le service est construit par `facturation.service_pour(plateforme)` et peut être injecté pour les tests.
+
+## D-1012 — Données de facturation de l'acheteur
+
+- **Choix** : `reglages["facturation"]` du client : SIREN, TVA, adresse, courriel, adresse électronique (par défaut le SIREN), adresse de livraison si elle diffère. À défaut, la raison sociale du client et le premier contact. Un instantané est figé dans la facture émise.
+- **Limite** : les champs manquants (SIREN de l'acheteur…) n'empêchent pas l'émission : ils sont listés dans `contenu.controles_reforme`, à corriger avant le passage par une PA (obligatoire au plus tard le 1er septembre 2027).

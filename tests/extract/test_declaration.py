@@ -581,3 +581,50 @@ def test_page_illisible_ne_produit_rien():
     assert not ex.supports(doc, [page])
     res = ex.extract(doc, [page], ExtractionContext(options={"textes_pages": {1: pt}}))
     assert res.champs is not None and res.champs.mrn is None and res.partielle
+
+
+# --- Mise au point du rappel (D-804, D-811) -----------------------------------------------------------------
+
+
+def _entete_ocr() -> list[list[tuple]]:
+    return [
+        _mots("DÉCLARATION EN DOUANE - IMPORTATION (H1)", 0.06),
+        [*_mots("MRN", 0.06), *_mots(MRN, 0.30)],
+        [*_mots("Date d'acceptation", 0.06), *_mots("14/08/2026", 0.30)],
+    ]
+
+
+def test_documents_produits_sans_colonne_de_codes():
+    """OCR : colonne des codes perdue (« référence + libellé ») et séparateur « | » entre code et référence."""
+    lignes = [
+        *_entete_ocr(),
+        _mots("Documents produits / références (DG 12 03)", 0.06),
+        [*_mots("FAC/2026/0042-0", 0.06), *_mots("Facture commerciale", 0.40)],
+        [*_mots("N705 |", 0.06), *_mots("DEMO000111222", 0.14), *_mots("Connaissement", 0.40)],
+        [*_mots("1008 |", 0.06), *_mots(TVA_IMP, 0.14), *_mots("Autoliquidation TVA", 0.40)],
+        [*_mots("Article 1", 0.06), *_mots("Code marchandise 8471300000", 0.20)],
+        [*_mots("Désignation : FACTURE COMMERCIALE EN PAPIER 4711", 0.06)],
+    ]
+    c = _extraire([_page_ocr(lignes)])
+    refs = {(d.type_code.valeur, d.reference.valeur) for d in c.documents_references}
+    assert refs == {("N380", "FAC/2026/0042-0"), ("N705", "DEMO000111222"), ("1008", TVA_IMP)}
+    n380 = next(d for d in c.documents_references if d.type_code.valeur == "N380")
+    assert n380.type_code.valeur_brute == "Facture commerciale" and n380.type_code.ancree
+
+
+def test_forfait_petits_envois_hors_tableau():
+    """OCR : en-tête du tableau des taxes illisible ; la ligne de forfait est lue (présence, base, taux),
+    sans son montant (le reste du tableau a pu échapper à la lecture)."""
+    lignes = [
+        _mots("DÉCLARATION - ENVOI DE FAIBLE VALEUR (H7)", 0.06),
+        [*_mots("MRN :", 0.06), *_mots(MRN, 0.40)],
+        _mots("Nombre d'articles (positions) : 4", 0.06),
+        _mots("Droits et taxes", 0.06),
+        _mots("type | bone ER AR ES NE ame Tate) Montant EUR | We", 0.06),
+        [*_mots("Droit forfaitaire petits envois", 0.06), *_mots("4 article(s)", 0.45), *_mots("3,00 EUR/art.", 0.62),
+         *_mots("12,00 | E.", 0.80)],
+    ]
+    c = _extraire([_page_ocr(lignes)])
+    (fpe,) = [t for t in c.taxations if t.categorie is CategorieTaxe.forfait_petits_envois]
+    assert (fpe.base_quantite.valeur, fpe.taux.valeur, fpe.taux_nature) == ("4", "3.00", TauxNature.specifique)
+    assert fpe.montant is None
