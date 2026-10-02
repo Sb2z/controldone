@@ -256,7 +256,7 @@ def _vals_par_document(docs: Sequence[Document], vals: Sequence[ValeurSourcee | 
     Les valeurs peuvent être une par document (totaux) ou plusieurs par document (valeurs par article, quand
     le total n'est pas lu) : on rattache alors à chaque document sa première valeur (A10, A11)."""
     vals = list(vals)
-    if len(vals) == len(docs) and all(v is None or v.document_id in (None, d.id) for d, v in zip(docs, vals)):
+    if len(vals) == len(docs) and all(v is None or v.document_id in (None, d.id) for d, v in zip(docs, vals, strict=True)):
         return vals
     if len(vals) <= len(docs) and all(v is None or v.document_id is None for v in vals):
         return vals + [None] * (len(docs) - len(vals))

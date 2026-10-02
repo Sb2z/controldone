@@ -1,0 +1,120 @@
+# Liste des codes NC de l'annexe I du règlement MACF/CBAM — donnée versionnée (docs/MACF.md).
+#
+# STATUT : À VÉRIFIER. Le texte officiel n'a PAS pu être lu le 2 octobre 2026 : EUR-Lex a répondu
+# par une page vide (HTTP 202, protection anti-robot) aux URL ci-dessous. La liste a été transcrite
+# de l'annexe I du règlement (UE) 2023/956 dans sa version initiale, recoupée avec une source
+# secondaire (résultats de recherche). Les modifications ultérieures de l'annexe I, notamment par le
+# règlement (UE) 2025/2083, ne sont PAS vérifiées. À relire sur EUR-Lex avant tout usage client.
+#
+# Lecture des entrées :
+#   - ``code`` : code NC tel qu'il figure dans l'annexe (espaces conservés) ; un code court (« 72 »,
+#     « 7601 ») couvre toutes ses sous-positions ;
+#   - ``exclusions`` : préfixes exclus de l'entrée (« 7202 2 » = toutes les sous-positions 72022…) ;
+#   - ``hors_cumul_50t`` : secteur exclu du cumul de masse comparé au seuil de 50 t (électricité,
+#     hydrogène — source : DEHSt, docs/recherche/customs.md §4).
+#
+# Le produit ne se prononce JAMAIS sur le classement d'une marchandise : la correspondance est faite
+# sur le code IMPRIMÉ de la déclaration et chaque ligne retenue est « à faire vérifier ».
+#
+# Changement de version : majeure si un code est retiré, mineure si un code est ajouté.
+schema: controldone.macf_codes_nc/1.0.0
+version: 1.0.0
+statut: a_verifier
+source:
+  texte: Règlement (UE) 2023/956 du 10 mai 2023 établissant un mécanisme d'ajustement carbone aux frontières, annexe I
+  url: https://eur-lex.europa.eu/eli/reg/2023/956/oj
+  url_consolidee: https://eur-lex.europa.eu/legal-content/FR/TXT/?uri=CELEX:02023R0956-20251020
+  consulte_le: "2026-10-02"
+  lecture: >-
+    Texte officiel non lu (réponse vide d'EUR-Lex). Transcription de l'annexe I initiale, recoupée
+    avec une source secondaire : à vérifier sur EUR-Lex.
+sources_secondaires:
+  - url: https://www.cbam-services.com/annex1-eu2023-956
+    consulte_le: "2026-10-02"
+    usage: titre de résultat de recherche seulement (page non lue)
+modifications_non_verifiees:
+  - Règlement (UE) 2025/2083 (simplification ; seuil de 50 t ; calendrier) — effet éventuel sur l'annexe I non vérifié.
+seuil_annuel_tonnes: "50"
+seuil_source:
+  url: https://www.dehst.de/EN/Topics/CBAM/CBAM-definitive-regime-2026/cbam-definitive-regime-2026_node.html
+  consulte_le: "2026-10-02"
+  resume: >-
+    Seuil de 50 tonnes par an de marchandises MACF cumulées, hors électricité et hydrogène
+    (docs/recherche/customs.md §4).
+secteurs:
+  - id: ciment
+    libelle: Ciment
+    gaz: [CO2]
+    hors_cumul_50t: false
+    codes:
+      - {code: "2507 00 80", libelle: "Autres argiles kaoliniques"}
+      - {code: "2523 10 00", libelle: "Ciments non pulvérisés dits « clinkers »"}
+      - {code: "2523 21 00", libelle: "Ciments Portland blancs"}
+      - {code: "2523 29 00", libelle: "Autres ciments Portland"}
+      - {code: "2523 30 00", libelle: "Ciments alumineux"}
+      - {code: "2523 90 00", libelle: "Autres ciments hydrauliques"}
+  - id: electricite
+    libelle: Électricité
+    gaz: [CO2]
+    hors_cumul_50t: true
+    codes:
+      - {code: "2716 00 00", libelle: "Énergie électrique"}
+  - id: engrais
+    libelle: Engrais
+    gaz: [CO2, N2O]
+    hors_cumul_50t: false
+    codes:
+      - {code: "2808 00 00", libelle: "Acide nitrique ; acides sulfonitriques"}
+      - {code: "2814", libelle: "Ammoniac anhydre ou en solution aqueuse"}
+      - {code: "2834 21 00", libelle: "Nitrates de potassium"}
+      - {code: "3102", libelle: "Engrais minéraux ou chimiques azotés"}
+      - {code: "3105", libelle: "Engrais minéraux ou chimiques contenant deux ou trois des éléments fertilisants, sauf 3105 60 00",
+         exclusions: ["3105 60 00"]}
+  - id: fer_acier
+    libelle: Fer et acier
+    gaz: [CO2]
+    hors_cumul_50t: false
+    codes:
+      - {code: "2601 12 00", libelle: "Minerais de fer et leurs concentrés agglomérés, autres que les pyrites de fer grillées"}
+      - code: "72"
+        libelle: "Fonte, fer et acier, à l'exclusion des ferro-alliages et déchets listés"
+        exclusions: ["7202 2", "7202 30 00", "7202 50 00", "7202 70 00", "7202 80 00", "7202 91 00",
+                     "7202 92 00", "7202 93 00", "7202 99 10", "7202 99 30", "7202 99 80", "7204"]
+      - {code: "7301", libelle: "Palplanches en fer ou en acier ; profilés obtenus par soudage"}
+      - {code: "7302", libelle: "Éléments de voies ferrées en fonte, fer ou acier"}
+      - {code: "7303 00", libelle: "Tubes, tuyaux et profilés creux en fonte"}
+      - {code: "7304", libelle: "Tubes, tuyaux et profilés creux, sans soudure, en fer ou en acier"}
+      - {code: "7305", libelle: "Autres tubes et tuyaux de diamètre extérieur excédant 406,4 mm"}
+      - {code: "7306", libelle: "Autres tubes, tuyaux et profilés creux en fer ou en acier"}
+      - {code: "7307", libelle: "Accessoires de tuyauterie en fonte, fer ou acier"}
+      - {code: "7308", libelle: "Constructions et parties de constructions en fonte, fer ou acier"}
+      - {code: "7309 00", libelle: "Réservoirs, foudres, cuves de contenance excédant 300 l"}
+      - {code: "7310", libelle: "Réservoirs, fûts, tambours, bidons de contenance n'excédant pas 300 l"}
+      - {code: "7311 00", libelle: "Récipients pour gaz comprimés ou liquéfiés"}
+      - {code: "7318", libelle: "Vis, boulons, écrous, rivets, rondelles et articles similaires"}
+      - {code: "7326", libelle: "Autres ouvrages en fer ou en acier"}
+  - id: aluminium
+    libelle: Aluminium
+    gaz: [CO2, PFC]
+    hors_cumul_50t: false
+    codes:
+      - {code: "7601", libelle: "Aluminium sous forme brute"}
+      - {code: "7603", libelle: "Poudres et paillettes d'aluminium"}
+      - {code: "7604", libelle: "Barres et profilés en aluminium"}
+      - {code: "7605", libelle: "Fils en aluminium"}
+      - {code: "7606", libelle: "Tôles et bandes en aluminium d'une épaisseur excédant 0,2 mm"}
+      - {code: "7607", libelle: "Feuilles et bandes minces en aluminium"}
+      - {code: "7608", libelle: "Tubes et tuyaux en aluminium"}
+      - {code: "7609 00 00", libelle: "Accessoires de tuyauterie en aluminium"}
+      - {code: "7610", libelle: "Constructions et parties de constructions en aluminium"}
+      - {code: "7611 00 00", libelle: "Réservoirs, foudres, cuves en aluminium de contenance excédant 300 l"}
+      - {code: "7612", libelle: "Réservoirs, fûts, tambours, bidons en aluminium de contenance n'excédant pas 300 l"}
+      - {code: "7613 00 00", libelle: "Récipients en aluminium pour gaz comprimés ou liquéfiés"}
+      - {code: "7614", libelle: "Torons, câbles, tresses en aluminium, non isolés pour l'électricité"}
+      - {code: "7616", libelle: "Autres ouvrages en aluminium"}
+  - id: hydrogene
+    libelle: Hydrogène
+    gaz: [CO2]
+    hors_cumul_50t: true
+    codes:
+      - {code: "2804 10 00", libelle: "Hydrogène"}

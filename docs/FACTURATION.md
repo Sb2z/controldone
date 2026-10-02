@@ -198,7 +198,8 @@ bout est `tests/facturation/test_avant_paiement.py` (route API, file de tâches,
 
 - **Sans clé** : `PaiementBouchon` est utilisé automatiquement. Les pages de paiement sont simulées
   (`/admin/finances/bouchon/<session>`). Les événements ont le format Stripe et sont signés avec
-  `STRIPE_WEBHOOK_SECRET` (ou un secret local), puis vérifiés par le **même**
+  `STRIPE_WEBHOOK_SECRET` (ou, à défaut, un secret aléatoire propre au processus, jamais écrit dans le code :
+  personne ne peut forger un événement accepté par `/webhooks/stripe`), puis vérifiés par le **même**
   `stripe.Webhook.construct_event`. Tout le flux est testable hors ligne.
 - **Avec `STRIPE_SECRET_KEY`** : `PaiementStripe` (`stripe.StripeClient`, une clé par instance).
   - Une clé `sk_test_…` (ou `rk_test_…`) est acceptée.

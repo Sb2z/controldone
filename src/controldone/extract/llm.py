@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -278,8 +279,18 @@ def _consigne_champs(type_document: TypeDocument) -> str:
     )
 
 
+#: Rang maximal d'un élément de liste accepté dans la réponse du modèle : un rang démesuré (document piégé)
+#: créerait autant de lignes vides (``champs.definir`` complète la liste) et saturerait la mémoire (RS-13).
+INDEX_MAX = 999
+
+
+def _neutraliser_balises(texte: str) -> str:
+    """Le texte du document ne peut ni fermer ni rouvrir le bloc « non fiable » (RS-13)."""
+    return re.sub(r"<\s*/?\s*document_non_fiable\s*>", "[balise retirée]", texte, flags=re.I)
+
+
 def _bloc_texte(pages: Sequence[Page]) -> str:
-    morceaux = [f"=== PAGE {p.numero} ===\n{p.texte}" for p in pages]
+    morceaux = [f"=== PAGE {p.numero} ===\n{_neutraliser_balises(p.texte or '')}" for p in pages]
     return f"{BALISE_DEBUT}\n" + "\n".join(morceaux) + f"\n{BALISE_FIN}"
 
 
@@ -454,7 +465,7 @@ class LLMExtracteur:
         for item in donnees.get("valeurs", []):
             champ: str = item["champ"]
             if "[]" in champ:
-                if item.get("index") is None or item["index"] < 0:
+                if item.get("index") is None or item["index"] < 0 or item["index"] > INDEX_MAX:
                     ignorees += 1
                     continue
                 chemin = champ.replace("[]", f"[{int(item['index'])}]", 1)

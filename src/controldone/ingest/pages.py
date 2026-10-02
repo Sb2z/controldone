@@ -218,7 +218,7 @@ def _extraire_isole(contenu: bytes, mime: str, opts: OptionsPages, n_pages: int 
         sortie = Path(tmp) / "sortie.json"
         req = {"entree": str(entree), "sortie": str(sortie), "mime": mime,
                "options": {**asdict(opts), "isoler": False, "cache_dir": None}}
-        env = {**os.environ, "OMP_THREAD_LIMIT": "1", "OPENBLAS_NUM_THREADS": "1"}
+        env = {**_environnement_sans_secrets(), "OMP_THREAD_LIMIT": "1", "OPENBLAS_NUM_THREADS": "1"}
         try:
             proc = subprocess.run(
                 [sys.executable, "-m", "controldone.ingest._worker"],
@@ -242,6 +242,16 @@ def _extraire_isole(contenu: bytes, mime: str, opts: OptionsPages, n_pages: int 
             p.avertissements.append(f"ocr_abandonne:{motif}")
         return pages
     return [_page_illisible(i, motif) for i in range(1, max(1, n_estime) + 1)]
+
+
+#: Variables jamais transmises au processus qui analyse les fichiers déposés (contenu hostile) : clés, secrets,
+#: URL de base (mot de passe éventuel). Le processus n'en a aucun besoin (revue de sécurité RS-14).
+_SECRETS_ENV = re.compile(r"(CONTROLDONE_(MASTER_KEY|SECRET_KEY|DATABASE_URL|MCP_API_KEY|REFERENTIEL_SEL|IMAP_.*)|"
+                          r"ANTHROPIC_.*|STRIPE_.*|.*(SECRET|PASSWORD|PASSWD|TOKEN|API_KEY).*)", re.I)
+
+
+def _environnement_sans_secrets() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items() if not _SECRETS_ENV.fullmatch(k)}
 
 
 def _limiteur_memoire(memoire_mo: int):
