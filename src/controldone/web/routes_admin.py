@@ -56,12 +56,6 @@ def _pf(request: Request) -> Plateforme:
     return request.app.state.plateforme
 
 
-def _demo(pf: Plateforme, f: Acteur, tenant_id: str) -> bool:
-    """Le client est-il un client de démonstration (bandeau « DONNÉES FICTIVES ») ? Lecture tracée."""
-    with pf.db.operateur(f) as op:
-        return any(t.id == tenant_id and (t.reglages or {}).get("demo") for t in op.lister_clients())
-
-
 def _s(form: Any, cle: str, n: int = 500) -> str:
     v = form.get(cle)
     return v.strip()[:n] if isinstance(v, str) else ""
@@ -374,17 +368,18 @@ def file_validation(request: Request) -> Response:
     items: list[dict[str, Any]] = []
     attention: list[dict[str, Any]] = []
     with pf.db.operateur(f) as op:
-        clients = {t.id: t for t in op.lister_clients()}
+        clients = {t.id: {"raison_sociale": t.raison_sociale, "actif": t.actif,
+                          "demo": bool((t.reglages or {}).get("demo"))} for t in op.lister_clients()}
         par_client: dict[str, list[Any]] = defaultdict(list)
         for c in op.file_validation():
             par_client[c.tenant_id].append(c)
         demo = False
-        for tenant_id in sorted(set(par_client) | {t for t in clients if clients[t].actif}):
+        for tenant_id in sorted(set(par_client) | {t for t in clients if clients[t]["actif"]}):
             t = clients.get(tenant_id)
             if t is None:
                 continue
             scope = op.client(tenant_id, "file de validation")
-            demo = demo or bool((t.reglages or {}).get("demo"))
+            demo = demo or t["demo"]
             courants = {c.id for c in constats_courants(scope)} if par_client.get(tenant_id) else set()
             libelles: dict[str, str] = {}
             refs: dict[str, str] = {}
@@ -397,25 +392,25 @@ def file_validation(request: Request) -> Response:
                     libelles[doc_id] = libelle_document(doc)
                 for lien in m.liens:
                     if lien.force.value == "faible":
-                        attention.append({"type": "Rattachement faible", "client": t.raison_sociale,
+                        attention.append({"type": "Rattachement faible", "client": t["raison_sociale"],
                                           "tenant_id": tenant_id, "dossier_id": d.id, "dossier": refs[d.id],
                                           "detail": libelles.get(lien.document_id, lien.document_id)})
             for doc in scope.lister(Document, type="inconnu"):
                 if doc.dossier_id:
-                    attention.append({"type": "Document non reconnu", "client": t.raison_sociale,
+                    attention.append({"type": "Document non reconnu", "client": t["raison_sociale"],
                                       "tenant_id": tenant_id, "dossier_id": doc.dossier_id,
                                       "dossier": refs.get(doc.dossier_id, doc.dossier_id), "detail": doc.id})
             vues = [vue_constat(c, libelles) for c in par_client.get(tenant_id, []) if c.id in courants]
             extraits = images_preuves(pf.vault, scope, vues[:40])
             for v in vues:
-                items.append({"c": v, "tenant_id": tenant_id, "client": t.raison_sociale,
+                items.append({"c": v, "tenant_id": tenant_id, "client": t["raison_sociale"],
                               "dossier": refs.get(v.dossier_id, v.dossier_id), "extraits": extraits})
     ordre = {id(x["c"]): i for i, x in enumerate(items)}
     tries = trier_constats([x["c"] for x in items])
     par_c = {id(x["c"]): x for x in items}
     items = [par_c[id(c)] for c in tries if id(c) in ordre]
     sorties = FileSortante(pf.db).lister(f, statuts=["brouillon"])
-    noms = {k: v.raison_sociale for k, v in clients.items()}
+    noms = {k: v["raison_sociale"] for k, v in clients.items()}
     return page(request, "admin/validation.html.j2", titre="File de validation", nav="validation", items=items,
                 attention=attention, sorties=sorties, noms=noms, libelles_sortie=LIBELLES_SORTIE, demo=demo,
                 retour="/admin/validation")

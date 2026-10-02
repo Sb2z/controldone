@@ -14,8 +14,13 @@ from controldone.auth.totp import verifier_totp
 if TYPE_CHECKING:
     from controldone.storage.db import Database
 
-__all__ = ["EchecAuthentification", "authentifier", "verifier_mot_de_passe_compte", "verifier_second_facteur",
-           "acteur_client"]
+__all__ = [
+    "EchecAuthentification",
+    "acteur_client",
+    "authentifier",
+    "verifier_mot_de_passe_compte",
+    "verifier_second_facteur",
+]
 
 
 

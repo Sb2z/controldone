@@ -17,7 +17,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from controldone.auth import GestionnaireSessions, SessionInvalide, parametres_cookie, secrets_session_depuis_env
+from controldone.auth import (
+    GestionnaireSessions,
+    SessionInvalide,
+    parametres_cookie,
+    secrets_session_depuis_env,
+)
 from controldone.ingest.reception import Limites
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
 from controldone.storage.erreurs import AccesRefuse

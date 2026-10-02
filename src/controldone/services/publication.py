@@ -22,7 +22,6 @@ from typing import Any
 
 from controldone.auth.roles import Acteur, Role
 from controldone.findings_io import construire_findings, statut_global_depuis_resultats
-from controldone.model.documents import Document as DocumentModele
 from controldone.model.documents import Fichier as FichierModele
 from controldone.model.dossier import Dossier as DossierModele
 from controldone.model.enums import StatutFichier

@@ -1,0 +1,29 @@
+{% extends "base.html.j2" %}
+{% block contenu %}
+<div class="titre-page"><h1>Déposer des documents</h1>
+<p class="discret">Factures commerciales, déclarations en douane (PDF, XML, CSV), factures du transitaire et avoirs. Rangez chaque envoi dans son propre dossier ou archive ZIP : l'arborescence est conservée et aide au regroupement.</p></div>
+<div class="grille-2 grille-large-etroite">
+<section class="carte">
+  {% if peut_deposer %}
+  <form method="post" action="/espace/depot" enctype="multipart/form-data" class="formulaire depot" data-depot>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="fichiers">Fichiers ou archives ZIP</label>
+    <input id="fichiers" name="fichiers" type="file" multiple required accept=".pdf,.zip,.xml,.csv,.xlsx,.png,.jpg,.jpeg,.tif,.tiff,.eml">
+    <p class="discret" data-resume></p>
+    <button type="submit" class="btn btn-principal">Envoyer</button>
+  </form>
+  {% else %}<p>Votre compte est en lecture seule : le dépôt est réservé aux administrateurs de votre société.</p>{% endif %}
+  <h2>Limites</h2>
+  <ul class="liste-simple">
+    <li>{{ (limites.taille_fichier // 1048576) }} Mo par fichier, {{ (limites.taille_lot // 1048576) }} Mo par dépôt, {{ limites.pages_fichier }} pages par fichier.</li>
+    <li>Archives : {{ limites.zip_entrees }} fichiers au plus, {{ limites.zip_profondeur }} niveaux d'archives imbriquées ; chemins absolus, « .. », liens symboliques et archives anormalement compressées refusés.</li>
+    <li>Les documents sont chiffrés au repos et traités comme des données : aucun texte qu'ils contiennent n'est exécuté.</li>
+  </ul>
+</section>
+<section class="carte">
+  <h2>Dépôts récents</h2>
+  {% if lots %}<ul class="liste-simple">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a><br><span class="discret">{{ l.statut_libelle }} · {{ l.resume.get("fichiers", 0) }} fichier(s){% if l.resume.get("refuses") %}, {{ l.resume.get("refuses") }} refusé(s){% endif %}</span></li>{% endfor %}</ul>
+  {% else %}<p class="vide">Aucun dépôt.</p>{% endif %}
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% block contenu %}
+<div class="titre-page"><h1>Registre de recouvrement</h1>
+<p class="discret">Écarts refacturés validés. Les montants sont des écarts constatés entre documents ; vous envoyez vous-même vos réclamations et enregistrez ici les avoirs reçus.</p></div>
+<section class="kpis">
+  <div class="kpi"><div class="kpi-lib">Écarts constatés</div><div class="kpi-val num">{{ totaux.initial|montant }}</div></div>
+  <div class="kpi"><div class="kpi-lib">Avoirs reçus</div><div class="kpi-val num">{{ totaux.credite|montant }}</div></div>
+  <div class="kpi kpi-accent"><div class="kpi-lib">Reste</div><div class="kpi-val num">{{ totaux.reste|montant }}</div></div>
+</section>
+<section class="carte">
+<div class="defilement">
+<table class="donnees">
+  <thead><tr><th scope="col">Dossier</th><th scope="col">Transitaire</th><th scope="col">Composante</th><th scope="col" class="num">Écart</th><th scope="col" class="num">Crédité</th><th scope="col" class="num">Reste</th><th scope="col">Statut</th>{% if peut_declarer %}<th scope="col">Déclarer</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for x in lignes %}
+  <tr><th scope="row">{% if x.dossier_id %}<a href="/espace/dossiers/{{ x.dossier_id }}">{{ x.dossier_reference or x.dossier_id }}</a>{% else %}—{% endif %}{% if x.niveau == "a_verifier" %} <span class="badge b-verifier">À confirmer</span>{% endif %}</th>
+    <td>{{ x.transitaire }}</td><td>{{ x.composante }}</td><td class="num">{{ x.montant_initial|montant }}</td><td class="num">{{ x.montant_credite|montant }}</td><td class="num">{{ x.reste|montant }}</td>
+    <td><span class="badge {{ {'credite': 'b-valide', 'abandonne': 'b-neutre', 'conteste': 'b-rejete', 'reclame': 'b-verifier', 'partiellement_credite': 'b-verifier'}.get(x.statut_code, 'b-propose') }}">{{ x.statut }}</span>{% if x.age_jours is not none %}<br><span class="discret">{{ x.age_jours }} j{% if x.relance %} · {{ x.relance }}{% endif %}</span>{% endif %}</td>
+    {% if peut_declarer %}<td class="actions-registre">
+      {% if x.statut_code in ("ouvert", "conteste") %}
+      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit">J'ai envoyé la réclamation</button></form>
+      {% endif %}
+      {% if x.statut_code not in ("credite", "abandonne") %}
+      <details class="corriger"><summary>Avoir reçu</summary>
+      <form method="post" action="/espace/recouvrement/{{ x.id }}/avoir" class="formulaire compact">{{ csrf_champ(csrf) }}
+        <label for="m-{{ x.id }}">Montant (EUR)</label><input id="m-{{ x.id }}" name="montant" inputmode="decimal" required maxlength="15">
+        <label for="r-{{ x.id }}">N° de l'avoir</label><input id="r-{{ x.id }}" name="reference" maxlength="200">
+        <button type="submit" class="btn btn-petit">Enregistrer</button></form></details>
+      {% endif %}
+    </td>{% endif %}
+  </tr>
+  {% else %}<tr><td colspan="8" class="vide">Aucun écart à recouvrer pour l'instant.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+</section>
+{% endblock %}

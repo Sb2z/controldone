@@ -6,7 +6,12 @@ from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import Response
 
-from controldone.auth import EchecAuthentification, MotDePasseFaible, hacher_mot_de_passe, verifier_mot_de_passe
+from controldone.auth import (
+    EchecAuthentification,
+    MotDePasseFaible,
+    hacher_mot_de_passe,
+    verifier_mot_de_passe,
+)
 from controldone.auth.roles import Role
 from controldone.auth.service import acteur_client, verifier_mot_de_passe_compte, verifier_second_facteur
 from controldone.storage.comptes import changer_mot_de_passe, utilisateur

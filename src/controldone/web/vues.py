@@ -12,7 +12,7 @@ from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.models import Constat, Document, Fichier
 from controldone.storage.scope import TenantScope
 
-__all__ = ["images_dossier", "image_page", "images_preuves"]
+__all__ = ["image_page", "images_dossier", "images_preuves"]
 
 MAX_VIGNETTES = 4
 

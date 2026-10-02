@@ -1,0 +1,19 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import badge_niveau %}
+{% block contenu %}
+<div class="titre-page"><h1>Dossiers</h1><p class="discret">Clés dans l'ordre : facture du transitaire, transport, MRN, facture commerciale.</p></div>
+<section class="carte">
+<div class="defilement">
+<table class="donnees">
+  <thead><tr><th scope="col">Dossier</th><th scope="col">Statut</th><th scope="col">Facture du transitaire</th><th scope="col">Transport</th><th scope="col">MRN</th><th scope="col">Facture commerciale</th><th scope="col" class="num">Constats</th><th scope="col" class="num">Recouvrable certain</th></tr></thead>
+  <tbody>
+  {% for d in dossiers %}
+  <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td>
+    {% for _lib, val in d.cles %}<td><code>{{ val }}</code></td>{% endfor %}
+    <td class="num">{{ d.nb_constats }}</td><td class="num">{{ d.recouvrable_certain|montant if d.recouvrable_certain else "—" }}</td></tr>
+  {% else %}<tr><td colspan="8" class="vide">Aucun dossier.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+</section>
+{% endblock %}

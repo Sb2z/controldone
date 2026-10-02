@@ -1,0 +1,58 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ, constat_carte %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>File de validation</h1>
+  <p class="discret">Rien ne sort vers un client sans décision ici. Ordre : écarts certains par montant décroissant, puis à vérifier, puis points à faire vérifier par un professionnel.</p>
+</div>
+<nav class="ancres" aria-label="Sections"><a href="#constats">Constats proposés ({{ items|length }})</a><a href="#sorties">Actions sortantes ({{ sorties|length }})</a><a href="#attention">Points d'attention ({{ attention|length }})</a></nav>
+
+<section id="constats" aria-labelledby="t-c">
+  <h2 id="t-c">Constats proposés</h2>
+  {% for it in items %}
+    {{ constat_carte(it.c, it.extraits, "/admin/clients/" ~ it.tenant_id, csrf, retour, True, it.tenant_id, it.client, it.dossier) }}
+    <p class="lien-dossier"><a href="/admin/clients/{{ it.tenant_id }}/dossiers/{{ it.c.dossier_id }}#constat-{{ it.c.id }}">Ouvrir le dossier {{ it.dossier }} (corriger une valeur, voir les pages)</a></p>
+  {% else %}
+    <p class="vide carte">Aucun constat en attente.</p>
+  {% endfor %}
+</section>
+
+<section id="sorties" aria-labelledby="t-s">
+  <h2 id="t-s">Actions sortantes à approuver</h2>
+  <p class="discret">Les rapports et dossiers de réclamation approuvés sont mis à disposition du client dans son espace ; rien n'est envoyé à un transitaire.</p>
+  {% for s in sorties %}
+  <article class="carte sortie">
+    <header class="sortie-tete">
+      <div><span class="badge b-propose">{{ libelles_sortie.get(s.kind.value, s.kind.value) }}</span> <strong>{{ s.payload.get("objet", "") }}</strong></div>
+      <span class="discret">{{ noms.get(s.tenant_id, "plateforme") if s.tenant_id else "plateforme" }} · {{ s.cree_le|date }}</span>
+    </header>
+    {% if s.motif_blocage %}<p class="alerte-ligne">Bloqué par les garde-fous : {{ s.motif_blocage }}</p>{% endif %}
+    <pre class="corps">{{ s.payload.get("corps", "") }}</pre>
+    {% if s.payload.get("pieces") %}<p>Pièces : {% for p in s.payload.get("pieces") %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ p.format }}">{{ p.nom }}</a>{% endfor %}</p>{% endif %}
+    <div class="decisions">
+      <form method="post" action="/admin/sorties/{{ s.id }}/approuver" class="decision">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
+        <button type="submit" class="btn btn-principal">Approuver</button></form>
+      <form method="post" action="/admin/sorties/{{ s.id }}/refuser" class="decision decision-motif">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
+        <label class="vh" for="ref-{{ s.id }}">Motif du refus</label><input id="ref-{{ s.id }}" name="motif" required maxlength="1000" placeholder="Motif du refus (obligatoire)">
+        <button type="submit" class="btn">Refuser</button></form>
+      <details class="corriger"><summary>Corriger puis approuver</summary>
+        <form method="post" action="/admin/sorties/{{ s.id }}/corriger" class="formulaire">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
+          <label for="obj-{{ s.id }}">Objet</label><input id="obj-{{ s.id }}" name="objet" value="{{ s.payload.get('objet', '') }}" maxlength="300" required>
+          <label for="corps-{{ s.id }}">Texte</label><textarea id="corps-{{ s.id }}" name="corps" rows="10" maxlength="20000">{{ s.payload.get("corps", "") }}</textarea>
+          <button type="submit" class="btn">Enregistrer la correction et approuver</button>
+        </form></details>
+    </div>
+  </article>
+  {% else %}<p class="vide carte">Aucune action en attente.</p>{% endfor %}
+</section>
+
+<section id="attention" class="carte" aria-labelledby="t-a">
+  <h2 id="t-a">Points d'attention</h2>
+  <p class="discret">Documents non reconnus et rattachements faibles : à vérifier dans le dossier.</p>
+  {% if attention %}
+  <table class="donnees compacte"><thead><tr><th scope="col">Type</th><th scope="col">Client</th><th scope="col">Dossier</th><th scope="col">Document</th></tr></thead><tbody>
+  {% for a in attention %}<tr><td>{{ a.type }}</td><td>{{ a.client }}</td><td><a href="/admin/clients/{{ a.tenant_id }}/dossiers/{{ a.dossier_id }}">{{ a.dossier }}</a></td><td>{{ a.detail }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="vide">Aucun point d'attention.</p>{% endif %}
+</section>
+{% endblock %}

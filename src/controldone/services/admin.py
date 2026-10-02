@@ -22,8 +22,8 @@ from typing import Any
 from controldone.auth.cles_api import CleApiCreee, creer_cle_api
 from controldone.auth.motdepasse import hacher_mot_de_passe
 from controldone.auth.roles import ROLES_CLIENT, Acteur, Role
-from controldone.jobs.couts import etat_plafond
 from controldone.ids import Prefixe, id_stable, nouvel_id
+from controldone.jobs.couts import etat_plafond
 from controldone.model.referentiel import Entite as EntiteModele
 from controldone.model.referentiel import GrilleTarifaire
 from controldone.model.referentiel import Transitaire as TransitaireModele
@@ -39,8 +39,8 @@ from controldone.storage.scope import TenantScope
 __all__ = [
     "ajouter_entite",
     "ajouter_transitaire",
-    "creer_client",
     "creer_cle",
+    "creer_client",
     "creer_utilisateur_client",
     "fiche_client",
     "importer_grille",

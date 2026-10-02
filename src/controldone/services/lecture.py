@@ -59,9 +59,9 @@ __all__ = [
     "client_info",
     "constats_courants",
     "detail_dossier",
+    "lire_lot",
     "lister_dossiers",
     "lister_lots",
-    "lire_lot",
     "vue_constat",
 ]
 
