@@ -866,3 +866,73 @@ mesure finale.
   défaut avec plusieurs déclarations.
 - **Choix** : la page citée pour chaque déclaration (ou facture) est la première valeur lue de ce document ; plus
   d'exception. Les deux dossiers produisent désormais leur constat A11 `a_verifier`.
+
+# Généralisation à une mise en page inconnue
+
+Constat : le jeu de démonstration (`src/controldone/demo`, famille de mise en page jamais vue des extracteurs)
+traité par le moteur réel laissait toute la famille A `non_verifiable` (montant total, TVA importateur et articles
+de la déclaration non lus ; noms de parties lus sur un bandeau ou un libellé voisin à 0,80–0,90) et DEMO-3 finissait
+`a_verifier` sans constat. Ce statut était conforme à §18.2 (A4/A5 `non_verifiable` -> `a_verifier`, « contrôle
+non réalisable ») : la fonction de statut n'est pas modifiée, ce sont les lectures qui sont corrigées. Règles
+générales, sans référence aux chaînes du jeu de démonstration ; tests sur des PDF rendus par reportlab dans
+plusieurs variantes (`tests/extract/test_mise_en_page_inconnue.py`), plus le jeu de démonstration traité par le
+moteur réel (`tests/assembly/test_demo_moteur_reel.py`).
+
+## D-950 — Déclaration : libellés génériques, codes marchandise par groupes, mode de paiement en lettres
+
+- **Montant total facturé** : libellés ajoutés (« Montant facturé total », « Montant total de la facture »,
+  « Total invoiced amount », « Total facturé »…). Le libellé générique « Montant facturé » / « Invoice amount » /
+  « Amount invoiced » reste un libellé d'article ; imprimé dans l'**en-tête** (hors blocs et tableaux d'articles),
+  **une seule fois** et **avant le premier article**, il donne `montant_total_facture`. Si les montants facturés
+  par article sont tous lus et que leur somme ne lui est pas égale (au centime), il est plafonné à 0,80 (jamais
+  valeur clé d'un écart certain). Sans article reconnu, il n'est pas retenu (ce pourrait être le montant d'un
+  article dont le bloc n'a pas été lu).
+- **Code marchandise imprimé par groupes** (« 8207 70 37 00 », « 7318 15 88 ») : 4 + 2 + 2 (+ 2) chiffres en
+  mots rapprochés forment un code (lu tel quel, sans correction lettre/chiffre) ; reconnu dans les cellules des
+  tableaux d'articles (attribution à la colonne « code », détection d'une ligne d'article) et après un libellé.
+- **Mode de paiement en toutes lettres** (« Comptant », « Autoliquidation », « Deferred »…) dans la colonne MP :
+  mot rattaché à la colonne, `paiement_normalise` d'après le libellé (mêmes motifs que la légende) ;
+  « autoliquidation » ne s'applique qu'à une ligne de TVA.
+- **Facture commerciale** : libellé de colis nu, seul dans son segment (« Packages   12 »), lu à droite seulement.
+
+## D-951 — En-tête à deux colonnes : pavé borné par la colonne voisine
+
+- **Constat** : pavé de partie à gauche, couples « libellé … valeur » à droite, interlignes différents : les lignes
+  s'intercalent. Le pavé de l'importateur était fermé par le premier libellé de la colonne de droite (« Montant
+  facturé ») ; le pavé acheteur prenait ce libellé (« Place ») comme nom, à 0,90.
+- **Choix** : (a) facture commerciale (`pave`) : quand la ligne du libellé n'a rien à sa droite, une colonne de
+  droite est reconnue si au moins deux lignes voisines (± 8 lignes) commencent toutes deux nettement à droite du
+  pavé (au-delà du libellé + 0,05 et de son bord gauche + 0,15), alignées à ± 0,02 ; le pavé est borné à ce bord
+  (positions x des mots), les lignes de cette colonne sont ignorées sans fermer le pavé. (b) Déclaration
+  (`_dessous`, pavé de partie) : un libellé imprimé nettement à droite du pavé et séparé de son texte par un grand
+  blanc borne le pavé au lieu de le fermer. (c) Le nom d'une partie lu dans un pavé ainsi borné (structure
+  ambiguë) est plafonné à 0,80 au lieu de 0,90 ; un nom doit avoir trois lettres et ne pas être un bandeau ni un
+  libellé « … : ».
+
+## D-952 — Numéro de TVA collé à son libellé
+
+« N° TVAFR15000100008 », « VATDE123456789 » (mise en page ou OCR) : le libellé collé (TVA, VAT, IVA, USt-IdNr, NIF,
+précédé ou non de « N° ») est retiré seulement si le reste a la forme nationale **et**, pour une TVA française à
+clé numérique, une clé juste ; sinon rien n'est lu. Commun aux lectures de TVA des extracteurs (`lire_tva_mots`)
+et à la déclaration (`_tva`, pavé de partie).
+
+## D-953 — Bandeaux, filigranes, en-têtes et pieds répétés : jamais un nom de partie
+
+- **Constat** : `vendeur.nom` (facture commerciale, sans libellé « vendeur ») et `emetteur.nom` (facture du
+  transitaire) étaient pris sur la première ligne de la page : le bandeau « DONNÉES FICTIVES — … », à 0,80–0,85.
+- **Règle générale** (`lignes_bandeau`) : est un bandeau une ligne (i) dont le texte relève du vocabulaire des
+  bandeaux et filigranes (« données fictives », « fictitious data », « document de démonstration / de test »,
+  « specimen », « draft », « aucune valeur réelle »…) — un nom suivi de « (FICTIF) » n'en relève pas ; (ii) qui
+  tient entièrement dans la marge haute ou basse de la page (3 %) ; (iii) sur un document de plusieurs pages,
+  répétée sur **toutes** les pages (chiffres neutralisés) dans leur quart haut ou bas. Pour le nom de
+  l'**émetteur** (vendeur sans libellé, transitaire), les lignes répétées du haut de page restent admises : c'est
+  le papier à en-tête, où se lit précisément son nom ; les pieds répétés restent exclus.
+- Ces lignes ne sont jamais lues comme nom de partie ni n'ouvrent un pavé ; sans autre candidat, le nom reste
+  absent (mieux vaut absent que faux à haute confiance).
+
+**Mesures** (avant -> après) : démonstration (moteur réel) : DEMO-1 C3 + D3 certains (inchangé), DEMO-2 B1 certain
++ A12 `a_verifier` sans montant (A12 était `non_verifiable`), DEMO-3 `a_verifier` sans constat -> `conforme` ;
+contrôles `non_verifiable` par dossier : A1, A4, A9, A10, A11, A12, A13, A15 et P3 -> A9 seul (quantités non imprimées sur ces déclarations). Banc dev
+(`dev_r4`) : identique à `dev_r3` (précision certain 100 %, rappel 81,3 %), `declaration.importateur.tva`
+288 -> 290 exactes. Calibration (`scripts/mesure_extraction.py`, dev) : déclaration 22 882 valeurs ≥ 0,90, 100 %
+exactes (22 880 avant) ; facture commerciale 9 111, 100 % (inchangé).
