@@ -20,7 +20,7 @@ Que faire ? Poser la question au transitaire, avec les deux pièces. Parfois l'e
 
 Ce point relève d'une appréciation réglementaire : il est à faire vérifier par un représentant en douane enregistré ou un avocat. ControlDOne ne se prononce pas sur ce point.
 
-Je lance ControlDOne, un contrôle croisé facture fournisseur / déclaration / facture transitaire / avoirs pour les PME importatrices. Je cherche 3 entreprises pour un diagnostic gratuit, contre le droit d'en publier les résultats anonymisés.
+Je lance ControlDOne, un contrôle croisé facture fournisseur / déclaration / facture transitaire / avoirs pour les PME importatrices. Je cherche 3 entreprises pour un diagnostic gratuit (remise de lancement). Si elles l'acceptent, par un accord séparé, j'en publierai ensuite des résultats anonymisés.
 
 #import #douane #PME #transitaire #comptabilité
 
@@ -34,11 +34,11 @@ Sur la facture de mars : « Dédouanement 65,00 EUR » et, juste en dessous, « 
 
 Rien d'extraordinaire : une ligne de plus, 35 EUR. Mais sur 120 dossiers par an, la même ligne représente 4 200 EUR (calcul sur ce cas fictif : 120 × 35,00 EUR).
 
-Le constat que l'on peut écrire est purement contractuel :
+Le constat que l'on peut écrire est purement tarifaire, chiffres contre chiffres :
 → la grille signée prévoit un forfait de dédouanement qui inclut les frais de dossier ;
 → la facture ajoute une ligne « frais de dossier » distincte.
 
-La suite est une conversation commerciale avec le transitaire, grille en main. Pas besoin d'avis juridique pour comparer une facture à un tarif signé.
+La suite est une conversation commerciale entre vous et le transitaire, grille en main. Pas besoin d'avis juridique pour comparer une facture à un tarif chiffré. Si la question devient « cette ligne est-elle due au regard du contrat ? », c'est une question d'interprétation, à voir avec votre conseil.
 
 Ce qui manque le plus souvent dans les PME : la grille elle-même, retrouvée dans un e-mail de 2023. C'est la première pièce que je demande.
 
@@ -80,9 +80,9 @@ Un suivi simple suffit :
 → montant de l'écart constaté entre les documents ;
 → réponse du transitaire ;
 → numéro et date de l'avoir quand il arrive ;
-→ relance à 30 jours sinon.
+→ votre relance à 30 jours sinon.
 
-C'est la partie « recouvrement » de ControlDOne : chaque écart signalé reste ouvert jusqu'à ce qu'un avoir le solde, ou qu'il soit expliqué.
+C'est la partie « suivi des avoirs reçus » de ControlDOne : chaque écart signalé reste ouvert dans votre registre jusqu'à ce qu'un avoir le solde, ou qu'il soit expliqué. Les relances restent les vôtres : ControlDOne ne contacte jamais le transitaire et n'encaisse rien.
 
 Et depuis le 1er septembre 2026, toutes les entreprises assujetties doivent pouvoir recevoir leurs factures électroniques via une plateforme agréée (source : impots.gouv.fr). Des factures structurées, c'est aussi des avoirs plus faciles à rapprocher.
 

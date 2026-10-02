@@ -20,12 +20,13 @@ Calcul de l'extrapolation, fixé à l'avance pour ne pas l'ajuster après coup :
 
 **But** : mesurer, sur des dossiers réels, si les écarts entre facture fournisseur, déclaration, facture du transitaire et avoirs représentent un montant qui justifie un service payant. C'est le test de la stratégie.
 
-**Offre** : diagnostic gratuit sur un lot de dossiers passés (idéalement les 20 à 30 derniers dossiers, ou 6 mois), contre le droit de publier les résultats sous forme anonymisée. Aucun montant promis.
+**Offre** : diagnostic gratuit sur un lot de dossiers passés (idéalement les 20 à 30 derniers dossiers, ou 6 mois), au titre d'une remise commerciale de lancement de 100 %. L'autorisation de publier des résultats anonymisés est proposée à part, facultative et révocable jusqu'à la publication, sans effet sur la remise (brief juridique §4.4). Aucun montant promis.
 
 **Étapes**
 
 1. **Préparer les pièces contractuelles (3 h)**
-   - accord de diagnostic gratuit d'une page : périmètre, durée de conservation des documents, droit de publication anonymisée (pas de nom, pas de montant identifiant), absence de conseil juridique, fiscal ou douanier (avertissement de la SPEC §3.4) ;
+   - accord de diagnostic d'une page (remise de lancement de 100 %) : périmètre, durée de conservation des documents, absence de conseil juridique, fiscal ou douanier (avertissement de la SPEC §3.4) ; signature à distance (devis accepté par e-mail), jamais sur place chez un client de 5 salariés au plus (art. L221-3 C. conso.) ;
+   - accord de publication **distinct et facultatif** : résultats anonymisés (pas de nom, pas de montant identifiant), relecture par le client, retrait possible jusqu'à la publication ;
    - accord de sous-traitance art. 28 RGPD (les documents contiennent des données personnelles : noms, signatures) — voir `docs/recherche/legal_market.md` §2 ;
    - liste des pièces demandées : factures fournisseurs, déclarations (ou extractions DELTA fournies par le transitaire), factures du transitaire, avoirs, grille tarifaire ou devis signé.
 2. **Prospection (8 à 10 h, semaines 1 à 4)**
@@ -35,7 +36,7 @@ Calcul de l'extrapolation, fixé à l'avance pour ne pas l'ajuster après coup :
    - Objectif intermédiaire : 6 à 8 rendez-vous de 20 minutes pour obtenir 3 accords.
 3. **Collecte des documents (2 h par client)** : dépôt sécurisé, contrôle de complétude (famille P de la SPEC), relance des pièces manquantes, en particulier la grille tarifaire.
 4. **Analyse et validation (4 à 6 h par client)** : traitement du lot, revue de chaque constat par le fondateur (valider, rejeter, rétrograder), rédaction des notes de renvoi avec la phrase exacte.
-5. **Restitution (1 h par client)** : rapport de diagnostic, présentation en visioconférence, dossiers de réclamation prêts à envoyer **par le client, à la première personne**.
+5. **Restitution (1 h par client)** : rapport de diagnostic, présentation en visioconférence, relevé d'écarts et modèle de courrier neutre que le client adapte et envoie lui-même s'il le décide.
 6. **Bilan (2 h)** : tableau des 3 diagnostics (nombre de dossiers, écarts certains, écarts à vérifier, notes de renvoi, extrapolation annuelle), comparaison au critère d'arrêt, texte anonymisé publiable.
 
 **Critère de réussite** : 3 diagnostics livrés dans les 8 semaines, chacun sur au moins 15 dossiers, avec rapport validé et accord de publication signé.
@@ -52,7 +53,7 @@ Calcul de l'extrapolation, fixé à l'avance pour ne pas l'ajuster après coup :
 
 1. Envoyer un e-mail adapté (variante DAF de `sequence_emails.md`, en remplaçant l'offre par : « présenter le diagnostic gratuit à un ou deux de vos clients importateurs ») aux cabinets de `prospects.csv` (canal « expert-comptable »). (2 h)
 2. Rendez-vous de 30 minutes : montrer un rapport sur cas fictif, expliquer la limite (pas de conseil juridique, fiscal ou douanier ; renvoi vers RDE ou avocat). (2 à 3 h)
-3. Pas de commission de prescription ni d'accord commercial avant la fin de l'action 1 : on attend d'avoir des résultats mesurés. (—)
+3. Aucune commission d'apport aux cabinets, ni maintenant ni plus tard (art. 24 de l'ordonnance du 19 septembre 1945) : partenariat sans rémunération, le cabinet facture lui-même son temps à son client. (—)
 4. Noter pour chaque cabinet : nombre approximatif de clients importateurs annoncé, intérêt, objection principale. (1 h)
 
 **Critère de réussite** : 2 rendez-vous tenus et au moins 1 client importateur présenté par un cabinet.
@@ -79,5 +80,6 @@ Calcul de l'extrapolation, fixé à l'avance pour ne pas l'ajuster après coup :
 - Ne rien envoyer ni publier sans relecture du fondateur.
 - Aucun chiffre sans source ; aucun témoignage ou résultat client avant qu'il existe et que sa publication soit autorisée.
 - Aucun avis sur un droit, une taxe, un classement, une origine, une valeur en douane ou un régime : phrase de renvoi exacte.
-- Les réclamations sont envoyées par le client lui-même, à la première personne (SPEC §17.3).
+- Le relevé d'écarts et son modèle de courrier neutre sont adaptés et envoyés par le client lui-même ; ControlDOne ne contacte jamais le transitaire, ne relance pas pour le client et n'encaisse rien (SPEC §17.3, brief juridique §6.1).
+- Aucune commission d'apport versée à un expert-comptable (art. 24 de l'ordonnance du 19 septembre 1945).
 - Données de prospection : uniquement des coordonnées professionnelles publiées par l'entreprise ; information sur l'origine des données et désinscription dans chaque message ; registre des traitements tenu à jour (`docs/RGPD_registre.md`).

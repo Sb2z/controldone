@@ -6,7 +6,7 @@
 
 Une PME qui importe des marchandises hors de l'Union européenne reçoit, pour chaque expédition, au moins quatre documents : la facture commerciale de son fournisseur, la déclaration en douane établie par son transitaire ou son représentant en douane, la facture de ce transitaire, et parfois un ou plusieurs avoirs. Chacun de ces documents est lu par quelqu'un. Il est rare qu'ils soient lus ensemble.
 
-C'est pourtant en les mettant côte à côte que l'on voit les écarts. Pas des écarts d'interprétation : des écarts de fait. Un document indique une valeur, un autre en indique une différente. Une somme imprimée ne correspond pas à l'addition des lignes imprimées. Une ligne facturée n'existe pas dans la grille tarifaire signée. Un avoir promis par écrit n'est jamais arrivé.
+C'est pourtant en les mettant côte à côte que l'on voit les écarts. Pas des écarts d'interprétation : des écarts de fait. Un document indique une valeur, un autre en indique une différente. Une somme imprimée ne correspond pas à l'addition des lignes imprimées. Une ligne facturée n'existe pas dans la grille tarifaire chiffrée. Un avoir promis par écrit n'est jamais arrivé.
 
 Cet article passe en revue cinq situations de ce type, toutes fictives, et la manière de les constater sans sortir de son rôle. Car il y a une limite nette entre constater un écart entre deux documents et se prononcer sur ce qui était dû. La première activité est un contrôle de cohérence et de calcul. La seconde relève de professionnels habilités.
 
@@ -39,7 +39,7 @@ La société fictive « Jardin Démo » a signé avec son transitaire une grille
 
 Sur la facture d'avril, on lit : « Dédouanement 65,00 EUR », « Frais de dossier 35,00 EUR », « Prise en charge 110,00 EUR ».
 
-Deux constats contractuels, sans aucune appréciation juridique :
+Deux constats tarifaires, chiffres contre chiffres, sans aucune appréciation juridique :
 
 - la ligne « Frais de dossier » (35,00 EUR) n'existe pas dans la grille, qui prévoit un forfait de dédouanement frais de dossier inclus ;
 - la prise en charge est facturée 110,00 EUR, quand la grille indique 90,00 EUR, soit un écart de 20,00 EUR.
@@ -77,7 +77,7 @@ Je n'ai pas de chiffre sur la fréquence de ce cas, et je ne vous en inventerai 
 - montant de l'écart constaté entre les documents ;
 - réponse du transitaire ;
 - numéro et date de l'avoir quand il arrive, et rapprochement avec l'écart d'origine ;
-- relance à date fixe sinon.
+- votre relance à date fixe sinon (c'est vous qui écrivez au transitaire, pas un tiers).
 
 La réforme de la facturation électronique devrait aider. Depuis le 1er septembre 2026, toutes les entreprises assujetties doivent pouvoir recevoir leurs factures par une plateforme agréée, et les PME devront émettre les leurs au plus tard le 1er septembre 2027 (source : impots.gouv.fr). Des factures et des avoirs structurés se rapprochent plus facilement que des PDF.
 
@@ -105,7 +105,7 @@ Ce partage laisse la main à l'importateur : c'est lui qui pose la question à s
 
 Je lance ControlDOne, un service qui fait ce rapprochement pour les PME importatrices : facture du fournisseur, déclaration en douane, facture du transitaire, avoirs, grille tarifaire. Le code compare et calcule, chaque constat est validé par une personne avant de sortir, et chaque écart montre les deux valeurs, la page où elles figurent et la tolérance appliquée.
 
-Pour démarrer, je cherche trois PME qui importent hors de l'Union européenne et travaillent avec un transitaire, pour un diagnostic gratuit sur un lot de dossiers passés. En contrepartie, je demande le droit de publier les résultats sous forme anonymisée. Je ne promets aucun montant : un diagnostic qui conclut que tout est cohérent est aussi un résultat.
+Pour démarrer, je cherche trois PME qui importent hors de l'Union européenne et travaillent avec un transitaire, pour un diagnostic gratuit sur un lot de dossiers passés (remise de lancement). Si elles l'acceptent, par un accord séparé et révocable, je publierai ensuite des résultats anonymisés, après leur relecture. Je ne promets aucun montant : un diagnostic qui conclut que tout est cohérent est aussi un résultat.
 
 Si vous êtes concerné, ou si vous êtes expert-comptable et que vos clients importateurs vous posent ces questions, écrivez-moi en message privé.
 

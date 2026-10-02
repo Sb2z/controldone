@@ -13,6 +13,11 @@ offres:
     type: commission
     # Fraction de la base §17.4 (crédits imputés sur des écarts issus de constats validés).
     taux: "0.20"
+    # Champs descriptifs (CGV art. 5, brief juridique §6.1) — non lus par le code à ce jour.
+    assiette: HT                 # montant hors taxes des avoirs émis par un transitaire
+    exclusions:
+      - "remboursements, remises ou dégrèvements accordés par une administration (douanière, fiscale ou autre)"
+    facturation: mensuelle_recapitulative   # au titre des avoirs déclarés au cours du mois précédent
   continu:
     libelle: "Contrôle continu (abonnement mensuel)"
     type: abonnement
@@ -34,20 +39,33 @@ offres:
 
 coupons:
   LANCEMENT-3-DIAGNOSTICS:
-    libelle: "Offre de lancement : diagnostic gratuit contre le droit de publier les résultats anonymisés"
+    libelle: "Remise de lancement (100 %) — accord de publication proposé séparément"
     offre: diagnostic
     remise_pourcentage: "100"
     utilisations_max: 3          # trois diagnostics au total, tous clients confondus
     une_fois_par_client: true
-    consentement_requis: true    # accord signé de publication des résultats anonymisés (drapeau + référence)
+    # La remise ne dépend d'aucune contrepartie (brief juridique §4.4 : pas de troc). L'accord de publication
+    # des résultats anonymisés est distinct, facultatif et révocable jusqu'à la publication.
+    consentement_publication: optionnel   # cible (descriptif, non lu par le code)
+    # Lu par le code. Cible : false (la remise s'applique sans accord de publication). Reste à true tant que
+    # facturation/service.py (proposer_diagnostic) suppose un consentement présent : avec false et sans
+    # consentement, il lève AttributeError. À basculer avec la correction du code et de ses tests.
+    consentement_requis: true
 
 tva:
-  # Hypothèse : le fondateur est assujetti à la TVA (régime réel). Alternative : franchise en base
-  # (art. 293 B du CGI) -> tva_applicable: false ; la mention ci-dessous est alors imprimée et la
-  # catégorie de TVA du XML est « E » (exonération) au taux 0.
-  tva_applicable: true
-  taux: "20.00"
+  # Au démarrage : micro-entreprise en franchise en base (art. 293 B du CGI) -> tva_applicable: false ;
+  # la mention ci-dessous est imprimée et la catégorie de TVA du XML est « E » au taux 0.
+  # Passer à true (ou CONTROLDONE_TVA_APPLICABLE=true) dès le dépassement du seuil majoré.
+  tva_applicable: false
+  taux: "20.00"                # taux appliqué après sortie de la franchise
   mention_franchise: "TVA non applicable, art. 293 B du CGI"
+  # Seuils de la franchise pour les prestations de services (2026, brief juridique §4.2) — descriptifs,
+  # non lus par le code à ce jour : alerte à prévoir dès que les recettes de l'année atteignent le seuil majoré.
+  seuil_franchise_eur: "37500.00"
+  seuil_franchise_majore_eur: "41250.00"
+  alerte_depassement_seuil: true
+  # Client établi en Suisse (impôt sur les acquisitions chez le client) : mention À VALIDER par l'expert-comptable.
+  mention_autoliquidation_ch: "À VALIDER : Autoliquidation — TVA due par le preneur"
   # Option pour le paiement de la TVA d'après les débits (prestations de services) : false par défaut
   # (TVA exigible à l'encaissement). Si true : mention imprimée et code BT-8 = 5 (date de facture).
   option_debits: false
@@ -72,9 +90,9 @@ paiement:
 vendeur:
   identifiant: "fondateur"            # entité légale : clé de la série de numérotation
   raison_sociale: "À COMPLÉTER"
-  forme_juridique: "À COMPLÉTER"      # ex. « EI », « SASU au capital de … EUR »
+  forme_juridique: "À COMPLÉTER"      # ex. « EI » (entrepreneur individuel, nom suivi de « EI »)
   siren: "À COMPLÉTER"
-  rcs: "À COMPLÉTER"                  # ex. « RCS Paris 123 456 789 » ou « Dispensé d'immatriculation »
+  rcs: "À COMPLÉTER"                  # micro-entreprise BNC : « Immatriculé au RNE » (pas de RCS)
   tva_intracom: "À COMPLÉTER"
   adresse_ligne: "À COMPLÉTER"
   code_postal: "À COMPLÉTER"

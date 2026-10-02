@@ -1,9 +1,11 @@
 # Liste des transitaires publiés sous un alias public dans le référentiel anonymisé
 # (docs/REFERENTIEL.md). Tenue par le fondateur. Un transitaire absent de cette liste est publié sous
-# une empreinte salée (T-xxxxxxxxxxxx). Ne lister qu'un transitaire dont le nom peut être rendu public
-# (accord écrit ou acteur notoire) ; les entrées ci-dessous sont des exemples FICTIFS.
+# une empreinte salée (T-xxxxxxxxxxxx). Ne lister qu'un transitaire qui a donné son accord écrit (référence
+# de l'accord à indiquer dans un commentaire de l'entrée). Le référentiel ne publie que des statistiques de
+# prix, jamais de taux d'écart ou d'erreur attribués à un transitaire identifiable (brief juridique §5.4).
+# Les entrées ci-dessous sont des exemples FICTIFS.
 version: 1
 alias: {}
-#  "Transitaire national FICTIF":
+#  "Transitaire national FICTIF":       # accord écrit : [référence de l'accord, date]
 #    tva: ["FR00000000000"]
 #    noms: ["TRANSITAIRE NATIONAL FICTIF SAS"]

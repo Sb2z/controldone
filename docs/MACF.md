@@ -60,6 +60,8 @@ proposer_brouillons(FileSortante(db), brouillons_demandes(lignes, annee=2026, cl
   imprimé peut lui-même être à revoir.
 - Il **ne calcule ni ne valide aucune valeur d'émissions**, aucun nombre de certificats, aucun prix.
 - Il **n'envoie aucun e-mail** ; il ne contacte jamais un fournisseur.
+- ControlDOne n'est pas déclarant MACF autorisé et n'agit pas en qualité de représentant ; les brouillons aux
+  fournisseurs sont des courriers commerciaux du client, sans qualification juridique.
 - Il ne lit pas l'installation de production : aucun des documents traités ne la porte.
 
 Ces sujets relèvent du déclarant MACF autorisé, d'un représentant en douane enregistré ou d'un avocat :

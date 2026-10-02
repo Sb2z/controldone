@@ -25,7 +25,7 @@ Les offres sont définies dans `config/offres.yaml`. Elles se modifient sans tou
 | Offre | Prix (HT) | Règle |
 |---|---|---|
 | Diagnostic | 390 EUR, forfait | Une facture par diagnostic. |
-| Commission | 20 % des avoirs obtenus | Base §17.4 : crédits imputés sur des écarts issus de constats **validés**. Arrondi au centime, demi supérieur. |
+| Commission | 20 % des avoirs obtenus | Base §17.4 : crédits imputés sur des écarts issus de constats **validés**. Assiette hors taxes : avoirs émis par un transitaire seulement, jamais un remboursement ou une remise accordés par une administration. Facture récapitulative mensuelle (avoirs déclarés le mois précédent). Arrondi au centime, demi supérieur. |
 | Contrôle continu — Essentiel | 99 EUR / mois | Jusqu'à 20 dossiers par mois. |
 | Contrôle continu — Pro | 199 EUR / mois | Jusqu'à 60 dossiers par mois. |
 | Contrôle continu — Intensif | 349 EUR / mois | Jusqu'à 150 dossiers par mois. |
@@ -37,12 +37,18 @@ palier qui couvre un volume donné.
 **Offre de lancement** : le coupon `LANCEMENT-3-DIAGNOSTICS` donne une remise de 100 % sur un diagnostic.
 
 - Quota : 3 utilisations au total, une seule par client.
-- Contrepartie : le client signe un accord qui autorise la publication de ses résultats anonymisés.
-  L'accord est obligatoire. Le fondateur saisit :
+- Nature : **remise commerciale de lancement de 100 %**, sans contrepartie (brief juridique §4.4 : pas de
+  troc). L'autorisation de publier des résultats anonymisés est un accord **distinct, facultatif et
+  révocable** jusqu'à la publication, sans effet sur la remise.
+- **Écart connu entre la cible et le code** : `consentement_requis` reste à `true` dans
+  `config/offres.yaml`, car `ServiceFacturation.proposer_diagnostic` suppose encore un consentement présent
+  (avec `false` et sans consentement, il lève `AttributeError`). Tant que ce n'est pas corrigé, le fondateur
+  saisit :
   - le drapeau « signé » ;
   - le nom du signataire ;
   - la date ;
   - la référence du document signé (conservé hors ligne).
+  Cible : `consentement_requis: false` ; l'accord de publication éventuel est tracé à part.
 - Contrôles :
   - quota et unicité vérifiés une première fois à la création du brouillon ;
   - revérifiés **sous verrou** à l'émission ;
@@ -51,13 +57,16 @@ palier qui couvre un volume donné.
 
 **TVA.**
 
-- Hypothèse par défaut : le fondateur est assujetti à la TVA (taux de 20 %, catégorie `S`).
-- Alternative : franchise en base. Pour l'activer, mettre `tva.tva_applicable: false` (ou
-  `CONTROLDONE_TVA_APPLICABLE=false`). Effets :
+- Par défaut : franchise en base au démarrage (micro-entreprise), `tva.tva_applicable: false`. Effets :
   - catégorie `E`, taux 0 ;
   - motif d'exonération « TVA non applicable, art. 293 B du CGI » imprimé et repris dans le XML (BT-120,
     note `TXD`) ;
   - code `VATEX-FR-FRANCHISE`.
+- Seuils 2026 pour les services : 37 500 EUR, seuil majoré 41 250 EUR (`tva.seuil_franchise_eur`,
+  `tva.seuil_franchise_majore_eur`, descriptifs : l'alerte de dépassement n'est pas encore codée). Dès le
+  dépassement : `tva_applicable: true` (ou `CONTROLDONE_TVA_APPLICABLE=true`), taux de 20 %, catégorie `S`.
+- Client établi en Suisse : mention d'autoliquidation `tva.mention_autoliquidation_ch`, à valider par
+  l'expert-comptable (non imprimée par le code à ce jour).
 - L'option pour le paiement de la TVA d'après les débits (`tva.option_debits`) est désactivée par défaut.
   Une fois activée :
   - la mention est imprimée ;
@@ -327,11 +336,11 @@ bout est `tests/facturation/test_avant_paiement.py` (route API, file de tâches,
 
 ### Hypothèses (à faire confirmer)
 
-1. **Assujettissement à la TVA** du fondateur (taux de 20 %). L'alternative de la franchise en base est
-   prévue par la configuration.
-2. **Coupon contre droit de publication** : une prestation rendue contre une contrepartie non monétaire peut
-   être une opération imposable (échange). La base serait alors la valeur du service, pas 0 EUR. **À faire
-   valider par l'expert-comptable** avant le premier diagnostic gratuit.
+1. **Franchise en base** du fondateur au démarrage (art. 293 B du CGI) ; passage à l'assujettissement prévu
+   par la configuration. Seuil micro 2026 (77 700 ou 83 600 EUR) à vérifier.
+2. **Remise de lancement** : présentée comme une remise commerciale de 100 %, l'accord de publication étant
+   séparé et facultatif, pour éviter un échange de services taxable (brief juridique §4.4). Traitement fiscal
+   **à faire valider par l'expert-comptable** avant le premier diagnostic.
 3. **Montant de 40 EUR** (D441-5) : non relu sur Légifrance (brief juridique, confiance élevée).
 4. **Statuts de cycle de vie** : la liste 200 à 213 vient de sources non officielles. Seuls Déposée,
    Rejetée, Refusée et Encaissée seraient obligatoires. À confirmer sur XP Z12-012.

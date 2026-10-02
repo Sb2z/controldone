@@ -29,7 +29,7 @@ Ordre : d'abord les adresses e-mail publiées par l'entreprise, puis les formula
 
 ## Avant d'envoyer
 
-1. Relire chaque brouillon et compléter les champs entre crochets (nom, adresse, SIREN de l'entreprise émettrice, téléphone).
+1. Relire chaque brouillon et compléter les champs entre crochets (nom suivi de « EI », adresse, SIREN, téléphone).
 2. Vérifier que l'adresse ou le formulaire est toujours publié à l'URL indiquée (le jour de l'envoi).
 3. Envoyer un par un, 5 par jour au plus, depuis la boîte du fondateur ; relances J+5 et J+12 selon `../sequence_emails.md`, seulement sans réponse.
 4. Noter toute réponse STOP le jour même dans `../prospects.csv` et ne plus jamais écrire à cette adresse.
@@ -38,4 +38,4 @@ Prospects du fichier sans brouillon : A TEX (pas d'e-mail ni de formulaire publi
 
 ## Dépôt dans la boîte Gmail (2 octobre 2026)
 
-Les 13 brouillons qui ont une adresse e-mail publiée (01 à 13) ont été déposés comme **brouillons** dans la boîte Gmail du fondateur, objet préfixé « [À VALIDER] ». Aucun n'a été envoyé. Avant tout envoi : compléter la signature ([Prénom Nom], SIREN, adresse, téléphone), retirer le préfixe, vérifier la ligne « Terr'Asia » (SIREN à confirmer). Les 7 autres (14 à 20) visent un formulaire de contact : ils restent en fichiers, à coller à la main.
+Les 13 brouillons qui ont une adresse e-mail publiée (01 à 13) ont été déposés comme **brouillons** dans la boîte Gmail du fondateur, objet préfixé « [À VALIDER] ». Aucun n'a été envoyé. **Ces brouillons Gmail portent encore l'ancienne formulation de l'offre de lancement (« En échange, je demande le droit de publier… ») et l'ancienne signature : avant tout envoi, remplacer leur texte par celui des fichiers 01 à 13 (remise de lancement + accord de publication séparé et facultatif, signature « EI »).** Avant tout envoi : compléter la signature ([Prénom Nom] EI, SIREN, adresse, téléphone), retirer le préfixe, vérifier la ligne « Terr'Asia » (SIREN à confirmer). Les 7 autres (14 à 20) visent un formulaire de contact : ils restent en fichiers, à coller à la main.

@@ -19,7 +19,9 @@ def test_offres_par_defaut():
     assert c.taux_commission == Decimal("0.20")
     assert [(p.prix_mensuel_ht, p.dossiers_par_mois) for p in c.paliers] == [
         (Decimal("99.00"), 20), (Decimal("199.00"), 60), (Decimal("349.00"), 150)]
-    assert c.tva.tva_applicable and c.tva.taux == Decimal("20.00") and c.tva.categorie == "S"
+    # Franchise en base au démarrage (art. 293 B du CGI) ; taux conservé pour la sortie de franchise.
+    assert not c.tva.tva_applicable and c.tva.taux == Decimal("20.00") and c.tva.categorie == "E"
+    assert c.tva.mention_franchise == "TVA non applicable, art. 293 B du CGI"
     assert c.prefixe_facture == "F" and c.prefixe_avoir == "AV"
     assert c.vendeur.siren == A_COMPLETER and not c.vendeur.complet
     assert "siren" in c.vendeur.champs_a_completer()

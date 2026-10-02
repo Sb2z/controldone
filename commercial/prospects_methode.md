@@ -59,11 +59,20 @@ Source : CNIL, « La prospection commerciale par courrier électronique », http
 - **Régime B2B d'opposition (opt-out)** : un professionnel peut être sollicité par e-mail sans consentement préalable si le message concerne sa profession (art. L34-5 CPCE ; intérêt légitime, art. 6.1.f RGPD). Nos messages visent la fonction de dirigeant, de responsable achats/import ou de DAF d'une entreprise qui importe : le lien avec la profession est direct.
 - **Adresses génériques** (contact@, info@) : elles désignent une organisation et non une personne ; elles sortent du régime de protection des personnes, mais nous appliquons quand même les mêmes règles (identification, désinscription).
 - **Adresses nominatives** publiées par l'entreprise (ex. une adresse prénom.nom@ affichée sur la page Contact) : ce sont des données personnelles. Elles ne sont utilisées que si l'entreprise les publie elle-même pour ce type de demande, et la personne est informée dès le premier message.
-- **Information sur l'origine des données** (art. 14 RGPD) : chaque premier message indique où l'adresse a été trouvée (« votre adresse figure sur votre site, page Contact »), qui écrit (nom, fonction, SIREN de l'entreprise émettrice) et pourquoi.
+- **Information sur l'origine des données** (art. 14 RGPD) : chaque premier message indique où l'adresse a été trouvée (« votre adresse figure sur votre site, page Contact »), qui écrit (nom suivi de « EI », fonction, SIREN) et pourquoi.
 - **Désinscription** : chaque message propose « répondez STOP », gratuit et immédiat. Un STOP est inscrit le jour même dans le fichier et l'adresse n'est plus jamais utilisée. L'opposition est possible dès le premier message.
 - **LinkedIn** : pas d'extraction de profils (scraping), pas d'automatisation. Mêmes règles que l'e-mail par prudence (`legal_market.md`, hypothèse n° 1).
-- **Durée de conservation** : 3 ans à compter du dernier contact émanant du prospect, puis suppression ; les lignes sans réponse sont supprimées au plus tard 3 ans après la collecte. Cette durée correspond à la recommandation habituelle de la CNIL pour les prospects (référentiel « gestion des activités commerciales ») ; elle n'a pas été relue sur cnil.fr lors de cette collecte : **à vérifier**.
+- **Durée de conservation** : 3 ans à compter de la collecte ou du dernier contact émanant du prospect, puis suppression ; les lignes sans réponse sont supprimées au plus tard 3 ans après la collecte. Confirmé : référentiel CNIL « gestion des activités commerciales » (3 ans à compter de la collecte ou du dernier contact émanant du prospect ; la simple ouverture d'un e-mail ne compte pas, un e-mail que nous envoyons non plus). Voir `docs/recherche/juridique_france_suisse.md` §5.3.
+- **Employeur du fondateur** : ne jamais prospecter l'employeur actuel du fondateur, ni ses clients, fournisseurs ou transitaires, pendant toute la durée du contrat de travail (loyauté ; brief juridique §3.1). Vérifier chaque ligne avant envoi.
 - **Registre** : ajouter le traitement « prospection commerciale B2B » au registre des activités de traitement (`docs/RGPD_registre.md`) : finalité, catégories de données (dénomination, adresse e-mail professionnelle, page source), base légale (intérêt légitime), durée, droits.
+
+## 5 bis. Suisse et Belgique
+
+Source : `docs/recherche/juridique_france_suisse.md` §5.5 (à faire confirmer par un avocat du pays concerné).
+
+- **Suisse** : consentement préalable (opt-in) pour tout envoi de masse, en B2B comme en B2C (art. 3 al. 1 let. o LCD). Donc uniquement des e-mails individuels et personnalisés, rédigés un par un, en lien avec l'activité du destinataire ; jamais d'outil d'envoi groupé ; relances limitées. Identification de l'expéditeur et désinscription dans chaque message.
+- **Belgique** : prospection par e-mail sans consentement seulement vers des adresses impersonnelles de personnes morales (info@, contact@). Adresses nominatives exclues sans consentement préalable.
+- **Luxembourg** : aucune prospection avant avis d'un avocat luxembourgeois (monopole de la consultation juridique à vérifier).
 
 ## 6. Limites connues de ce fichier
 

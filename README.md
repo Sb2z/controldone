@@ -48,5 +48,6 @@ Configuration : copier `.env.example` en `.env`. Sans `ANTHROPIC_API_KEY`, seuls
 `structure` et `deterministe` sont utilisés.
 
 Principe : le modèle de langage lit, le code testé compare et calcule, le fondateur valide.
-Le produit ne constate que des écarts factuels et contractuels ; il ne se prononce jamais sur un droit,
+Le produit ne constate que des écarts factuels, documentaires et tarifaires (prix chiffrés de la grille
+transmise par le client) ; il ne se prononce jamais sur un droit,
 une taxe, un classement, une origine ou une valeur en douane.
