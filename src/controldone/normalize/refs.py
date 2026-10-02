@@ -61,6 +61,13 @@ def ref_compatibles(x: str | None, y: str | None) -> bool:
     """Égales, ou l'une contient l'autre et la plus courte a au moins 5 caractères (§8.4)."""
     if ref_egales(x, y):
         return True
+    # Inclusion sur la forme §5.2 (``norm_ref``), telle que l'écrit §8.4 : « 0001-0 » est une troncature de
+    # « FAC/2026/0001-0 » (D-805) ; puis sur la forme sans zéros de tête des segments numériques.
+    n1, n2 = norm_ref(x), norm_ref(y)
+    if n1 and n2:
+        court, long_ = (n1, n2) if len(n1) <= len(n2) else (n2, n1)
+        if len(court) >= LONGUEUR_MIN_CONTAINMENT and court in long_:
+            return True
     a, b = norm_ref_containment(x), norm_ref_containment(y)
     if not a or not b:
         return False

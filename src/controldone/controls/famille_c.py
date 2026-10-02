@@ -23,7 +23,12 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
-from controldone.controls.confusion import codes_confondables, confusion_applicable
+from controldone.controls.confusion import (
+    CLASSES_CONFUSION,
+    LETTRES_CHIFFRES,
+    codes_confondables,
+    confusion_applicable,
+)
 from controldone.controls.framework import (
     Confusion,
     ControlContext,
@@ -55,6 +60,7 @@ from controldone.normalize.fiscal import normalize_vat
 from controldone.normalize.refs import (
     mrn_prefixe,
     norm_ref,
+    norm_ref_transport,
     ref_compatibles,
     ref_transport_compatibles,
 )
@@ -1384,21 +1390,46 @@ def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
 # =====================================================================================================
 
 
-def _refs_transport_dossier(ctx: ControlContext) -> list[str]:
-    refs: list[str] = []
-    for d in ctx.declarations(dernieres_versions=False):
-        refs += [r.reference.valeur for r in d.dec.documents_references
-                 if r.reference is not None and r.reference.valeur]
-    for fc in ctx.factures_commerciales():
-        if fc.fc.ref_transport is not None and fc.fc.ref_transport.valeur:
-            refs.append(fc.fc.ref_transport.valeur)
-    for s in ctx.supports():
-        if s.champs is None or getattr(s.champs, "type_document", None) != "document_support":
-            continue
-        for v in (s.sup.ref_transport_maitre, s.sup.ref_transport_maison):
-            if v is not None and v.valeur:
-                refs.append(v.valeur)
+def _refs_transport_documents(docs: Iterable[Document]) -> list[ValeurSourcee]:
+    """Références de transport citées par des documents : déclarations (documents produits), factures
+    commerciales, documents support."""
+    refs: list[ValeurSourcee] = []
+    for d in docs:
+        t = getattr(d.champs, "type_document", None) if d.champs is not None else None
+        if t == "declaration":
+            refs += [r.reference for r in d.dec.documents_references if r.reference is not None and r.reference.valeur]
+        elif t == "facture_commerciale":
+            if d.fc.ref_transport is not None and d.fc.ref_transport.valeur:
+                refs.append(d.fc.ref_transport)
+        elif t == "document_support":
+            refs += [v for v in (d.sup.ref_transport_maitre, d.sup.ref_transport_maison) if v is not None and v.valeur]
     return refs
+
+
+def _refs_transport_dossier(ctx: ControlContext) -> list[ValeurSourcee]:
+    docs = [*ctx.declarations(dernieres_versions=False), *ctx.factures_commerciales(), *ctx.supports()]
+    return _refs_transport_documents(docs)
+
+
+_CONFUSIONS_REF: dict[str, set[str]] = {}
+for _a, _b in [*LETTRES_CHIFFRES.items(), *((x, y) for cl in CLASSES_CONFUSION for x in cl for y in cl if x != y)]:
+    _CONFUSIONS_REF.setdefault(_a.upper(), set()).add(_b.upper())
+    _CONFUSIONS_REF.setdefault(_b.upper(), set()).add(_a.upper())
+
+
+def refs_confondables(a: str | None, b: str | None, *, max_differences: int = 2) -> bool:
+    """Références normalisées de même longueur qui ne diffèrent que par 1 à ``max_differences`` caractères,
+    chacun d'une paire de confusion de lecture (§8.5.4 : classes de chiffres, O↔0, D↔0, I↔1, S↔5, B↔8, Z↔2,
+    G↔6). Sert à ne pas signaler comme « sans correspondance » une référence mal lue (C7, D-709)."""
+    x, y = norm_ref(a), norm_ref(b)
+    if len(x) != len(y) or x == y or len(x) < 5:
+        return False
+    diff = [i for i in range(len(x)) if x[i] != y[i]]
+    return len(diff) <= max_differences and all(y[i] in _CONFUSIONS_REF.get(x[i], set()) for i in diff)
+
+
+def _sujette(ctx: ControlContext, v: ValeurSourcee) -> bool:
+    return confusion_applicable(v, ctx.qualite_page(v))
 
 
 @control("C7")
@@ -1407,17 +1438,29 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
 
     Un MRN est reconnu par son préfixe (toutes versions, et déclarations des autres dossiers du client
     pour un relevé) ; une référence de transport par ``ref_compatibles`` avec une référence de la
-    déclaration, de la facture commerciale ou d'un document support. ``a_verifier`` seulement, sans montant.
+    déclaration, de la facture commerciale ou d'un document support — du dossier ou d'un autre dossier qui
+    contient la même facture (relevé réparti). Une référence qui ne diffère d'une référence connue que par
+    une confusion de lecture (l'une des deux lue par OCR) n'est pas signalée. Une facture partagée entre
+    dossiers est jugée dans le dossier principal seulement. ``a_verifier`` seulement, sans montant.
     """
     factures = ctx.factures_transitaires()
     if not factures:
         return [ctx.non_applicable("C7", RaisonCode.facture_transitaire_absente)]
+    prefixes_vals = [d.dec.mrn for d in ctx.declarations(dernieres_versions=False)
+                     if d.dec.mrn_prefixe and d.dec.mrn is not None]
     prefixes = {d.dec.mrn_prefixe for d in ctx.declarations(dernieres_versions=False) if d.dec.mrn_prefixe}
     prefixes |= _prefixes_autres_dossiers(ctx)
-    refs_dossier = _refs_transport_dossier(ctx)
+    refs_propres = _refs_transport_dossier(ctx)
     out = []
     for f in factures:
         unite = cle_unite(ft=f.id)
+        if not dossier_principal(ctx, f.id):
+            out.append(ctx.non_applicable("C7", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[f.id],
+                                          details={"motif": "facture_evaluee_dans_un_autre_dossier"}))
+            continue
+        freres = [a for a in ctx.autres_dossiers if f.id in a.documents]
+        refs_dossier = refs_propres + _refs_transport_documents(
+            d for a in freres for d in a.documents.values() if d.id != f.id)
         ft = f.ft
         mrns = _mrn_cites(ctx, f)
         transports = [v for v in [*ft.refs_transport, *(t.ref_transport for t in ft.tableau_mrn),
@@ -1432,8 +1475,12 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
             if p in vus:
                 continue
             vus.add(p)
-            if not prefixes or p not in prefixes:
-                sans.append(v)
+            if p in prefixes:
+                continue
+            if any(refs_confondables(p, mrn_prefixe(x.valeur)) and (_sujette(ctx, v) or _sujette(ctx, x))
+                   for x in prefixes_vals):
+                continue
+            sans.append(v)
         transports_sans: list[ValeurSourcee] = []
         verifiable_transport = bool(refs_dossier)
         if verifiable_transport:
@@ -1443,9 +1490,13 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
                 if k in vus_t:
                     continue
                 vus_t.add(k)
-                if not any(ref_transport_compatibles(v.valeur, r) or ref_compatibles(v.valeur, r)
-                           for r in refs_dossier):
-                    transports_sans.append(v)
+                if any(ref_transport_compatibles(v.valeur, r.valeur) or ref_compatibles(v.valeur, r.valeur)
+                       for r in refs_dossier):
+                    continue
+                if any(refs_confondables(norm_ref_transport(v.valeur), norm_ref_transport(r.valeur))
+                       and (_sujette(ctx, v) or _sujette(ctx, r)) for r in refs_dossier):
+                    continue
+                transports_sans.append(v)
         details = {"mrn_cites": len(vus), "refs_transport_verifiees": verifiable_transport}
         entrees = {f"ref_{i}": v for i, v in enumerate(sans + transports_sans)}
         if not sans and not transports_sans:
@@ -1493,9 +1544,17 @@ def c8_client_facture(ctx: ControlContext) -> list[ResultatControle]:
         return [ctx.non_applicable("C8", RaisonCode.facture_transitaire_absente)]
     importateurs = _tva_importateur(ctx)
     out = []
+    # Factures adressées à un même numéro de TVA différent de l'importateur : un seul constat par dossier et
+    # par numéro (une facture de débours et une facture de prestations pour le même envoi relèvent du même
+    # fait ; D-707). Une facture partagée entre dossiers (relevé) n'est jugée que dans le dossier principal.
+    ecarts: dict[str, list[Document]] = {}
     for f in factures:
         unite = cle_unite(ft=f.id)
         cf = f.ft.client_facture
+        if not dossier_principal(ctx, f.id):
+            out.append(ctx.non_applicable("C8", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[f.id],
+                                          details={"motif": "facture_evaluee_dans_un_autre_dossier"}))
+            continue
         if not importateurs:
             out.append(ctx.non_verifiable("C8", RaisonCode.valeur_absente, unite=unite, documents=[f.id],
                                           details={"motif": "tva_importateur_absente"}))
@@ -1506,31 +1565,11 @@ def c8_client_facture(ctx: ControlContext) -> list[ResultatControle]:
         if ctx.utilisable(cf.tva):
             assert cf.tva is not None
             t = normalize_vat(cf.tva.valeur)
-            commun = dict(unite=unite, entrees={"client_facture": cf.tva, "importateur": ref},
-                          attendu=ref.valeur, constate=cf.tva.valeur, documents=docs)
             if t in tvas_imp:
-                out.append(ctx.conforme("C8", **commun))
+                out.append(ctx.conforme("C8", unite=unite, entrees={"client_facture": cf.tva, "importateur": ref},
+                                        attendu=ref.valeur, constate=cf.tva.valeur, documents=docs))
                 continue
-            entite = ctx.entite_par_tva(cf.tva.valeur)
-            douteuse = any(
-                confusion_applicable(v, ctx.qualite_page(v)) and codes_confondables(
-                    (normalize_vat(cf.tva.valeur) or "")[2:], (normalize_vat(ref.valeur) or "")[2:], max_differences=1)
-                for v in (cf.tva, ref)
-            )
-            classement = ctx.classify("C8", ecart=None, tolerance=None, seuil_certitude=None,
-                                      valeurs_cles=[cf.tva, ref], documents=docs, lecture_douteuse=douteuse)
-            qui = (f"Ce numéro est celui de l'entité {entite.raison_sociale} du client." if entite is not None
-                   else "Ce numéro ne correspond à aucune entité enregistrée du client.")
-            src = "la déclaration" if ref.chemin.startswith("declaration") else "la facture commerciale"
-            libelle = (
-                f"{libelle_facture([f])} est adressée au numéro de TVA {cf.tva.valeur_brute or cf.tva.valeur}"
-                f"{_entre_parentheses(page_txt([cf.tva]))} ; {src} indique comme importateur le numéro "
-                f"{ref.valeur_brute or ref.valeur}{_entre_parentheses(page_txt([ref]))}. {qui}"
-            )
-            out.append(ctx.constat(
-                "C8", classement, libelle=libelle, prochaine_action=ACTION_C8,
-                preuves=[preuve(cf.tva, RolePreuve.valeur_b), preuve(ref, RolePreuve.valeur_a)], **commun,
-            ))
+            ecarts.setdefault(t or norm_ref(cf.tva.valeur), []).append(f)
             continue
         # Pas de TVA lue : comparaison par nom ou alias (jamais certaine).
         if not ctx.utilisable(cf.nom):
@@ -1565,4 +1604,42 @@ def c8_client_facture(ctx: ControlContext) -> list[ResultatControle]:
             preuves=[preuve(cf.nom, RolePreuve.valeur_b), preuve(ref, RolePreuve.valeur_a)],
             entrees={"client_facture": cf.nom, "importateur": ref},
         ))
+    for groupe in ecarts.values():
+        out.append(_c8_ecart_tva(ctx, groupe, importateurs))
     return out
+
+
+def _c8_ecart_tva(ctx: ControlContext, groupe: Sequence[Document], importateurs: Sequence[ValeurSourcee]
+                  ) -> ResultatControle:
+    """Constat C8 pour des factures adressées à un même numéro de TVA, différent de celui de l'importateur."""
+    ref = importateurs[0]
+    tvas = [f.ft.client_facture.tva for f in groupe]
+    assert all(v is not None for v in tvas)
+    cf_tva = max((v for v in tvas if v is not None), key=lambda v: v.confiance)
+    ids = [f.id for f in groupe]
+    unite = cle_unite(ft=ids[0] if len(ids) == 1 else ids)
+    docs = [*ids, *dict.fromkeys(v.document_id for v in importateurs if v.document_id)]
+    commun = dict(unite=unite, entrees={"client_facture": cf_tva, "importateur": ref},
+                  attendu=ref.valeur, constate=cf_tva.valeur, documents=docs)
+    entite = ctx.entite_par_tva(cf_tva.valeur)
+    douteuse = any(
+        confusion_applicable(v, ctx.qualite_page(v)) and codes_confondables(
+            (normalize_vat(cf_tva.valeur) or "")[2:], (normalize_vat(ref.valeur) or "")[2:], max_differences=1)
+        for v in (cf_tva, ref)
+    )
+    cles = [v for v in tvas if v is not None] + [ref]
+    classement = ctx.classify("C8", ecart=None, tolerance=None, seuil_certitude=None,
+                              valeurs_cles=cles, documents=docs, lecture_douteuse=douteuse)
+    qui = (f"Ce numéro est celui de l'entité {entite.raison_sociale} du client." if entite is not None
+           else "Ce numéro ne correspond à aucune entité enregistrée du client.")
+    src = "la déclaration" if ref.chemin.startswith("declaration") else "la facture commerciale"
+    est = "est adressée" if len(groupe) == 1 else "sont adressées"
+    libelle = (
+        f"{libelle_facture(list(groupe))} {est} au numéro de TVA {cf_tva.valeur_brute or cf_tva.valeur}"
+        f"{_entre_parentheses(page_txt(tvas))} ; {src} indique comme importateur le numéro "
+        f"{ref.valeur_brute or ref.valeur}{_entre_parentheses(page_txt([ref]))}. {qui}"
+    )
+    return ctx.constat(
+        "C8", classement, libelle=libelle, prochaine_action=ACTION_C8,
+        preuves=[*(preuve(v, RolePreuve.valeur_b) for v in tvas), preuve(ref, RolePreuve.valeur_a)], **commun,
+    )

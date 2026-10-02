@@ -4,18 +4,21 @@ Format CSV : ``date,devise,devise_par_eur`` (convention BCE : unités de devise 
 Usage **limité** (§8.7) : déterminer le sens d'un taux imprimé sans libellé, et A7 (ordre de grandeur).
 Jamais pour calculer un montant en jeu.
 
-Le fichier livré est vide (en-tête seul) : il est alimenté par une tâche d'import hors ligne.
+Le fichier est alimenté hors ligne par ``scripts/importer_taux_bce.py`` à partir du fichier historique publié
+par la BCE (``eurofxref-hist.csv``, format large : une colonne par devise) ; voir D-806.
 """
 
 from __future__ import annotations
 
 import csv
+import io
+import zipfile
 from bisect import bisect_right
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-__all__ = ["TableTauxReference"]
+__all__ = ["TableTauxReference", "convertir_historique_bce", "table_par_defaut"]
 
 
 class TableTauxReference:
@@ -56,3 +59,54 @@ class TableTauxReference:
     def eur_par_devise(self, devise: str, le: date) -> Decimal | None:
         t = self.devise_par_eur(devise, le)
         return None if t is None or t == 0 else Decimal(1) / t
+
+
+def convertir_historique_bce(contenu: bytes, *, depuis: date | None = None) -> str:
+    """Convertit le fichier historique de la BCE (``eurofxref-hist.csv`` ou son archive ZIP : ``Date,USD,JPY,…``,
+    valeurs « N/A » pour une devise non cotée) au format ``date,devise,devise_par_eur`` de ``ref/taux_bce.csv``.
+    Lignes triées par date puis devise ; ``depuis`` limite la période conservée."""
+    if contenu[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(contenu)) as z:
+            nom = next(n for n in z.namelist() if n.lower().endswith(".csv"))
+            contenu = z.read(nom)
+    lignes: list[tuple[str, str, str]] = []
+    for ligne in csv.DictReader(io.StringIO(contenu.decode("utf-8-sig"))):
+        jour = (ligne.get("Date") or "").strip()
+        if not jour:
+            continue
+        d = date.fromisoformat(jour)
+        if depuis is not None and d < depuis:
+            continue
+        for devise, valeur in ligne.items():
+            if not devise or devise == "Date" or valeur is None:
+                continue
+            valeur = valeur.strip()
+            if not valeur or valeur.upper() == "N/A":
+                continue
+            Decimal(valeur)  # refuse une valeur non numérique
+            lignes.append((d.isoformat(), devise.strip().upper(), valeur))
+    lignes.sort()
+    sortie = io.StringIO()
+    w = csv.writer(sortie, lineterminator="\n")
+    w.writerow(["date", "devise", "devise_par_eur"])
+    w.writerows(lignes)
+    return sortie.getvalue()
+
+
+_DEFAUT: dict[str, TableTauxReference | None] = {}
+
+
+def table_par_defaut() -> TableTauxReference | None:
+    """Table ``<ref_dir>/taux_bce.csv`` (réglage ``CONTROLDONE_REF_DIR``), chargée une fois ; ``None`` si le
+    fichier est absent ou ne contient aucun taux."""
+    from controldone.config import get_settings
+
+    chemin = Path(get_settings().ref_dir) / "taux_bce.csv"
+    cle = str(chemin)
+    if cle not in _DEFAUT:
+        table = None
+        if chemin.is_file():
+            t = TableTauxReference.depuis_csv(chemin)
+            table = t if t._taux else None
+        _DEFAUT[cle] = table
+    return _DEFAUT[cle]

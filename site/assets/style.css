@@ -165,8 +165,8 @@ main { display: block; }
 /* ---------- Hero ---------- */
 .hero { padding: 3.5rem 0 4rem; }
 .hero .wrap { display: grid; gap: 2.5rem; align-items: center; }
-@media (min-width: 960px) { .hero .wrap { grid-template-columns: 1.08fr .92fr; gap: 3.5rem; } .hero { padding: 5rem 0 5.5rem; } }
-.hero h1 { max-width: 18ch; }
+@media (min-width: 960px) { .hero .wrap { grid-template-columns: 1.12fr .88fr; gap: 3.5rem; } .hero { padding: 5rem 0 5.5rem; } }
+.hero h1 { max-width: 21ch; font-size: clamp(1.95rem, 1.35rem + 2.1vw, 2.75rem); hyphens: manual; }
 .hero .lead { margin-top: 1rem; }
 .hero-points { list-style: none; padding: 0; margin: 1.5rem 0 0; display: grid; gap: .45rem; color: var(--ink-2); }
 .hero-points li { display: flex; gap: .6rem; align-items: baseline; margin: 0; }
