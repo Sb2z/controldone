@@ -61,8 +61,14 @@ Un-à-un, glouton, déterministe, sur l'ensemble du split : les candidats sont t
 
 1. écart de montant absolu `|f.montant_en_jeu − e.expected_amount_eur|` croissant ; les couples
    où l'un des deux montants est `null` passent **après** tous les autres ;
-2. `error_id` ;
-3. `finding_id` (puis `dossier_id` pour départager des `finding_id` identiques entre dossiers).
+2. **départage** à écart égal : d'abord le constat dont `controle_id` est le contrôle
+   **principal** de l'erreur (`e.control_id`), puis le constat de niveau `ecart_certain` ;
+3. `error_id` ;
+4. `finding_id` (puis `dossier_id` pour départager des `finding_id` identiques entre dossiers).
+
+Le départage (2) a été ajouté après le premier holdout (D-905) : une erreur B4 (acceptée B4/A10)
+était appariée au constat A10 `a_verifier` dont le `finding_id` triait avant, et le constat B4
+`ecart_certain` du même document était compté FP certain. Il s'applique à tous les splits.
 
 On parcourt la liste et on retient un couple si ni le constat ni l'erreur ne sont déjà pris.
 

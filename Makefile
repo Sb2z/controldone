@@ -2,7 +2,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 
-.PHONY: install test lint demo bench-dev serve-demo
+.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build
 
 install:
 	uv pip install --python $(PY) -e ".[dev]"
@@ -30,3 +30,18 @@ serve-demo:
 	  $(PY) -m controldone.cli init-demo --si-absente
 	CONTROLDONE_ENV=dev CONTROLDONE_DATA_DIR=$(DEMO_WEB) CONTROLDONE_DATABASE_URL=sqlite:///$(DEMO_WEB)/controldone.db \
 	  $(PY) -m controldone.cli serve --host 127.0.0.1 --port $(or $(PORT),8000)
+
+# Démonstration complète en une commande : installation si besoin, rapport (var/demo/), base web neuve
+# (var/demo_web/, identifiants dans var/demo_web/identifiants.txt), serveur http://127.0.0.1:8000 (Ctrl-C).
+demo-complete:
+	scripts/demo_complete.sh
+
+# Diagnostic d'un dossier réel ou fictif : make diagnostic DOSSIER=chemin [OUT=var/diagnostic] [SANS_LLM=1]
+OUT ?= var/diagnostic
+diagnostic:
+	@test -n "$(DOSSIER)" || { echo "Usage : make diagnostic DOSSIER=chemin/du/lot [OUT=var/diagnostic] [SANS_LLM=1]"; exit 2; }
+	$(PY) -m controldone.cli diagnostic "$(DOSSIER)" --out "$(OUT)" $(if $(SANS_LLM),--sans-llm,)
+
+# Image de production (voir docs/DEPLOIEMENT.md) — construction seulement, aucun déploiement.
+docker-build:
+	docker build -f deploy/Dockerfile -t controldone:$(or $(VERSION),2.0.0) .

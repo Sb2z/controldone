@@ -193,6 +193,30 @@ def test_glouton_trie_par_ecart_de_montant_puis_ids(banc):
     assert classes(m)["f_a"] == "fp_certain" and classes(m)["f_b"] == "fp_certain"
 
 
+def test_departage_controle_principal_puis_niveau_certain(banc):
+    # Holdout 1 : à écart de montant égal (deux montants null), le constat du contrôle
+    # principal de l'erreur l'emporte sur un constat d'un contrôle accepté qui trie avant.
+    e = erreur("BX0001-E1", "B4", ["B4", "A10"], "ecart_certain", None, None, ["dec1"])
+    banc.ajouter(truth("BX0001", [e]), findings("BX0001", [
+        constat("f_a", "A10", "a_verifier", None, ["p_dec"]),
+        constat("f_b", "B4", "ecart_certain", None, ["p_dec"]),
+    ]))
+    m = banc.scorer()
+    assert classes(m)["f_b"] == "vp_certain"
+    assert classes(m)["f_a"] == "fp_a_verifier"
+    assert m["global"]["fp_certain"] == 0
+
+
+def test_departage_niveau_certain_a_controle_egal(banc):
+    e = erreur("BX0001-E1", "B4", ["B4", "A10"], "ecart_certain", None, None, ["dec1"])
+    banc.ajouter(truth("BX0001", [e]), findings("BX0001", [
+        constat("f_a", "B4", "a_verifier", None, ["p_dec"]),
+        constat("f_b", "B4", "ecart_certain", None, ["p_dec"]),
+    ]))
+    m = banc.scorer()
+    assert classes(m)["f_b"] == "vp_certain"
+
+
 def test_a_verifier_apparie_a_erreur_certaine_est_sous_classement(banc):
     banc.ajouter(truth("BX0001", [E_C3]),
                  findings("BX0001", [constat("f1", "C3", "a_verifier", "2508.00", ["p_dec"])]))

@@ -13,3 +13,8 @@ bench/out/
 htmlcov/
 dist/
 build/
+
+# Secrets de production (deploy/)
+.env.prod
+deploy/.env
+bench/corpus_h2/

@@ -1,0 +1,84 @@
+# ControlDOne v2 — intégration continue. Déclenchement MANUEL uniquement (workflow_dispatch) pour ne pas
+# consommer les minutes GitHub Actions du fondateur sans son accord.
+# Activer sur push / pull request : docs/DEPLOIEMENT.md § 12.
+name: CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      banc:
+        description: "Générer le corpus et appliquer la porte du banc (holdout)"
+        type: boolean
+        default: true
+      avec_llm:
+        description: "Utiliser le secret ANTHROPIC_API_KEY pour le banc (coût IA réel)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  CONTROLDONE_ENV: test
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Tesseract (fra, eng, osd)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-osd
+          tesseract --list-langs
+
+      - name: Dépendances (figées) + outils de dev
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install "pytest>=8.0" "ruff>=0.4"
+
+      - name: Ruff
+        run: ruff check src tests
+
+      - name: Pytest
+        run: pytest -q
+
+      - name: Banc — génération du corpus (dev + holdout)
+        if: ${{ inputs.banc }}
+        run: python -m bench.generator --split all --out bench/corpus --jobs 4
+
+      - name: Banc — exécution sur le holdout
+        if: ${{ inputs.banc }}
+        env:
+          ANTHROPIC_API_KEY: ${{ inputs.avec_llm && secrets.ANTHROPIC_API_KEY || '' }}
+        run: python -m controldone.bench_run --corpus bench/corpus --split holdout --out bench/out/ci --workers 4 --no-score
+
+      - name: Banc — porte (seuil bloquant SPEC §19.7)
+        if: ${{ inputs.banc }}
+        run: python -m bench.score --corpus bench/corpus --split holdout --run bench/out/ci --gate
+
+      - name: Métriques du banc
+        if: ${{ always() && inputs.banc }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-holdout-metrics
+          path: |
+            bench/out/ci/metrics.json
+            bench/out/ci/*.md
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1317,7 +1317,7 @@ Entrées : constats produits (`findings.json`, Annexe C) de niveau `ecart_certai
    - même `dossier_id` (pour F3–F5 : le dossier du constat est l'un des dossiers cités par `e`) ;
    - `f.controle_id ∈ e.accepted_control_ids` ;
    - au moins un document de `f.documents_concernes` correspond à un document de `e.documents` ;
-3. **Appariement** : un-à-un, glouton déterministe, en triant les candidats par (écart de montant absolu croissant, `null` en dernier ; `error_id` ; `finding_id`).
+3. **Appariement** : un-à-un, glouton déterministe, en triant les candidats par (écart de montant absolu croissant, `null` en dernier ; départage ; `error_id` ; `finding_id`). **Départage** à écart égal : on préfère le constat du contrôle principal de l'erreur (`control_id`), puis le constat de niveau `ecart_certain` (ajouté après le premier holdout, D-905 ; vaut pour tous les splits).
 4. **Montant correct** : si `e.expected_amount_eur` et `f.montant_en_jeu` sont tous deux non nuls, `|f − e| ≤ max(0,05 ; 1 % × |e|)`. Si `e` attend `null` et que `f` porte un montant (ou l'inverse), le montant est incorrect, sauf pour les natures `recouvrable` où `f = null` avec raison `doublon_composantes` est accepté si un autre constat apparié du même dossier porte le montant.
 5. Classes :
    - **VP certain** : `f` de niveau `ecart_certain` apparié avec montant correct ;
