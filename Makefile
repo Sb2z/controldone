@@ -4,10 +4,15 @@ PY := $(VENV)/bin/python
 
 .PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build
 
+# Installation reproductible sur un clone neuf (F-17) : crée .venv s'il manque, installe les versions figées
+# de requirements.lock, puis le paquet en mode éditable avec les outils de développement (pytest, ruff).
 install:
+	@test -x $(PY) || uv venv $(VENV)
+	uv pip install --python $(PY) -r requirements.lock
 	uv pip install --python $(PY) -e ".[dev]"
 
 test:
+	@$(PY) -c "import pytest" 2>/dev/null || $(MAKE) install
 	$(PY) -m pytest -q
 
 lint:

@@ -442,8 +442,19 @@ class TenantScope:
     def enregistrer_resultats(self, resultats: Sequence[ResultatControle]) -> int:
         """Enregistre (idempotent, identifiants stables D-009) résultats et constats. La validation déjà
         donnée par le fondateur à un constat de même identifiant est conservée."""
+        from controldone.findings_io import constats_hors_totaux
+
         self.exiger(Action.ecrire)
         self._exiger_moteur()
+        # Règle unique des totaux (``findings_io.constats_hors_totaux``, D-1202) : appliquée par dossier et
+        # inscrite dans chaque constat (``contenu.hors_totaux``) pour que tableau de bord, API et espace
+        # client comptent exactement comme le rapport (D-1319).
+        par_dossier: dict[str, list[ResultatControle]] = {}
+        for r in resultats:
+            par_dossier.setdefault(r.dossier_id, []).append(r)
+        hors_totaux: dict[str, str] = {}
+        for groupe in par_dossier.values():
+            hors_totaux.update(constats_hors_totaux(groupe))
         n = 0
         for r in resultats:
             self.obtenir(Dossier, r.dossier_id)  # le dossier doit être de ce client
@@ -465,7 +476,8 @@ class TenantScope:
                       # affichage des tolérances à côté du constat (§3.1 règle 6) sans lire les résultats bruts
                       "tolerance_appliquee": contenu.get("tolerance_appliquee"),
                       "seuil_certitude_applique": contenu.get("seuil_certitude_applique"),
-                      "attendu": contenu.get("attendu"), "constate": contenu.get("constate")}
+                      "attendu": contenu.get("attendu"), "constate": contenu.get("constate"),
+                      "hors_totaux": hors_totaux.get(c.id)}
                 if existant is None:
                     self._ajouter_interne(Constat(
                         id=c.id, resultat_id=r.id, dossier_id=r.dossier_id, dossier_version=r.dossier_version,
@@ -827,14 +839,16 @@ class OperatorScope:
             b["dossiers"][st or "inconnu"] = n
             b["nb_dossiers"] += n
         courants = (select(Constat.tenant_id, Constat.statut_validation, Constat.niveau, Constat.nature_montant,
-                           Constat.montant_en_jeu)
+                           Constat.montant_en_jeu, Constat.contenu["hors_totaux"].as_string())
                     .join(Dossier, (Dossier.id == Constat.dossier_id) & (Dossier.tenant_id == Constat.tenant_id)
                           & (Dossier.version == Constat.dossier_version))
                     .where((Constat.statut_validation == "propose") | (Constat.nature_montant == "recouvrable")))
-        for tenant, statut, niveau, nature, montant in self.session.execute(courants):
+        for tenant, statut, niveau, nature, montant, exclu in self.session.execute(courants):
             b = bloc(tenant)
             if statut == "propose":
                 b["proposes"] += 1
+            if exclu:  # hors totaux (E6 remplaçant, doublon F5) : compté une seule fois, comme le rapport
+                continue
             if nature == "recouvrable" and montant and montant > 0:
                 if niveau == "ecart_certain" and statut == "valide":
                     b["recouvrable_certain"] += montant

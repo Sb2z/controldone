@@ -34,6 +34,9 @@ dependencies = [
   "anthropic>=0.80",
   "mcp>=1.0",
   "stripe>=8.0",
+  # importés directement (F-17) : redressement OCR (ingest/pages.py), veille réseau (agents/veille_sources.py)
+  "numpy>=1.26",
+  "httpx>=0.27",
 ]
 
 [project.scripts]

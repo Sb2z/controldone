@@ -20,8 +20,7 @@ from controldone.auth.roles import Acteur
 from controldone.ingest.reception import recevoir_courriel, recevoir_octets
 from controldone.model.enums import CanalLot, StatutFichier
 from controldone.storage.db import Database
-from controldone.storage.file_jobs import JobStore
-from controldone.storage.models import Fichier, Lot
+from controldone.storage.models import Lot
 
 from .base import Depot, ResultatDepot
 
@@ -42,7 +41,7 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
     tenant = depot.tenant_id
     acteur = Acteur.systeme(f"connecteur:{depot.source}")
     with db.tenant(tenant, acteur, lecture=True) as sc:
-        deja = {f.sha256: f.id for f in sc.lister(Fichier, ordre=Fichier.recu_le)}
+        deja = sc.empreintes_fichiers()  # deux colonnes, pas les lignes entières (F-15)
         reglages = sc.client().reglages or {}
         if _deja_integre(sc.lister(Lot), depot.message_id, depot.reference, depot.source):
             return ResultatDepot("deja_recu", motif="message_ou_reference_deja_integre")
@@ -66,26 +65,46 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
     if not nouveaux:
         return ResultatDepot("deja_recu" if doublons else "vide", doublons=doublons)
     lot_id = reception.lot.id
-    with db.tenant(tenant, acteur) as sc:
-        lot = sc.creer_lot(lot_id, canal=CanalLot(depot.canal).value, expediteur=reception.lot.expediteur)
-        lot.resume = {"source": depot.source, "reference": depot.reference, "message_id": depot.message_id,
-                      **{k: v for k, v in depot.meta.items() if k in ("facture_pa_id", "controle_avant_paiement")}}
-        for f in reception.fichiers:
-            ref = None
-            if f.a_traiter and f.contenu is not None:
-                ref = vault.deposer(tenant, f.contenu)
-            sc.enregistrer_fichier(f.fichier, lot_id=lot_id, coffre_ref=ref)
-        sc.flush()
-    res = ResultatDepot("lot_cree", lot_id=lot_id, fichiers=sum(1 for f in reception.fichiers if f.a_traiter),
+    # Contenus chiffrés dans le coffre **avant** la transaction d'écriture (le verrou SQLite reste court,
+    # F-04) ; retirés si l'enregistrement échoue.
+    refs: list[str | None] = []
+    nouveaux_blobs: list[str] = []
+    for f in reception.fichiers:
+        ref = None
+        if f.a_traiter and f.contenu is not None:
+            existait = vault.existe(tenant, f.fichier.sha256)
+            ref = vault.deposer(tenant, f.contenu)
+            if not existait:
+                nouveaux_blobs.append(ref)
+            f.contenu = None
+        refs.append(ref)
+    res = ResultatDepot("lot_cree", lot_id=lot_id, fichiers=sum(1 for r in refs if r is not None),
                         doublons=doublons, refuses=sum(1 for f in nouveaux if f.fichier.statut is StatutFichier.refuse))
-    store = JobStore(db)
-    if res.fichiers:
-        job, _ = store.enqueue("traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant}:{lot_id}", tenant)
-        res.jobs.append(job.id)
-    pa_id = depot.meta.get("facture_pa_id")
-    if pa_id and depot.meta.get("controle_avant_paiement") and res.fichiers:
-        payload = {"lot_id": lot_id, "facture_pa_id": pa_id,
-                   **{k: str(depot.meta[k]) for k in ("numero", "date_echeance") if depot.meta.get(k)}}
-        job, _ = store.enqueue("controle_avant_paiement", payload, f"controle_avant_paiement:{tenant}:{pa_id}", tenant)
-        res.jobs.append(job.id)
+    try:
+        with db.tenant(tenant, acteur) as sc:
+            lot = sc.creer_lot(lot_id, canal=CanalLot(depot.canal).value, expediteur=reception.lot.expediteur)
+            lot.resume = {"source": depot.source, "reference": depot.reference, "message_id": depot.message_id,
+                          **{k: v for k, v in depot.meta.items() if k in ("facture_pa_id", "controle_avant_paiement")}}
+            for f, ref in zip(reception.fichiers, refs, strict=True):
+                sc.enregistrer_fichier(f.fichier, lot_id=lot_id, coffre_ref=ref)
+            sc.flush()
+            # jobs mis en file dans la même transaction que le lot (D-1306)
+            if res.fichiers:
+                res.jobs.append(sc.mettre_en_file("traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant}:{lot_id}"))
+            pa_id = depot.meta.get("facture_pa_id")
+            if pa_id and depot.meta.get("controle_avant_paiement") and res.fichiers:
+                payload = {"lot_id": lot_id, "facture_pa_id": pa_id,
+                           **{k: str(depot.meta[k]) for k in ("numero", "date_echeance") if depot.meta.get(k)}}
+                res.jobs.append(sc.mettre_en_file("controle_avant_paiement", payload,
+                                                  f"controle_avant_paiement:{tenant}:{pa_id}"))
+    except BaseException:
+        try:
+            with db.tenant(tenant, acteur, lecture=True) as sc:
+                encore = sc.contenus_references(nouveaux_blobs)
+            for sha in nouveaux_blobs:
+                if sha not in encore:
+                    vault.supprimer(tenant, sha)
+        except Exception:  # pragma: no cover - nettoyage au mieux
+            pass
+        raise
     return res
