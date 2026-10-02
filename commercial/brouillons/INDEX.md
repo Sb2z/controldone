@@ -38,7 +38,7 @@ Prospects du fichier sans brouillon : A TEX (pas d'e-mail ni de formulaire publi
 
 ## Dépôt dans la boîte Gmail (2 octobre 2026)
 
-Les 13 brouillons qui ont une adresse e-mail publiée (01 à 13) ont été déposés comme **brouillons** dans la boîte Gmail du fondateur, objet préfixé « [À VALIDER] ». Aucun n'a été envoyé. **Ces brouillons Gmail portent encore l'ancienne formulation de l'offre de lancement (« En échange, je demande le droit de publier… ») et l'ancienne signature : avant tout envoi, remplacer leur texte par celui des fichiers 01 à 13 (remise de lancement + accord de publication séparé et facultatif, signature « EI »).** Avant tout envoi : compléter la signature ([Prénom Nom] EI, SIREN, adresse, téléphone), retirer le préfixe, vérifier la ligne « Terr'Asia » (SIREN à confirmer). Les 7 autres (14 à 20) visent un formulaire de contact : ils restent en fichiers, à coller à la main.
+Les 13 brouillons qui ont une adresse e-mail publiée (01 à 13) ont été déposés comme **brouillons** dans la boîte Gmail du fondateur, objet préfixé « [À VALIDER] ». Aucun n'a été envoyé. Avant tout envoi : compléter la signature ([Prénom Nom] EI, SIREN, adresse, téléphone), retirer le préfixe, vérifier la ligne « Terr'Asia » (SIREN à confirmer). Les 7 autres (14 à 20) visent un formulaire de contact : ils restent en fichiers, à coller à la main.
 
 
 **Mise à jour du 2 octobre (audit final)** : les 13 brouillons Gmail ont été mis à jour avec la formulation actuelle (remise de lancement, accord de publication séparé et facultatif, signature « EI »). Toujours non envoyés.
