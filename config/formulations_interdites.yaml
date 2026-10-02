@@ -1,0 +1,83 @@
+# Formulations interdites (SPEC §3.2). Fichier versionné, enrichissable sans code.
+# Comparaison insensible à la casse et aux accents, y compris au pluriel et au féminin
+# (voir controldone.guardrails). Toute sortie contenant l'une de ces expressions est bloquée
+# et part en file de validation avec le motif « formulation_interdite ».
+#
+# Changement de version : majeure si une expression est retirée, mineure si elle est ajoutée.
+schema: controldone.formulations_interdites/1.0.0
+version: 1.0.0
+motif: formulation_interdite
+categories:
+  - id: classement_tarifaire
+    pourquoi: Avis de classement tarifaire
+    remplacer_par: « le code imprimé sur A diffère du code imprimé sur B »
+    expressions:
+      - le bon code
+      - le code correct
+      - mauvais classement
+      - erreur de classement
+      - devrait être classé
+  - id: bien_fonde_imposition
+    pourquoi: Avis sur le bien-fondé de l'imposition
+    remplacer_par: « montant liquidé indiqué sur la déclaration »
+    expressions:
+      - droit dû
+      - droits dus
+      - taxe due
+      - montant dû à la douane
+      - trop payé en douane
+      - remboursement des droits
+  - id: valeur_en_douane
+    pourquoi: Avis sur la valeur en douane
+    remplacer_par: « le montant facturé déclaré diffère du total de la facture commerciale »
+    expressions:
+      - valeur en douane incorrecte
+      - sous-évaluation
+      - sur-évaluation
+  - id: origine_preference
+    pourquoi: Avis sur l'origine ou la préférence
+    remplacer_par: « le pays d'origine imprimé sur A diffère de celui imprimé sur B »
+    expressions:
+      - origine incorrecte
+      - origine fausse
+      - préférence injustifiée
+      - préférence applicable
+      - droit préférentiel
+  - id: taux
+    pourquoi: Avis sur le taux
+    remplacer_par: « le montant imprimé diffère du produit base × taux imprimés »
+    expressions:
+      - taux erroné
+      - mauvais taux
+      - le taux applicable est
+  - id: qualification_juridique
+    pourquoi: Qualification juridique
+    remplacer_par: (supprimer)
+    expressions:
+      - non conforme à la réglementation
+      - illégal
+      - irrégulier
+      - en infraction
+      - fraude
+      - frauduleux
+  - id: reclamation_au_nom_du_prestataire
+    pourquoi: La réclamation n'est pas faite au nom du prestataire
+    remplacer_par: Rédaction à la première personne du client (§17.3)
+    expressions:
+      - nous réclamons
+      - ControlDOne réclame
+      - au nom de notre client
+      - mandaté par
+  - id: demarche_juridique
+    pourquoi: Recommandation d'une démarche juridique
+    remplacer_par: « point à faire vérifier par un RDE ou un avocat » (phrase de renvoi)
+    expressions:
+      - vous devez déposer une demande de remboursement
+      - déposez une réclamation en douane
+      - il faut rectifier la déclaration
+  - id: engagement_resultat
+    pourquoi: Engagement de résultat juridique
+    remplacer_par: (supprimer)
+    expressions:
+      - nous garantissons
+      - certifié conforme

@@ -1,0 +1,105 @@
+"""Modèle de données du dossier (SPEC §5, §6). Tout est réexporté ici : ``from controldone.model import ...``."""
+
+from controldone.model.base import (
+    NOM_SCHEMA_DOSSIER,
+    Enregistrement,
+    ErreurSchema,
+    Modele,
+    VersionSchema,
+    chaine_schema,
+    dump_canonique,
+    horodatage,
+    set_horloge,
+    verifier_schema,
+)
+from controldone.model.champs import (
+    CHAMPS_CLES,
+    ArticleDeclaration,
+    Champs,
+    ChampsAvoir,
+    ChampsDeclaration,
+    ChampsDocument,
+    ChampsFactureCommerciale,
+    ChampsFactureTransitaire,
+    ChampsSupport,
+    DocumentReference,
+    FeuilleChamp,
+    IndiceAutoliquidation,
+    LigneFactureCommerciale,
+    LigneFactureTransitaire,
+    LigneTableauMrn,
+    Partie,
+    SousTotal,
+    TaxationDeclaration,
+    chemin_complet,
+    chemin_generique,
+    chemin_relatif,
+    classe_champs,
+    type_valeur_pour,
+)
+from controldone.model.documents import Document, Fichier, Lot, Page, PageRef
+from controldone.model.dossier import Allocation, ClesDossier, Dossier, LienDocument, poids_force
+from controldone.model.enums import *  # noqa: F403
+from controldone.model.enums import __all__ as _enums_all
+from controldone.model.recouvrement import (
+    TRANSITIONS_AUTORISEES,
+    EcartARecouvrer,
+    ErreurTransition,
+    EvenementRecouvrement,
+    PieceRecouvrement,
+    Reclamation,
+    transitionner,
+)
+from controldone.model.referentiel import (
+    Client,
+    Entite,
+    ErreurTolerance,
+    GrilleTarifaire,
+    ParametresPetitsEnvois,
+    PosteGrille,
+    ProfilTolerances,
+    Transitaire,
+)
+from controldone.model.resultats import (
+    RAISONS_INFORMATIVES,
+    Constat,
+    Correction,
+    Execution,
+    Preuve,
+    ResultatControle,
+)
+from controldone.model.valeur import (
+    FACTEUR_NOM_FICHIER,
+    FACTEUR_RECONSTRUIT_OCR,
+    FACTEUR_SOMME_ANCREE,
+    PLAFOND_CONFIANCE_DESACCORD,
+    PLAFOND_CONFIANCE_LLM_NON_ANCREE,
+    PLAFOND_CONFIANCE_TOTAL_RECONSTRUIT,
+    ExtracteurInfo,
+    ValeurSourcee,
+    Zone,
+    confiance_derivee,
+    deriver_somme,
+    facteur_derivation,
+)
+
+__all__ = [
+    *_enums_all,
+    "NOM_SCHEMA_DOSSIER", "Enregistrement", "ErreurSchema", "Modele", "VersionSchema", "chaine_schema",
+    "dump_canonique", "horodatage", "set_horloge", "verifier_schema",
+    "CHAMPS_CLES", "ArticleDeclaration", "Champs", "ChampsAvoir", "ChampsDeclaration", "ChampsDocument",
+    "ChampsFactureCommerciale", "ChampsFactureTransitaire", "ChampsSupport", "DocumentReference",
+    "FeuilleChamp", "IndiceAutoliquidation", "LigneFactureCommerciale", "LigneFactureTransitaire",
+    "LigneTableauMrn", "Partie", "SousTotal", "TaxationDeclaration", "chemin_complet", "chemin_generique",
+    "chemin_relatif", "classe_champs", "type_valeur_pour",
+    "Document", "Fichier", "Lot", "Page", "PageRef",
+    "Allocation", "ClesDossier", "Dossier", "LienDocument", "poids_force",
+    "TRANSITIONS_AUTORISEES", "EcartARecouvrer", "ErreurTransition", "EvenementRecouvrement",
+    "PieceRecouvrement", "Reclamation", "transitionner",
+    "Client", "Entite", "ErreurTolerance", "GrilleTarifaire", "ParametresPetitsEnvois", "PosteGrille",
+    "ProfilTolerances", "Transitaire",
+    "RAISONS_INFORMATIVES", "Constat", "Correction", "Execution", "Preuve", "ResultatControle",
+    "FACTEUR_NOM_FICHIER", "FACTEUR_RECONSTRUIT_OCR", "FACTEUR_SOMME_ANCREE", "PLAFOND_CONFIANCE_DESACCORD",
+    "PLAFOND_CONFIANCE_LLM_NON_ANCREE", "PLAFOND_CONFIANCE_TOTAL_RECONSTRUIT", "ExtracteurInfo",
+    "ValeurSourcee", "Zone", "confiance_derivee", "deriver_somme", "facteur_derivation",
+]

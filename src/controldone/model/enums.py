@@ -118,6 +118,7 @@ class RaisonCode(StrEnum):
     aucune_grille_validee = "aucune_grille_validee"
     facture_transitaire_absente = "facture_transitaire_absente"
     couvert_par_autre_controle = "couvert_par_autre_controle"
+    dossier_non_concerne = "dossier_non_concerne"
     erreur_interne = "erreur_interne"
 
 
@@ -162,6 +163,7 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
     RaisonCode.aucune_grille_validee: "aucune grille tarifaire validée pour ce transitaire",
     RaisonCode.facture_transitaire_absente: "aucune facture du transitaire dans le dossier",
     RaisonCode.couvert_par_autre_controle: "sujet déjà traité par un autre contrôle",
+    RaisonCode.dossier_non_concerne: "dossier non concerné : l'acheteur n'est pas une entité du client",
     RaisonCode.erreur_interne: "contrôle non réalisé à la suite d'une erreur interne",
 }
 

@@ -53,6 +53,7 @@ ignore = [
   "RUF002",
   "RUF003",
   "E501",
+  "SIM905",  # listes de codes écrites en chaîne puis découpées (lisibilité)
 ]
 
 [tool.ruff.lint.per-file-ignores]
