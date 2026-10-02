@@ -164,6 +164,16 @@ def compute_consequences(dm):
                              description=f"Frais d'avance de fonds {l.montant_ht} calculés sur des débours "
                                          f"incluant un excédent de {q2(excess)} (attendu {att}).",
                              key=f"C6:{ft.doc_id}:{l.mrn}")
+    # A1 : la facture transitaire est adressée à l'acheteur de la facture commerciale, alors que la
+    # déclaration indique un autre importateur -> C8 constate aussi l'écart (client facturé ≠ importateur).
+    a1 = next((e for e in dm.errors if e["control"] == "A1"), None)
+    if a1 is not None and dm.fts and not any(e["control"] == "C8" for e in dm.errors):
+        d = dm.final_decls[0]
+        ft = dm.fts[0]
+        if ft.client.vat != d.importer.vat:
+            dm.add_error("C8", "client_facture_different", [ft.doc_id, d.doc_id], whole=True, consequence_of="A1",
+                         description=f"Conséquence de A1 : facture adressée à {ft.client.vat}, importateur déclaré "
+                                     f"{d.importer.vat}.", key="C8A1")
     _impute_avoirs(dm)
 
 

@@ -243,9 +243,20 @@ def _t4(pen, ft, dm, variant):
         if l.mrn not in mrns:
             mrns.append(l.mrn)
     rows = []
+    matrix_codes = ("DROITS", "AUTRES", "TVA", "DEDOUANEMENT", "LIGNE_SUP", "AVANCE_FONDS")
+    extra_lines = []
     for m in mrns:
-        ls = [l for l in ft.lines if l.mrn == m]
-        def s(code):
+        ls_all = [l for l in ft.lines if l.mrn == m]
+        ls = []
+        seen_codes = set()
+        for l in ls_all:
+            if l.code in matrix_codes and l.code in seen_codes:
+                extra_lines.append(l)  # ligne répétée : détaillée à part, jamais additionnée dans la cellule
+                continue
+            seen_codes.add(l.code)
+            ls.append(l)
+
+        def s(code, ls=ls):
             v = sum((l.montant_ht for l in ls if l.code == code), Decimal(0))
             if code == "LIGNE_SUP" and v:
                 q = sum((l.qty for l in ls if l.code == code), Decimal(0))
@@ -262,8 +273,7 @@ def _t4(pen, ft, dm, variant):
                          ("Droits", 18, "right"), ("Autres tx", 16, "right"), ("TVA import", 19, "right"),
                          ("Dédouan.", 17, "right"), ("Lignes sup. (qté)", 20, "right"), ("Av. fonds", 15, "right")],
                   rows, size=6.9, row_h=5, header_size=6.6) + 5
-    other = [l for l in ft.lines if l.code not in ("DROITS", "AUTRES", "TVA", "DEDOUANEMENT", "LIGNE_SUP",
-                                                   "AVANCE_FONDS")]
+    other = [l for l in ft.lines if l.code not in matrix_codes or l in extra_lines]
     if other:
         pen.text(8, y, "Détail des autres lignes", size=8, bold=True)
         y = pen.table(8, y + 2, [("MRN", 36, "left"), ("Désignation", 50, "left"), ("Détail", 46, "left"),

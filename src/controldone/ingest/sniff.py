@@ -120,8 +120,6 @@ def _est_csv(texte: str) -> bool:
 def detecter_type(contenu: bytes, nom: str = "") -> str:
     """Type MIME déduit des octets ; ``application/octet-stream`` si inconnu."""
     tete = contenu[:2048]
-    if b"%PDF-" in tete[:1024]:
-        return MIME_PDF
     if tete.startswith(b"\x89PNG\r\n\x1a\n"):
         return MIME_PNG
     if tete.startswith(b"\xff\xd8\xff"):
@@ -134,6 +132,8 @@ def detecter_type(contenu: bytes, nom: str = "") -> str:
         return MIME_XLS
     if tete.startswith((b"GIF87a", b"GIF89a", b"BM", b"7z\xbc\xaf", b"Rar!", b"\x1f\x8b")):
         return MIME_INCONNU
+    if b"%PDF-" in tete[:1024]:  # des octets parasites peuvent précéder l'en-tête PDF
+        return MIME_PDF
     texte = decoder_texte(contenu)
     if texte is None:
         return MIME_INCONNU
