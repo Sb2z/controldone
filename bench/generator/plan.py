@@ -143,7 +143,7 @@ def _compat(p: dict, ctl: str) -> bool:
     if ctl == "D4":
         return "cdebours" not in p["groups"] and "C6" not in p["controls"]
     if ctl == "D8":
-        return tpl != "T3"
+        return tpl in ("T1", "T5", "T6", "T8")
     if ctl == "D9":
         return lay in ("L1", "L2", "L3", "X1", "X2")
     if ctl in ("E1", "E2", "E5"):
