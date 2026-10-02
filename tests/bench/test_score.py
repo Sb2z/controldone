@@ -7,7 +7,6 @@ import math
 from pathlib import Path
 
 import pytest
-
 from bench.score.__main__ import main
 from bench.score.core import scorer, wilson_borne_basse
 from bench.score.formulations import charger_formulations
