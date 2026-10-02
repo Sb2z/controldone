@@ -304,9 +304,9 @@ def _f3_unite(ctx: ControlContext, ft: Document, prefixe: str, pool: list[_Occ])
     liq = _liquide_mrn(ctx, prefixe)
     if liq is not None and abs(ici.montant + autre.montant - liq) <= t_deb:
         return ctx.conforme("F3", **{**commun, "details": {**commun["details"], "complementaire": True}})
+    # Déclaration absente : la complémentarité n'est pas testable ; le critère de certitude de §15 F3
+    # (MRN lus, débours égaux dans T_DEBOURS et > S_DEBOURS) est appliqué tel quel (D-308).
     raisons = _raisons_ailleurs([autre.occ])
-    if liq is None:
-        raisons.append(RaisonCode.document_manquant)  # complémentarité non vérifiable sans la déclaration
     egaux = abs(ici.montant - autre.montant) <= t_deb
     if not egaux:
         raisons.append(RaisonCode.controle_signal_seulement)  # débours différents : refacturation partielle ?

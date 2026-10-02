@@ -5,7 +5,7 @@ un code. La prochaine action de chaque constat B contient « Demander au déclar
 écart de calcul. » suivie de la phrase de renvoi.
 
 Ce module contient B1, **contrôle de référence** du cadre (voir docs/ARCHITECTURE.md, « Comment écrire
-un contrôle »). B2 à B5 suivent B1 (voir docs/DECISIONS.md, D-3xx « Contrôles B, E, F, G »).
+un contrôle »). B2 à B5 suivent B1 (voir docs/DECISIONS.md, D-301 à D-303).
 """
 
 from __future__ import annotations
@@ -267,7 +267,7 @@ def _montant_taxe(t: TaxationDeclaration) -> ValeurSourcee | None:
 
 
 def _totaux_par_categorie(dec: Document) -> dict[str, tuple[int, list[int]]]:
-    """Totaux de catégorie imprimés (D-3xx) : pour un code de taxe, **une seule** ligne de niveau
+    """Totaux de catégorie imprimés (D-301) : pour un code de taxe, **une seule** ligne de niveau
     déclaration (sans article) **et** au moins une ligne par article -> la ligne sans article est le
     total imprimé de la catégorie. Retourne ``{code: (index_total, [index_lignes_articles])}``."""
     par_code: dict[str, tuple[list[int], list[int]]] = {}
