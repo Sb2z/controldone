@@ -342,7 +342,13 @@ def _caracteres_invisibles(pdfium_page) -> list[tuple[float, float, float, float
                 continue
             g, d, b, h = (ctypes.c_double(), ctypes.c_double(), ctypes.c_double(), ctypes.c_double())
             if raw.FPDFText_GetCharBox(tp.raw, i, g, d, b, h):
-                boites.append((g.value - 1, hauteur - h.value - 1, d.value + 1, hauteur - b.value + 1))
+                # boîte étendue à la hauteur de la police (la boîte d'un « . » est minuscule)
+                corps = float(raw.FPDFText_GetFontSize(tp.raw, i) or 0) or (h.value - b.value)
+                ox, oy = ctypes.c_double(), ctypes.c_double()
+                base = oy.value if raw.FPDFText_GetCharOrigin(tp.raw, i, ox, oy) else b.value
+                haut = max(h.value, base + corps)
+                bas = min(b.value, base - 0.3 * corps)
+                boites.append((g.value - 1, hauteur - haut - 1, d.value + 1, hauteur - bas + 1))
     finally:
         tp.close()
     return boites

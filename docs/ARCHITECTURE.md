@@ -462,3 +462,31 @@ res.reliquats                  # reliquats d'avoir non imputés (E5)  res.imputa
   Décisions : D-304 à D-306.
 - Les familles E, F et G partagent des lectures internes dans `controls/_aides_befg.py` (privé, non
   contractuel) ; B2–B5 sont dans `famille_b.py` à la suite de B1 (inchangé).
+
+---
+
+## 11. Assemblage : API publiée (`regroupement`, `pipeline`, `bench_run`, `rapport`, `cli`)
+
+```python
+from controldone.regroupement import regrouper, OptionsRegroupement      # §7.5, pur et déterministe
+res = regrouper(documents, fichiers_par_id, profil=tolerances, transitaires=[...],
+                options=OptionsRegroupement(meme_source=True, annee=2026, courriels={fichier_id: message_id}))
+res.dossiers, res.non_rattaches                                             # Dossier (liens, allocations, clés)
+
+from controldone.pipeline import traiter_lot, preparer_lot, controler_lot, OptionsPipeline, Composants
+resultats = traiter_lot("lot/", "profil.json", "grilles/", autres_dossiers=[...],
+                        options=OptionsPipeline(seed=1, dossier_id_sortie="BX0042"))
+r = resultats[0]; r.findings; r.execution; r.non_lus; r.cles               # cles = clés d'idempotence §7
+
+from controldone.rapport import generer_rapport                            # HTML, PDF, JSON, XLSX
+generer_rapport(resultats, profil_client, "var/rapport")
+```
+
+- Composant de découpage attendu de l'ingestion : objet `decouper(source: FichierSource, *, ids, client_id)
+  -> ResultatDecoupage(pages, documents, avertissements)` (`controldone.ingest.Decoupeur`). Extracteurs :
+  protocole `Extracteur` (§4), publiés par `controldone.ingest.structure.extracteurs()` et
+  `controldone.extract.deterministe.extracteurs()` (découverts à l'exécution).
+- Banc : `python -m controldone.bench_run --corpus bench/corpus --split dev --out bench/out/<run> [--limit N]
+  [--workers K]` (puis appel du correcteur) ; `make bench-dev`.
+- Démonstration : `controldone demo` (jeu fictif sous `demo/`, rapport dans `var/demo/`) ; `make demo`.
+  Diagnostic : `controldone diagnostic <dossier> --client-profile p.json --grilles dir --out <dir>`.

@@ -1,0 +1,61 @@
+"""Persistance de la file de validation des actions sortantes (outbox). La logique (transitions,
+garde-fous, autonomie) est dans ``controldone.outbox`` ; ce module ne fait que lire et écrire, dans la
+transaction fournie (session système ouverte par ``Database.transaction_systeme``)."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from controldone.storage.coltypes import maintenant
+from controldone.storage.models import AutonomieSortie, Outbox
+
+__all__ = ["autonomie", "definir_autonomie", "inserer", "lire", "lire_par_cle", "lister"]
+
+
+def inserer(s: Session, **champs: Any) -> Outbox:
+    o = Outbox(**champs)
+    s.add(o)
+    s.flush()
+    return o
+
+
+def lire(s: Session, action_id: str, *, verrou: bool = False) -> Outbox | None:
+    q = select(Outbox).where(Outbox.id == action_id)
+    if verrou:
+        q = q.with_for_update()
+    return s.execute(q).scalar_one_or_none()
+
+
+def lire_par_cle(s: Session, cle: str) -> Outbox | None:
+    return s.execute(select(Outbox).where(Outbox.idempotency_key == cle)).scalar_one_or_none()
+
+
+def lister(s: Session, *, statuts: list[str] | None = None, kind: str | None = None,
+           tenant_id: str | None = None, plateforme: bool | None = None, limite: int = 500) -> list[Outbox]:
+    q = select(Outbox).order_by(Outbox.cree_le, Outbox.id).limit(limite)
+    if statuts:
+        q = q.where(Outbox.statut.in_(statuts))
+    if kind:
+        q = q.where(Outbox.kind == kind)
+    if tenant_id:
+        q = q.where(Outbox.tenant_id == tenant_id)
+    if plateforme is True:
+        q = q.where(Outbox.tenant_id.is_(None))
+    return list(s.execute(q).scalars())
+
+
+def autonomie(s: Session, kind: str) -> str:
+    a = s.get(AutonomieSortie, kind)
+    return a.mode if a else "manuel"
+
+
+def definir_autonomie(s: Session, kind: str, mode: str, par: str) -> None:
+    a = s.get(AutonomieSortie, kind)
+    if a is None:
+        s.add(AutonomieSortie(kind=kind, mode=mode, modifie_par=par, modifie_le=maintenant()))
+    else:
+        a.mode, a.modifie_par, a.modifie_le = mode, par, maintenant()
+    s.flush()
