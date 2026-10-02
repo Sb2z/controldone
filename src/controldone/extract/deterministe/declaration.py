@@ -83,8 +83,12 @@ CONF_NATIF_FAIBLE = 0.93
 CONF_SENS_DERIVE = 0.85
 #: Plafond d'une lecture OCR contredite par un recoupement arithmétique.
 PLAFOND_INCOHERENT = 0.80
+#: Plafond d'une lecture OCR isolée (non recoupée) : sous ``C_MIN_CERTAIN`` (0,90, §8.3).
+PLAFOND_OCR_SEUL = 0.89
+#: Plafond d'une relecture (séparateur décimal perdu par l'OCR, rétabli par recoupement).
+PLAFOND_REPARE = 0.80
 #: Confiance accordée à une lecture OCR confirmée par un recoupement arithmétique.
-CONF_CONFIRMEE = 0.95
+CONF_CONFIRMEE = 0.93
 
 # --- libellés (fr / en), clés internes -> variantes imprimées ----------------------------------------------
 
@@ -501,6 +505,7 @@ class _Lecteur:
         self.libelles_codes: dict[str, str] = {}
         self.codes_colonnes: dict[str, tuple[str, _Span]] = {}
         self.vs_articles: dict[int, ValeurSourcee] = {}
+        self._reparees: set[str] = set()
 
     # --- chargement -------------------------------------------------------------------------------------
 
@@ -631,7 +636,7 @@ class _Lecteur:
             libs = [x for x in self.hits_par_ligne.get(ligne.idx, []) if gauche - 0.01 <= x.x0 <= droite]
             if partie and any(x.cle in _STOP_PARTIE for x in libs):
                 break
-            if not partie and libs and libs[0].toks[0] is toks[0]:
+            if not partie and libs:
                 break  # rangée de libellés de cases
             out.append(_Span(toks, h.score))
             bas = ligne.y1
@@ -669,7 +674,7 @@ class _Lecteur:
             confs = [t.conf if t.conf is not None else 0.5 for t in span.toks]
             cmin = min(confs)
             c = 0.30 + 0.65 * cmin
-            c = min(c, info.plafond)
+            c = min(c, info.plafond, PLAFOND_OCR_SEUL)
             c -= (1.0 - span.score_libelle) * 0.5
         return max(0.0, min(1.0, c - penalite))
 
@@ -1315,7 +1320,8 @@ class _Lecteur:
             for idx in range(debut, fin):
                 toks = self.lignes[idx].toks
                 for n in range(1, len(toks)):
-                    if toks[n].k in ("colis", "packages") and id(toks[n]) not in dans_libelle \
+                    seul = n + 1 == len(toks) or toks[n + 1].x0 - toks[n].x1 > 3 * toks[n].hx
+                    if toks[n].k in ("colis", "packages") and id(toks[n]) not in dans_libelle and seul \
                             and re.fullmatch(r"\d{1,6}", toks[n - 1].t):
                         colis = _Lu(_Span([toks[n - 1]]), toks[n - 1].t, str(int(toks[n - 1].t)))
                         break
@@ -1414,8 +1420,8 @@ class _Lecteur:
                 code_lu = _code_taxe(_Span(ligne.toks[:1]))
             if code_lu is None:
                 manquees += 1
-                if manquees > 1 or any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne.toks):
-                    break  # fin du tableau (une ligne parasite d'OCR est tolérée)
+                if manquees > 1 or self.hits_par_ligne.get(idx) or not re.search(r"\d", ligne.texte):
+                    break  # fin du tableau (une ligne illisible d'OCR est tolérée)
                 continue
             manquees = 0
             self.lignes_tableaux.add(idx)
@@ -1670,71 +1676,213 @@ class _Lecteur:
 
     # --- recoupements (lectures OCR) -----------------------------------------------------------------------------
 
-    def _ajuster(self, valeurs: Iterable[ValeurSourcee | None], coherent: bool) -> None:
-        for vs in valeurs:
-            if vs is None or not self._est_ocr(vs):
+    def _reparer_separateurs(self) -> None:
+        """OCR : une virgule décimale perdue (« 45185 » pour « 451,85 », « 47% » pour « 4,7 % ») rend la ligne
+        de taxe incohérente. Si une seule relecture (montant / 100, taux / 10 ou / 100) rétablit
+        base × taux = montant, elle est retenue avec une confiance plafonnée (jamais certaine) ; la valeur
+        brute reste celle lue."""
+        demi = Decimal("0.0051")
+
+        def variantes(vs: ValeurSourcee | None, diviseurs: tuple[int, ...]) -> list[tuple[Decimal, bool]]:
+            if vs is None or not vs.est_lisible:
+                return []
+            d = vs.decimal()
+            out = [(d, False)]
+            brut = (vs.valeur_brute or "").replace("%", "").strip()
+            if self._est_ocr(vs) and re.fullmatch(r"\d{2,}", brut):
+                out += [(d / k, True) for k in diviseurs]
+            return out
+
+        for tx in self.champs.taxations:
+            if tx.taux_nature is not TauxNature.ad_valorem or tx.base_montant is None or tx.taux is None \
+                    or tx.montant is None:
                 continue
-            nouvelle = vs.confiance
-            if coherent and vs.confiance >= 0.55:
-                nouvelle = max(vs.confiance, min(CONF_CONFIRMEE, self.pages[vs.page].plafond + 0.05))
-            elif not coherent:
-                nouvelle = min(vs.confiance, PLAFOND_INCOHERENT)
-            if nouvelle != vs.confiance:
-                self._remplacer(vs, nouvelle)
+            solutions = []
+            for b, rb in variantes(tx.base_montant, (100,)):
+                for t, rt in variantes(tx.taux, (10, 100)):
+                    for m, rm in variantes(tx.montant, (100,)):
+                        if (rb or rt or rm) and t != 0 and abs(b * t / 100 - m) <= demi:
+                            solutions.append(((b, rb), (t, rt), (m, rm)))
+            if len(solutions) != 1 or abs(tx.base_montant.decimal() * tx.taux.decimal() / 100
+                                          - tx.montant.decimal()) <= demi:
+                continue
+            for vs, (val, repare) in zip((tx.base_montant, tx.taux, tx.montant), solutions[0], strict=True):
+                if repare:
+                    exp = 2 if vs is not tx.taux else max(1, -val.normalize().as_tuple().exponent)
+                    nouvelle = val.quantize(Decimal(1).scaleb(-exp))
+                    object.__setattr__(vs, "valeur", str(nouvelle))
+                    self._remplacer(vs, min(vs.confiance, PLAFOND_REPARE))
+                    self._reparees.add(vs.id)
+
+    def _confirmer(self, *valeurs: ValeurSourcee | None) -> None:
+        for vs in valeurs:
+            if vs is not None and self._est_ocr(vs):
+                self._confirmees.add(vs.id)
+
+    def _infirmer(self, *valeurs: ValeurSourcee | None) -> None:
+        for vs in valeurs:
+            if vs is not None and self._est_ocr(vs):
+                self._infirmees.add(vs.id)
 
     def _remplacer(self, vs: ValeurSourcee, conf: float) -> None:
         object.__setattr__(vs, "confiance", round(conf, 4))
 
     def _coherence(self) -> None:
+        """Recoupements des lectures OCR (§6.3, §8.5.4). Une lecture OCR isolée reste sous ``C_MIN_CERTAIN``
+        (``PLAFOND_OCR_SEUL``) ; elle n'atteint ``CONF_CONFIRMEE`` que si une relation indépendante imprimée
+        sur le document la confirme (base × taux = montant, sommes, clé de TVA, double lecture…). Une relation
+        contredite plafonne les lectures concernées à ``PLAFOND_INCOHERENT``."""
+        self._confirmees: set[str] = set()
+        self._infirmees: set[str] = set()
+        self._reparer_separateurs()
         c = self.champs
-        un_centime = Decimal("0.011")
-        # B1 : base × taux = montant (ou arrondi à l'euro)
+        cent = Decimal("0.011")  # tolérance d'incohérence (T_LIGNE, §8.3)
+        demi = Decimal("0.0051")  # confirmation : égalité au demi-centime près (arrondi d'un seul calcul)
+
+        def lisibles(*vs: ValeurSourcee | None) -> bool:
+            return all(v is not None and v.est_lisible for v in vs)
+
+        def b1(tx: TaxationDeclaration) -> bool | None:
+            if tx.taux_nature is TauxNature.ad_valorem and lisibles(tx.base_montant, tx.taux, tx.montant):
+                calc = tx.base_montant.decimal() * tx.taux.decimal() / 100  # type: ignore[union-attr]
+                m = tx.montant.decimal()  # type: ignore[union-attr]
+                if abs(calc - m) <= demi:
+                    return True
+                if m == m.to_integral_value() and any(abs(x - m) < cent for x in (
+                        calc.quantize(Decimal(1), rounding="ROUND_HALF_UP"),
+                        calc.quantize(Decimal(1), rounding="ROUND_FLOOR"),
+                        calc.quantize(Decimal(1), rounding="ROUND_CEILING"))):
+                    return True  # droits arrondis à l'euro
+                return False if abs(calc - m) > cent else None
+            if tx.base_quantite is not None and lisibles(tx.base_quantite, tx.taux, tx.montant):
+                ecart = abs(tx.base_quantite.decimal() * tx.taux.decimal()  # type: ignore[union-attr]
+                            - tx.montant.decimal())  # type: ignore[union-attr]
+                return True if ecart <= demi else (False if ecart > cent else None)
+            return None
+
+        # B1 : confirme le taux et le montant ; pas les centimes de la base (une erreur de lecture sur les
+        # centimes de la base ne change presque pas le produit)
         for tx in c.taxations:
-            if tx.base_montant and tx.taux and tx.montant and tx.taux_nature is TauxNature.ad_valorem \
-                    and all(v.est_lisible for v in (tx.base_montant, tx.taux, tx.montant)):
-                calc = tx.base_montant.decimal() * tx.taux.decimal() / 100
-                m = tx.montant.decimal()
-                ok = abs(calc - m) <= un_centime or abs(calc.to_integral_value() - m) < un_centime \
-                    or abs(calc.quantize(Decimal(1), rounding="ROUND_FLOOR") - m) < un_centime \
-                    or abs(calc.quantize(Decimal(1), rounding="ROUND_CEILING") - m) < un_centime
-                self._ajuster([tx.base_montant, tx.taux, tx.montant], ok)
-            elif tx.base_quantite and tx.taux and tx.montant and all(
-                    v.est_lisible for v in (tx.base_quantite, tx.taux, tx.montant)):
-                ok = abs(tx.base_quantite.decimal() * tx.taux.decimal() - tx.montant.decimal()) <= un_centime
-                self._ajuster([tx.base_quantite, tx.taux, tx.montant], ok)
+            ok = b1(tx)
+            if ok is None:
+                continue
+            nul = tx.taux is not None and tx.taux.decimal() == 0
+            if ok:
+                self._confirmer(tx.montant, *(() if nul else (tx.taux,)))
+                if tx.base_quantite is not None and not nul:
+                    self._confirmer(tx.base_quantite)
+            else:
+                self._infirmer(tx.base_montant, tx.base_quantite, tx.taux, tx.montant)
+        # base TVA = base des droits + droits et taxes de l'article
+        par_article: dict[str, list[TaxationDeclaration]] = {}
+        for tx in c.taxations:
+            par_article.setdefault(tx.article.valeur if tx.article and tx.article.valeur else "-", []).append(tx)
+        for groupe in par_article.values():
+            tvas = [t for t in groupe if t.categorie is CategorieTaxe.tva]
+            autres = [t for t in groupe if t.categorie is not CategorieTaxe.tva]
+            droit = next((t for t in autres if t.base_montant is not None), None)
+            if len(tvas) != 1 or droit is None or not lisibles(tvas[0].base_montant, droit.base_montant) \
+                    or not all(lisibles(t.montant) for t in autres):
+                continue
+            ajouts = [t.montant.decimal() for t in autres]  # type: ignore[union-attr]
+            attendu = droit.base_montant.decimal() + sum(ajouts)  # type: ignore[union-attr]
+            # une égalité entre deux lectures du même nombre n'est pas un recoupement (erreurs corrélées)
+            if any(ajouts) and abs(attendu - tvas[0].base_montant.decimal()) <= demi:  # type: ignore[union-attr]
+                self._confirmer(tvas[0].base_montant, droit.base_montant, *(t.montant for t in autres))
         # totaux des taxes
-        montants = [tx.montant for tx in c.taxations if tx.montant is not None and tx.montant.est_lisible]
-        if c.total_droits_taxes and c.total_droits_taxes.est_lisible and montants and \
-                len(montants) == len(c.taxations):
-            ok = abs(sum(m.decimal() for m in montants) - c.total_droits_taxes.decimal()) <= un_centime
-            self._ajuster([c.total_droits_taxes, *montants], ok)
-        if c.total_a_payer and c.total_a_payer.est_lisible and montants and len(montants) == len(c.taxations) \
-                and all(tx.paiement_normalise is not PaiementNormalise.inconnu or tx.categorie is not
-                        CategorieTaxe.tva for tx in c.taxations):
-            dus = sum(tx.montant.decimal() for tx in c.taxations if tx.montant is not None
-                      and tx.paiement_normalise is not PaiementNormalise.autoliquide)
-            self._ajuster([c.total_a_payer], abs(dus - c.total_a_payer.decimal()) <= un_centime)
+        montants = [tx.montant for tx in c.taxations]
+        if _plusieurs(montants) and lisibles(c.total_droits_taxes, *montants):
+            ok = abs(sum(m.decimal() for m in montants) - c.total_droits_taxes.decimal()) <= demi  # type: ignore
+            (self._confirmer if ok else self._infirmer)(c.total_droits_taxes, *montants)
+        if _plusieurs(montants) and lisibles(c.total_a_payer, *montants) and all(
+                tx.paiement_normalise is not PaiementNormalise.inconnu for tx in c.taxations
+                if tx.categorie is CategorieTaxe.tva):
+            dus = sum(tx.montant.decimal() for tx in c.taxations  # type: ignore[union-attr]
+                      if tx.paiement_normalise is not PaiementNormalise.autoliquide)
+            ok = abs(dus - c.total_a_payer.decimal()) <= demi  # type: ignore[union-attr]
+            (self._confirmer if ok else self._infirmer)(c.total_a_payer)
         # montant total facturé = somme des articles (même devise)
         mts = [a.montant_facture_article for a in c.articles]
-        if c.montant_total_facture and c.montant_total_facture.est_lisible and mts and \
-                all(m is not None and m.est_lisible and m.unite == c.montant_total_facture.unite for m in mts):
-            ok = abs(sum(m.decimal() for m in mts) - c.montant_total_facture.decimal()) <= Decimal("0.011") * len(mts)
-            self._ajuster([c.montant_total_facture, *mts], ok)
-        # masses
+        if _plusieurs(mts) and lisibles(c.montant_total_facture, *mts) and all(
+                m.unite == c.montant_total_facture.unite for m in mts):  # type: ignore[union-attr]
+            ok = abs(sum(m.decimal() for m in mts) - c.montant_total_facture.decimal()) <= demi  # type: ignore
+            (self._confirmer if ok else self._infirmer)(c.montant_total_facture, *mts)
+        # taux de change : montant facturé converti = valeur statistique (ou base des droits) d'un article
+        self._recouper_taux()
+        # masses, colis, nombre d'articles
         mbs = [a.masse_brute for a in c.articles]
-        if c.masse_brute_totale and c.masse_brute_totale.est_lisible and mbs and \
-                all(m is not None and m.est_lisible for m in mbs):
-            ok = abs(sum(m.decimal() for m in mbs) - c.masse_brute_totale.decimal()) <= Decimal("0.002") * len(mbs)
-            self._ajuster([c.masse_brute_totale, *mbs], ok)
-        # colis
+        if _plusieurs(mbs) and lisibles(c.masse_brute_totale, *mbs):
+            ok = abs(sum(m.decimal() for m in mbs) - c.masse_brute_totale.decimal()) \
+                <= Decimal("0.0005")  # type: ignore[union-attr]
+            (self._confirmer if ok else self._infirmer)(c.masse_brute_totale, *mbs)
         cls = [a.nombre_colis for a in c.articles]
-        if c.nombre_colis_total and c.nombre_colis_total.est_lisible and cls and \
-                all(x is not None and x.est_lisible for x in cls):
-            ok = sum(x.entier() for x in cls) == c.nombre_colis_total.entier()
-            self._ajuster([c.nombre_colis_total, *cls], ok)
-        # nombre d'articles
-        if c.nombre_articles and c.nombre_articles.est_lisible and c.articles:
-            self._ajuster([c.nombre_articles], c.nombre_articles.entier() == len(c.articles))
+        if _plusieurs(cls) and lisibles(c.nombre_colis_total, *cls):
+            ok = sum(x.entier() for x in cls) == c.nombre_colis_total.entier()  # type: ignore[union-attr]
+            (self._confirmer if ok else self._infirmer)(c.nombre_colis_total, *cls)
+        if lisibles(c.nombre_articles) and c.articles:
+            ok = c.nombre_articles.entier() == len(c.articles)  # type: ignore[union-attr]
+            (self._confirmer if ok else self._infirmer)(c.nombre_articles)
+        # identifiants : clé de TVA, EORI = SIREN de la TVA, doubles lectures (MRN, devise, date)
+        for partie in (c.importateur, c.declarant):
+            if lisibles(partie.tva) and tva_fr_valide(partie.tva.valeur) is True:  # type: ignore[union-attr]
+                self._confirmer(partie.tva)
+                if lisibles(partie.eori) and partie.eori.valeur[2:11] == partie.tva.valeur[4:]:  # type: ignore
+                    self._confirmer(partie.eori)
+        # double lecture : seulement sans caractère d'une classe de confusion (O/0, I/1…), car deux lectures
+        # du même glyphe dans la même police se trompent de la même façon
+        for vs in (c.mrn, c.devise_facture):
+            if lisibles(vs) and not re.search(r"[0O1IL5S8B2Z6G]", (vs.valeur or "")[4:] if vs is c.mrn
+                                              else "") and self._lectures(vs) >= 2:  # type: ignore[arg-type]
+                self._confirmer(vs)
+        # application
+        for vs in self.champs.iter_valeurs():
+            if not self._est_ocr(vs):
+                continue
+            plafond_page = self.pages[vs.page].plafond if vs.page in self.pages else 0.5
+            if vs.id in self._reparees:
+                continue  # relecture : jamais au-dessus de PLAFOND_REPARE
+            if vs.id in self._confirmees and vs.confiance >= 0.5:
+                cible = CONF_CONFIRMEE if plafond_page >= 0.75 else min(PLAFOND_OCR_SEUL, vs.confiance + 0.1)
+                self._remplacer(vs, max(vs.confiance, cible))
+            elif vs.id in self._infirmees:
+                self._remplacer(vs, min(vs.confiance, PLAFOND_INCOHERENT))
+
+    def _recouper_taux(self) -> None:
+        c = self.champs
+        tx, sens = c.taux_change, c.taux_change_sens
+        if tx is None or not tx.est_lisible or sens is None or not sens.est_lisible or tx.decimal() == 0:
+            return
+        for a in c.articles:
+            mf = a.montant_facture_article
+            refs = [a.valeur_statistique] + [t.base_montant for t in c.taxations
+                                             if t.categorie is CategorieTaxe.droit and t.article is not None
+                                             and a.numero_article is not None
+                                             and t.article.valeur == a.numero_article.valeur]
+            if mf is None or not mf.est_lisible or mf.unite in (None, "EUR"):
+                continue
+            eur = mf.decimal() / tx.decimal() if sens.valeur == TauxChangeSens.devise_par_eur.value \
+                else mf.decimal() * tx.decimal()
+            for r in refs:
+                if r is not None and r.est_lisible and abs(eur - r.decimal()) <= Decimal("0.0051"):
+                    self._confirmer(tx, sens, mf, r)
+                    return
+
+    def _lectures(self, vs: ValeurSourcee) -> int:
+        """Nombre de lectures concordantes de la valeur ailleurs dans le document (titre, signature…)."""
+        cible = re.sub(r"[^A-Z0-9]", "", (vs.valeur or "").upper())
+        n = 0
+        for ligne in self.lignes:
+            sp = _Span(ligne.toks)
+            if vs.chemin.endswith("date_acceptation"):
+                for m in _DATE_RE.finditer(sp.texte):
+                    lu = self.v_date(sp.sous(m.start(), m.end()))
+                    if lu is not None and lu.valeur == vs.valeur:
+                        n += 1
+                continue
+            for t in ligne.toks:
+                if re.sub(r"[^A-Z0-9]", "", t.t.upper()) == cible:
+                    n += 1
+        return n
 
 
 # --- aides de module -----------------------------------------------------------------------------------------
@@ -1743,6 +1891,18 @@ _TYPES_ARTICLES = {"numero": "entier", "code": "code", "designation": "texte", "
                    "montant_facture": "nombre", "valeur": "nombre", "quantite": "nombre", "masse_brute": "nombre",
                    "masse_nette": "nombre", "base_droits": "nombre", "taux_droits": "nombre", "droits": "nombre",
                    "base_tva": "nombre", "tva": "nombre", "statut": "mp"}
+
+
+def _plusieurs(valeurs: Sequence[ValeurSourcee | None]) -> bool:
+    """Au moins deux termes non nuls : une somme d'un seul terme recopie le même nombre (pas un recoupement)."""
+    n = 0
+    for v in valeurs:
+        try:
+            if v is not None and v.est_lisible and v.decimal() != 0:
+                n += 1
+        except ValueError:
+            continue
+    return n >= 2
 
 
 def _b(v: float) -> float:
@@ -1824,7 +1984,7 @@ def _code_taxe(span: _Span) -> _Lu | None:
     if span is None or span.vide:
         return None
     t = span.toks[0]
-    s = t.t.strip(".,:;()_|—-~'‘’\"")
+    s = t.t.strip(".,:;()_|—-~'‘’\"°*«»[]{}")
     if not _CODE_TAXE_RE.match(s) or s in _MOTS_NON_TAXE:
         return None
     corr = s[0] + s[1:].upper().translate(_VERS_CHIFFRE) if re.fullmatch(r"[A-Z][0-9OoIlSZ]{2}", s) else s

@@ -75,6 +75,7 @@ from controldone.normalize import (
     code_marchandise,
     codes_iso_dans_texte,
     country_to_iso2,
+    exposant_devise,
     normalize_currency,
     normalize_unit,
     parse_amount,
@@ -100,7 +101,7 @@ LIB_NUMERO = motifs(
     rf"(?:facture|factura)(?: (?:commerciale|comercial|pro ?forma|proforma))?\s*{_NO}\s*:?",
 )
 #: Repli OCR : « Factura nic: » (abréviation de numéro illisible) ; confiance réduite.
-LIB_NUMERO_OCR = motifs(r"(?:invoice|facture|factura)\s+[a-z0-9°.]{1,4}\s*:")
+LIB_NUMERO_OCR = motifs(r"(?:invoice|facture|factura)\s+(?!date|fecha)[a-z0-9°.]{1,4}\s*:")
 LIB_DATE = motifs(
     r"(?:invoice\s*)?date(?:\s*of\s*invoice)?(?:\s*de\s*(?:la\s*)?facture)?\s*:?",
     r"fecha(?:\s*de\s*(?:la\s*)?(?:factura|emision))?\s*:?",
@@ -645,10 +646,84 @@ def _tableau(e: _Etat) -> None:
                 e.lignes_tableau.add((p.numero, x.rang))
         rangees.extend(rs)
     if colonnes_prec is None:
-        e.avert.append("tableau_lignes_non_reconnu")
+        rangees = _rangees_sans_entete(e)
+        if not rangees:
+            e.avert.append("tableau_lignes_non_reconnu")
+            return
+        e.avert.append("tableau_lu_sans_entete")
+        for k, r in enumerate(rangees):
+            ln = _ligne(e, r, k)
+            for nom, v in list(ln):
+                if isinstance(v, ValeurSourcee):  # colonnes présumées : jamais une lecture sûre
+                    setattr(ln, nom, v.model_copy(update={"confiance": min(v.confiance, 0.6)}))
+            e.champs.lignes.append(ln)
         return
     for k, r in enumerate(rangees):
         e.champs.lignes.append(_ligne(e, r, k))
+
+
+_BRUIT = re.compile(r"^[|_—–\-~.,:;'\"“”‘’°*()\[\]{}]+$")
+
+
+def _rangees_sans_entete(e: _Etat) -> list[RangeeTableau]:
+    """Repli quand l'en-tête du tableau est illisible : une ligne d'article est reconnue à sa forme
+    (n° de ligne en tête, montant en fin, quantité × prix = montant ou code marchandise présent) et ses
+    cellules sont attribuées de droite à gauche. Les valeurs ainsi lues ont une confiance ≤ 0,60."""
+    out: list[RangeeTableau] = []
+    for p in e.vue.pages:
+        for li in p.lignes:
+            if _est_fin(li) or (p.numero, li.rang) in e.entetes:
+                continue
+            mots = [m for m in li.mots if not _BRUIT.match(m.texte)]
+            if len(mots) < 4:
+                continue
+            m0 = re.fullmatch(r"\W{0,2}(\d{1,3})\W{0,2}", mots[0].texte)
+            if not m0:
+                continue
+            nombres = [n for n in nombres_dans(mots) if not n.tronque and n.i > 0]
+            if len(nombres) < 2:
+                continue
+            mt, pu = nombres[-1], nombres[-2]
+            if mt.j < len(mots) - 1:
+                continue  # le montant termine la ligne
+            if (e.devise is None or exposant_devise(e.devise) > 0) and not re.search(r"\d[.,]\d{2}\)?$", mt.texte):
+                continue  # séparateur décimal perdu par l'OCR : montant illisible
+            v_mt = lire_montant_mots(mots[mt.i:mt.j], vue=e.vue, devise=e.devise)
+            v_pu = lire_montant_mots(mots[pu.i:pu.j], vue=e.vue, devise=e.devise)
+            cellules: dict[str, list] = {"numero_ligne": [mots[0]], "montant": list(mots[mt.i:mt.j]),
+                                         "prix_unitaire": list(mots[pu.i:pu.j])}
+            fin_desc = pu.i
+            coherent = False
+            for q in reversed(nombres[:-2]):
+                v_q = lire_montant_mots(mots[q.i:q.j], vue=e.vue, devise=None, rejeter_masse=False)
+                if v_q and v_mt and v_pu and abs(v_q[2] * v_pu[2] - v_mt[2]) <= Decimal("0.011"):
+                    cellules["quantite"] = list(mots[q.i:q.j])
+                    if q.j < pu.i and re.fullmatch(r"[A-Za-z]{1,6}\.?", mots[q.j].texte):
+                        cellules["unite"] = [mots[q.j]]
+                    fin_desc = q.i
+                    coherent = True
+                    break
+            k = 1
+            if k < fin_desc and re.search(r"\d", mots[k].texte) and re.search(r"[A-Za-z]", mots[k].texte) \
+                    and "-" in mots[k].texte:
+                cellules["reference_article"] = [mots[k]]
+                k += 1
+            reste = list(mots[k:fin_desc])
+            if reste and re.fullmatch(r"\(?[A-Z]{2}\)?", reste[-1].texte) and country_to_iso2(reste[-1].texte.strip("()")):
+                cellules["origine"] = [reste.pop()]
+            code: list = []
+            while reste and re.fullmatch(r"[\d.\s\-/]+", reste[-1].texte):
+                code.insert(0, reste.pop())
+            if code and code_marchandise(" ".join(m.texte for m in code)):
+                cellules["code"] = code
+            elif code:
+                reste.extend(code)
+            if reste:
+                cellules["description"] = reste
+            if not (coherent or "code" in cellules):
+                continue
+            out.append(RangeeTableau(cellules, [li], p))
+    return out
 
 
 def _lec_cellule(r: RangeeTableau, typ: str, *, premiere_ligne: bool = False) -> Lecture | None:
@@ -801,6 +876,8 @@ def _recouper_ligne(ln: LigneFactureCommerciale) -> None:
         return
     for nom in ("quantite", "prix_unitaire", "montant_ligne"):
         v: ValeurSourcee = getattr(ln, nom)
+        if nom == "quantite" and v.unite == "inconnue":
+            continue  # l'unité reste douteuse : le recoupement ne porte que sur le nombre
         if ok:
             c = max(v.confiance, 0.97 if v.methode is not Methode.ocr else 0.92) if v.ancree else v.confiance
         else:
@@ -829,7 +906,7 @@ def _candidats(e: _Etat) -> list[_Candidat]:
         cle = (t.page.numero, t.ligne.rang, t.segment.rang)
         if cle in vus or (t.page.numero, t.ligne.rang) in e.lignes_tableau or (t.page.numero, t.ligne.rang) in e.entetes:
             return
-        lec = valeur_apres(vue, t, acc, lignes_dessous=1, marge_dessous=0.4)
+        lec = valeur_apres(vue, t, acc, lignes_dessous=1, marge_dessous=0.4, dessous_seul=True)
         if lec is None:
             return
         res = lire_montant_mots(lec.mots, vue=vue, devise=e.devise)

@@ -37,6 +37,7 @@ from controldone.extract.deterministe._mise_en_page import (
     pave,
     reconnaitre_entete,
     separateur_masse,
+    texte_nombre,
     valeur_apres,
     vue_document,
 )
@@ -190,12 +191,30 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
             setattr(ch, chemin, fab.valeur(chemin, lec, type_valeur=TypeValeur.entier))
             continue
         sep, presume = separateur_masse(vue, lec.texte)
-        if parse_weight_kg(lec.texte, separateur_decimal=sep) is None:
+        if parse_weight_kg(texte_nombre(lec.texte), separateur_decimal=sep) is None:
             continue
-        conf = min(confiance_mots(lec), 0.7) if presume else None
+        conf = confiance_mots(lec)
+        if presume:
+            conf = min(conf, 0.7)
+        if lec.methode is Methode.ocr and re.search(r"\d{7,}", lec.texte):
+            conf = min(conf, 0.4)  # séparateurs perdus par l'OCR (« 2739523277 »)
         setattr(ch, chemin, fab.valeur(chemin, lec, type_valeur=TypeValeur.masse, separateur=sep, confiance=conf))
+    _recouper_masses(ch)
     _parties(vue, fab, ch)
     return ch
+
+
+def _recouper_masses(ch: ChampsSupport) -> None:
+    """Poids brut et poids taxable lus tous deux : un rapport aberrant (≥ 10) trahit un séparateur mal lu."""
+    b, t = ch.masse_brute, ch.masse_taxable
+    if b is None or t is None or not b.valeur or not t.valeur:
+        return
+    from decimal import Decimal
+
+    vb, vt = Decimal(b.valeur), Decimal(t.valeur)
+    if vb > 0 and vt > 0 and (vb / vt >= 10 or vt / vb >= 10):
+        ch.masse_brute = b.model_copy(update={"confiance": min(b.confiance, 0.4)})
+        ch.masse_taxable = t.model_copy(update={"confiance": min(t.confiance, 0.4)})
 
 
 def _premier(vue: VueDocument, libs, acc) -> Lecture | None:
