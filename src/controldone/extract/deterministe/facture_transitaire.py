@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from controldone.extract.base import ExtractionContext, ExtractionResult
@@ -334,19 +334,12 @@ class Total:
 
 
 @dataclass
-class Lecture_tva:
+class LectureTva:
     lu: Lu
     norm: str
     ligne: VueLigne
     page: VuePage
     corrigee: bool = False
-
-
-@dataclass
-class Etat:
-    vue: VueDocument
-    pages: list[VuePage]
-    lignes_consommees: set[tuple[int, int]] = field(default_factory=set)
 
 
 # --- extracteur -------------------------------------------------------------------------------------------------
@@ -769,7 +762,7 @@ class _Extraction:
         titres = [(li, s) for li in page.lignes if li.y0 < 0.2 for s in li.segments if _est_titre(s.cle)]
         if not titres:
             return None
-        li_t, s_t = titres[0]
+        _, s_t = titres[0]
         cx, cy = (s_t.x0 + s_t.x1) / 2, (s_t.y0 + s_t.y1) / 2
         meilleur = None
         for li in page.lignes:
@@ -822,7 +815,7 @@ class _Extraction:
         entites.discard(None)
         label = next((t for t in chercher(self.vue, _LIB_CLIENT, pages=[premiere.numero])
                       if t.ligne.y0 < 0.45 and not re.match(r"client (n°|no|code|ref)", t.segment.cle)), None)
-        client_tva: Lecture_tva | None = None
+        client_tva: LectureTva | None = None
         conf_client = C_LIBELLE
         if label is not None:
             x0 = label.segment.x0
@@ -836,7 +829,7 @@ class _Extraction:
         autres = [lt for lt in tvas if client_tva is None or lt.norm != client_tva.norm]
         autres = [lt for lt in autres if lt.norm not in entites]
         siren_pied = _siren_pied(pages)
-        emetteur: Lecture_tva | None = None
+        emetteur: LectureTva | None = None
         conf_em = C_LIBELLE
         if autres:
             confirme = [lt for lt in autres if siren_pied and siren_depuis_tva(lt.norm) == siren_pied]
@@ -884,8 +877,8 @@ class _Extraction:
             if nom_cl is not None:
                 c.definir("client_facture.nom", self._vs("client_facture.nom", nom_cl, type_valeur=TypeValeur.texte))
 
-    def _tvas(self, pages: list[VuePage]) -> list[Lecture_tva]:
-        out: list[Lecture_tva] = []
+    def _tvas(self, pages: list[VuePage]) -> list[LectureTva]:
+        out: list[LectureTva] = []
         for p in pages:
             for li in p.lignes:
                 if re.search(r"\b(iban|bic|swift|rib)\b", li.cle):
@@ -904,9 +897,9 @@ class _Extraction:
                     i, j, norm = r
                     ms = mots[k + i:k + j]
                     brut = " ".join(m.texte for m in ms).strip(":;,()")
-                    out.append(Lecture_tva(Lu(lecture_mots(ms, p, li), brut=brut), norm, li, p, corrigee))
+                    out.append(LectureTva(Lu(lecture_mots(ms, p, li), brut=brut), norm, li, p, corrigee))
                     k += j
-        uniques: dict[str, Lecture_tva] = {}
+        uniques: dict[str, LectureTva] = {}
         for lt in out:
             uniques.setdefault(lt.norm, lt)
         return list(uniques.values())
@@ -923,7 +916,7 @@ class _Extraction:
                 return self._lu_mots(s.mots, page, li, base=0.85)
         return None
 
-    def _nom_client(self, page: VuePage, label, client_tva: Lecture_tva | None) -> Lu | None:
+    def _nom_client(self, page: VuePage, label, client_tva: LectureTva | None) -> Lu | None:
         if label is not None:
             reste = label.segment.mots[label.apres:]
             if reste and re.search(r"[A-Za-z]{3}", " ".join(m.texte for m in reste)):
@@ -1244,8 +1237,10 @@ class _Extraction:
             pre = f"lignes[{idx}]."
             idx += 1
             vals: dict[str, ValeurSourcee | None] = {}
-            vals["libelle"] = self._vs(pre + "libelle", lg.libelle, type_valeur=TypeValeur.texte,
-                                       conf=None if not lg.libelle_entete else None)
+            # libellé d'une colonne « par nature » : l'en-tête imprimé de la colonne (« Droits », « Duty »)
+            lib = Lu(lg.libelle.lecture, base=0.9, brut=lg.libelle.brut) if lg.libelle and lg.libelle_entete \
+                else lg.libelle
+            vals["libelle"] = self._vs(pre + "libelle", lib, type_valeur=TypeValeur.texte)
             vals["montant_ht"] = self._vs(pre + "montant_ht", lg.montant_ht)
             vals["quantite"] = self._vs(pre + "quantite", lg.quantite, type_valeur=TypeValeur.quantite)
             vals["prix_unitaire"] = self._vs(pre + "prix_unitaire", lg.prix_unitaire)
@@ -1343,17 +1338,16 @@ class _Extraction:
             c.definir(noms[cle], v)
         lignes: list[LigneFactureTransitaire] = list(c.lignes)
         hts = [lg.montant_ht for lg in lignes if lg.montant_ht is not None]
-        if not self.avoir:
-            if c.total_debours is None and lignes:  # type: ignore[union-attr]
-                deb = [lg.montant_ht for lg in lignes if lg.nature.est_debours and lg.montant_ht is not None]
-                if deb:
-                    v = deriver_somme(chemin_complet(self.td, "total_debours"), deb, document_id=self.document_id,
-                                      extracteur=self.info, unite="EUR", regle="somme_lignes_debours",
-                                      total_reconstruit=True)
-                else:
-                    v = self._derive("total_debours", "0.00", [], "aucune_ligne_de_debours", plafond=0.5,
-                                     total_reconstruit=True)
-                c.definir("total_debours", v)
+        if not self.avoir and c.total_debours is None and lignes:  # type: ignore[union-attr]
+            deb = [lg.montant_ht for lg in lignes if lg.nature.est_debours and lg.montant_ht is not None]
+            if deb:
+                v = deriver_somme(chemin_complet(self.td, "total_debours"), deb, document_id=self.document_id,
+                                  extracteur=self.info, unite="EUR", regle="somme_lignes_debours",
+                                  total_reconstruit=True)
+            else:
+                v = self._derive("total_debours", "0.00", [], "aucune_ligne_de_debours", plafond=0.5,
+                                 total_reconstruit=True)
+            c.definir("total_debours", v)
         cle_ht = "total_credite_ht" if self.avoir else "total_ht"
         cle_ttc = "total_credite_ttc" if self.avoir else "total_ttc"
         if c.obtenir(cle_ht) is None and hts:
@@ -1446,9 +1440,9 @@ class _Extraction:
                 else:
                     abaisser([td])
             net = c.net_a_payer  # type: ignore[union-attr]
-            if net is not None and tttc is not None and net.methode is Methode.ocr:
-                if abs((_dec(net) or 0) - (_dec(tttc) or 0)) <= _CENT:
-                    relever([net, tttc])
+            if net is not None and tttc is not None and net.methode is Methode.ocr \
+                    and abs((_dec(net) or 0) - (_dec(tttc) or 0)) <= _CENT:
+                relever([net, tttc])
         if not maj:
             return
         for chemin_rel, v in list(_feuilles(c)):

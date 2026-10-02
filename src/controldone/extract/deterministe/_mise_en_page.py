@@ -634,6 +634,10 @@ def accepte_reference(mots: Sequence[Mot]) -> tuple[int, int] | None:
                 and _ecart_etroit(mots[j - 1], mots[j]):
             t += mots[j].texte
             j += 1
+        if j == k + 1 and re.fullmatch(r"(?i)no\.|nr\.|n°", t) and j < len(mots) \
+                and re.fullmatch(r"\d[\w/\-.]*", mots[j].texte) and mots[j].x0 - m.x1 < (m.x1 - m.x0) / 2:
+            t += mots[j].texte  # « No.202601371 » coupé par l'OCR
+            j += 1
         if len(t) >= 3 and re.search(r"\d", t) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./\-_#]*", t):
             return k, j
         if k >= 2:

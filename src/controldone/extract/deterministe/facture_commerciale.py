@@ -99,6 +99,8 @@ LIB_NUMERO = motifs(
     rf"(?:{_NO}|numero)\s*(?:de\s*(?:la\s*)?)?(?:facture|factura)\s*:?",
     rf"(?:facture|factura)(?: (?:commerciale|comercial|pro ?forma|proforma))?\s*{_NO}\s*:?",
 )
+#: Repli OCR : « Factura nic: » (abréviation de numéro illisible) ; confiance réduite.
+LIB_NUMERO_OCR = motifs(r"(?:invoice|facture|factura)\s+[a-z0-9°.]{1,4}\s*:")
 LIB_DATE = motifs(
     r"(?:invoice\s*)?date(?:\s*of\s*invoice)?(?:\s*de\s*(?:la\s*)?facture)?\s*:?",
     r"fecha(?:\s*de\s*(?:la\s*)?(?:factura|emision))?\s*:?",
@@ -407,6 +409,10 @@ def _entete(e: _Etat) -> None:
     lec = _premier(vue, LIB_NUMERO, accepte_reference)
     if lec is not None:
         ch.numero = fab.valeur("numero", lec, confiance=_conf_ref(lec))
+    else:
+        lec = _premier(vue, LIB_NUMERO_OCR, accepte_reference, dessous=False)
+        if lec is not None:
+            ch.numero = fab.valeur("numero", lec, confiance=min(0.7, _conf_ref(lec)))
     lec = _premier(vue, LIB_DATE, _accepte_date)
     if lec is not None:
         d = parse_date_detail(lec.texte)
@@ -482,7 +488,8 @@ def _parties(e: _Etat) -> None:
             if not re.search(r"(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))):
                 page = vue.page(li0.page)
                 lec_nom = lecture_mots(mots0, page, li0)
-                ch.acheteur.nom = fab.valeur("acheteur.nom", lec_nom, type_valeur=TypeValeur.texte)
+                ch.acheteur.nom = fab.valeur("acheteur.nom", lec_nom, type_valeur=TypeValeur.texte,
+                                             confiance=min(0.9, confiance_mots(lec_nom)))
             adr = [lecture_mots(ms, vue.page(li.page), li) for li, ms in lignes[1:]
                    if not re.search(r"(vat|tva|iva|eori|siren|siret|tel|phone|fax|e-?mail)\b",
                                     cle_texte(" ".join(m.texte for m in ms)))]
@@ -590,7 +597,10 @@ def _vendeur(e: _Etat) -> None:
         if not ms or not re.search(r"[a-z]{3}", txt) or re.match(r"^[\d\W]", txt):
             continue
         if ch.vendeur.nom is None:
-            ch.vendeur.nom = fab.valeur("vendeur.nom", lecture_mots(ms, p, li), type_valeur=TypeValeur.texte)
+            lec_v = lecture_mots(ms, p, li)
+            # sans libellé « vendeur », le nom est présumé (première ligne de l'en-tête)
+            ch.vendeur.nom = fab.valeur("vendeur.nom", lec_v, type_valeur=TypeValeur.texte,
+                                        confiance=min(0.9 if t_v else 0.8, confiance_mots(lec_v)))
         r = lire_tva_mots(ms)
         if r is not None and ch.vendeur.tva is None:
             lec = lecture_mots(ms[r[0]:r[1]], p, li)
