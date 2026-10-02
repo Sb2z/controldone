@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ r.titre }} — {{ r.client }}{% if r.demo %} (données fictives){% endif %}</title>
+<style>
+:root {
+  --encre: #1f2933; --encre-2: #52606d; --encre-3: #7b8794; --filet: #d9dee5; --fond-2: #f5f7fa;
+  --marine: #1d3557; --marine-2: #2f4b73; --certain: #9b2226; --certain-fond: #fbeaea;
+  --verifier: #9a5b00; --verifier-fond: #fff4e0; --renvoi: #3d5a80; --renvoi-fond: #e8eef6;
+  --conforme: #2d6a4f; --conforme-fond: #e7f4ec; --demo: #b42318;
+}
+* { box-sizing: border-box; }
+html { font-size: 10.5pt; }
+body { margin: 0; color: var(--encre); background: #fff;
+  font-family: "Source Sans 3", "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif;
+  line-height: 1.45; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { max-width: 190mm; margin: 0 auto; padding: 14mm 0 30mm; }
+h1, h2, h3, h4 { color: var(--marine); line-height: 1.2; margin: 0; font-weight: 650; }
+h2 { font-size: 1.45rem; margin: 2.2rem 0 .9rem; padding-bottom: .35rem; border-bottom: 2px solid var(--marine); }
+h2 .num { color: var(--encre-3); font-weight: 500; margin-right: .4rem; }
+h3 { font-size: 1.12rem; margin: 1.4rem 0 .6rem; }
+h4 { font-size: .95rem; margin: 1rem 0 .4rem; color: var(--marine-2); }
+p { margin: .35rem 0; }
+small, .discret { color: var(--encre-2); }
+.mono { font-family: "DejaVu Sans Mono", "Menlo", "Consolas", monospace; font-size: .92em; }
+table { width: 100%; border-collapse: collapse; margin: .4rem 0 .9rem; font-size: .93rem; }
+th { text-align: left; font-weight: 600; color: var(--encre-2); background: var(--fond-2);
+  border-bottom: 1px solid var(--filet); padding: .38rem .5rem; font-size: .86rem; }
+td { border-bottom: 1px solid var(--filet); padding: .38rem .5rem; vertical-align: top; }
+td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+tr { break-inside: avoid; }
+.badge { display: inline-block; padding: .08rem .5rem; border-radius: 999px; font-size: .8rem; font-weight: 600;
+  white-space: nowrap; border: 1px solid transparent; }
+.b-ecart_certain { color: var(--certain); background: var(--certain-fond); border-color: #efc7c7; }
+.b-a_verifier { color: var(--verifier); background: var(--verifier-fond); border-color: #f2d7a6; }
+.b-renvoi { color: var(--renvoi); background: var(--renvoi-fond); border-color: #c9d6e8; }
+.b-conforme { color: var(--conforme); background: var(--conforme-fond); border-color: #c3e2d0; }
+.b-document_manquant, .b-non_concerne, .b-neutre { color: var(--encre-2); background: var(--fond-2); border-color: var(--filet); }
+.bandeau-demo { background: var(--demo); color: #fff; text-align: center; font-weight: 700; letter-spacing: .14em;
+  padding: .35rem; font-size: .85rem; }
+.couverture { min-height: 235mm; display: flex; flex-direction: column; justify-content: space-between;
+  page-break-after: always; break-after: page; padding-top: 6mm; }
+.marque { font-size: .95rem; letter-spacing: .2em; text-transform: uppercase; color: var(--marine-2); font-weight: 700; }
+.marque span { color: var(--encre-3); font-weight: 500; letter-spacing: .05em; text-transform: none; margin-left: .5rem; }
+.couverture h1 { font-size: 2.5rem; margin: 26mm 0 4mm; font-weight: 700; }
+.couverture .sous-titre { font-size: 1.15rem; color: var(--encre-2); }
+.fiche-couverture { margin-top: 14mm; border-top: 3px solid var(--marine); }
+.fiche-couverture td { padding: .55rem .2rem; font-size: 1rem; }
+.fiche-couverture td:first-child { color: var(--encre-2); width: 38%; }
+.cartes { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: .6rem 0 1rem; }
+.carte { border: 1px solid var(--filet); border-radius: 6px; padding: .7rem .8rem; background: #fff; break-inside: avoid; }
+.carte .etiquette { font-size: .8rem; color: var(--encre-2); text-transform: uppercase; letter-spacing: .04em; }
+.carte .valeur { font-size: 1.45rem; font-weight: 650; margin-top: .2rem; font-variant-numeric: tabular-nums; }
+.carte .note { font-size: .8rem; color: var(--encre-3); margin-top: .15rem; }
+.carte.certain { border-top: 4px solid var(--certain); }
+.carte.verifier { border-top: 4px solid var(--verifier); }
+.carte.documentaire { border-top: 4px solid var(--marine-2); }
+.carte.calcul { border-top: 4px solid #6b7c93; }
+.carte.renvoi { border-top: 4px solid var(--renvoi); }
+.carte.statuts { border-top: 4px solid var(--encre-3); }
+.statuts-liste { list-style: none; padding: 0; margin: .3rem 0 0; font-size: .88rem; }
+.statuts-liste li { display: flex; justify-content: space-between; padding: .05rem 0; }
+.avis { border-left: 4px solid var(--marine); background: var(--fond-2); padding: .55rem .8rem; margin: .7rem 0;
+  font-size: .9rem; }
+.avis.renvoi { border-color: var(--renvoi); background: var(--renvoi-fond); }
+.actions { counter-reset: none; list-style: none; padding: 0; margin: 0; }
+.actions > li { border: 1px solid var(--filet); border-radius: 6px; padding: .6rem .8rem; margin-bottom: .55rem; break-inside: avoid; }
+.actions .prio { display: inline-block; min-width: 2.2rem; font-weight: 700; color: #fff; background: var(--marine);
+  border-radius: 4px; text-align: center; margin-right: .5rem; font-size: .85rem; }
+.actions ul { margin: .35rem 0 0 2.8rem; padding: 0; color: var(--encre-2); font-size: .9rem; }
+.dossier { page-break-before: always; break-before: page; }
+.dossier-entete { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+  border-bottom: 2px solid var(--marine); padding-bottom: .35rem; margin-bottom: .6rem; }
+.dossier-entete h3 { margin: 0; font-size: 1.3rem; }
+.cles { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem .8rem; font-size: .88rem; margin-bottom: .6rem; }
+.cles div span { display: block; color: var(--encre-3); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
+.constat { border: 1px solid var(--filet); border-left: 5px solid var(--verifier); border-radius: 6px;
+  padding: .7rem .85rem; margin: .7rem 0; break-inside: avoid; }
+.constat.ecart_certain { border-left-color: var(--certain); }
+.constat.renvoi { border-left-color: var(--renvoi); }
+.constat-tete { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.constat-tete .titre { font-weight: 650; color: var(--marine); }
+.constat-tete .montant { font-size: 1.15rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.constat .libelle { margin: .45rem 0; }
+.constat .meta { font-size: .82rem; color: var(--encre-2); display: flex; flex-wrap: wrap; gap: .3rem 1.1rem; }
+.constat .raisons { font-size: .86rem; color: var(--verifier); margin: .3rem 0; }
+.constat .action { font-size: .88rem; background: var(--fond-2); border-radius: 4px; padding: .4rem .6rem; margin-top: .45rem; }
+.preuves { display: grid; grid-template-columns: repeat(2, 1fr); gap: .55rem; margin-top: .55rem; }
+.preuve { border: 1px solid var(--filet); border-radius: 5px; padding: .45rem .55rem; font-size: .84rem; background: #fff; }
+.preuve .role { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--encre-3); }
+.preuve .doc { font-weight: 600; color: var(--encre); }
+.preuve .lu { margin-top: .2rem; }
+.preuve img { display: block; max-width: 100%; margin-top: .35rem; border: 1px solid var(--filet); border-radius: 3px; }
+.preuve.calcul { background: var(--fond-2); }
+details.controles summary { cursor: pointer; color: var(--marine-2); font-weight: 600; margin: .8rem 0 .3rem; }
+.oc-conforme { color: var(--conforme); } .oc-ecart_certain { color: var(--certain); font-weight: 600; }
+.oc-a_verifier { color: var(--verifier); font-weight: 600; } .oc-non_verifiable { color: var(--encre-2); }
+.oc-non_applicable { color: var(--encre-3); }
+.faible { color: var(--verifier); font-weight: 600; }
+.vide { color: var(--encre-3); font-style: italic; }
+footer.pied { margin-top: 2.5rem; border-top: 1px solid var(--filet); padding-top: .6rem; font-size: .76rem; color: var(--encre-2); }
+footer.pied .demo { color: var(--demo); font-weight: 700; letter-spacing: .1em; }
+@media screen { body { background: #eef1f5; } .page { background: #fff; padding: 14mm 14mm 10mm; margin: 8mm auto;
+  box-shadow: 0 1px 3px rgba(16,24,40,.12); border-radius: 4px; } }
+@media print {
+  @page { size: A4; margin: 15mm 14mm 26mm 14mm; }
+  html { font-size: 9.6pt; }
+  .page { max-width: none; padding: 0; }
+  details.controles > summary { display: none; }
+  details.controles { display: block; }
+  footer.pied { position: fixed; bottom: -19mm; left: 0; right: 0; margin: 0; background: #fff; }
+  .bandeau-demo.fixe { position: fixed; top: -12mm; left: 0; right: 0; }
+  a { color: inherit; text-decoration: none; }
+}
+@media (max-width: 700px) { .cartes, .preuves { grid-template-columns: 1fr; } .cles { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+{% if r.demo %}<div class="bandeau-demo fixe">DONNÉES FICTIVES — DÉMONSTRATION</div>{% endif %}
+<div class="page">
+
+<section class="couverture">
+  <div>
+    <div class="marque">ControlDOne <span>contrôle technique de cohérence des documents d'import</span></div>
+    <h1>{{ r.titre }}</h1>
+    <div class="sous-titre">{{ r.client }}</div>
+    <table class="fiche-couverture">
+      <tr><td>Client</td><td><strong>{{ r.client }}</strong></td></tr>
+      <tr><td>Période couverte</td><td>{{ r.periode }}</td></tr>
+      <tr><td>Offre</td><td>{{ r.offre }}</td></tr>
+      <tr><td>Dossiers analysés</td><td>{{ r.nb_dossiers }}</td></tr>
+      <tr><td>Date du rapport</td><td>{{ r.date }}</td></tr>
+      <tr><td>Versions</td><td class="discret">{% for k, v in r.versions.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+      <tr><td>Exécution</td><td class="mono discret">{{ r.execution_ids | join(", ") }}</td></tr>
+    </table>
+  </div>
+  <div>
+    {% if r.demo %}<p class="avis" style="border-color: var(--demo)"><strong>Données fictives.</strong> Toutes les sociétés, adresses, numéros et montants de ce rapport sont inventés pour la démonstration.</p>{% endif %}
+    {% if r.mention_validation %}<p class="avis">{{ r.mention_validation }}</p>{% endif %}
+    <p class="avis"><strong>Avertissement.</strong> {{ r.avertissement }}</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">1</span>Synthèse</h2>
+  <div class="cartes">
+    <div class="carte certain"><div class="etiquette">Montant recouvrable certain</div>
+      <div class="valeur">{{ r.recouvrable_certain }}</div><div class="note">écarts refacturés, preuve complète</div></div>
+    <div class="carte verifier"><div class="etiquette">Montant recouvrable à vérifier</div>
+      <div class="valeur">{{ r.recouvrable_a_verifier }}</div><div class="note">affiché à part, jamais additionné</div></div>
+    <div class="carte statuts"><div class="etiquette">Dossiers par statut</div>
+      <ul class="statuts-liste">{% for lib, code, n in r.statuts %}<li><span>{{ lib }}</span><strong>{{ n }}</strong></li>{% endfor %}</ul></div>
+    <div class="carte documentaire"><div class="etiquette">Écarts de valeur entre documents</div>
+      <div class="valeur">{{ r.ecarts_documentaires_nb }}</div><div class="note">montant absolu : {{ r.ecarts_documentaires }}</div></div>
+    <div class="carte calcul"><div class="etiquette">Écarts de calcul sur la déclaration</div>
+      <div class="valeur">{{ r.ecarts_calcul_nb }}</div><div class="note">montant absolu : {{ r.ecarts_calcul }}</div></div>
+    <div class="carte renvoi"><div class="etiquette">Points à faire vérifier par un professionnel</div>
+      <div class="valeur">{{ r.nb_renvois }}</div><div class="note">sans montant</div></div>
+  </div>
+  <p class="discret">Les montants de natures différentes ne sont jamais additionnés entre eux. Les écarts de valeur entre documents et les écarts de calcul ne sont pas des montants de droits.</p>
+
+  {% if r.par_composante %}
+  <h4>Écarts refacturés par composante</h4>
+  <table><tr><th>Composante</th><th class="num">Certain</th><th class="num">À vérifier</th></tr>
+  {% for k, c, v in r.par_composante %}<tr><td>{{ k }}</td><td class="num">{{ c }}</td><td class="num">{{ v }}</td></tr>{% endfor %}</table>
+  {% endif %}
+  {% if r.par_transitaire %}
+  <h4>Par transitaire</h4>
+  <table><tr><th>Transitaire</th><th class="num">Certain</th><th class="num">À vérifier</th></tr>
+  {% for k, c, v in r.par_transitaire %}<tr><td>{{ k }}</td><td class="num">{{ c }}</td><td class="num">{{ v }}</td></tr>{% endfor %}</table>
+  {% endif %}
+  {% if r.par_mois %}
+  <h4>Par mois de facture</h4>
+  <table><tr><th>Mois</th><th class="num">Certain</th><th class="num">À vérifier</th></tr>
+  {% for k, c, v in r.par_mois %}<tr><td>{{ k }}</td><td class="num">{{ c }}</td><td class="num">{{ v }}</td></tr>{% endfor %}</table>
+  {% endif %}
+</section>
+
+<section>
+  <h2><span class="num">2</span>Prochaines actions</h2>
+  {% if r.actions %}
+  <ol class="actions">
+  {% for a in r.actions %}<li><span class="prio">{{ a.priorite }}</span><strong>{{ a.titre }}</strong>
+    <ul>{% for d in a.details %}<li>{{ d }}</li>{% endfor %}</ul></li>{% endfor %}
+  </ol>
+  {% else %}<p class="vide">Aucune action à mener.</p>{% endif %}
+</section>
+
+<section>
+  <h2><span class="num">3</span>Constats par nature</h2>
+  <table><tr><th>Nature</th><th class="num">Constats</th><th class="num">Montant</th><th>Précision</th></tr>
+  {% for l in r.table_nature %}<tr><td>{{ l.libelle }}</td><td class="num">{{ l.nombre }}</td><td class="num">{{ l.montant }}</td><td class="discret">{{ l.note }}</td></tr>{% endfor %}
+  </table>
+</section>
+
+<section>
+  <h2><span class="num">4</span>Tableau des dossiers</h2>
+  <table>
+    <tr><th>Dossier</th><th>Clés (facture transitaire · transport · MRN · facture)</th><th>TVA acheteur / importateur</th><th class="num">Facturé / déclaré</th><th>Statut</th><th class="num">Recouvrable</th></tr>
+    {% for d in r.dossiers %}
+    <tr><td class="mono">{{ d.reference }}</td>
+      <td>{% for k, v in d.cles %}<span class="discret">{{ v }}</span>{% if not loop.last %} · {% endif %}{% endfor %}<br><small>{{ d.raisons }}</small></td>
+      <td class="mono">{{ d.tva_acheteur }}<br>{{ d.tva_importateur }}</td>
+      <td class="num">{{ d.montant_facture }}<br>{{ d.montant_declare }}</td>
+      <td><span class="badge b-{{ d.statut_code }}">{{ d.statut }}</span></td>
+      <td class="num">{{ fm(d.recouvrable_certain) }}{% if d.recouvrable_a_verifier %}<br><small>à vérifier : {{ fm(d.recouvrable_a_verifier) }}</small>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section>
+  <h2><span class="num">5</span>Fiches dossiers</h2>
+  {% for d in r.dossiers %}
+  <article class="dossier">
+    <div class="dossier-entete"><h3>Dossier {{ d.reference }}</h3><span class="badge b-{{ d.statut_code }}">{{ d.statut }}</span></div>
+    <div class="cles">{% for k, v in d.cles %}<div><span>{{ k }}</span>{{ v }}</div>{% endfor %}</div>
+    {% if d.transitaire %}<p class="discret">Transitaire : {{ d.transitaire }}</p>{% endif %}
+    {% if d.documents_manquants %}<p class="avis">Documents manquants : {{ d.documents_manquants | join(", ") }}.</p>{% endif %}
+
+    <h4>Documents et rattachements</h4>
+    <table><tr><th>Type</th><th>Fichier</th><th class="num">Pages</th><th class="num">Classement</th><th>Rattachement</th></tr>
+    {% for doc in d.documents %}<tr><td>{{ doc.type }}</td><td class="mono">{{ doc.fichier }}</td><td class="num">{{ doc.pages }}</td><td class="num">{{ doc.confiance }}</td>
+      <td><span class="{{ 'faible' if doc.faible else '' }}">{{ doc.lien }}</span><br><small>{{ doc.signaux }}</small></td></tr>{% endfor %}
+    </table>
+
+    <h4>Constats</h4>
+    {% for c in d.constats %}{% include "constat.html.j2" %}{% else %}<p class="vide">Aucun constat sur ce dossier.</p>{% endfor %}
+
+    {% if d.cote_a_cote %}
+    <h4>Lignes de facture et articles de déclaration (rapprochés par SH6)</h4>
+    <table><tr><th>SH6</th><th>Facture commerciale</th><th>Déclaration</th></tr>
+    {% for l in d.cote_a_cote %}<tr><td class="mono">{{ l.sh6 }}</td><td>{{ l.facture }}</td><td>{{ l.declaration }}</td></tr>{% endfor %}</table>
+    {% endif %}
+
+    <details class="controles"><summary>Contrôles exécutés ({{ d.resultats | length }})</summary>
+    <h4>Contrôles exécutés</h4>
+    <table><tr><th>Contrôle</th><th>Résultat</th><th class="num">Attendu</th><th class="num">Constaté</th><th>Motif</th></tr>
+    {% for x in d.resultats %}<tr><td><span class="mono">{{ x.controle_id }}</span> {{ x.libelle }}</td><td class="oc-{{ x.resultat_code }}">{{ x.resultat }}</td>
+      <td class="num mono">{{ x.attendu }}</td><td class="num mono">{{ x.constate }}</td><td class="discret">{{ x.raison }}</td></tr>{% endfor %}
+    </table></details>
+    <p class="discret">État du recouvrement : aucune demande d'avoir enregistrée pour ce dossier.</p>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="dossier">
+  <h2><span class="num">6</span>Points à faire vérifier par un professionnel</h2>
+  <p class="avis renvoi">{{ r.phrase_renvoi }}</p>
+  {% for c in r.renvois %}{% include "constat.html.j2" %}{% else %}<p class="vide">Aucun point réglementaire relevé.</p>{% endfor %}
+</section>
+
+<section>
+  <h2><span class="num">7</span>Documents non lus ou non reconnus</h2>
+  {% if r.non_lus %}
+  <table><tr><th>Fichier</th><th>Motif</th><th class="num">Pages</th></tr>
+  {% for f, m, p in r.non_lus %}<tr><td class="mono">{{ f }}</td><td>{{ m }}</td><td class="num">{{ p }}</td></tr>{% endfor %}</table>
+  {% else %}<p class="vide">Tous les fichiers reçus ont été lus et reconnus.</p>{% endif %}
+</section>
+
+<section>
+  <h2><span class="num">8</span>Méthode et tolérances</h2>
+  <ul>{% for l in r.limites %}<li>{{ l }}</li>{% endfor %}</ul>
+  <h4>Tolérances appliquées</h4>
+  <table><tr><th>Tolérance</th><th class="num">Valeur</th></tr>
+  {% for k, v in r.tolerances %}<tr><td>{{ k }}</td><td class="num">{{ v }}</td></tr>{% endfor %}</table>
+  <p class="discret">Empreinte du profil de tolérances : <span class="mono">{{ r.empreinte }}</span></p>
+  <h4>Versions</h4>
+  <table><tr><th>Composant</th><th>Version</th></tr>
+  {% for k, v in r.versions.items() %}<tr><td>{{ k }}</td><td class="mono">{{ v }}</td></tr>{% endfor %}
+  {% for k, v in r.extracteurs %}<tr><td>extracteur {{ k }}</td><td class="mono">{{ v }}</td></tr>{% endfor %}
+  <tr><td>modèle de langage</td><td class="mono">{{ r.modele_llm }}</td></tr></table>
+</section>
+
+<section>
+  <h2><span class="num">9</span>Avertissement</h2>
+  <p class="avis">{{ r.avertissement }}</p>
+</section>
+
+<footer class="pied">{% if r.demo %}<span class="demo">DONNÉES FICTIVES</span> · {% endif %}{{ r.client }} · {{ r.titre }} · {{ r.date }}<br>{{ r.avertissement }}</footer>
+</div>
+</body>
+</html>

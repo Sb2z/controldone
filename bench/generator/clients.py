@@ -134,6 +134,8 @@ def _make_grid(seed: int, cid: str, fw: Forwarder) -> dict:
     inclus = r.choice([2, 3, 3, 5])
     faf_pct = D(r.choice(["2.0", "2.5", "2.5", "3.0"]))
     faf_base = r.choice(["debours_total", "debours_total", "debours_hors_tva"])
+    if fw.template == "T3":
+        faf_base = "debours_total"  # montant combiné : la base hors TVA n'est pas lisible
     faf_min = D(r.choice(["15.00", "18.00", "20.00", "25.00"]))
     faf_max = r.choice([None, None, D("350.00"), D("500.00")])
     mag = D(r.choice(["9.00", "11.50", "12.00", "15.00"]))

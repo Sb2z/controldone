@@ -5,8 +5,8 @@ from __future__ import annotations
 import datetime as dt
 from decimal import Decimal
 
-from .build import (VAT_RATE, _alloc_to, _conv, _lbl, _marker, _presta, compute_taxes, debours_lines, faf_amount,
-                    faf_base, ft_number, make_faf_line, recompute_decl_totals)
+from .build import (VAT_RATE, _alloc_to, _conv, _lbl, _marker, _n, _p, _presta, compute_taxes, debours_lines,
+                    faf_amount, faf_base, faf_detail, ft_number, make_faf_line, recompute_decl_totals)
 from .clients import grid_poste
 from .common import (D, D0, ZERO_DEC_CURRENCIES, CONF_CLASSES, is_confusion_variant, make_awb, make_mrn, q0, q2, q3,
                      qcur, transpose_digits)
@@ -16,6 +16,10 @@ from .refdata import PRODUCTS_BY_KEY
 INCOTERMS = ["EXW", "FCA", "FOB", "FAS", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"]
 CUR_SWAP = {"EUR": "USD", "USD": "CNY", "CNY": "USD", "GBP": "USD", "CHF": "EUR", "INR": "USD", "TRY": "EUR",
             "CAD": "USD", "JPY": "USD", "KRW": "USD"}
+
+
+def _strong(dm, ctl):
+    return ctl in dm.plan.get("strong", [])
 
 
 def _ci0(dm):
@@ -98,6 +102,7 @@ def inject_declaration(dm):
                 from .build import _rate_print
                 d.rate_printed, d.eur_per_unit = _rate_print(dm, newcur, p["rate_sens"])
                 d.rate_sens = p["rate_sens"]
+                d._inv_cur = newcur
             else:
                 d.rate_printed, d.rate_sens, d.eur_per_unit = None, None, Decimal(1)
             for a in d.articles:
@@ -110,7 +115,7 @@ def inject_declaration(dm):
             old = d.total_invoiced
             if inj == "valeur_transposee":
                 new = transpose_digits(old, r, d.currency)
-            elif r.random() < 0.18:
+            elif r.random() < 0.18 and not _strong(dm, "A4"):
                 new = _confusion_sub(old, r, d.currency)
             else:
                 f = D(r.choice([1, -1]) * r.uniform(0.03, 0.18)).quantize(Decimal("0.0001"))
@@ -150,6 +155,7 @@ def inject_declaration(dm):
                 from .build import _rate_print
                 d.rate_printed, d.eur_per_unit = _rate_print(dm, ci.currency, p["rate_sens"])
                 d.rate_sens = p["rate_sens"]
+            d._inv_cur = ci.currency
             d.currency = "EUR"
             new = q2(facture)
             rescale_decl(dm, d, new)
@@ -195,6 +201,19 @@ def inject_declaration(dm):
                          fields=[f"{d2.doc_id}.montant_total_facture"],
                          description="Conséquence de F5 : somme des montants déclarés supérieure au total facture.",
                          key="A4F5")
+    # ---- référence de facture tronquée mais compatible (piège A2)
+    if p["trunc_ref"] and not any(e["control"] == "A2" for e in p["errors"]):
+        new_refs = []
+        for c, ref in d.doc_refs:
+            if c in ("N380", "N325"):
+                n = "".join(ch for ch in ref if ch.isalnum())
+                cut = ref[-7:] if len(n) >= 9 else ref
+                if len("".join(ch for ch in cut if ch.isalnum())) < 5:
+                    cut = ref
+                ref = cut.lstrip("-/ .")
+            new_refs.append((c, ref))
+        d.doc_refs = new_refs
+        dm.tags.append("reference_tronquee")
     # ---- erreurs n'affectant pas les montants déclarés
     for e in p["errors"]:
         ctl = e["control"]
@@ -287,6 +306,8 @@ def inject_declaration(dm):
             t = r.choice(cands)
             calc = t.base_montant * t.taux / 100
             mode = r.random()
+            if _strong(dm, "B1"):
+                mode = 0.9
             if mode < 0.2:
                 new = transpose_digits(t.montant, r)
             elif mode < 0.35:
@@ -360,7 +381,7 @@ def _inject_g_decl(dm, d, ctl, inj, ci):
     ft = next(t for t in d.taxes if t.categorie == "forfait_petits_envois")
     n = len(d.articles)
     if ctl == "G1":
-        delta = D(r.choice(["3.00", "6.00", "-3.00", "4.50", "9.00", "1.50"]))
+        delta = D(r.choice(["3.00", "6.00", "-3.00", "4.50", "9.00"] + ([] if _strong(dm, "G1") else ["1.50"])))
         ft.montant = q2(ft.base_quantite * ft.taux + delta)
         recompute_decl_totals(d)
         dm.add_error("G1", inj, [d.doc_id], amount=delta, nature="arithmetique_declaration",
@@ -369,8 +390,8 @@ def _inject_g_decl(dm, d, ctl, inj, ci):
                      description=f"Forfait : {ft.base_quantite} × {ft.taux} imprimé {ft.montant}.", key="G1")
     elif ctl == "G2":
         units = sum((a.qty_total for a in d.articles), D0)
-        if units == n:
-            units = D(n + 2)
+        if units - n < 3:
+            units = D(n + r.choice([3, 4] if _strong(dm, "G2") else [1, 3, 3, 4]))
         ft.base_quantite = units
         ft.montant = q2(units * ft.taux)
         recompute_decl_totals(d)
@@ -459,6 +480,8 @@ def inject_forwarder(dm):
                     l = r.choice(cands)
             if e.get("big") or p.get("big_debours"):
                 delta = _delta(r, big=True)
+            elif _strong(dm, ctl):
+                delta = q2(D(r.uniform(6, 240)))
             elif r.random() < 0.15 and l.montant_ht >= 100:
                 delta = transpose_digits(l.montant_ht, r) - l.montant_ht
                 if abs(delta) < Decimal("1.10") or delta < 0:
@@ -500,7 +523,7 @@ def inject_forwarder(dm):
                     units = tx.base_quantite + 2
                 l.qty, l.unit_price = units, tx.taux
                 l.montant_ht = q2(units * tx.taux)
-                l.detail = f"{tx.taux} x {units}"
+                l.detail = f"{_n(tx.taux, lang)} x {_n(units, lang, 0)}"
                 amt = q2((units - tx.base_quantite) * tx.taux)
                 dm.add_error("G5", inj, [deb.doc_id, d.doc_id], amount=amt, nature="recouvrable",
                              composante="forfait_petits_envois", gap=amt, thr=Decimal(1),
@@ -532,7 +555,7 @@ def inject_forwarder(dm):
         elif ctl == "D3":
             l = _line(pre, "DEDOUANEMENT", d.mrn) if (e.get("for_avoir") or r.random() < 0.6) else (
                 _line(pre, "TRANSPORT") or _line(pre, "DEDOUANEMENT", d.mrn))
-            if r.random() < 0.15 and not e.get("for_avoir"):
+            if r.random() < 0.15 and not e.get("for_avoir") and not _strong(dm, "D3"):
                 delta = q2(D(r.uniform(0.12, 0.28)))
             else:
                 delta = q2(D(r.uniform(5, 30)))
@@ -557,7 +580,7 @@ def inject_forwarder(dm):
             if billed - att < Decimal("0.5"):
                 billed = att + D(r.choice(["5.00", "10.00", "12.50"]))
             _set_ht(l, billed)
-            l.detail = f"{pct} % x {base}"
+            l.detail = faf_detail(dm.grid, base, lang, pct=pct)
             dm.add_error("D4", inj, [pre.doc_id, deb.doc_id], amount=q2(billed - att), nature="recouvrable",
                          composante="prestation", gap=q2(billed - att), thr=Decimal("0.10"),
                          fields=[f"{pre.doc_id}.lignes[{pre.lines.index(l)}].montant_ht"],
@@ -588,13 +611,13 @@ def inject_forwarder(dm):
                          key="D6")
         elif ctl == "D7":
             fu = _line(pre, "SURCHARGE_CARBURANT")
-            if fu is not None and r.random() < 0.5:
+            if fu is not None and (r.random() < 0.5 or _strong(dm, "D7")):
                 tp = _line(pre, "TRANSPORT")
                 pst = grid_poste(dm.grid, "SURCHARGE_CARBURANT")
                 newpct = D(pst["pourcentage"]) + D(r.choice(["4.0", "6.0", "8.0"]))
                 old = fu.montant_ht
                 _set_ht(fu, q2(tp.montant_ht * newpct / 100))
-                fu.detail = f"{newpct} %"
+                fu.detail = f"{_p(newpct, lang)} %"
                 amt = q2(fu.montant_ht - old)
                 dm.add_error("D7", inj, [pre.doc_id], amount=amt, nature="recouvrable", composante="prestation",
                              gap=amt, thr=Decimal("0.10"), fields=[f"{pre.doc_id}.lignes[{pre.lines.index(fu)}]"],
@@ -634,7 +657,7 @@ def inject_forwarder(dm):
                 l.qty += k
                 _set_ht(l, l.qty * D(ls["prix"]))
                 l.unit_price = D(ls["prix"])
-            l.detail = f"{len(d.articles) + k} art. - {ls['inclus']} inclus" if len(d.articles) + k > ls["inclus"] else ""
+            l.detail = ""
             amt = q2(k * D(ls["prix"]))
             dm.add_error("D9", inj, [pre.doc_id, d.doc_id], amount=amt, nature="recouvrable",
                          composante="prestation", gap=amt, thr=Decimal("0.10"),
@@ -667,7 +690,8 @@ def inject_forwarder(dm):
     for e in p["errors"]:
         if e["control"] == "D1":
             ft = pre
-            delta = q2(D(r.uniform(1.2, 2.8))) if r.random() < 0.2 else q2(D(r.uniform(3.5, 75)))
+            delta = q2(D(r.uniform(1.2, 2.8))) if (r.random() < 0.2 and not _strong(dm, "D1")) else \
+                q2(D(r.uniform(3.5, 75)))
             if r.random() < 0.5:
                 ft.printed_override["total_ttc"] = ft.total_ttc + delta
                 ft.printed_override["net_a_payer"] = ft.total_ttc + delta - ft.acompte
@@ -693,8 +717,7 @@ def refresh_faf(dm):
         deb = [x for x in all_deb if l.mrn is None or x.mrn == l.mrn]
         base = faf_base(dm.grid, deb)
         _set_ht(l, faf_amount(dm.grid, base))
-        pst = grid_poste(dm.grid, "AVANCE_FONDS")
-        l.detail = f"{pst['pourcentage']} % x {base} (min {pst['minimum']})"
+        l.detail = faf_detail(dm.grid, base, dm.fw.lang)
 
 
 # ======================================================================
