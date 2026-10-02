@@ -66,10 +66,10 @@ def _l1(pen, d, dm, variant):
 
     def head(cont=False):
         pen.rect(10, 8, 190, 14, fill=LIGHT, lw=0.8)
-        pen.text(14, 14, "DÉCLARATION EN DOUANE - IMPORTATION (jeu de données H1)", size=11, bold=True)
-        pen.text(14, 19, "Mise en libre pratique - copie déclarant - Bureau de douane fictif FR000999", size=7.5,
+        pen.text(14, 14, "DÉCLARATION EN DOUANE - IMPORTATION (H1)", size=10.5, bold=True)
+        pen.text(14, 19, "Mise en libre pratique - copie déclarant - Bureau de douane fictif FR000999", size=7.2,
                  color=DARK)
-        pen.text(196, 14, f"MRN {d.mrn}", size=9.5, bold=True, align="right")
+        pen.text(196, 14, f"MRN {d.mrn}", size=9, bold=True, align="right")
         pen.text(196, 19, "suite" if cont else f"Version {d.version}", size=7.5, align="right")
         return 27
 
@@ -307,9 +307,9 @@ def _l4(pen, d, dm, variant):
     ns = "fr"
     dec = cur_decimals(d.currency)
     pen.rect(10, 8, 190, 16, fill=LIGHT, lw=0.8)
-    pen.text(14, 14.5, "DÉCLARATION EN DOUANE - ENVOI DE FAIBLE VALEUR (H7)", size=11, bold=True)
+    pen.text(14, 14.5, "DÉCLARATION - ENVOI DE FAIBLE VALEUR (H7)", size=10.5, bold=True)
     pen.text(14, 20, "Mise en libre pratique - édition intégrateur / déclarant (FICTIF)", size=7.5)
-    pen.text(196, 14.5, f"MRN {d.mrn}", size=9.5, bold=True, align="right")
+    pen.text(196, 14.5, f"MRN {d.mrn}", size=9, bold=True, align="right")
     y = 30
     rows = [("MRN", d.mrn), ("Référence locale", d.lrn), ("Date d'acceptation", d_fr(d.date)),
             ("Destinataire / importateur", d.importer.name), ("N° TVA", d.importer.vat),
@@ -325,9 +325,9 @@ def _l4(pen, d, dm, variant):
     other_refs = [f"{c} {r}" for c, r in d.doc_refs if c != "FR7"]
     pen.text(12, y, "Documents : " + " ; ".join(other_refs), size=7.6, maxw=186)
     y += 6
-    cols = [("Pos.", 10, "center"), ("Code marchandise", 28, "center"), ("Description", 70, "left"),
-            ("Qté", 12, "right"), ("Origine", 14, "center"), (f"Valeur ({d.currency})", 30, "right"),
-            ("Masse brute kg", 22, "right")]
+    cols = [("Pos.", 10, "center"), ("Code marchandise", 32, "center"), ("Description", 62, "left"),
+            ("Qté", 12, "right"), ("Origine", 14, "center"), (f"Valeur ({d.currency})", 28, "right"),
+            ("Masse brute kg", 28, "right")]
     rows = [[str(a.no), a.hs10, a.desc, fmt_qty(a.qty_total, ns), a.origin, _amt(a.amount, ns, dec),
              fmt_kg(a.gross, ns)] for a in d.articles]
     y = pen.table(12, y, cols, rows, size=7.6, row_h=5) + 3

@@ -81,6 +81,13 @@ def _totals(pen, rows, x, y, tpl, w=70, size=8.2):
     return y + len(rows) * 4.8
 
 
+def _rd(l, ft, sep=" "):
+    """Détail d'une ligne de prestation ; MRN ajouté quand la facture couvre plusieurs déclarations."""
+    if l.mrn and len(set(ft.refs_mrn)) > 1:
+        return f"{l.mrn}{sep}{l.detail}".strip()
+    return l.detail
+
+
 def render_ft(pen: Pen, ft, dm, variant: int):
     {"T1": _t1, "T2": _t2, "T3": _t3, "T4": _t4, "T5": _t5, "T6": _t6, "T7": _t7, "T8": _t8}[ft.template](
         pen, ft, dm, variant)
@@ -118,7 +125,7 @@ def _t1(pen, ft, dm, variant, title="FACTURE"):
         y = pen.table(12, y + 2, [("Désignation", 58, "left"), ("Détail", 40, "left"), ("Qté", 12, "right"),
                                   ("PU HT", 22, "right"), ("Montant HT", 26, "right"), ("TVA", 14, "center"),
                                   ("", 14, "center")],
-                      [[l.libelle, l.detail, fmt_qty(l.qty, "fr"), _m(l.unit_price, tpl), _m(l.montant_ht, tpl),
+                      [[l.libelle, _rd(l, ft), fmt_qty(l.qty, "fr"), _m(l.unit_price, tpl), _m(l.montant_ht, tpl),
                         f"{pct_str(l.taux_tva)} %", l.marker] for l in pre], size=7.4, row_h=5) + 4
     rows = []
     if deb and pre:
@@ -176,9 +183,9 @@ def _t2(pen, ft, dm, variant):
         y += 10
     if pre:
         pen.text(12, y, "SERVICES", size=8.5, bold=True, color=GREEN)
-        y = pen.table(12, y + 2, [("Description", 70, "left"), ("Details", 34, "left"), ("Qty", 12, "right"),
+        y = pen.table(12, y + 2, [("Description", 56, "left"), ("Details", 48, "left"), ("Qty", 12, "right"),
                                   ("Unit price", 24, "right"), ("Amount", 28, "right"), ("VAT", 18, "center")],
-                      [[l.libelle, l.detail, fmt_qty(l.qty, "en"), _m(l.unit_price, tpl), _m(l.montant_ht, tpl),
+                      [[l.libelle, _rd(l, ft), fmt_qty(l.qty, "en"), _m(l.unit_price, tpl), _m(l.montant_ht, tpl),
                         f"{l.marker} {pct_str(l.taux_tva, 'en')}%"] for l in pre], size=7.4, row_h=5) + 4
     rows = [("Total excl. VAT", _m(ft.printed("total_ht"), tpl), False),
             ("VAT 20%", _m(ft.printed("total_tva"), tpl) + " S", False),
@@ -240,6 +247,9 @@ def _t4(pen, ft, dm, variant):
         ls = [l for l in ft.lines if l.mrn == m]
         def s(code):
             v = sum((l.montant_ht for l in ls if l.code == code), Decimal(0))
+            if code == "LIGNE_SUP" and v:
+                q = sum((l.qty for l in ls if l.code == code), Decimal(0))
+                return f"{_m(v, tpl)} ({fmt_qty(q, 'fr')})"
             return _m(v, tpl) if v else "-"
         tref = next((l.ref_transport for l in ls if l.ref_transport), "")
         ddate = ""
@@ -250,7 +260,7 @@ def _t4(pen, ft, dm, variant):
                      s("AVANCE_FONDS")])
     y = pen.table(8, y, [("Transport", 26, "left"), ("MRN", 36, "left"), ("Date", 17, "center"),
                          ("Droits", 18, "right"), ("Autres tx", 16, "right"), ("TVA import", 19, "right"),
-                         ("Dédouan.", 18, "right"), ("Lignes sup.", 17, "right"), ("Av. fonds", 17, "right")],
+                         ("Dédouan.", 17, "right"), ("Lignes sup. (qté)", 20, "right"), ("Av. fonds", 15, "right")],
                   rows, size=6.9, row_h=5, header_size=6.6) + 5
     other = [l for l in ft.lines if l.code not in ("DROITS", "AUTRES", "TVA", "DEDOUANEMENT", "LIGNE_SUP",
                                                    "AVANCE_FONDS")]
@@ -285,7 +295,7 @@ def _t5(pen, ft, dm, variant):
     y = _refs_block(pen, ft, 12, 32, tpl, extra=extra) + 8
     y = pen.table(12, y, [("Désignation", 58, "left"), ("MRN / détail", 48, "left"), ("Qté", 10, "right"),
                           ("PU", 20, "right"), ("Montant", 24, "right"), ("TVA", 18, "right"), ("", 8, "center")],
-                  [[l.libelle, l.mrn if l.is_debours else (l.detail or l.mrn or ""), fmt_qty(l.qty, "de"),
+                  [[l.libelle, l.mrn if l.is_debours else (_rd(l, ft) or l.mrn or ""), fmt_qty(l.qty, "de"),
                     _m(l.unit_price, tpl), _m(l.montant_ht, tpl), _m(l.montant_tva, tpl), l.marker]
                    for l in ft.lines], size=7.4, row_h=5.2) + 5
     if ft.kind == "debours":
@@ -313,7 +323,7 @@ def _t6(pen, ft, dm, variant):
     y = _refs_block(pen, ft, 12, 32, tpl) + 8
     y = pen.table(12, y, [("Nat.", 10, "center"), ("Désignation", 70, "left"), ("Référence / détail", 50, "left"),
                           ("Qté", 12, "right"), ("Montant HT", 26, "right"), ("TVA", 18, "right")],
-                  [["D" if l.is_debours else "P", l.libelle, l.mrn if l.is_debours else (l.detail or ""),
+                  [["D" if l.is_debours else "P", l.libelle, l.mrn if l.is_debours else (_rd(l, ft) or ""),
                     fmt_qty(l.qty, "fr"), _m(l.montant_ht, tpl), _m(l.montant_tva, tpl)] for l in ft.lines],
                   size=7.5, row_h=5.2) + 5
     rows = [("Total débours (D)", ft.total_debours, False), ("Total HT", ft.printed("total_ht"), False),
@@ -334,10 +344,10 @@ def _t7(pen, ft, dm, variant):
     pen.text(198, 26, "Facture électronique Factur-X (profil EN 16931)", size=6.8, align="right", color=GREY)
     _client_block(pen, ft, 115, 32)
     y = _refs_block(pen, ft, 12, 32, tpl) + 8
-    y = pen.table(12, y, [("Désignation", 72, "left"), ("Référence", 44, "left"), ("Qté", 12, "right"),
+    y = pen.table(12, y, [("Désignation", 64, "left"), ("Référence", 48, "left"), ("Qté", 12, "right"),
                           ("PU HT", 20, "right"), ("Total HT", 22, "right"), ("Cat.", 9, "center"),
-                          ("TVA %", 11, "right")],
-                  [[l.libelle, l.mrn if l.is_debours else (l.detail or ""), fmt_qty(l.qty, "fr"),
+                          ("TVA %", 13, "right")],
+                  [[l.libelle, l.mrn if l.is_debours else (_rd(l, ft) or ""), fmt_qty(l.qty, "fr"),
                     _m(l.unit_price, tpl), _m(l.montant_ht, tpl), l.marker, pct_str(l.taux_tva)]
                    for l in ft.lines], size=7.4, row_h=5.2) + 5
     rows = [("Total HT", ft.printed("total_ht"), False), ("Total TVA", ft.printed("total_tva"), False),

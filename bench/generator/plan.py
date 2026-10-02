@@ -93,12 +93,12 @@ def _compat(p: dict, ctl: str) -> bool:
         if ctl in ("G4", "G5") and tpl in ("T3",):
             return False
         return True
-    if ctl == "A1":
+    if ctl in ("A1", "A8", "A12", "B1", "B2"):
         return True
     if ctl == "A2":
         return not p["trunc_ref"]
     if ctl == "A3":
-        return not p["split_invoice"]
+        return not p["split_invoice"] and not p["freight_trap"] and p["decl_mode"] in ("same", "eur")
     if ctl == "A4":
         return p["decl_mode"] in ("same", "eur") and not p["freight_trap"] and not p["split_invoice"]
     if ctl == "A5":
@@ -202,10 +202,19 @@ def build_plan(seed: int, count: int) -> list:
     for split in ("dev", "holdout"):
         sub = [p for p in plans if p["split"] == split]
         _assign_structure(seed, split, sub)
+        _assign_formats(seed, split, sub)
+
+    from .clients import build_registry
+    from .refdata import TEMPLATE_TO_FORWARDER
+    reg = build_registry(seed)
+
+    def hors_grille(p):
+        g = reg.grids[(p["client"], TEMPLATE_TO_FORWARDER[p["template"]])]
+        return g["prestations_hors_grille"]
 
     for split in ("dev", "holdout"):
         sub = [p for p in plans if p["split"] == split]
-        _assign_errors(seed, split, sub)
+        _assign_errors(seed, split, sub, hors_grille)
 
     for p in plans:
         p["controls"] = sorted(set(p["controls"]))
@@ -217,10 +226,25 @@ def build_plan(seed: int, count: int) -> list:
 # Structure : gabarit, mise en page, dégradation, client, devise, scénarios
 # ---------------------------------------------------------------------------
 
+def _assign_formats(seed: int, split: str, sub: list):
+    """Formats de facture commerciale répartis exactement : UBL 5 %, CII 4 %, XLSX 6 %."""
+    r = rng_for(seed, "plan-formats", split)
+    n = len(sub)
+    cands = [p for p in sub if p["layout"] != "L4"]
+    r.shuffle(cands)
+    k_ubl, k_cii, k_x = round(0.05 * n), round(0.04 * n), round(0.065 * n)
+    for p in cands[:k_ubl]:
+        p["ci_format"] = "ubl"
+    for p in cands[k_ubl:k_ubl + k_cii]:
+        p["ci_format"] = "cii"
+    for p in cands[k_ubl + k_cii:k_ubl + k_cii + k_x]:
+        p["ci_format"] = "xlsx"
+
+
 def _assign_structure(seed: int, split: str, sub: list):
     n = len(sub)
     r = rng_for(seed, "plan-structure", split)
-    n_l4 = max(5, round(0.09 * n))
+    n_l4 = max(6, round(0.09 * n))
     others = n - n_l4
     lay = ["L4"] * n_l4
     for i, l in enumerate(["L1", "L2", "L3", "X1", "X2"]):
@@ -300,20 +324,12 @@ def _assign_structure(seed: int, split: str, sub: list):
             p["n_decl"] = pr.choice([3, 3, 4, 4, 5, 6, 8])
         elif p["layout"] != "L4":
             x = pr.random()
-            if x < 0.12:
+            if x < 0.15:
                 p["n_ci"] = 2
-            elif x < 0.22 and p["template"] not in ("T5",):
+            elif x < 0.25 and p["template"] not in ("T5",):
                 p["split_invoice"] = True
                 p["n_decl"] = 2
         p["avoir"] = False
-        ein = pr.random()
-        p["ci_format"] = "pdf"
-        if ein < 0.05:
-            p["ci_format"] = "ubl"
-        elif ein < 0.09:
-            p["ci_format"] = "cii"
-        elif ein < 0.15 and p["layout"] != "L4":
-            p["ci_format"] = "xlsx"
         p["eml"] = pr.random() < 0.06
         p["packing"] = pr.random() < 0.4
         p["awb"] = pr.random() < 0.55
@@ -322,8 +338,8 @@ def _assign_structure(seed: int, split: str, sub: list):
         p["transport"] = pr.random() < 0.55
         p["surcharges"] = pr.random() < 0.35
         p["rectificative"] = (p["template"] not in ("T4", "T6") and not p["split_invoice"]
-                              and p["layout"] in ("L1", "L3", "X1") and pr.random() < 0.06)
-        p["complementaire"] = (p["template"] in ("T1", "T2", "T8") and p["n_decl"] == 1 and pr.random() < 0.10)
+                              and p["layout"] in ("L1", "L3", "X1") and pr.random() < 0.12)
+        p["complementaire"] = (p["template"] in ("T1", "T2", "T8") and p["n_decl"] == 1 and pr.random() < 0.16)
         p["refs_in_designation"] = p["layout"] in DETAIL_LAYOUTS and pr.random() < 0.25
         p["ci_codes"] = pr.random() < 0.88
         p["pro_forma"] = pr.random() < 0.06
@@ -333,6 +349,7 @@ def _assign_structure(seed: int, split: str, sub: list):
         p["round_trap"] = p["template"] != "T3" and pr.random() < 0.08
         p["trunc_ref"] = pr.random() < 0.07
         p["euro_round"] = p["layout"] in ("L1", "L3", "X2") and pr.random() < 0.18
+        p["ci_format"] = "pdf"
         p["min_articles"] = 1
         p["p_error"] = None
         p["clean"] = False
@@ -351,11 +368,12 @@ TARGET_OVERRIDE = {
     "C5": {"dev": 4, "holdout": 2}, "C6": {"dev": 3, "holdout": 2}, "E5": {"dev": 3, "holdout": 2},
     "E6": {"dev": 4, "holdout": 2}, "G3": {"dev": 4, "holdout": 2}, "G4": {"dev": 4, "holdout": 2},
     "C7": {"dev": 4, "holdout": 2}, "A4": {"dev": 6, "holdout": 3}, "C1": {"dev": 6, "holdout": 2},
-    "D3": {"dev": 6, "holdout": 2},
+    "D3": {"dev": 6, "holdout": 2}, "C2": {"dev": 6, "holdout": 2}, "C4": {"dev": 6, "holdout": 2}, "E2": {"dev": 6, "holdout": 2},
+    "E5": {"dev": 8, "holdout": 3}, "E6": {"dev": 6, "holdout": 2}, "E1": {"dev": 8, "holdout": 3},
 }
 
 
-def _assign_errors(seed: int, split: str, sub: list):
+def _assign_errors(seed: int, split: str, sub: list, hors_grille=None):
     r = rng_for(seed, "plan-errors", split)
     n = len(sub)
     order = list(sub)
@@ -428,7 +446,10 @@ def _assign_errors(seed: int, split: str, sub: list):
             return None
         def key(p):
             k_deg = 0 if (not prefer_certain or p["degradation"] in ("d0", "d1")) else 1
-            return (k_deg, len(p["errors"]), sub_rank[p["id"]])
+            k_grid = 0
+            if prefer_certain and ctl in ("D2",) and hors_grille is not None:
+                k_grid = 0 if hors_grille(p) == "interdites" else 1
+            return (k_grid, k_deg, len(p["errors"]), sub_rank[p["id"]])
         cands.sort(key=key)
         return cands[0]
 
@@ -460,6 +481,21 @@ def _assign_errors(seed: int, split: str, sub: list):
                 _add_error(p, ctl, r)
                 continue
             p = pick(ctl, prefer)
+            if p is not None and prefer:
+                p.setdefault("strong", []).append(ctl)
+                if ctl == "D7":
+                    p["transport"] = True
+                    p["surcharges"] = True
+            if p is None and ctl == "F5":
+                cands = [q for q in order if not q["clean"] and not q["p_error"] and q["n_decl"] == 1
+                         and q["n_ci"] == 1 and q["template"] not in ("T4", "T5") and q["layout"] != "L4"
+                         and q["decl_mode"] in ("same", "eur") and "valeur" not in q["groups"]
+                         and not q["fpair"] and not q["rectificative"]]
+                if cands:
+                    p = cands[0]
+                    p["split_invoice"] = True
+                    p["n_decl"] = 2
+                    p["complementaire"] = False
             if p is None:
                 continue
             if ctl == "E6":

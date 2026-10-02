@@ -16,7 +16,7 @@ from .clients import grid_poste
 from .common import (D, D0, ZERO_DEC_CURRENCIES, is_confusion_variant, make_awb, make_bl, make_lrn, make_mrn, q0,
                      q2, q3, q5, qcur, rng_for, transpose_digits)
 from .model import (FT_LABELS, NATURE_OF_CODE, OFF_GRID, Article, CILine, CommercialInvoice, CreditNote, Declaration,
-                    FTLine, ForwarderInvoice, Party, SupportDoc, composante_of)
+                    FTLine, ForwarderInvoice, Party, SupportDoc, Tax, composante_of)
 from .refdata import (CARRIERS, OTHER_TAX_PRODUCTS, PRODUCTS, PRODUCTS_BY_KEY, REF_RATES, SELLERS, SELLERS_BY_KEY,
                       SMALL_PARCEL_PRODUCTS)
 
@@ -60,6 +60,11 @@ class DossierModel:
         self.ext_mrns = set()    # MRN cités appartenant à un autre dossier
         self.ci_by_id = {}
         self.decl_by_id = {}
+        self.warnings = []
+        self.trap_round = False
+        self.d3_line = None
+        self.f1_requested = False
+        self._rates = {}
 
     # ------------------------------------------------------------------
     def entity_party(self, ent=None):
@@ -107,9 +112,11 @@ class DossierModel:
 def _rate_units_per_eur(dm, cur):
     if cur == "EUR":
         return Decimal(1)
-    base = D(REF_RATES[cur])
-    f = Decimal(1) + D(dm.r.uniform(-0.02, 0.02)).quantize(Decimal("0.0001"))
-    return base * f
+    if cur not in dm._rates:
+        base = D(REF_RATES[cur])
+        f = Decimal(1) + D(dm.r.uniform(-0.02, 0.02)).quantize(Decimal("0.0001"))
+        dm._rates[cur] = base * f
+    return dm._rates[cur]
 
 
 def _price_in(cur, usd_price, r):
@@ -184,6 +191,9 @@ def make_ci(dm, k, seller, currency, date, n_lines, small=False, big=False, othe
             origin = "CN"
         elif r.random() < 0.1 and seller.country in ALT_ORIGINS:
             origin = r.choice(ALT_ORIGINS[seller.country])
+        prev = next((x for x in lines if x.product == key), None)
+        if prev is not None:
+            origin = prev.origin
         net = q3(qty * D(prod.kg) * D(r.uniform(0.9, 1.1)))
         if net <= 0:
             net = Decimal("0.010")
@@ -295,6 +305,22 @@ def _conv(amount, eur_per_unit):
     return q2(amount * eur_per_unit)
 
 
+def _alloc_int(weights, total):
+    """Répartition entière au plus fort reste, somme exacte, valeurs >= 0."""
+    tot = sum(weights, D0)
+    if tot == 0 or total <= 0:
+        out = [0] * len(weights)
+        out[-1] = int(total)
+        return out
+    raw = [w * total / tot for w in weights]
+    out = [int(x) for x in raw]
+    rest = int(total) - sum(out)
+    order = sorted(range(len(raw)), key=lambda i: -(raw[i] - int(raw[i])))
+    for i in order[:rest]:
+        out[i] += 1
+    return out
+
+
 def _alloc_to(values, target, quant):
     """Répartit `target` proportionnellement à `values`, au quantum près, somme exacte."""
     tot = sum(values, D0)
@@ -309,7 +335,7 @@ def _alloc_to(values, target, quant):
 
 def build_declaration(dm, doc_id, ship_lines, cis, decl_cur_mode, rate_sens, layout, date, target_inv_cur,
                       mrn=None, version=1, importer=None, euro_round=False, group_by_code=True, shipment=0,
-                      ci_currency=None):
+                      ci_currency=None, packages_total=None):
     """ship_lines : [(ci, line)] couverts ; target_inv_cur : montant déclaré dans la devise de la facture."""
     r = dm.r
     p = dm.plan
@@ -347,16 +373,9 @@ def build_declaration(dm, doc_id, ship_lines, cis, decl_cur_mode, rate_sens, lay
     else:
         total_decl = target_inv_cur
         art_amounts = amounts_inv
-    packages_total = sum({id(ci): ci.packages for ci, _ in ship_lines}.values()) if len(
-        {id(ci) for ci, _ in ship_lines}) > 1 else cis[0].packages
-    if p["split_invoice"]:
-        packages_total = max(1, int(math.ceil(float(sum(l.gross for _, l in ship_lines)) / 20)))
-    pk = _alloc_to([sum((l.gross for l in g["lines"]), D0) for g in groups], D(packages_total), Decimal(1))
-    pk = [int(x) for x in pk]
-    for i in range(len(pk)):
-        if pk[i] < 0:
-            pk[-1] += pk[i]
-            pk[i] = 0
+    if packages_total is None:
+        packages_total = sum(ci.packages for ci in cis)
+    pk = _alloc_int([sum((l.gross for l in g["lines"]), D0) for g in groups], packages_total)
     articles = []
     for i, g in enumerate(groups):
         prod = PRODUCTS_BY_KEY[g["lines"][0].product]
@@ -387,6 +406,7 @@ def build_declaration(dm, doc_id, ship_lines, cis, decl_cur_mode, rate_sens, lay
         gross_total=sum((a.gross for a in articles), D0), packages_total=packages_total, articles=articles,
         taxes=[], doc_refs=[], autoliq=p["autoliq"], euro_round=euro_round, shipment=shipment,
         ci_ids=[ci.doc_id for ci in cis])
+    decl._inv_cur = cur_inv
     for ci in cis:
         decl.doc_refs.append(("N325" if ci.sous_type == "pro_forma" else "N380", ci.numero))
     tk = cis[0].transport_kind
@@ -468,6 +488,27 @@ def _lbl(code, lang):
     return FT_LABELS[code][lang]
 
 
+def _n(v, lang, dec=2):
+    from .common import fmt_num
+    return fmt_num(v, "en" if lang == "en" else "frs", dec)
+
+
+def _p(v, lang):
+    from .common import pct_str
+    return pct_str(v, "en" if lang == "en" else "fr")
+
+
+def _dt(d, lang):
+    return d.strftime("%d/%m/%Y") if lang != "en" else d.strftime("%d %b %Y")
+
+
+def faf_detail(grid, base, lang, pct=None):
+    pst = grid_poste(grid, "AVANCE_FONDS")
+    pct = pct if pct is not None else pst["pourcentage"]
+    mn = f" (min. {_n(D(pst['minimum']), lang)})" if pst["minimum"] else ""
+    return f"{_p(D(pct), lang)} % x {_n(base, lang)}{mn}"
+
+
 def _marker(template, kind):
     m = {"T1": ("E", "N"), "T2": ("Z", "S"), "T3": ("0", "1"), "T4": ("D", "T"), "T5": ("E", "N"),
          "T6": ("E", "N"), "T7": ("E", "S"), "T8": ("D", "N")}[template]
@@ -503,9 +544,11 @@ def debours_lines(dm, decl, template, lang, tref):
     if liq["forfait_petits_envois"]:
         n = next(t.base_quantite for t in decl.taxes if t.categorie == "forfait_petits_envois")
         rate = next(t.taux for t in decl.taxes if t.categorie == "forfait_petits_envois")
-        lines.append(FTLine("debours_forfait_petits_envois", "FORFAIT", _lbl("FORFAIT", lang), n, rate,
-                            liq["forfait_petits_envois"], D0, D0, mk, mrn=decl.mrn, ref_transport=tref,
-                            detail=f"{rate} x {n}"))
+        amt = liq["forfait_petits_envois"]
+        q, pu = (n, rate) if q2(n * rate) == amt else (Decimal(1), amt)
+        lines.append(FTLine("debours_forfait_petits_envois", "FORFAIT", _lbl("FORFAIT", lang), q, pu,
+                            amt, D0, D0, mk, mrn=decl.mrn, ref_transport=tref,
+                            detail=f"{_n(rate, lang)} x {_n(n, lang, 0)}"))
     if liq["droit"]:
         lines.append(FTLine("debours_droits", "DROITS", _lbl("DROITS", lang), Decimal(1), liq["droit"], liq["droit"],
                             D0, D0, mk, mrn=decl.mrn, ref_transport=tref))
@@ -557,7 +600,8 @@ def prestation_lines(dm, decl, template, lang, tref, first=True, n_articles=None
     q = max(0, n_art - ls["inclus"])
     if q > 0:
         out.append(_presta(dm, "LIGNE_SUP", lang, template, q, D(ls["prix"]), mrn=decl.mrn, tref=tref,
-                           detail=f"{n_art} art. - {ls['inclus']} inclus"))
+                           detail=(f"{n_art} items - {ls['inclus']} included" if lang == "en"
+                                   else f"{n_art} art. - {ls['inclus']} inclus")))
     if first:
         od = grid_poste(g, "OUVERTURE_DOSSIER")
         if od and dm.__dict__.setdefault("_ouv", r.random() < 0.6):
@@ -570,7 +614,7 @@ def prestation_lines(dm, decl, template, lang, tref, first=True, n_articles=None
             debut = fin - dt.timedelta(days=total_days - 1)
             days = total_days - fr
             l = _presta(dm, "MAGASINAGE", lang, template, days, D(mg["prix"]), mrn=decl.mrn, tref=tref,
-                        detail=f"{debut.isoformat()} > {fin.isoformat()}")
+                        detail=(f"{_dt(debut, lang)} - {_dt(fin, lang)}"))
             l.date_debut, l.date_fin = debut, fin
             out.append(l)
         if p["transport"]:
@@ -580,7 +624,7 @@ def prestation_lines(dm, decl, template, lang, tref, first=True, n_articles=None
                 fu = grid_poste(g, "SURCHARGE_CARBURANT")
                 amt = q2(D(tp["prix"]) * D(fu["pourcentage"]) / 100)
                 out.append(_presta(dm, "SURCHARGE_CARBURANT", lang, template, 1, amt, mrn=decl.mrn, tref=tref,
-                                   detail=f"{fu['pourcentage']} %"))
+                                   detail=f"{_p(D(fu['pourcentage']), lang)} %"))
         if p["surcharges"]:
             su = grid_poste(g, "SURCHARGE_SURETE")
             out.append(_presta(dm, "SURCHARGE_SURETE", lang, template, 1, D(su["prix"]), mrn=decl.mrn, tref=tref))
@@ -595,7 +639,7 @@ def make_faf_line(dm, template, lang, deb_lines, mrn=None, tref=None):
     amt = faf_amount(dm.grid, base)
     pst = grid_poste(dm.grid, "AVANCE_FONDS")
     l = _presta(dm, "AVANCE_FONDS", lang, template, 1, amt, mrn=mrn, tref=tref,
-                detail=f"{pst['pourcentage']} % x {base} (min {pst['minimum']})")
+                detail=faf_detail(dm.grid, base, lang))
     l.base_droit = None
     return l
 
@@ -692,13 +736,20 @@ def build_core(seed, plan, reg, plans_by_id, _depth=0):
             # montant de chaque partie : lignes + pied réparti
             quant = Decimal(1) if ci.currency in ZERO_DEC_CURRENCIES else Decimal("0.01")
             vals = _alloc_to([sum(l.amount for _, l in part) for part in parts], ci.total, quant)
-            targets = list(zip(parts, vals))
+            pks = _alloc_to([sum(l.gross for _, l in part) for part in parts], D(ci.packages), Decimal(1))
+            pks = [max(1, int(x)) for x in pks]
+            if ci.packages < 2:
+                ci.packages = 2
+                pks = [1, 1]
+            else:
+                pks[-1] = ci.packages - sum(pks[:-1])
+            targets = list(zip(parts, vals, pks))
         else:
             tgt = sum((ci.total for ci in cis), D0)
             if p["freight_trap"] and s == 0:
                 tgt = sum((ci.goods for ci in cis), D0)
-            targets = [(lines_all, tgt)]
-        for j, (part, tgt) in enumerate(targets):
+            targets = [(lines_all, tgt, None)]
+        for j, (part, tgt, pk_tot) in enumerate(targets):
             dk += 1
             doc_id = f"dec{dk}"
             dd = ddate + dt.timedelta(days=j * r.randint(3, 9))
@@ -706,7 +757,7 @@ def build_core(seed, plan, reg, plans_by_id, _depth=0):
             if p["rectificative"] and s == 0:
                 v1 = build_declaration(dm, doc_id, part, cis, mode, p["rate_sens"], layout, dd,
                                        qcur(tgt * Decimal("1.06"), cis[0].currency),
-                                       euro_round=p["euro_round"], shipment=s)
+                                       euro_round=p["euro_round"], shipment=s, packages_total=pk_tot)
                 dm.decls.append(v1)
                 dm.decl_by_id[v1.doc_id] = v1
                 dk += 1
@@ -714,7 +765,7 @@ def build_core(seed, plan, reg, plans_by_id, _depth=0):
                 dd = dd + dt.timedelta(days=r.randint(3, 9))
                 mrn2 = v1.mrn[:15] + "".join(r.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(3))
                 d = build_declaration(dm, doc_id, part, cis, mode, p["rate_sens"], layout, dd, tgt, mrn=mrn2,
-                                      version=2, euro_round=p["euro_round"], shipment=s)
+                                      version=2, euro_round=p["euro_round"], shipment=s, packages_total=pk_tot)
                 d.lrn = v1.lrn
                 # le taux imprimé reste celui de la première version
                 sh["v1"] = v1
@@ -722,7 +773,7 @@ def build_core(seed, plan, reg, plans_by_id, _depth=0):
             else:
                 d = build_declaration(dm, doc_id, part, cis, mode, p["rate_sens"], layout, dd, tgt,
                                       euro_round=p["euro_round"], shipment=s,
-                                      group_by_code=not dm.has("G3"))
+                                      group_by_code=not dm.has("G3"), packages_total=pk_tot)
             dm.decls.append(d)
             dm.final_decls.append(d)
             dm.decl_by_id[d.doc_id] = d

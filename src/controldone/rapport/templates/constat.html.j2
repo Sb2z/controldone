@@ -1,0 +1,23 @@
+<div class="constat {{ 'renvoi' if c.renvoi else c.niveau_code }}">
+  <div class="constat-tete">
+    <div><span class="badge b-{{ 'renvoi' if c.renvoi else c.niveau_code }}">{{ 'Renvoi' if c.renvoi else c.niveau }}</span>
+      <span class="titre">&nbsp;{{ c.controle_id }} — {{ c.controle_libelle }}</span>
+      {% if c.renvoi %}<br><small>Dossier {{ c.dossier_reference }}</small>{% endif %}</div>
+    <div class="montant">{{ c.montant }}</div>
+  </div>
+  <p class="libelle">{{ c.libelle }}</p>
+  {% if c.raisons %}<div class="raisons">{{ c.raisons | join(" ; ") }}</div>{% endif %}
+  <div class="meta"><span>{{ c.nature }}</span>{% if c.composante %}<span>{{ c.composante }}</span>{% endif %}
+    {% if c.tolerance %}<span>Tolérance : {{ c.tolerance }}</span>{% endif %}{% if c.seuil %}<span>Seuil de certitude : {{ c.seuil }}</span>{% endif %}</div>
+  {% if c.preuves %}<div class="preuves">
+  {% for p in c.preuves %}<div class="preuve{{ ' calcul' if not p.fichier else '' }}">
+    <div class="role">{{ p.role }}</div>
+    <div class="doc">{{ p.document }}</div>
+    {% if p.fichier %}<div class="discret mono">{{ p.fichier }}{% if p.page %}, page {{ p.page }}{% endif %}</div>{% endif %}
+    {% if p.valeur_lue %}<div class="lu">Valeur lue : <strong class="mono">{{ p.valeur_lue }}</strong></div>{% endif %}
+    {% if p.calcul %}<div class="lu">Calcul : <span class="mono">{{ p.calcul }}</span></div>{% endif %}
+    {% if p.image %}<img alt="Extrait de la page {{ p.page }}" src="data:image/png;base64,{{ b64(p.image) }}">{% endif %}
+  </div>{% endfor %}
+  </div>{% endif %}
+  {% if c.prochaine_action %}<div class="action"><strong>Prochaine action :</strong> {{ c.prochaine_action }}</div>{% endif %}
+</div>

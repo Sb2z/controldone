@@ -13,7 +13,7 @@ LBL = {
            "seller": "Seller / Exporter", "buyer": "Buyer / Bill to", "consignee": "Ship to / Consignee",
            "vat": "VAT No.", "eori": "EORI", "inc": "Incoterms", "pay": "Payment terms", "awb": "AWB No.",
            "bl": "B/L No.", "via": "Shipped via", "item": "#", "ref": "Item ref.", "desc": "Description",
-           "hs": "HS code", "orig": "Origin", "qty": "Qty", "unit": "Unit", "up": "Unit price", "amt": "Amount",
+           "hs": "HS code", "orig": "Orig.", "qty": "Qty", "unit": "Unit", "up": "Unit price", "amt": "Amount",
            "goods": "Subtotal (goods)", "fret": "Freight", "assurance": "Insurance", "emballage": "Packing",
            "remise": "Discount", "total": "TOTAL AMOUNT", "gross": "Total gross weight", "net": "Total net weight",
            "pk": "Number of packages", "ptot": "Page total", "cur": "Currency", "page": "Page",
@@ -25,7 +25,7 @@ LBL = {
            "seller": "Vendeur / Exportateur", "buyer": "Acheteur / Facturé à", "consignee": "Livré à",
            "vat": "N° TVA", "eori": "EORI", "inc": "Incoterm", "pay": "Conditions de paiement", "awb": "LTA n°",
            "bl": "Connaissement n°", "via": "Expédié par", "item": "N°", "ref": "Référence", "desc": "Désignation",
-           "hs": "Code SH", "orig": "Origine", "qty": "Qté", "unit": "Unité", "up": "Prix unitaire",
+           "hs": "Code SH", "orig": "Orig.", "qty": "Qté", "unit": "Unité", "up": "Prix unitaire",
            "amt": "Montant", "goods": "Sous-total marchandises", "fret": "Fret", "assurance": "Assurance",
            "emballage": "Emballage", "remise": "Remise", "total": "TOTAL À PAYER", "gross": "Poids brut total",
            "net": "Poids net total", "pk": "Nombre de colis", "ptot": "Total page", "cur": "Devise",
@@ -37,7 +37,7 @@ LBL = {
            "seller": "Vendedor / Exportador", "buyer": "Comprador / Facturar a", "consignee": "Consignatario",
            "vat": "N.º IVA", "eori": "EORI", "inc": "Incoterm", "pay": "Condiciones de pago", "awb": "Guía aérea n.º",
            "bl": "Conocimiento n.º", "via": "Enviado por", "item": "N.º", "ref": "Referencia",
-           "desc": "Descripción", "hs": "Partida", "orig": "Origen", "qty": "Cant.", "unit": "Ud.",
+           "desc": "Descripción", "hs": "Partida", "orig": "Orig.", "qty": "Cant.", "unit": "Ud.",
            "up": "Precio unit.", "amt": "Importe", "goods": "Subtotal mercancía", "fret": "Flete",
            "assurance": "Seguro", "emballage": "Embalaje", "remise": "Descuento", "total": "TOTAL",
            "gross": "Peso bruto total", "net": "Peso neto total", "pk": "Número de bultos",
@@ -147,8 +147,8 @@ def _header(pen, ci, L, style, pi, npages, spaced):
 def _lines_table(pen, ci, L, plines, y, style, dec, ns):
     ul = UNIT_LABELS[ci.language]
     with_nw = style == "boxed"
-    cols = [(L["item"], 7, "center"), (L["ref"], 23, "left"), (L["desc"], 47 if with_nw else 59, "left"),
-            (L["hs"], 19, "center"), (L["orig"], 11, "center"), (L["qty"], 14, "right"), (L["unit"], 10, "center"),
+    cols = [(L["item"], 7, "center"), (L["ref"], 23, "left"), (L["desc"], 45 if with_nw else 57, "left"),
+            (L["hs"], 19, "center"), (L["orig"], 13, "center"), (L["qty"], 14, "right"), (L["unit"], 10, "center"),
             (L["up"], 20, "right"), (L["amt"], 24, "right")]
     if with_nw:
         cols.insert(7, (L["nw"], 12, "right"))

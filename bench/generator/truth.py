@@ -241,7 +241,7 @@ def compute_traps(dm):
                     "Facture complémentaire légitime : la somme des deux factures égale le montant liquidé.")
         dm.add_trap("C4", "conforme", [dm.fts[0].doc_id, dm.fts[1].doc_id, d0.doc_id],
                     "Débours répartis entre facture initiale et complémentaire.")
-    if p["freight_trap"] and ci0 and d0 and not value_err:
+    if p["freight_trap"] and ci0 and d0 and not (ctl & {"A3", "A4", "A5", "A6", "A7", "F5"}):
         dm.add_trap("A4", "a_verifier", [ci0.doc_id, d0.doc_id],
                     "Le fret en pied de facture explique l'écart entre total facture et montant déclaré.")
     if ci0 and d0 and "A13" not in ctl and any(l.hs_printed and len("".join(ch for ch in l.hs_printed if ch.isdigit())) == 6
