@@ -55,7 +55,7 @@ def test_rs01_bouchon_refuse_un_webhook_signe_avec_l_ancien_secret_public(tmp_pa
 
 
 def test_rs01_webhook_public_refuse_un_evenement_force(monde, monkeypatch):
-    from controldone.facturation import stock
+    from controldone.storage import facturation as stock
     from controldone.facturation.paiements import signer_charge
 
     for k in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):

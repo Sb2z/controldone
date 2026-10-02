@@ -1059,4 +1059,19 @@ def _confiance_total(e: _Etat, retenu: _Candidat, payables: list[_Candidat], som
         conf = min(conf, 0.75)
     if e.devise is None:
         conf = min(conf, 0.85)
+    if not natif and not coherent and _separateur_decimal_douteux(lec.texte, total, e.devise):
+        conf = min(conf, 0.8)
     return conf
+
+
+
+def _separateur_decimal_douteux(texte: str, valeur: Decimal, devise: str | None) -> bool:
+    """Montant OCR ≥ 1000 lu sans séparateur décimal pour une devise à décimales (ou inconnue) : le
+    séparateur a pu être perdu (facteur 100). Seul un recoupement arithmétique à la même échelle (somme des
+    lignes, sous-total) autorise alors une confiance > 0,80 (§8.5.1 condition 3)."""
+    if devise is not None and exposant_devise(devise) == 0:
+        return False
+    if abs(valeur) < 1000:
+        return False
+    n = exposant_devise(devise) if devise is not None else 2
+    return re.search(rf"\d[.,]\s?\d{{{n}}}\D*$", texte.strip()) is None

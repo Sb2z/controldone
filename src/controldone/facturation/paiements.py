@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 __all__ = [
-    "SECRET_WEBHOOK_BOUCHON",
     "CleStripeRefusee",
     "FournisseurPaiement",
     "PaiementBouchon",
@@ -37,8 +36,10 @@ __all__ = [
     "verifier_cle_stripe",
 ]
 
-#: Secret de signature du bouchon quand ``STRIPE_WEBHOOK_SECRET`` est absent (local uniquement).
-SECRET_WEBHOOK_BOUCHON = "whsec_bouchon_local_controldone"
+# Secret de signature du bouchon quand ``STRIPE_WEBHOOK_SECRET`` est absent : **aléatoire par instance**
+# (jamais une constante du code, qui permettrait à quiconque de forger un événement accepté par le point
+# d'entrée public ``/webhooks/stripe`` ; revue de sécurité RS-01). Le bouchon signe et vérifie ses propres
+# événements avec la même instance (service de facturation mis en cache sur la plateforme).
 
 
 class CleStripeRefusee(RuntimeError):
@@ -175,7 +176,7 @@ class PaiementStripe:
 
 class PaiementBouchon:
     """Bouchon local : sessions dans ``<racine>/sessions/``, événements au format Stripe, signés avec le
-    secret de webhook (``STRIPE_WEBHOOK_SECRET`` s'il existe, sinon ``SECRET_WEBHOOK_BOUCHON``)."""
+    secret de webhook (``STRIPE_WEBHOOK_SECRET`` s'il existe, sinon un secret aléatoire propre à l'instance)."""
 
     nom = "bouchon"
     mode_test = True
@@ -186,7 +187,7 @@ class PaiementBouchon:
 
             racine = Path(get_settings().data_dir) / "paiement_bouchon"
         self.racine = Path(racine)
-        self.secret_webhook = secret_webhook or SECRET_WEBHOOK_BOUCHON
+        self.secret_webhook = secret_webhook or "whsec_" + secrets.token_urlsafe(32)
 
     def _ecrire(self, nom: str, contenu: dict[str, Any]) -> None:
         d = self.racine / "sessions"

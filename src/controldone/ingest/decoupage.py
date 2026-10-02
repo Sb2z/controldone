@@ -320,7 +320,12 @@ class Decoupeur:
         if options is None:
             import os
 
-            cache = os.environ.get("CONTROLDONE_PAGES_CACHE_DIR")
+            from controldone.storage.cles import mode_execution
+
+            # Le cache disque garde le texte des pages EN CLAIR, indexé par empreinte (sans client) et hors de
+            # la purge de conservation et de l'effacement RGPD : banc et développement seulement, jamais en
+            # production (revue de sécurité RS-03).
+            cache = os.environ.get("CONTROLDONE_PAGES_CACHE_DIR") if mode_execution() != "prod" else None
             options = OptionsPages(cache_dir=cache or None)
         self.options = options
         self.fiches = tuple(fiches) if fiches is not None else None

@@ -22,6 +22,7 @@ from controldone.extract.deterministe._mise_en_page import (
 )
 from controldone.extract.deterministe.facture_commerciale import (
     ExtracteurFactureCommerciale,
+    _separateur_decimal_douteux,
     extraire_facture_commerciale,
 )
 from controldone.ingest.texte import Ligne, Mot, PageText
@@ -266,6 +267,23 @@ def test_ocr_confiance_plafonnee_et_correction_tva():
     # « FRO7000909341 » : O lu pour 0 ; corrigé car la clé de la TVA française est valide
     assert ch.acheteur.tva.valeur == "FR07000909341" and ch.acheteur.tva.valeur_brute == "FRO7000909341"
     assert ch.acheteur.tva.confiance < 0.9
+
+
+def test_ocr_total_sans_separateur_decimal_plafonne():
+    # Holdout 1 : un total OCR ≥ 1000 sans séparateur décimal, pour une devise à 2 décimales, peut avoir
+    # perdu sa virgule (facteur 100) : jamais > 0,80 sans recoupement à la même échelle.
+    pt = _page_ocr([
+        [("Invoice", 0.57, 0.62), ("No.:", 0.625, 0.65), ("INV-FICTIF-0001", 0.70, 0.80)],
+        [("Currency:", 0.57, 0.64), ("EUR", 0.70, 0.73)],
+        [("TOTAL", 0.50, 0.56), ("AMOUNT", 0.57, 0.64), ("EUR", 0.66, 0.70), ("4058121", 0.72, 0.80)],
+    ], conf=0.99)
+    ch, _ = extraire_facture_commerciale(vue_document([pt]), document_id="doc_test")
+    assert ch.total_facture is not None and ch.total_facture.confiance <= 0.8
+    assert _separateur_decimal_douteux("4058121", Decimal("4058121"), "EUR")
+    assert _separateur_decimal_douteux("4058121", Decimal("4058121"), None)
+    assert not _separateur_decimal_douteux("4058121", Decimal("4058121"), "JPY")  # 0 décimale : légitime
+    assert not _separateur_decimal_douteux("EUR 40 581,21", Decimal("40581.21"), "EUR")
+    assert not _separateur_decimal_douteux("999", Decimal("999"), "EUR")
 
 
 # --- outils de mise en page ---------------------------------------------------------------------------------------

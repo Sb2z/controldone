@@ -111,7 +111,10 @@ def _cle_version(options: OptionsPages) -> str:
 
 
 class CachePagesDisque:
-    """Cache ``PageText`` sur disque : un fichier JSON par (sha256, page, version)."""
+    """Cache ``PageText`` sur disque : un fichier JSON par (sha256, page, version).
+
+    Le texte y est **en clair** (fichiers 0600, répertoires 0700) : réservé au banc et au développement ; le
+    découpeur du service l'ignore en production (``CONTROLDONE_ENV=prod``, revue de sécurité RS-03)."""
 
     def __init__(self, dossier: str | Path) -> None:
         self.dossier = Path(dossier)
@@ -133,7 +136,7 @@ class CachePagesDisque:
         try:
             for p in pages:
                 c = self._chemin(sha, version, f"p{p.numero}")
-                c.parent.mkdir(parents=True, exist_ok=True)
+                c.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 _ecrire_atomique(c, json.dumps(p.to_dict(), ensure_ascii=False))
             _ecrire_atomique(self._chemin(sha, version, "index"), json.dumps({"pages": len(pages)}))
         except OSError:
@@ -141,8 +144,12 @@ class CachePagesDisque:
 
 
 def _ecrire_atomique(chemin: Path, contenu: str) -> None:
+    """Écriture atomique, fichier privé (0600) : le cache contient du texte de document en clair."""
     tmp = chemin.with_suffix(f".{os.getpid()}.tmp")
-    tmp.write_text(contenu, "utf-8")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(contenu)
+    os.chmod(tmp, 0o600)
     tmp.replace(chemin)
 
 

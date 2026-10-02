@@ -581,14 +581,14 @@ def _ligne(code=None, qte=None, unite="C62", origine=None, ref=None):
     )
 
 
-def _article(num="1", code=None, qte=None, unite="C62", origine=None, desc=None, colis=None, **kw):
+def _article(num="1", code=None, qte=None, unite="C62", origine=None, desc=None, colis=None, doc=DEC, **kw):
     return ArticleDeclaration(
-        numero_article=dv("articles[].numero_article", num),
-        code_marchandise=dv("articles[].code_marchandise", code),
-        quantite_unite_supplementaire=dv("articles[].quantite_unite_supplementaire", qte, unite=unite),
-        pays_origine=dv("articles[].pays_origine", origine),
-        description=dv("articles[].description", desc),
-        nombre_colis=dv("articles[].nombre_colis", colis),
+        numero_article=dv("articles[].numero_article", num, doc),
+        code_marchandise=dv("articles[].code_marchandise", code, doc),
+        quantite_unite_supplementaire=dv("articles[].quantite_unite_supplementaire", qte, doc, unite=unite),
+        pays_origine=dv("articles[].pays_origine", origine, doc),
+        description=dv("articles[].description", desc, doc),
+        nombre_colis=dv("articles[].nombre_colis", colis, doc),
         **kw,
     )
 
@@ -645,6 +645,22 @@ def test_a11_colis():
     assert r.outcome is Outcome.a_verifier and r.constate == "11"
     texte_propre(r)
     assert un(fa.a11_colis, ctx_de([facture(), d])).outcome is Outcome.non_verifiable
+
+
+def test_a11_deux_declarations_colis_par_article_sans_exception():
+    # Total de colis non lu sur deux déclarations du même couple : les valeurs par article (plus nombreuses
+    # que les déclarations) ne doivent pas faire échouer la rédaction du libellé (ValueError de zip strict).
+    f = facture(nombre_colis=fv("nombre_colis", "20"))
+    d1 = declaration(articles=[_article("1", colis="5", doc="doc_dec1"), _article("2", colis="6", doc="doc_dec1")])
+    d2 = declaration("doc_dec2", mrn="26FR22222222222222",
+                     articles=[_article("1", colis="4", doc="doc_dec2"), _article("2", colis="3", doc="doc_dec2")])
+    rs = fa.a11_colis(ctx_de([f, d1, d2]))
+    assert rs and all(r.outcome is not None for r in rs)
+    for r in rs:
+        if r.outcome is Outcome.a_verifier:
+            assert "MRN" in texte_propre(r).libelle
+    assert fa._refs_dec([d1.model_copy(), d2], [dv("x", "1"), dv("x", "2"), dv("x", "3", doc="doc_dec2")]) \
+        .startswith("les déclarations (")
 
 
 # --- A12, A13 (renvoi) -------------------------------------------------------------------------------------

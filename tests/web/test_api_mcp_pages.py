@@ -164,7 +164,8 @@ def test_mcp_depot_base64_et_chemin(monde, tmp_path):
     dossier = tmp_path / "envoi"
     dossier.mkdir()
     (dossier / "a.zip").write_bytes(_pdf_zip())
-    r = o.deposer_dossier(chemin=str(dossier))
+    assert "erreur" in o.deposer_dossier(chemin=str(dossier))  # sans CONTROLDONE_MCP_RACINE (RS-02)
+    r = _outils(monde, A, racine_autorisee=tmp_path).deposer_dossier(chemin=str(dossier))
     assert r["fichiers_acceptes"] == 1
     assert "erreur" in o.deposer_dossier(contenu_base64="pas du base64 !!")
     assert "erreur" in o.deposer_dossier()
