@@ -31,9 +31,11 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from itertools import pairwise
 from typing import Any
 
 from controldone.extract.base import ExtractionContext, ExtractionResult
+from controldone.extract.deterministe._mise_en_page import est_bandeau_texte, separer_libelle_tva
 from controldone.extract.valeurs import valeur_sourcee
 from controldone.ids import IdGenerator, Prefixe
 from controldone.model.champs import (
@@ -117,7 +119,9 @@ LIBELLES: dict[str, tuple[str, ...]] = {
     "devise_facture": ("Monnaie de facturation", "Invoice currency", "Devise de facturation"),
     "devise_et_montant": ("Monnaie et montant total facturé", "Currency and total amount invoiced"),
     "montant_total_facture": ("Montant total facturé", "Valeur fac", "Valeur intrinsèque totale",
-                              "Total amount invoiced", "Total invoice amount", "Valeur facturée totale"),
+                              "Total amount invoiced", "Total invoice amount", "Valeur facturée totale",
+                              "Montant facturé total", "Montant total de la facture", "Total invoiced amount",
+                              "Total facturé", "Invoice total amount"),
     "taux_change": ("Taux de change", "Taux", "Exchange rate", "Rate of exchange"),
     "masse_brute_totale": ("Masse brute totale", "Masse brute totale (kg)", "Poids brut", "Poids brut total",
                            "Total gross mass", "Gross mass total", "Total gross weight"),
@@ -142,7 +146,8 @@ LIBELLES: dict[str, tuple[str, ...]] = {
     "regime": ("Régime", "Procedure", "Procédure"),
     "preference": ("Préférence", "Preference"),
     "designation": ("Désignation", "Description", "Designation"),
-    "montant_facture_article": ("Montant facturé", "Prix de l'article", "Item price", "Invoiced amount"),
+    "montant_facture_article": ("Montant facturé", "Prix de l'article", "Item price", "Invoiced amount",
+                                "Invoice amount", "Amount invoiced", "Montant de la facture"),
     "valeur_statistique": ("Valeur statistique", "Statistical value"),
     "masse_nette": ("Masse nette", "Masse nette (kg)", "Net mass", "Poids net"),
     "masse_brute": ("Masse brute", "Masse brute (kg)", "Gross mass"),
@@ -535,6 +540,7 @@ class _Lecteur:
         self._reparees: set[str] = set()
         #: Lignes de taxation dont le code n'a pas été lu (sous-ligne d'un tableau condensé) : plafonnées.
         self._codes_illisibles: list[TaxationDeclaration] = []
+        self._mt_generique = False
 
     # --- chargement -------------------------------------------------------------------------------------
 
@@ -666,10 +672,20 @@ class _Lecteur:
                 break
             if ligne.y0 - bas > dy_max:
                 break
+            libs = [x for x in self.hits_par_ligne.get(ligne.idx, []) if gauche - 0.01 <= x.x0 <= droite]
+            if partie:
+                # En-tête à deux colonnes : un libellé imprimé nettement à droite du pavé (et séparé de son
+                # texte par un grand blanc) ouvre la colonne voisine ; il borne le pavé au lieu de le fermer,
+                # et les lignes de cette colonne qui s'intercalent sont ignorées (D-951).
+                for x in sorted(libs, key=lambda x: x.x0):
+                    if x.cle in _STOP_PARTIE and x.x0 > max(h.x1 + 0.05, gauche + 0.15) and all(
+                            x.x0 - t.x1 > 0.04 for t in ligne.toks if t.x1 <= x.x0):
+                        droite = min(droite, x.x0 - 0.004)
+                        break
+                libs = [x for x in libs if x.x0 <= droite]
             toks = [t for t in ligne.toks if t.cx >= gauche and t.cx <= droite and t.x0 >= gauche - 0.01]
             if not toks:
                 continue
-            libs = [x for x in self.hits_par_ligne.get(ligne.idx, []) if gauche - 0.01 <= x.x0 <= droite]
             if partie and any(x.cle in _STOP_PARTIE for x in libs):
                 break
             if not partie and libs:
@@ -980,6 +996,11 @@ class _Lecteur:
         return None
 
     def v_code_marchandise(self, span: _Span) -> _Lu | None:
+        groupe = _code_groupes(span.toks)
+        if groupe is not None:  # « 8207 70 37 00 » : code imprimé par groupes de chiffres (D-950)
+            i, j, chiffres = groupe
+            sel = span.toks[i:j]
+            return _Lu(span.depuis(sel), " ".join(t.t for t in sel).strip(".,:;"), chiffres)
         for t in span.toks:
             net = t.t.strip(".,:;")
             chiffres = re.sub(r"[ .]", "", net)
@@ -1028,6 +1049,7 @@ class _Lecteur:
         self._indices()
         self._sens_taux_derive()
         self._coherence()
+        self._recouper_montant_generique()
         for tx in self._codes_illisibles:
             for vs in (tx.base_montant, tx.base_quantite, tx.taux, tx.montant):
                 if vs is not None and vs.confiance > PLAFOND_CODE_ILLISIBLE:
@@ -1062,6 +1084,8 @@ class _Lecteur:
         devise = dev.valeur if dev else None
         mt = self._lire(["montant_total_facture", "devise_et_montant"],
                         lambda sp: self.v_montant_devise(sp, devise), lignes=lignes)
+        if mt is None:
+            mt = self._montant_facture_entete(lignes, devise)
         if dev is None and mt is not None and "devise_span" in mt.extra:
             d = mt.extra["devise"]
             dev = _Lu(mt.extra["devise_span"], d, d)
@@ -1070,6 +1094,7 @@ class _Lecteur:
         if mt is not None and devise and mt.extra.get("devise") not in (None, devise):
             mt.penalite += 0.2  # devise du montant différente de la monnaie de facturation imprimée
         c.montant_total_facture = self._vs("montant_total_facture", mt, unite=devise)
+        self._mt_generique = mt is not None and bool(mt.extra.get("libelle_generique"))
         tx = self._lire(["taux_change"], self.v_taux, lignes=lignes)
         if tx is not None:
             c.taux_change = self._vs("taux_change", tx, unite=tx.extra.get("devise"))
@@ -1082,6 +1107,29 @@ class _Lecteur:
                                         self._lire(["nombre_colis_total", "colis"], self.v_entier, lignes=lignes))
         c.nombre_articles = self._vs("nombre_articles",
                                      self._lire(["nombre_articles"], self.v_petit_entier, lignes=lignes))
+
+    def _montant_facture_entete(self, lignes: set[int], devise: str | None) -> _Lu | None:
+        """Libellé générique « Montant facturé » / « Invoice amount » imprimé dans l'**en-tête** (hors blocs et
+        tableaux d'articles) : c'est le montant total facturé (DE 14 06) d'une mise en page qui n'emploie pas
+        le libellé « total ». Retenu seulement s'il est unique dans l'en-tête et imprimé avant le premier
+        article (sinon, ce peut être le montant d'un article dont le bloc n'a pas été reconnu) (D-950)."""
+        hits = self._hits(["montant_facture_article"], lignes)
+        if len(hits) != 1:
+            return None
+        h = hits[0]
+        debut_articles = min(self.lignes_blocs | self.lignes_tableaux, default=None)
+        if debut_articles is None or h.ligne.idx >= debut_articles:
+            return None
+        lu = self.v_montant_devise(self._droite(h), devise)
+        if lu is None:
+            for sp in self._dessous(h):
+                lu = self.v_montant_devise(sp, devise)
+                if lu is not None:
+                    break
+        if lu is not None:
+            lu.extra["hit"] = h
+            lu.extra["libelle_generique"] = True
+        return lu
 
     def _penalite_mrn(self, valeur: str) -> float:
         """Plusieurs lectures du MRN dans le document : désaccord -> lecture douteuse."""
@@ -1128,9 +1176,13 @@ class _Lecteur:
                     else:
                         tva = tva or self.v_tva(reste)
                     continue
+                colle = next((t for t in sp.toks if separer_libelle_tva(t.t) is not None), None)
+                if colle is not None:  # « N° TVAFR15000100008 » : libellé collé au numéro (D-952)
+                    tva = tva or self.v_tva(sp.depuis([colle]))
+                    continue
                 if nom is None:
                     lu = self.v_texte(sp)
-                    if lu is not None and not _tva(lu.span.toks[0]):
+                    if lu is not None and not _tva(lu.span.toks[0]) and not est_bandeau_texte(lu.brut):
                         nom = lu
             self._definir(f"{chemin}.nom", self._vs(f"{chemin}.nom", nom, type_valeur=TypeValeur.texte))
             self._definir(f"{chemin}.tva", self._vs(f"{chemin}.tva", tva))
@@ -1456,6 +1508,10 @@ class _Lecteur:
 
         def compatible(g: list[_Tok], c: _Colonne) -> bool:
             genre = types.get(c.cle, "texte")
+            if genre == "code" and len(g) > 1:
+                cg = _code_groupes(g)
+                if cg is not None and cg[0] == 0 and cg[1] == len(g):
+                    return True  # code marchandise imprimé par groupes (D-950)
             return _compatible(g[0], genre) if genre != "nombre" else any(_compatible(t, genre) for t in g)
 
         for g in groupes:
@@ -1586,6 +1642,20 @@ class _Lecteur:
                                       type_valeur=TypeValeur.montant)
         if mp is not None and not mp.vide:
             tok = next((t for t in mp.toks if re.fullmatch(r"[A-Z0-9©]", t.t.strip(".,"))), None)
+            if tok is None:
+                # mode de paiement imprimé en toutes lettres (« Comptant », « Autoliquidation », « Deferred ») :
+                # sens d'après le libellé, sans code (D-950)
+                mot = next((t for t in mp.toks if re.fullmatch(r"[^\W\d_]{4,}", t.t.strip(".,"))), None)
+                sens = None
+                if mot is not None:
+                    cle_mot = sans_accents(mot.t.strip(".,")).lower()
+                    sens = next((pn for motif, pn in _SENS_PAIEMENT if motif.match(cle_mot)), None)
+                if mot is not None and sens is not None and not (
+                        sens is PaiementNormalise.autoliquide and cat is not CategorieTaxe.tva):
+                    tx.mode_paiement = self._vs(f"{p}.mode_paiement", _Lu(mp.depuis([mot]), mot.t.strip(".,"),
+                                                                          mot.t.strip(".,")),
+                                                type_valeur=TypeValeur.code)
+                    tx.paiement_normalise = sens
             if tok is not None:
                 code_mp = {"©": "0"}.get(tok.t.strip(".,"), tok.t.strip(".,"))
                 leg = self.legende.get(code_mp)
@@ -1864,6 +1934,20 @@ class _Lecteur:
             if vs is not None and self._est_ocr(vs):
                 self._infirmees.add(vs.id)
 
+    def _recouper_montant_generique(self) -> None:
+        """Montant total lu sous un libellé générique (« Montant facturé ») : plafonné à
+        ``PLAFOND_INCOHERENT`` si les montants facturés lus par article, tous lisibles, ne lui sont pas égaux
+        en somme (D-950)."""
+        mt = self.champs.montant_total_facture
+        if not self._mt_generique or mt is None or not mt.est_lisible:
+            return
+        montants = [a.montant_facture_article for a in self.champs.articles]
+        if not montants or any(v is None or not v.est_lisible for v in montants):
+            return
+        somme = sum((v.decimal() for v in montants if v is not None), Decimal(0))
+        if abs(somme - mt.decimal()) > Decimal("0.011") and mt.confiance > PLAFOND_INCOHERENT:
+            self._remplacer(mt, PLAFOND_INCOHERENT)
+
     def _remplacer(self, vs: ValeurSourcee, conf: float) -> None:
         object.__setattr__(vs, "confiance", round(conf, 4))
 
@@ -2136,6 +2220,9 @@ def _compatible(t: _Tok, genre: str) -> bool:
     if genre == "code_taxe":
         return bool(_CODE_TAXE_RE.match(s)) or _code_minuscule(s)
     if genre == "mp":
+        if re.fullmatch(r"[^\W\d_]{4,}", s):  # mode imprimé en toutes lettres (D-950)
+            cle_mot = sans_accents(s).lower()
+            return any(motif.match(cle_mot) for motif, _pn in _SENS_PAIEMENT)
         return bool(re.fullmatch(r"[A-Z0-9©]", s))
     if genre == "entier":
         return bool(re.fullmatch(r"\d{1,3}", s))
@@ -2169,10 +2256,39 @@ def _code_taxe(span: _Span, ligne: _Ligne | None = None) -> _Lu | None:
     return _Lu(span.depuis([t]), s_lu, corr, pen)
 
 
+_GROUPE_CODE_RE = re.compile(r"\d{4}(?:[ .]\d{2}){2,3}")
+
+
+def _code_groupes(toks: Sequence[_Tok]) -> tuple[int, int, str] | None:
+    """Code marchandise imprimé par groupes séparés d'espaces (« 8207 70 37 00 », « 8481 80 85 ») : mots
+    consécutifs ``i`` à ``j`` exclus, rapprochés (pas de grand blanc), formant 4 + 2 + 2 (+ 2) chiffres, et
+    chiffres joints. Seuls des chiffres imprimés tels quels (aucune correction lettre/chiffre)."""
+    for i, t in enumerate(toks):
+        if not re.fullmatch(r"\d{4}", t.t.strip(".,:;")):
+            continue
+        for n in (4, 3):
+            sel = toks[i:i + n]
+            if len(sel) < n:
+                continue
+            if any(b.x0 - a.x1 > 1.2 * max(a.hx, 1e-3) for a, b in pairwise(sel)):
+                continue
+            txt = " ".join(x.t.strip(",:;") for x in sel)
+            if not _GROUPE_CODE_RE.fullmatch(txt.rstrip(".")):
+                continue
+            suivant = toks[i + n] if i + n < len(toks) else None
+            if suivant is not None and re.fullmatch(r"\d{1,2}", suivant.t) and suivant.x0 - sel[-1].x1 < sel[-1].hx:
+                continue  # groupe de chiffres qui continue : pas un code
+            return i, i + n, re.sub(r"\D", "", txt)
+    return None
+
+
 def _ligne_article(cells: dict[str, _Span]) -> bool:
     code = cells.get("code")
     if code is None or code.vide:
         return False
+    cg = _code_groupes(code.toks[:4])
+    if cg is not None and cg[0] == 0:
+        return True
     s = re.sub(r"[ .]", "", code.toks[0].t.strip(",:;"))
     return len(s) in (8, 10) and sum(c.isdigit() for c in s) >= len(s) - 2
 
@@ -2195,8 +2311,12 @@ def _re_sous(span: _Span, m: re.Match[str], groupe: int) -> re.Match[str] | None
 
 def _tva(t: _Tok) -> tuple[str, str, float] | None:
     """Numéro de TVA lu dans un mot : (brut, valeur, pénalité). Confusions corrigées sur les positions
-    numériques d'une TVA française, la clé est vérifiée."""
+    numériques d'une TVA française, la clé est vérifiée. Un libellé collé au numéro (« TVAFR15000100008 »)
+    est retiré si le numéro qui reste a une forme (et une clé) valide (D-952)."""
     brut = t.t.strip(".,:;()")
+    colle = separer_libelle_tva(brut)
+    if colle is not None:
+        brut = colle
     net = re.sub(r"[^A-Za-z0-9]", "", brut).upper()
     if net.startswith("FR") and len(net) == 13:
         corps = net[2:].translate(_VERS_CHIFFRE)

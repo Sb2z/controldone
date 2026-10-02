@@ -49,7 +49,9 @@ from controldone.extract.deterministe._mise_en_page import (
     chercher,
     confiance_mots,
     devise_dans,
+    est_bandeau_texte,
     lecture_mots,
+    lignes_bandeau,
     lire_tva_mots,
     nombres_dans,
     valeur_apres,
@@ -905,11 +907,16 @@ class _Extraction:
         return list(uniques.values())
 
     def _nom_emetteur(self, page: VuePage) -> Lu | None:
-        for li in page.lignes[:4]:
+        # bandeaux, filigranes, en-têtes et pieds répétés : jamais le nom de l'émetteur (D-953)
+        bandeaux = lignes_bandeau(self.vue, entetes_repetes=False)
+        lignes = [li for li in page.lignes if (page.numero, li.rang) not in bandeaux]
+        for li in lignes[:4]:
             if li.y0 > 0.12:
                 break
             for s in li.segments:
                 if _est_titre(s.cle) or not re.search(r"[A-Za-z]{3}", s.texte) or re.search(r"\d{4}", s.texte):
+                    continue
+                if est_bandeau_texte(s.texte):
                     continue
                 if len(s.mots) < 2:
                     continue

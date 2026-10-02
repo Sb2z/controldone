@@ -50,7 +50,10 @@ __all__ = [
     "VueLigne",
     "VuePage",
     "chercher",
+    "colonne_droite",
     "confiance_mots",
+    "est_bandeau_texte",
+    "lignes_bandeau",
     "lire_tableau",
     "lire_tva_ocr",
     "nombres_dans",
@@ -599,12 +602,18 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
     # largeur de colonne : jusqu'au segment suivant de la ligne du libellé, sinon mi-page
     suivants = [s for s in t.ligne.segments[t.segment.rang + 1:]]
     xmax = suivants[0].x0 - 0.005 if suivants else max(t.segment.x1 + 0.35, 0.5)
+    # en-tête à deux colonnes : les lignes de la colonne de droite s'intercalent avec celles du pavé (D-951)
+    droite_col = colonne_droite(page, t.ligne, x0, t.segment.x1) if page.geometrie and not suivants else None
+    if droite_col is not None:
+        xmax = min(xmax, droite_col - 0.005)
     pas = page.pas_ligne
     prec_y = t.ligne.y1
     for li in page.lignes[t.ligne.rang + 1:]:
         if li.y0 - prec_y > 2.6 * pas + 0.005 or len(sortie) >= max_lignes:
             break
         segs = [s for s in li.segments if s.x0 >= x0 - 0.03 and s.x0 < xmax and s.x1 <= xmax + 0.25]
+        if droite_col is not None:
+            segs = [s for s in segs if s.x1 <= droite_col + 0.01]
         if not segs:
             if any(s.x0 < x0 - 0.03 for s in li.segments):
                 break
@@ -616,6 +625,90 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
         prec_y = li.y1
     return sortie
 
+
+
+# --- bandeaux, en-têtes et pieds de page répétés (D-953) ----------------------------------------------------
+
+#: Vocabulaire des bandeaux et filigranes (texte sans accents, minuscules) : jamais le nom d'une partie.
+BANDEAU_VOCABULAIRE = re.compile(
+    r"donnees fictives|fictitious (?:data|document)|document fictif|documents? (?:de )?(?:demonstration|test|"
+    r"specimen)|(?:demonstration|demo|test|sample|specimen) (?:document|copy|data)|\bspecimen\b|"
+    r"pour (?:la )?demonstration|for demonstration|aucune valeur reelle|no real value|not a real|"
+    r"sans valeur (?:legale|juridique)|watermark|filigrane|ne pas utiliser|do not use|\bbrouillon\b|\bdraft\b"
+)
+#: Marges haute et basse de la page (hauteur relative) : un texte qui y tient entièrement est un bandeau.
+MARGE_BANDEAU = 0.03
+
+
+def _cle_repetition(texte: str) -> str:
+    return re.sub(r"\d+", "#", cle_texte(texte))
+
+
+def est_bandeau_texte(texte: str) -> bool:
+    return bool(BANDEAU_VOCABULAIRE.search(cle_texte(texte)))
+
+
+def lignes_bandeau(vue: VueDocument, *, entetes_repetes: bool = True) -> set[tuple[int, int]]:
+    """Lignes ``(page, rang)`` qui sont des bandeaux, en-têtes ou pieds de page plutôt que du contenu :
+
+    - vocabulaire de bandeau ou de filigrane (« données fictives », « specimen », « draft »…) ;
+    - texte tenant entièrement dans la marge haute ou basse de la page (``MARGE_BANDEAU``) ;
+    - sur un document de plusieurs pages, ligne répétée (chiffres neutralisés : « Page 1 / 2 ») sur
+      **toutes** les pages, dans le quart haut ou bas de chacune.
+
+    Règle générale de mise en page, sans référence à un gabarit : un nom de partie n'est jamais lu sur
+    ces lignes. ``entetes_repetes=False`` : les lignes répétées du **haut** de page ne sont pas retenues
+    (papier à en-tête de l'émetteur, imprimé sur chaque page : c'est là que se lit son nom) ; les pieds
+    répétés le restent."""
+    out: set[tuple[int, int]] = set()
+    for p in vue.pages:
+        for li in p.lignes:
+            if est_bandeau_texte(li.texte) or (p.geometrie and li.mots and (li.y1 <= MARGE_BANDEAU or li.y0 >= 1 - MARGE_BANDEAU)):
+                out.add((p.numero, li.rang))
+    if len(vue.pages) >= 2:
+        par_page: list[dict[str, list[VueLigne]]] = []
+        for p in vue.pages:
+            d: dict[str, list[VueLigne]] = {}
+            for li in p.lignes:
+                if not p.geometrie or (entetes_repetes and li.y1 <= 0.25) or li.y0 >= 0.75:
+                    k = _cle_repetition(li.texte)
+                    if len(k) >= 6:
+                        d.setdefault(k, []).append(li)
+            par_page.append(d)
+        communes = set(par_page[0])
+        for d in par_page[1:]:
+            communes &= set(d)
+        for p, d in zip(vue.pages, par_page, strict=True):
+            for k in communes:
+                for li in d[k]:
+                    out.add((p.numero, li.rang))
+    return out
+
+
+def colonne_droite(page: VuePage, ligne: VueLigne, x0: float, x1: float, *, n_lignes: int = 8) -> float | None:
+    """Bord gauche d'une colonne de texte imprimée **à droite** d'un pavé ouvert en ``x0`` sur ``ligne`` (en-tête
+    à deux colonnes dont les lignes s'intercalent avec celles du pavé) ; ``None`` s'il n'y en a pas.
+
+    Une ligne voisine (au-dessus ou au-dessous du libellé) dont **tout** le texte commence nettement à droite du
+    pavé (au-delà de ``x1`` + 0,05 et de ``x0`` + 0,15) appartient à une autre colonne ; le bord retenu est le
+    plus petit début de ces lignes, s'il est confirmé par au moins deux lignes alignées (± 0,02)."""
+    rang = ligne.rang
+    debuts: list[float] = []
+    voisines = page.lignes[max(0, rang - n_lignes): rang + 1 + n_lignes]
+    for li in voisines:
+        if li is ligne or not li.segments:
+            continue
+        d = li.segments[0].x0
+        if d > max(x1 + 0.05, x0 + 0.15):
+            debuts.append(d)
+    if not debuts:
+        return None
+    debuts.sort()
+    for d in debuts:
+        alignes = [e for e in debuts if abs(e - d) <= 0.02]
+        if len(alignes) >= 2:
+            return min(alignes)
+    return None
 
 
 # --- accepteurs usuels ------------------------------------------------------------------------------------
@@ -708,6 +801,9 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
     mots (« FR 68 000 458 570 », « CHE-123.456.789 »)."""
     for k, m in enumerate(mots):
         t = m.texte.strip(":;,()")
+        colle = _LIB_TVA_COLLE.match(t)
+        if colle and colle.end() < len(t):
+            t = t[colle.end():]  # libellé collé au numéro (« TVAFR15000100008 », D-952)
         mm = re.match(r"^([A-Z]{2})([0-9A-Z.\-]*)$", t)
         if not mm or mm.group(1) not in PAYS_TVA:
             continue
@@ -729,11 +825,41 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
                 meilleur = j
         if meilleur is None:
             continue
-        brut = "".join(re.sub(r"[.\-]", "", x.texte.strip(":;,()")) for x in mots[k:meilleur])
-        norm = normalize_vat(brut)
+        brut = t + "".join(re.sub(r"[.\-]", "", x.texte.strip(":;,()")) for x in mots[k + 1:meilleur])
+        norm = normalize_vat(re.sub(r"[.\-]", "", brut))
+        if norm and colle and colle.end() < len(m.texte.strip(":;,()")) and not tva_colle_valide(norm):
+            continue  # libellé collé : la forme seule ne suffit pas, la clé (ou le format) doit être juste
         if norm:
             return k, meilleur, norm
     return None
+
+
+#: Libellé de TVA collé devant le numéro par la mise en page ou l'OCR (« N°TVAFR… », « VAT:GB… »).
+_LIB_TVA_COLLE = re.compile(r"^(?:N[°º]?\.?)?(?:TVA|VAT|IVA|UST-?IDNR|USTID|NIF)(?:NO|N[°º])?[.:#]?(?=[A-Z]{2}\d)",
+                            re.IGNORECASE)
+
+
+def separer_libelle_tva(texte: str) -> str | None:
+    """Numéro de TVA collé à son libellé (« TVAFR15000100008 ») -> « FR15000100008 » si la forme (et, pour la
+    France, la clé) est valide ; ``None`` sinon."""
+    t = texte.strip(":;,()")
+    m = _LIB_TVA_COLLE.match(t)
+    if not m or m.end() >= len(t):
+        return None
+    reste = t[m.end():]
+    norm = normalize_vat(reste)
+    return reste if norm and tva_colle_valide(norm) else None
+
+
+def tva_colle_valide(norm: str) -> bool:
+    """Forme nationale respectée et, pour une TVA française à clé numérique, clé juste."""
+    from controldone.normalize import tva_fr_valide
+
+    pays, corps = norm[:2], norm[2:]
+    fmt = FORMATS_TVA.get(pays)
+    if pays not in PAYS_TVA or fmt is None or not re.fullmatch(fmt, corps):
+        return False
+    return tva_fr_valide(norm) is not False
 
 
 _CONFUSION_CHIFFRE = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0", "I": "1", "l": "1", "|": "1", "S": "5",

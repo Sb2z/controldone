@@ -47,9 +47,12 @@ from controldone.extract.deterministe._mise_en_page import (
     accepte_montant,
     accepte_reference,
     chercher,
+    colonne_droite,
     confiance_mots,
     devise_dans,
+    est_bandeau_texte,
     lecture_mots,
+    lignes_bandeau,
     lire_montant_mots,
     lire_tableau,
     lire_tva_mots,
@@ -142,6 +145,8 @@ LIB_COLIS = motifs(
     r"(?:nombre|nb|nbre)\s*(?:total\s*)?(?:de\s*)?colis\s*:?", r"colis\s*:",
     r"(?:numero|n\.?o|cantidad|total)\s*(?:de\s*)?bultos\s*:?", r"bultos\s*:",
 )
+#: Libellé de colis sans « : », seul dans son segment ; valeur lue à droite seulement.
+LIB_COLIS_NU = motifs(r"(?:packages|pkgs|colis|bultos|cartons|nombre de colis|no\.? of packages)$")
 _EXCLU_TOTAL = re.compile(
     r"sub-?\s?total|sous-?\s?total|page|report|carried|suma y sigue|weight|poids|peso|wt\b|packages|colis|"
     r"bultos|quantit|qty|cantidad|pieces|cartons|volume|cbm|\b(?:tva|vat|iva)\b|discount|remise|descuento|"
@@ -487,20 +492,22 @@ def _parties(e: _Etat) -> None:
         if lec is not None:
             _tva_partie(e, "acheteur", lec)
             break
+    bandeaux = lignes_bandeau(vue)
     pavés = chercher(vue, LIB_ACHETEUR, pages=[vue.pages[0].numero] if vue.pages else None)
     for t in pavés:
-        if _sous_champ(t):
+        if _sous_champ(t) or (t.page.numero, t.ligne.rang) in bandeaux:
             continue
-        lignes = pave(t, fin=LIB_FIN_PAVE, exclus=e.entetes)
+        lignes = [(li, ms) for li, ms in pave(t, fin=LIB_FIN_PAVE, exclus=e.entetes | bandeaux)]
         if not lignes:
             continue
         if ch.acheteur.nom is None:
             li0, mots0 = lignes[0]
-            if not re.search(r"(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))):
+            if not re.search(r"(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))) \
+                    and _nom_plausible(mots0):
                 page = vue.page(li0.page)
                 lec_nom = lecture_mots(mots0, page, li0)
                 ch.acheteur.nom = fab.valeur("acheteur.nom", lec_nom, type_valeur=TypeValeur.texte,
-                                             confiance=min(0.9, confiance_mots(lec_nom)))
+                                             confiance=min(_plafond_nom(t), confiance_mots(lec_nom)))
             adr = [lecture_mots(ms, vue.page(li.page), li) for li, ms in lignes[1:]
                    if not re.search(r"(vat|tva|iva|eori|siren|siret|tel|phone|fax|e-?mail)\b",
                                     cle_texte(" ".join(m.texte for m in ms)))]
@@ -521,14 +528,16 @@ def _parties(e: _Etat) -> None:
         if ch.acheteur.nom is not None:
             break
     for t in chercher(vue, LIB_DESTINATAIRE, pages=[vue.pages[0].numero] if vue.pages else None):
-        if _sous_champ(t):
+        if _sous_champ(t) or (t.page.numero, t.ligne.rang) in bandeaux:
             continue
-        lignes = pave(t, fin=LIB_FIN_PAVE, exclus=e.entetes)
+        lignes = pave(t, fin=LIB_FIN_PAVE, exclus=e.entetes | bandeaux)
         if not lignes:
             continue
         li0, mots0 = lignes[0]
-        ch.destinataire.nom = fab.valeur("destinataire.nom", lecture_mots(mots0, vue.page(li0.page), li0),
-                                         type_valeur=TypeValeur.texte)
+        if _nom_plausible(mots0):
+            lec_nom = lecture_mots(mots0, vue.page(li0.page), li0)
+            ch.destinataire.nom = fab.valeur("destinataire.nom", lec_nom, type_valeur=TypeValeur.texte,
+                                             confiance=min(_plafond_nom(t), confiance_mots(lec_nom)))
         for li, ms in lignes:
             r = lire_tva_mots(ms)
             if r is not None:
@@ -537,6 +546,23 @@ def _parties(e: _Etat) -> None:
                 break
         break
     _vendeur(e)
+
+
+def _nom_plausible(mots) -> bool:
+    """Un nom de partie : au moins trois lettres, ni un bandeau, ni un libellé « clé : valeur » d'en-tête."""
+    txt = " ".join(m.texte for m in mots)
+    if not re.search(r"[^\W\d_]{3}", txt) or est_bandeau_texte(txt):
+        return False
+    return not txt.rstrip().endswith(":")
+
+
+def _plafond_nom(t: Trouve) -> float:
+    """Plafond de confiance d'un nom lu dans un pavé : 0,90 ; 0,80 quand une colonne de droite s'intercale
+    avec le pavé (structure ambiguë, D-951)."""
+    if t.page.geometrie and not t.ligne.segments[t.segment.rang + 1:] and colonne_droite(
+            t.page, t.ligne, t.segment.x0, t.segment.x1) is not None:
+        return 0.8
+    return 0.9
 
 
 _SOUS_CHAMP = re.compile(r"^(?:'s\s*)?(?:address|adresse|direccion|vat|tva|iva|name|nom|nombre|eori|tel|phone|"
@@ -592,11 +618,14 @@ def _vendeur(e: _Etat) -> None:
     p = vue.pages[0]
     t_ach = chercher(vue, LIB_ACHETEUR, pages=[p.numero])
     limite = t_ach[0].ligne.rang if t_ach else min(len(p.lignes), 6)
-    t_v = chercher(vue, LIB_VENDEUR, pages=[p.numero])
+    bandeaux = lignes_bandeau(vue, entetes_repetes=False)
+    t_v = [t for t in chercher(vue, LIB_VENDEUR, pages=[p.numero]) if (p.numero, t.ligne.rang) not in bandeaux]
     if t_v and t_v[0].ligne.rang < (t_ach[0].ligne.rang if t_ach else 99):
-        lignes = pave(t_v[0], fin=LIB_FIN_PAVE, exclus=e.entetes)
+        lignes = pave(t_v[0], fin=LIB_FIN_PAVE, exclus=e.entetes | bandeaux)
     else:
-        lignes = [(li, list(li.segments[0].mots)) for li in p.lignes[:limite] if li.segments]
+        # sans libellé : premières lignes de la page, bandeaux et en-têtes répétés exclus (D-953)
+        lignes = [(li, list(li.segments[0].mots)) for li in p.lignes[:limite]
+                  if li.segments and (p.numero, li.rang) not in bandeaux]
     titre = re.compile(r"\b(invoice|facture|factura|pro ?forma|commercial|comercial|commerciale|page|valeur|value"
                        r"|valor|document|documento)\b")
     for li, ms in lignes:
@@ -607,7 +636,7 @@ def _vendeur(e: _Etat) -> None:
         txt = cle_texte(" ".join(m.texte for m in ms))
         if not ms or not re.search(r"[a-z]{3}", txt) or re.match(r"^[\d\W]", txt):
             continue
-        if ch.vendeur.nom is None:
+        if ch.vendeur.nom is None and _nom_plausible(ms):
             lec_v = lecture_mots(ms, p, li)
             # sans libellé « vendeur », le nom est présumé (première ligne de l'en-tête)
             ch.vendeur.nom = fab.valeur("vendeur.nom", lec_v, type_valeur=TypeValeur.texte,
@@ -987,6 +1016,14 @@ def _pied(e: _Etat) -> None:
                 conf = min(conf, 0.7)
             setattr(ch, chemin, fab.valeur(chemin, lec, confiance=conf, separateur=sep))
     lec = _premier_hors(e, LIB_COLIS, accepte_entier, exclure_tab)
+    if lec is None:
+        # libellé nu, seul dans son segment (« Packages   12 ») : valeur à droite seulement (D-950)
+        for t in chercher(e.vue, LIB_COLIS_NU):
+            if (t.page.numero, t.ligne.rang) in exclure_tab:
+                continue
+            lec = valeur_apres(e.vue, t, accepte_entier, dessous=False)
+            if lec is not None:
+                break
     if lec is not None:
         ch.nombre_colis = fab.valeur("nombre_colis", lec, type_valeur=TypeValeur.entier)
 
