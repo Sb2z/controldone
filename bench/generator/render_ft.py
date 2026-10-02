@@ -236,7 +236,7 @@ def _t4(pen, ft, dm, variant):
     _client_block(pen, ft, 12, 30)
     pen.text(115, 30, f"Date du relevé : {d_fr(ft.date)}", size=8)
     pen.text(115, 34.5, f"Échéance : {d_fr(ft.due_date)}", size=8)
-    pen.text(115, 39, f"Nombre d'envois : {len(ft.refs_mrn)}", size=8)
+    pen.text(115, 39, f"Nombre d'envois : {len({l.mrn for l in ft.lines if l.mrn})}", size=8)
     y = 54
     mrns = []
     for l in ft.lines:
@@ -272,7 +272,11 @@ def _t4(pen, ft, dm, variant):
     y = pen.table(8, y, [("Transport", 26, "left"), ("MRN", 36, "left"), ("Date", 17, "center"),
                          ("Droits", 18, "right"), ("Autres tx", 16, "right"), ("TVA import", 19, "right"),
                          ("Dédouan.", 17, "right"), ("Lignes sup. (qté)", 20, "right"), ("Av. fonds", 15, "right")],
-                  rows, size=6.9, row_h=5, header_size=6.6) + 5
+                  rows, size=6.9, row_h=5, header_size=6.6) + 4
+    # références citées en en-tête du relevé (toutes, y compris celles sans ligne)
+    y = pen.paragraph(8, y + 1, "Références citées - LTA / BL : " + " ; ".join(ft.refs_transport), 190, size=6.8,
+                      leading=3.4)
+    y = pen.paragraph(8, y + 0.5, "MRN : " + " ; ".join(ft.refs_mrn), 190, size=6.8, leading=3.4) + 3
     other = [l for l in ft.lines if l.code not in matrix_codes or l in extra_lines]
     if other:
         pen.text(8, y, "Détail des autres lignes", size=8, bold=True)

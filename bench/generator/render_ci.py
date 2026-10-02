@@ -147,8 +147,8 @@ def _header(pen, ci, L, style, pi, npages, spaced):
 def _lines_table(pen, ci, L, plines, y, style, dec, ns):
     ul = UNIT_LABELS[ci.language]
     with_nw = style == "boxed"
-    cols = [(L["item"], 7, "center"), (L["ref"], 23, "left"), (L["desc"], 45 if with_nw else 57, "left"),
-            (L["hs"], 19, "center"), (L["orig"], 13, "center"), (L["qty"], 14, "right"), (L["unit"], 10, "center"),
+    cols = [(L["item"], 7, "center"), (L["ref"], 23, "left"), (L["desc"], 42 if with_nw else 54, "left"),
+            (L["hs"], 23, "center"), (L["orig"], 12, "center"), (L["qty"], 14, "right"), (L["unit"], 10, "center"),
             (L["up"], 20, "right"), (L["amt"], 24, "right")]
     if with_nw:
         cols.insert(7, (L["nw"], 12, "right"))

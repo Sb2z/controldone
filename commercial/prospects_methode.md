@@ -83,3 +83,25 @@ python commercial/scripts/prospection_sirene.py --q import --q importateur --q i
 ```
 
 Le script produit un squelette (SIREN, NAF, tranche, commune, contrôle d'exclusion automatique). Les colonnes de qualification restent vides : elles se remplissent à la main, en lisant le site de chaque entreprise, selon les règles des sections 1, 3 et 5.
+
+## 8. Candidats examinés puis écartés
+
+Pour transparence, les entreprises vérifiées mais non retenues (aucune n'est dans `prospects.csv`) :
+
+| Entreprise | SIREN | Motif |
+|---|---|---|
+| Winhonco | 337945968 | Tranche 6-9 salariés |
+| SA Angelini (produits de la mer) | 697120764 | Tranche 6-9 salariés |
+| LP Divertissements (Linder Partner) | 514274968 | Tranche 6-9 salariés |
+| Wiz' Import (OBG.PUB) | 492337449 | Tranche 1-2 salariés |
+| Asia Pack | 894824150 | Tranche 1-2 salariés |
+| Doumie | 522497510 | Effectif non renseigné ; preuve d'import absente du site |
+| France Fruits Secs International | 789647971 | Effectif non renseigné |
+| Caminel SAS (importateur LS Tractor) | 846950053 | Tranche 250-499 salariés |
+| Lu Shan | 432297448 | 1-2 salariés (source secondaire) |
+| Sun 7 Fruits | — | 4 salariés (source secondaire) |
+| Vimass | — | Société espagnole |
+| Ribimex | 712045863 | Preuve d'import hors UE introuvable sur son propre site |
+| AVM Import, Choco Suisse Import, Moore Import, DAG Import (MMKDO), Double D Import, IEV (groupe Rondy), Mastrad, Fartools, Terre Exotique, Moulin Roty, Cabaïa, Sveltus, Mash | — | Preuve d'import hors UE absente des pages lues, site illisible, ou taille hors cible |
+| Paget France | — | Liquidée en 2012-2013 (source secondaire) |
+| Artis Trading | 844021550 | Aucun site propre trouvé : ni preuve ni contact publiés par l'entreprise |

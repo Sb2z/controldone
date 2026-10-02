@@ -554,7 +554,7 @@ def test_cli_gate_code_retour(banc, capsys):
     _dossiers_vp(banc, 3, n_fp=1)
     args = ["--corpus", str(banc.corpus), "--split", "holdout", "--run", str(banc.run)]
     assert main(args) == 0
-    assert main(args + ["--gate"]) == 1
+    assert main([*args, "--gate"]) == 1
     out = capsys.readouterr().out
     assert "ÉCHOUE" in out and "3. petit échantillon" in out
     m = json.loads((banc.run / "metrics.json").read_text(encoding="utf-8"))
