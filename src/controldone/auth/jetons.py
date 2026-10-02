@@ -10,6 +10,8 @@ paramètres de cookie ``httponly`` ; jeton CSRF lié à la session.
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import hashlib
 import hmac
 import os
@@ -58,7 +60,7 @@ def secrets_session_depuis_env(mode: str | None = None) -> list[str]:
     from controldone.storage.cles import charger_cles_maitresses, mode_execution
     from controldone.storage.erreurs import CleManquante
 
-    brut = os.environ.get("CONTROLDONE_SECRET_KEY", "").strip()
+    brut = env("CONTROLDONE_SECRET_KEY", "").strip()
     if brut:
         return [s.strip() for s in brut.split(",") if s.strip()]
     if (mode or mode_execution()) == "prod":

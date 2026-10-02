@@ -11,6 +11,8 @@ SQLite : ``journal_mode=WAL``, ``foreign_keys=ON``, ``busy_timeout``. Les transa
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -49,7 +51,7 @@ for _sql in _TRIGGERS_PG:
 
 
 def url_par_defaut() -> str:
-    url = os.environ.get("CONTROLDONE_DATABASE_URL")
+    url = env("CONTROLDONE_DATABASE_URL")
     if url:
         return url
     from controldone.config import get_settings

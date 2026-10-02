@@ -46,6 +46,7 @@ from controldone.model import (
     Document,
     GrilleTarifaire,
     LigneFactureTransitaire,
+    MethodeAllocation,
     ModePoste,
     NatureLigne,
     Niveau,
@@ -615,8 +616,17 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
                 raison=None if m is not None else ctx.raison_inutilisable(v),
             )
             allocs = [a for a in ctx.dossier.allocations if a.source_document_id == f.id and a.source_ligne == i]
+            # Une allocation au prorata n'est pas une ventilation : elle désigne seulement les déclarations que
+            # la ligne non ventilée couvre ; la comparaison se fait sur leur somme (§12.2, D-1207).
+            couvertes_prorata = list({
+                c.id: c for a in allocs if a.methode is MethodeAllocation.prorata
+                for c in [par_id.get(a.cible_document_id or "") or par_prefixe.get(mrn_prefixe(a.mrn))]
+                if c is not None
+            }.values())
             cibles = []
             for a in allocs:
+                if a.methode is MethodeAllocation.prorata:
+                    continue
                 cible = par_id.get(a.cible_document_id or "") or par_prefixe.get(mrn_prefixe(a.mrn))
                 if cible is not None:
                     montant = a.montant_alloue if a.montant_alloue is not None else m
@@ -635,10 +645,11 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
                     # MRN sans correspondance (sujet de C7) : la seule déclaration du dossier reste la cible.
                     explicites[decs[0].id].append(ld)
                 continue
-            if len(couvertes) == 1:
-                explicites[couvertes[0].id].append(ld)
+            couv = couvertes_prorata or couvertes
+            if len(couv) == 1:
+                explicites[couv[0].id].append(ld)
             else:
-                globales.append((couvertes, ld, hors_dossier and f.ft.est_releve))
+                globales.append((couv, ld, hors_dossier and f.ft.est_releve))
 
     # Union des déclarations couvertes par une même ligne non ventilée.
     parent = {d.id: d.id for d in decs}

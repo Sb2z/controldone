@@ -32,7 +32,7 @@ lignes = total).
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
@@ -72,7 +72,7 @@ from controldone.model.enums import Methode, NatureLigne, QualiteTexte, TotalOri
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, confiance_derivee, deriver_somme
 from controldone.normalize import normalize_vat, parse_amount, parse_date
 from controldone.normalize.fiscal import siren_depuis_tva, tva_fr_valide
-from controldone.normalize.refs import norm_ref, norm_ref_transport
+from controldone.normalize.refs import CONFUSION_OCR, norm_ref, norm_ref_transport
 from controldone.normalize.text import cle_texte
 
 __all__ = ["ExtracteurFactureTransitaire", "classer_nature"]
@@ -142,8 +142,18 @@ def classer_nature(libelle: str | None) -> NatureLigne | None:
 # --- vocabulaire des en-têtes de tableau -------------------------------------------------------------------
 
 #: Classes de confusion OCR (caractères souvent pris l'un pour l'autre) pour regrouper les variantes.
-_CONFUSION_OCR = str.maketrans({"0": "O", "Q": "O", "D": "O", "1": "I", "L": "I", "4": "A", "5": "S", "8": "B",
-                                "2": "Z", "6": "G"})
+_CONFUSION_OCR = CONFUSION_OCR
+
+def consensus_lectures(membres: Sequence[str], compte: Mapping[str, int], meilleur: str) -> str:
+    """Vote caractère par caractère sur des lectures de même longueur d'une même référence. Départage
+    déterministe (§6.2.12, D-1208) : à égalité de votes, le caractère de ``meilleur`` (lecture la plus
+    fréquente), puis l'ordre alphabétique — jamais l'ordre d'itération d'un ensemble."""
+    n = min(len(c) for c in membres)
+    return "".join(
+        max(sorted({c[i] for c in membres}),
+            key=lambda ch, i=i: (sum(compte[c] for c in membres if c[i] == ch), ch == meilleur[i]))
+        for i in range(n))
+
 
 _ROLES_TEXTE = {"lib", "libcode", "natflag", "ref", "detail", "transport", "date"}
 _ROLES_NUM = {"qte", "pu", "ht", "tva", "tva_mt", "cat", "taux", "base_droit", "base_tva"}
@@ -576,9 +586,7 @@ class _Extraction:
             meilleur = max(membres, key=lambda c: (compte[c], self._conf(vus[c])))
             if len(membres) > 2:
                 # vote caractère par caractère sur toutes les lectures (erreurs à des positions différentes)
-                consensus = "".join(
-                    max({c[i] for c in membres}, key=lambda ch, i=i: sum(compte[c] for c in membres if c[i] == ch))
-                    for i in range(18))
+                consensus = consensus_lectures(membres, compte, meilleur)
                 if consensus in vus:
                     meilleur = consensus
             lu = vus[meilleur]

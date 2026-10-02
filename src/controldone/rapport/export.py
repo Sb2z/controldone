@@ -13,11 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from controldone.findings_io import findings_json
-from controldone.guardrails import AVERTISSEMENT
+from controldone.guardrails import AVERTISSEMENT, FormulationInterdite, check_text
 from controldone.pipeline import ResultatDossier
-from controldone.rapport.vue import VERSION_RAPPORT, RapportVue
+from controldone.rapport.vue import LIBELLE_RETENU, VERSION_RAPPORT, RapportVue
 
-__all__ = ["SCHEMA_RAPPORT", "ecrire_xlsx", "findings_lot_json", "neutraliser_formules", "rapport_json"]
+__all__ = [
+    "SCHEMA_RAPPORT", "ecrire_xlsx", "findings_lot_json", "findings_publiables", "neutraliser_formules", "rapport_json"
+]
 
 SCHEMA_RAPPORT = f"controldone.rapport/{VERSION_RAPPORT}"
 COLONNES_REVUE = ["Décision (valider / rejeter / à vérifier)", "Commentaire", "Relu par", "Date de revue"]
@@ -25,6 +27,22 @@ COLONNES_REVUE = ["Décision (valider / rejeter / à vérifier)", "Commentaire",
 
 def _d(x: Decimal | None) -> str | None:
     return None if x is None else str(x)
+
+
+def findings_publiables(rd: ResultatDossier) -> dict[str, Any]:
+    """``findings`` d'un dossier pour publication (rapport JSON, ``findings.json`` du rapport) : le libellé et
+    la prochaine action d'un constat bloqué (``motif_blocage``) sont remplacés par la mention neutre, comme
+    dans la vue HTML ; puis tous les textes produits sont vérifiés (lève ``FormulationInterdite``)."""
+    data = json.loads(findings_json(rd.findings))
+    for c in data.get("constats", []):
+        if c.get("motif_blocage"):
+            c["libelle"] = LIBELLE_RETENU
+            c["prochaine_action"] = ""
+    violations = check_text(" \n".join(t for c in data.get("constats", [])
+                                        for t in (c.get("libelle", ""), c.get("prochaine_action", ""))))
+    if violations:
+        raise FormulationInterdite(violations)
+    return data
 
 
 def rapport_json(vue: RapportVue, resultats: Sequence[ResultatDossier]) -> dict[str, Any]:
@@ -52,13 +70,13 @@ def rapport_json(vue: RapportVue, resultats: Sequence[ResultatDossier]) -> dict[
         },
         "prochaines_actions": [{"priorite": a.priorite, "titre": a.titre, "details": a.details} for a in vue.actions],
         "non_lus": [{"fichier": f, "motif": m, "pages": p} for f, m, p in vue.non_lus],
-        "dossiers": [json.loads(findings_json(rd.findings)) for rd in resultats],
+        "dossiers": [findings_publiables(rd) for rd in resultats],
         "avertissement": AVERTISSEMENT,
     }
 
 
 def findings_lot_json(resultats: Sequence[ResultatDossier]) -> list[dict[str, Any]]:
-    return [json.loads(findings_json(rd.findings)) for rd in resultats]
+    return [findings_publiables(rd) for rd in resultats]
 
 
 def neutraliser_formules(ws: Any) -> int:
@@ -125,7 +143,7 @@ def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: P
                          "TVA importateur", "Montant facturé", "Montant déclaré", "Statut", "Raisons",
                          "Recouvrable certain (EUR)", "Recouvrable à vérifier (EUR)"],
             [[d.reference, *[v for _k, v in d.cles], d.tva_acheteur, d.tva_importateur, d.montant_facture,
-              d.montant_declare, d.statut, d.raisons, float(d.recouvrable_certain), float(d.recouvrable_a_verifier)]
+              d.montant_declare, d.statut, d.raisons, d.recouvrable_certain, d.recouvrable_a_verifier]
              for d in vue.dossiers], revue=True)
     constats = []
     for rd in resultats:
@@ -136,7 +154,7 @@ def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: P
             constats.append([rd.dossier.reference, c.id, c.controle_id, c.niveau.value, c.nature_montant.value,
                              c.composante.value if c.composante else "", _d(c.montant_en_jeu) or "",
                              "oui" if c.renvoi else "non", ", ".join(x.value for x in c.raisons),
-                             c.libelle if c.motif_blocage is None else "(libellé retenu pour relecture)",
+                             c.libelle if c.motif_blocage is None else LIBELLE_RETENU,
                              c.prochaine_action if c.motif_blocage is None else "",
                              _d(r.tolerance_appliquee) or "", _d(r.seuil_certitude_applique) or "",
                              " | ".join(f"{p.role.value}: {p.valeur_brute or p.calcul or ''} (p. {p.page or '-'})"

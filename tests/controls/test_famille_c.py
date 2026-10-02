@@ -346,7 +346,24 @@ def test_multi_mrn_sans_ventilation_somme_des_declarations():
     assert r.constat.montant_en_jeu == D("30.00") and MRN_A in lib(r.constat) and MRN_B in lib(r.constat)
 
 
-def test_allocation_explicite_et_prorata():
+def test_allocation_prorata_ignoree_comparaison_sur_la_somme():
+    # §12.2, D-1207 : une ligne non ventilée répartie au prorata par le regroupement est comparée sur la
+    # somme des déclarations couvertes ; plus de paire d'écarts +X / -X fictifs.
+    d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
+    d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "160.00"), refs_mrn=[MRN_A, MRN_B])
+    ctx = contexte([d1, d2, f])
+    ctx.dossier.allocations.extend([
+        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
+                   montant_alloue=D("60.00"), methode=MethodeAllocation.prorata),
+        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
+                   montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
+    ])
+    rs = run_controls(ctx, controles=["C1"])
+    assert [(r.unite, r.outcome) for r in rs] == [("dec:doc_dec1+doc_dec2|ft:doc_ft1", Outcome.conforme)]
+
+
+def test_allocation_prorata_ecart_sur_la_somme_reste_a_verifier():
     d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
     d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
     f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "200.00"), refs_mrn=[MRN_A, MRN_B])
@@ -358,10 +375,43 @@ def test_allocation_explicite_et_prorata():
                    montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
     ])
     rs = run_controls(ctx, controles=["C1"])
-    c1 = {r.unite: r for r in rs}
-    c = c1["dec:doc_dec2|ft:doc_ft1"].constat
+    assert len(rs) == 1 and rs[0].unite == "dec:doc_dec1+doc_dec2|ft:doc_ft1"
+    c = rs[0].constat
     assert c.montant_en_jeu == D("40.00") and c.niveau is Niveau.a_verifier
     assert RaisonCode.allocation_prorata in c.raisons
+
+
+def test_allocation_prorata_designe_les_declarations_couvertes():
+    # D-1207 : la facture ne cite lisiblement qu'un MRN ; le regroupement a réparti la ligne sans MRN au
+    # prorata sur les deux déclarations : la ligne est comparée à leur somme (100 + 60 = 160).
+    d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
+    d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "160.00"), refs_mrn=[MRN_A])
+    ctx = contexte([d1, d2, f])
+    ctx.dossier.allocations.extend([
+        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
+                   montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
+        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
+                   montant_alloue=D("60.00"), methode=MethodeAllocation.prorata),
+    ])
+    rs = run_controls(ctx, controles=["C1"])
+    assert [(r.unite, r.outcome) for r in rs] == [("dec:doc_dec1+doc_dec2|ft:doc_ft1", Outcome.conforme)]
+
+
+def test_allocation_explicite_respectee():
+    d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
+    d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "200.00"), refs_mrn=[MRN_A, MRN_B])
+    ctx = contexte([d1, d2, f])
+    ctx.dossier.allocations.extend([
+        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
+                   montant_alloue=D("100.00"), methode=MethodeAllocation.reference_explicite),
+        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
+                   montant_alloue=D("100.00"), methode=MethodeAllocation.reference_explicite),
+    ])
+    c1 = {r.unite: r for r in run_controls(ctx, controles=["C1"])}
+    assert c1["dec:doc_dec2|ft:doc_ft1"].constat.montant_en_jeu == D("40.00")
+    assert c1["dec:doc_dec1|ft:doc_ft1"].outcome is Outcome.conforme
 
 
 def test_factures_debours_et_prestations_separees():

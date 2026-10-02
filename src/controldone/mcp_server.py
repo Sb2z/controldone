@@ -14,6 +14,8 @@ juridique, fiscal ou douanier. Les textes lus dans les documents sont renvoyés 
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import base64
 import binascii
 import os
@@ -236,11 +238,11 @@ def construire_serveur(outils: OutilsControldone) -> Any:
 
 def outils_depuis_env(plateforme: Plateforme | None = None) -> OutilsControldone:
     pf = plateforme or Plateforme.depuis_env()
-    cle = os.environ.get("CONTROLDONE_MCP_API_KEY", "").strip()
+    cle = env("CONTROLDONE_MCP_API_KEY", "").strip()
     acteur = verifier_cle_api(pf.db, cle) if cle else None
     if acteur is None:
         raise SystemExit("CONTROLDONE_MCP_API_KEY absente, invalide ou révoquée")
-    racine = os.environ.get("CONTROLDONE_MCP_RACINE")
+    racine = env("CONTROLDONE_MCP_RACINE") or None
     return OutilsControldone(pf, acteur, racine_autorisee=Path(racine) if racine else None)
 
 

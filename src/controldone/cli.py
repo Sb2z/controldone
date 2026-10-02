@@ -16,6 +16,8 @@ dans ``var/demo/``.
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import argparse
 import logging
 import os
@@ -178,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--https", action="store_true", help="servi derrière TLS : en-tête HSTS")
     sv.add_argument("--proxy", action="store_true", help="faire confiance aux en-têtes X-Forwarded-* du mandataire local")
     sv.add_argument("--forwarded-allow-ips", dest="forwarded_allow_ips",
-                    default=os.environ.get("CONTROLDONE_FORWARDED_ALLOW_IPS", "127.0.0.1"),
+                    default=env("CONTROLDONE_FORWARDED_ALLOW_IPS", "127.0.0.1"),
                     help="adresses du mandataire dont les en-têtes X-Forwarded-* sont crus (avec --proxy)")
     sv.set_defaults(fn=_serve)
 

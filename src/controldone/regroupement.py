@@ -42,7 +42,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import PurePosixPath
 
 from controldone.controls.tolerances import Tolerances
@@ -924,11 +924,7 @@ class _Regroupeur:
                     out.append(alloc(fc.id, d.id, MethodeAllocation.reference_explicite, explicites[d.id]))
                 continue
             declares = [_dec(d.dec.montant_total_facture) for d in cibles]
-            somme = sum((m for m in declares if m is not None), Decimal(0))
-            for d, m in zip(cibles, declares, strict=True):
-                part = None
-                if total is not None and m is not None and somme > 0:
-                    part = (total * m / somme).quantize(Decimal("0.01"))
+            for d, part in zip(cibles, repartir_prorata(total, declares), strict=True):
                 out.append(alloc(fc.id, d.id, MethodeAllocation.prorata, part))
 
         # lignes de facture transitaire -> MRN
@@ -943,8 +939,7 @@ class _Regroupeur:
                 continue
             # plusieurs MRN : chaque ligne de débours vers son MRN, sinon prorata des taxes déclarées
             dans_dossier = [p for p in mrns_cites if p in par_prefixe]
-            taxes = {d.id: _total_taxes(d) for d in decs}
-            somme_tax = sum((t for t in taxes.values() if t is not None), Decimal(0))
+            taxes = [_total_taxes(d) for d in decs]
             for i, li in enumerate(ft.ft.lignes):
                 if not li.nature.est_debours and li.nature is not NatureLigne.debours_combines:
                     continue
@@ -961,11 +956,7 @@ class _Regroupeur:
                     d = decs[0]
                     out.append(alloc(ft.id, d.id, MethodeAllocation.prorata, None, ligne=i, mrn=_txt(d.dec.mrn)))
                 else:
-                    for d in decs:
-                        part = None
-                        t = taxes.get(d.id)
-                        if montant is not None and t is not None and somme_tax > 0:
-                            part = (montant * t / somme_tax).quantize(Decimal("0.01"))
+                    for d, part in zip(decs, repartir_prorata(montant, taxes), strict=True):
                         out.append(alloc(ft.id, d.id, MethodeAllocation.prorata, part, ligne=i, mrn=_txt(d.dec.mrn)))
         return out
 
@@ -988,6 +979,24 @@ class _Regroupeur:
         if nb_fc == 1 or len(factures_citees) <= 1:
             return _dec(c.montant_total_facture)
         return None
+
+
+def repartir_prorata(total: Decimal | None, poids: Sequence[Decimal | None]) -> list[Decimal | None]:
+    """Parts de ``total`` au prorata de ``poids`` (§8.2 : centime, demi vers le haut). Le reliquat d'arrondi
+    va à la dernière part calculée, si bien que la somme des parts vaut ``total`` quand tous les poids sont
+    connus (3 × 33,33 + 0,01). Part ``None`` si le total, le poids ou la somme des poids manque."""
+    somme = sum((p for p in poids if p is not None), Decimal(0))
+    if total is None or somme <= 0:
+        return [None] * len(poids)
+    parts: list[Decimal | None] = [
+        None if p is None else (total * p / somme).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for p in poids
+    ]
+    connus = [i for i, p in enumerate(parts) if p is not None]
+    if connus and len(connus) == len(parts):
+        dernier = connus[-1]
+        reste = total - sum((p for p in parts if p is not None), Decimal(0))
+        parts[dernier] = (parts[dernier] or Decimal(0)) + reste
+    return parts
 
 
 def regrouper(

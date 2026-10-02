@@ -7,6 +7,8 @@ que si ``CONTROLDONE_VEILLE_RESEAU=1``.
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import os
 from typing import Any
 
@@ -21,7 +23,7 @@ __all__ = ["executer_agent", "reseau_veille"]
 
 
 def reseau_veille() -> bool:
-    return os.environ.get("CONTROLDONE_VEILLE_RESEAU", "").strip().lower() in ("1", "oui", "true", "yes")
+    return env("CONTROLDONE_VEILLE_RESEAU", "").strip().lower() in ("1", "oui", "true", "yes")
 
 
 @handler("agent")

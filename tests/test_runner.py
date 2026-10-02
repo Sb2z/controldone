@@ -185,6 +185,44 @@ def test_r2_c5_garde_son_montant_si_composante_non_evaluable(ctx):
     assert rs["C5"].constat.montant_en_jeu == D("50.00")
 
 
+def _r2_composante_non_evaluable(ctx, c2, c4, c5):
+    u = cle_unite(ft="doc_ft", dec=["doc_dec"])
+    with registre_temporaire():
+
+        @control("C1")
+        def f1(c):
+            return [c.non_verifiable("C1", RaisonCode.valeur_absente, unite=u)]
+
+        @control("C2")
+        def f2(c):
+            return [_constat(c, "C2", u, c2)]
+
+        @control("C4")
+        def f4(c):
+            return [_constat(c, "C4", u, c4)]
+
+        @control("C5")
+        def f5(c):
+            return [_constat(c, "C5", u, c5)]
+
+        return {r.controle_id: r for r in run_controls(ctx)}
+
+
+def test_r2_c5_ne_porte_que_le_residu_des_composantes(ctx):
+    # C1 non évaluable : C5 = 600,00 dont 150,00 (C2) et 400,00 (C4) déjà portés -> résidu 50,00 (D-1206)
+    rs = _r2_composante_non_evaluable(ctx, D("150.00"), D("400.00"), D("600.00"))
+    c5 = rs["C5"].constat
+    assert c5.montant_en_jeu == D("50.00") and c5.montant_brut == D("600.00")
+    assert RaisonCode.doublon_composantes in c5.raisons
+    assert rs["C2"].constat.montant_en_jeu == D("150.00") and rs["C4"].constat.montant_en_jeu == D("400.00")
+
+
+def test_r2_c5_sans_residu_n_a_pas_de_montant(ctx):
+    rs = _r2_composante_non_evaluable(ctx, D("150.00"), D("400.00"), D("550.02"))
+    c5 = rs["C5"].constat
+    assert c5.montant_en_jeu is None and c5.montant_brut == D("550.02")
+
+
 def test_r3_a6_neutralise_a5(ctx):
     u = cle_unite(fc=["doc_fc"], dec=["doc_dec"])
     with registre_temporaire():

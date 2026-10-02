@@ -43,11 +43,11 @@ from controldone.extract.base import (
 )
 from controldone.findings_io import Findings, construire_findings
 from controldone.guardrails import MOTIF_FORMULATION_INTERDITE, check_text
-from controldone.ids import IdGenerator, Prefixe
+from controldone.ids import IdGenerator, Prefixe, id_stable
 from controldone.model.base import horodatage
 from controldone.model.documents import Document, Fichier, Lot, Page
 from controldone.model.dossier import Dossier
-from controldone.model.enums import StatutFichier, StatutGlobal, TypeDocument
+from controldone.model.enums import Outcome, RaisonCode, StatutFichier, StatutGlobal, TypeDocument
 from controldone.model.referentiel import GrilleTarifaire
 from controldone.model.resultats import Constat, Execution, ResultatControle
 from controldone.normalize.refs import norm_ref
@@ -120,9 +120,32 @@ def cle_extraction(identite: str | None, extracteur_id: str, version: str, *, no
     return _h("extraction", identite, extracteur_id, version, VERSION_NORMALISATION if normalisation else "")
 
 
-def cle_controles(dossier_id: str, dossier_version: int, empreinte_tolerances: str) -> str:
-    """Étape 7 : ``dossier_id + dossier_version + version_regles + empreinte_tolerances``."""
-    return _h("controles", dossier_id, dossier_version, VERSION_REGLES, empreinte_tolerances)
+def cle_controles(
+    dossier_id: str, dossier_version: int, empreinte_tolerances: str, empreinte_contexte: str = ""
+) -> str:
+    """Étape 7 : ``dossier_id + dossier_version + version_regles + empreinte_tolerances`` + empreinte du
+    contexte (grilles, sous-ensemble de contrôles, table de taux, entités, transitaires, paramètres petits
+    envois) : un contexte différent ne rejoue jamais des résultats mémorisés (D-1203)."""
+    return _h("controles", dossier_id, dossier_version, VERSION_REGLES, empreinte_tolerances, empreinte_contexte)
+
+
+def empreinte_contexte_controles(
+    profil: ProfilClient,
+    grilles: Sequence[GrilleTarifaire],
+    *,
+    controles: Iterable[str] | None,
+    taux_reference: TableTauxReference,
+) -> str:
+    """Empreinte de tout ce qui, hors dossier et tolérances, change le résultat des contrôles."""
+    return _h(
+        "contexte",
+        _h(*(g.model_dump_json() for g in grilles)),
+        "*" if controles is None else ",".join(sorted(set(controles))),
+        taux_reference.empreinte(),
+        _h(*(e.model_dump_json() for e in profil.entites)),
+        _h(*(t.model_dump_json() for t in profil.transitaires)),
+        profil.parametres_petits_envois.model_dump_json(),
+    )
 
 
 def cle_redaction(constat_id: str) -> str:
@@ -581,7 +604,7 @@ def preparer_lot(
     try:
         reg = regrouper(
             documents, fichiers, profil=profil.tolerances, transitaires=profil.transitaires,
-            options=OptionsRegroupement(meme_source=options.meme_source, annee=options.annee or horodatage().year,
+            options=OptionsRegroupement(meme_source=options.meme_source, annee=options.annee or lot.recu_le.year,
                                         courriels=courriels, lot_ids=(lot.id,)),
         )
         dossiers = reg.dossiers
@@ -679,6 +702,22 @@ def _rediger(resultats: list[ResultatControle]) -> tuple[list[ResultatControle],
     return sortie, cles
 
 
+def _resultat_erreur_interne(dossier: Dossier, execution_id: str, e: Exception) -> ResultatControle:
+    """Résultat ``non_verifiable`` (raison ``erreur_interne``) quand le contexte des contrôles n'a pas pu
+    être construit : le dossier passe en ``a_verifier`` au lieu de sortir ``conforme`` sans contrôle."""
+    return ResultatControle(
+        id=id_stable(Prefixe.resultat, dossier.id, dossier.version, "erreur_interne"),
+        controle_id="P1",
+        unite="erreur",
+        dossier_id=dossier.id,
+        dossier_version=dossier.version,
+        execution_id=execution_id,
+        outcome=Outcome.non_verifiable,
+        raison_code=RaisonCode.erreur_interne,
+        details={"exception": type(e).__name__, "etape": "construction_contexte"},
+    )
+
+
 def controler_lot(
     prepare: LotPrepare,
     *,
@@ -699,12 +738,20 @@ def controler_lot(
         jetons_entree=prepare.cout.jetons_entree, jetons_sortie=prepare.cout.jetons_sortie,
     )
     freres = autres_dossiers_de([prepare])
+    taux_reference = options.taux_reference or table_par_defaut()
+    contexte = (
+        empreinte_contexte_controles(
+            profil, prepare.grilles, controles=options.controles, taux_reference=taux_reference
+        )
+        if options.memo is not None
+        else ""
+    )
     sortie: list[ResultatDossier] = []
     pour_sortie: list[tuple[Dossier, list[ResultatControle], dict[str, Any]]] = []
     for dossier in prepare.dossiers:
         autres = [a for a in [*autres_dossiers, *freres] if a.dossier.id != dossier.id]
         docs = [prepare.documents[i] for i in dossier.document_ids() if i in prepare.documents]
-        cles = {"controles": cle_controles(dossier.id, dossier.version, empreinte)}
+        cles = {"controles": cle_controles(dossier.id, dossier.version, empreinte, contexte)}
         memo = options.memo
         try:
             if memo is not None and cles["controles"] in memo and not autres:
@@ -713,7 +760,7 @@ def controler_lot(
                 ctx = ControlContext.construire(
                     dossier, docs, profil.tolerances, grilles=prepare.grilles, entites=profil.entites,
                     transitaires=profil.transitaires, autres_dossiers=autres,
-                    taux_reference=options.taux_reference or table_par_defaut(),
+                    taux_reference=taux_reference,
                     parametres_petits_envois=profil.parametres_petits_envois,
                     execution_id=execution.id,
                 )
@@ -721,8 +768,9 @@ def controler_lot(
                 if memo is not None and not autres:
                     memo[cles["controles"]] = resultats
         except Exception as e:  # le moteur isole déjà chaque contrôle ; ceci protège la construction
+            # Jamais « conforme » en silence (P8, D-1201) : un résultat non vérifiable explicite.
             log.error("controles_en_erreur dossier=%s exception=%s", dossier.id, type(e).__name__)
-            resultats = []
+            resultats = [_resultat_erreur_interne(dossier, execution.id, e)]
         resultats, cles["redaction"] = _rediger(resultats)
         pour_sortie.append((dossier, resultats, cles))
     duree = prepare.duree_s + (time.perf_counter() - debut)

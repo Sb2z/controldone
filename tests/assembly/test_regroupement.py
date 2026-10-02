@@ -550,3 +550,15 @@ def test_support_co_localise_lien_moyen_sans_alerte_p4():
     assert _lien(d, "mail1").force is ForceLien.moyenne
     lettre = _lien(d, "lettre1")
     assert lettre.force is ForceLien.forte and SignalLien.ref_facture_citee in lettre.signaux
+
+
+def test_repartition_prorata_demi_vers_le_haut_et_reliquat():
+    # §8.2 : ROUND_HALF_UP ; la somme des parts vaut le total (reliquat sur la dernière part), D-1207
+    from decimal import Decimal as D
+
+    from controldone.regroupement import repartir_prorata
+
+    assert repartir_prorata(D("20.25"), [D("1"), D("1")]) == [D("10.13"), D("10.12")]
+    assert repartir_prorata(D("100.00"), [D("1"), D("1"), D("1")]) == [D("33.33"), D("33.33"), D("33.34")]
+    assert repartir_prorata(D("10.00"), [D("1"), None]) == [D("10.00"), None]
+    assert repartir_prorata(None, [D("1")]) == [None]

@@ -39,7 +39,7 @@ def test_annexe_c(tmp_path):
     ctx, d, rs, ex, fic = _run()
     f = construire_findings(ctx.dossier, [d], rs, ex, fichiers={fic.id: fic}, dossier_id="BX0042")
     data = f.vers_dict()
-    assert data["schema"] == SCHEMA_FINDINGS == "controldone.findings/1.0.0"
+    assert data["schema"] == SCHEMA_FINDINGS == "controldone.findings/1.1.0"
     assert data["dossier_id"] == "BX0042" and data["dossier_version"] == 1
     assert data["execution"]["execution_id"] == "exe_1" and data["execution"]["cout_ia_eur"] == "0.00"
     assert data["statut_global"] == "ecart_certain"

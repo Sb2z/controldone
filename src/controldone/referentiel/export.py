@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import csv
 import hashlib
 import hmac
@@ -26,7 +28,7 @@ SCHEMA_REFERENTIEL = "controldone.referentiel/1.0.0"
 def sel_referentiel() -> bytes:
     """Sel secret du hachage des transitaires : ``CONTROLDONE_REFERENTIEL_SEL``, sinon dérivé de la clé
     maîtresse (HMAC, usage « referentiel »). Jamais exporté."""
-    brut = os.environ.get("CONTROLDONE_REFERENTIEL_SEL")
+    brut = (env("CONTROLDONE_REFERENTIEL_SEL") or None)
     if brut:
         return brut.encode("utf-8")
     from controldone.storage.cles import charger_cles_maitresses

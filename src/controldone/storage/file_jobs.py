@@ -6,6 +6,12 @@
   expiré après le dernier essai passe ``dead`` ;
 - ``prolonger`` (battement de cœur), ``terminer``, ``echouer`` (attente exponentielle : 30 s × 2^(n-1),
   plafonnée à 1 h ; ``dead`` après ``max_attempts`` essais, avec une alerte au fondateur).
+- **Jeton de clôture** (D-1303) : un bail est détenu par ``(locked_by, attempts)`` ; ``prolonger``,
+  ``terminer`` et ``echouer`` acceptent ``tentative`` et ``detient`` vérifie le bail **dans la transaction**
+  d'écriture du handler : deux workers de même identifiant ne peuvent pas valider le même job.
+- **Ordonnancement équitable** (D-1311) : parmi les jobs prêts, ``reserver`` sert d'abord le client dont
+  l'activité la plus récente est la plus ancienne (tourniquet entre clients) ; FIFO au sein d'un client.
+- ``purger_termines`` : suppression des jobs ``done`` anciens (30 jours par défaut, D-1309).
 """
 
 from __future__ import annotations
@@ -14,8 +20,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from controldone.ids import Prefixe, nouvel_id
 from controldone.storage.alertes import emettre_alerte
@@ -29,6 +36,8 @@ __all__ = ["BACKOFF_BASE_S", "BACKOFF_MAX_S", "MAX_ATTEMPTS", "JobInfo", "JobSto
 BACKOFF_BASE_S = 30
 BACKOFF_MAX_S = 3600
 MAX_ATTEMPTS = 5
+#: Nombre de jobs prêts examinés pour l'ordonnancement équitable entre clients.
+FENETRE_EQUITE = 200
 
 
 def delai_backoff(attempts: int) -> timedelta:
@@ -69,20 +78,32 @@ class JobStore:
         """Renvoie ``(job, cree)`` ; ``cree = False`` si la clé existait déjà."""
         if not idempotency_key:
             raise ValueError("clé d'idempotence obligatoire")
-        now = now or maintenant()
         with self.db.transaction_systeme() as s:
-            existant = s.execute(select(Job).where(Job.idempotency_key == idempotency_key)).scalar_one_or_none()
-            if existant is not None:
-                return _info(existant), False
-            job = Job(id=nouvel_id(Prefixe.job), kind=kind, payload=payload, idempotency_key=idempotency_key,
-                      tenant_id=tenant_id, max_attempts=max_attempts, run_after=run_after or now, cree_le=now)
-            try:
-                with s.begin_nested():
-                    s.add(job)
-            except IntegrityError:  # course avec un autre producteur : la clé existe désormais
-                existant = s.execute(select(Job).where(Job.idempotency_key == idempotency_key)).scalar_one()
-                return _info(existant), False
-            return _info(job), True
+            return self.enqueue_dans(s, kind, payload, idempotency_key, tenant_id, max_attempts=max_attempts,
+                                     run_after=run_after, now=now)
+
+    @staticmethod
+    def enqueue_dans(s: Session, kind: str, payload: dict[str, Any], idempotency_key: str,
+                     tenant_id: str | None = None, *, max_attempts: int = MAX_ATTEMPTS,
+                     run_after: datetime | None = None, now: datetime | None = None) -> tuple[JobInfo, bool]:
+        """Mise en file **dans la transaction de l'appelant** (D-1306) : le job est validé avec les écritures
+        qui le motivent (correction, dépôt), ou annulé avec elles. Idempotent (clé unique ; ``IntegrityError``
+        d'une course rattrapée par un point de sauvegarde, sûr sous PostgreSQL)."""
+        if not idempotency_key:
+            raise ValueError("clé d'idempotence obligatoire")
+        now = now or maintenant()
+        existant = s.execute(select(Job).where(Job.idempotency_key == idempotency_key)).scalar_one_or_none()
+        if existant is not None:
+            return _info(existant), False
+        job = Job(id=nouvel_id(Prefixe.job), kind=kind, payload=payload, idempotency_key=idempotency_key,
+                  tenant_id=tenant_id, max_attempts=max_attempts, run_after=run_after or now, cree_le=now)
+        try:
+            with s.begin_nested():
+                s.add(job)
+        except IntegrityError:  # course avec un autre producteur : la clé existe désormais
+            existant = s.execute(select(Job).where(Job.idempotency_key == idempotency_key)).scalar_one()
+            return _info(existant), False
+        return _info(job), True
 
     def reserver(self, worker_id: str, *, lease_s: int = 60, now: datetime | None = None,
                  kinds: list[str] | None = None) -> JobInfo | None:
@@ -96,11 +117,12 @@ class JobStore:
                 q = select(Job).where(pret)
                 if kinds:
                     q = q.where(Job.kind.in_(kinds))
-                job = s.execute(
-                    q.order_by(Job.run_after, Job.cree_le).limit(1).with_for_update(skip_locked=True)
-                ).scalar_one_or_none()
-                if job is None:
+                candidats = list(s.execute(
+                    q.order_by(Job.run_after, Job.cree_le).limit(FENETRE_EQUITE).with_for_update(skip_locked=True)
+                ).scalars())
+                if not candidats:
                     return None
+                job = self._choisir_equitable(s, candidats)
                 if job.statut == "running" and job.attempts >= job.max_attempts:
                     self._mort(s, job, "bail_expire", now)
                     continue
@@ -117,36 +139,77 @@ class JobStore:
                 return _info(s.get(Job, job.id))  # type: ignore[arg-type]
         return None
 
-    def prolonger(self, job_id: str, worker_id: str, *, lease_s: int = 60, now: datetime | None = None) -> bool:
+    @staticmethod
+    def _choisir_equitable(s: Session, candidats: list[Job]) -> Job:
+        """Tourniquet entre clients : le client dont la dernière prise de job est la plus ancienne passe
+        d'abord ; à égalité (ou au sein d'un client) l'ordre FIFO est conservé."""
+        clients = {c.tenant_id for c in candidats}
+        if len(clients) <= 1:
+            return candidats[0]
+        connus = [t for t in clients if t is not None]
+        derniere: dict[str | None, datetime] = {}
+        if connus:
+            derniere.update(s.execute(select(Job.tenant_id, func.max(Job.heartbeat_at))
+                                      .where(Job.tenant_id.in_(connus)).group_by(Job.tenant_id)).all())
+        derniere[None] = s.execute(select(func.max(Job.heartbeat_at)).where(Job.tenant_id.is_(None))).scalar()
+        premier: dict[str | None, int] = {}
+        for i, c in enumerate(candidats):
+            premier.setdefault(c.tenant_id, i)
+        jamais = datetime.min
+
+        def cle(t: str | None) -> tuple[datetime, int]:
+            d = derniere.get(t)
+            if d is not None and d.tzinfo is not None:
+                d = d.replace(tzinfo=None)
+            return (d or jamais, premier[t])
+
+        choisi = min(premier, key=cle)
+        return candidats[premier[choisi]]
+
+    @staticmethod
+    def _detenu(job_id: str, worker_id: str, tentative: int | None) -> Any:
+        cond = and_(Job.id == job_id, Job.locked_by == worker_id, Job.statut == "running")
+        return and_(cond, Job.attempts == tentative) if tentative is not None else cond
+
+    @staticmethod
+    def detient(s: Session, job_id: str, worker_id: str, tentative: int | None = None) -> bool:
+        """Jeton de clôture lu **dans la transaction de l'appelant** (verrou de ligne sous PostgreSQL)."""
+        q = select(Job.id).where(JobStore._detenu(job_id, worker_id, tentative))
+        if s.get_bind().dialect.name != "sqlite":
+            q = q.with_for_update()
+        return s.execute(q).scalar_one_or_none() is not None
+
+    def prolonger(self, job_id: str, worker_id: str, *, lease_s: int = 60, now: datetime | None = None,
+                  tentative: int | None = None) -> bool:
         """Battement de cœur : prolonge le bail si ce worker le détient encore."""
         now = now or maintenant()
         with self.db.transaction_systeme() as s:
             res = s.execute(
-                update(Job).where(Job.id == job_id, Job.locked_by == worker_id, Job.statut == "running")
+                update(Job).where(self._detenu(job_id, worker_id, tentative))
                 .values(locked_until=now + timedelta(seconds=lease_s), heartbeat_at=now)
                 .execution_options(synchronize_session=False)
             )
             return res.rowcount == 1
 
     def terminer(self, job_id: str, worker_id: str, resultat: dict[str, Any] | None = None,
-                 *, now: datetime | None = None) -> bool:
+                 *, now: datetime | None = None, tentative: int | None = None) -> bool:
         now = now or maintenant()
         with self.db.transaction_systeme() as s:
             res = s.execute(
-                update(Job).where(Job.id == job_id, Job.locked_by == worker_id, Job.statut == "running")
+                update(Job).where(self._detenu(job_id, worker_id, tentative))
                 .values(statut="done", resultat=resultat, termine_le=now, locked_until=None, last_error=None)
                 .execution_options(synchronize_session=False)
             )
             return res.rowcount == 1
 
     def echouer(self, job_id: str, worker_id: str, erreur: str, *, definitif: bool = False,
-                now: datetime | None = None) -> str | None:
+                now: datetime | None = None, tentative: int | None = None) -> str | None:
         """Enregistre un échec ; renvoie le nouveau statut (``pending`` ou ``dead``), ``None`` si le bail
         a été perdu entre-temps."""
         now = now or maintenant()
         with self.db.transaction_systeme() as s:
             job = s.execute(
-                select(Job).where(Job.id == job_id, Job.locked_by == worker_id, Job.statut == "running")
+                select(Job).where(self._detenu(job_id, worker_id, tentative))
             ).scalar_one_or_none()
             if job is None:
                 return None
@@ -175,14 +238,47 @@ class JobStore:
             j = s.get(Job, job_id)
             return _info(j) if j else None
 
-    def lister(self, *, statut: str | None = None, tenant_id: str | None = None, limite: int = 200) -> list[JobInfo]:
-        with self.db.transaction_systeme() as s:
-            q = select(Job).order_by(Job.cree_le).limit(limite)
+    def lister(self, *, statut: str | None = None, tenant_id: str | None = None, limite: int = 200,
+               recents: bool = False) -> list[JobInfo]:
+        """Jobs triés par création croissante ; ``recents=True`` : les ``limite`` **plus récents** (le tri
+        est fait en SQL avant la limite, D-1309), renvoyés eux aussi en ordre croissant."""
+        with self.db.session(lecture=True) as s:
+            s.info["controldone_systeme"] = True
+            q = select(Job)
             if statut:
                 q = q.where(Job.statut == statut)
             if tenant_id:
                 q = q.where(Job.tenant_id == tenant_id)
-            return [_info(j) for j in s.execute(q).scalars()]
+            if recents:
+                lignes = list(s.execute(q.order_by(Job.cree_le.desc(), Job.id.desc()).limit(limite)).scalars())
+                return [_info(j) for j in reversed(lignes)]
+            return [_info(j) for j in s.execute(q.order_by(Job.cree_le, Job.id).limit(limite)).scalars()]
+
+    def par_cle(self, idempotency_key: str) -> JobInfo | None:
+        """Job d'une clé d'idempotence (index unique) : ``traiter_lot:<client>:<lot>``…"""
+        with self.db.session(lecture=True) as s:
+            s.info["controldone_systeme"] = True
+            j = s.execute(select(Job).where(Job.idempotency_key == idempotency_key)).scalar_one_or_none()
+            return _info(j) if j else None
+
+    def compter(self, *, statut: str | None = None, avec_erreur: bool = False) -> int:
+        with self.db.session(lecture=True) as s:
+            s.info["controldone_systeme"] = True
+            q = select(func.count()).select_from(Job)
+            if statut:
+                q = q.where(Job.statut == statut)
+            if avec_erreur:
+                q = q.where(Job.attempts > 0, Job.last_error.is_not(None))
+            return int(s.execute(q).scalar() or 0)
+
+    def purger_termines(self, *, jours: int = 30, now: datetime | None = None) -> int:
+        """Supprime les jobs ``done`` terminés depuis plus de ``jours`` jours (les ``dead`` restent, pour
+        décision du fondateur). La clé d'idempotence d'un job purgé peut resservir."""
+        limite = (now or maintenant()) - timedelta(days=jours)
+        with self.db.transaction_systeme() as s:
+            res = s.execute(delete(Job).where(Job.statut == "done", Job.termine_le.is_not(None),
+                                              Job.termine_le < limite).execution_options(synchronize_session=False))
+            return int(res.rowcount or 0)
 
     def compter_par_statut(self) -> dict[str, int]:
         with self.db.transaction_systeme() as s:
