@@ -446,3 +446,34 @@ def test_battement_dans_un_fil_ne_meurt_pas(monde, monkeypatch):
     w = Worker(monde.db, worker_id="w1", handlers={"court": lambda ctx: time.sleep(0.5) or {}}, lease_s=60,
                heartbeat_s=0.1, poll_s=0.01)
     assert w.executer_un() == "done" and erreurs == []
+
+
+# --- F-14 : coffre chiffré par segments pour les gros contenus ---------------------------------------------------
+
+
+def test_f14_coffre_par_segments_memoire_et_integrite(tmp_path, cles):
+    from cryptography.fernet import Fernet
+
+    from controldone.storage import FileVault
+    from controldone.storage.vault import MAGIE_V2
+
+    v = FileVault(tmp_path / "coffre", cles)
+    contenu = os.urandom(20 * 1024 * 1024 + 123)
+    tracemalloc.start()
+    sha = v.deposer("cli_a", contenu)
+    _, pic = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert pic < 8 * 1024 * 1024, pic  # avant (Fernet d'un bloc) : environ 6 × 20 Mo
+    chemin = v._chemin("cli_a", sha, "fichiers")
+    assert chemin.read_bytes()[:4] == MAGIE_V2 and v.lire("cli_a", sha) == contenu
+    brut = chemin.read_bytes()
+    chemin.write_bytes(brut[: len(brut) - 1024 * 1024])  # segment final retiré
+    with pytest.raises(ErreurIntegrite):
+        v.lire("cli_a", sha)
+    chemin.unlink()
+    sha = v.deposer("cli_a", contenu)
+    nouvelle = Fernet.generate_key()
+    assert v.tourner_cles([nouvelle, *cles]) == 1
+    assert FileVault(tmp_path / "coffre", [nouvelle]).lire("cli_a", sha) == contenu
+    with pytest.raises(ErreurIntegrite):
+        FileVault(tmp_path / "coffre", cles).lire("cli_a", sha)

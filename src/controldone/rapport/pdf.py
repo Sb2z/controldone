@@ -9,6 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from reportlab import rl_config
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -36,6 +37,10 @@ from controldone.formatage import format_montant
 from controldone.rapport.vue import ConstatVue, DossierVue, RapportVue
 
 __all__ = ["rendre_pdf"]
+
+# Flux binaires (pas d'encodage ASCII85 en Python pur des images) : PDF ~18 % plus petit et plus rapide à produire,
+# rendu identique (D-1406). Réglage global de ReportLab, sans effet sur la validité des autres PDF produits.
+rl_config.useA85 = 0
 
 MARINE = colors.HexColor("#1d3557")
 MARINE_2 = colors.HexColor("#2f4b73")

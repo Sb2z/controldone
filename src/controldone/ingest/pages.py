@@ -10,8 +10,8 @@
 - Tableurs XLSX/ODS et CSV : une page par feuille, cellules jointes par `` | `` ligne par ligne.
 - XML : une page, texte brut conservé. Corps de courriel : une page de texte.
 
-Le travail sur les octets du fichier (analyse PDF, rendu, OCR) tourne dans un **processus séparé** avec
-limite de temps et de mémoire (``_worker``). Rien n'est persisté ici, sauf le cache disque facultatif
+Le travail sur les octets du fichier (analyse PDF, rendu, OCR) tourne dans un **processus séparé** par fichier,
+avec limite de temps et de mémoire (issu d'un forkserver préchargé ; à défaut ``_worker``). Rien n'est persisté ici, sauf le cache disque facultatif
 (clé : ``sha256 + n° page + version``).
 """
 
@@ -20,16 +20,19 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import multiprocessing
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
 from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
+from itertools import pairwise
 from pathlib import Path
 
 from controldone.ids import IdGenerator, Prefixe, nouvel_id
@@ -47,6 +50,7 @@ __all__ = [
     "extraire_pages",
     "extraire_pages_local",
     "ocr_disponible",
+    "textes_pages",
     "version_ocr",
 ]
 
@@ -163,29 +167,16 @@ def extraire_pages(
     type_mime: str | None = None,
     options: OptionsPages | None = None,
     ids: IdGenerator | None = None,
+    textes: list[PageText] | None = None,
 ) -> list[PageExtraite]:
     """``Fichier`` -> ``Page`` avec texte. Fonction pure (hors cache disque facultatif).
 
     Ne lève pas pour un fichier difficile : une page illisible porte ``qualite_texte = illisible``.
+    ``textes`` : résultat de ``textes_pages`` déjà calculé pour ce fichier (préchargement parallèle d'un lot) ;
+    seuls les identifiants de page sont alors attribués ici.
     """
-    opts = options or OptionsPages()
-    mime = type_mime or (fichier.type_mime if fichier else None)
-    if mime is None:
-        from .sniff import detecter_type
-
-        mime = detecter_type(contenu)
-    sha = fichier.sha256 if fichier else hashlib.sha256(contenu).hexdigest()
-    version = _cle_version(opts)
-    cache = CachePagesDisque(opts.cache_dir) if opts.cache_dir else None
-    textes = cache.lire(sha, version) if cache else None
     if textes is None:
-        if opts.isoler:
-            n_pages = fichier.nombre_pages if fichier and fichier.nombre_pages else None
-            textes = _extraire_isole(contenu, mime, opts, n_pages)
-        else:
-            textes = extraire_pages_local(contenu, mime, opts)
-        if cache and textes and not any("timeout" in a for p in textes for a in p.avertissements):
-            cache.ecrire(sha, version, textes)
+        textes = textes_pages(contenu, fichier=fichier, type_mime=type_mime, options=options)
     fid = fichier.id if fichier else "fic_inconnu"
     sortie = []
     for t in textes:
@@ -208,33 +199,52 @@ def extraire_pages(
     return sortie
 
 
+def textes_pages(
+    contenu: bytes,
+    *,
+    fichier: Fichier | None = None,
+    type_mime: str | None = None,
+    options: OptionsPages | None = None,
+) -> list[PageText]:
+    """Texte des pages d'un fichier (cache disque facultatif, puis processus isolé ou extraction locale).
+
+    Sans identifiant ni état partagé : peut tourner dans plusieurs fils à la fois (un processus isolé chacun)."""
+    opts = options or OptionsPages()
+    mime = type_mime or (fichier.type_mime if fichier else None)
+    if mime is None:
+        from .sniff import detecter_type
+
+        mime = detecter_type(contenu)
+    sha = fichier.sha256 if fichier else hashlib.sha256(contenu).hexdigest()
+    version = _cle_version(opts)
+    cache = CachePagesDisque(opts.cache_dir) if opts.cache_dir else None
+    textes = cache.lire(sha, version) if cache else None
+    if textes is None:
+        if opts.isoler:
+            n_pages = fichier.nombre_pages if fichier and fichier.nombre_pages else None
+            textes = _extraire_isole(contenu, mime, opts, n_pages)
+        else:
+            textes = extraire_pages_local(contenu, mime, opts)
+        if cache and textes and not any("timeout" in a for p in textes for a in p.avertissements):
+            cache.ecrire(sha, version, textes)
+    return textes
+
+
 def _extraire_isole(contenu: bytes, mime: str, opts: OptionsPages, n_pages: int | None = None) -> list[PageText]:
-    """Exécute ``extraire_pages_local`` dans un processus séparé (temps et mémoire bornés)."""
+    """Exécute ``extraire_pages_local`` dans un processus séparé (temps et mémoire bornés).
+
+    Un processus **neuf par fichier**, issu d'un forkserver préchargé (D-1402) : mêmes limites (RLIMIT_AS, délai,
+    arrêt forcé), environnement sans secrets (RS-14), sans le coût d'un nouvel interpréteur (~0,4 s par fichier).
+    Repli sur ``python -m controldone.ingest._worker`` si la plateforme n'offre pas de forkserver."""
     n_estime = n_pages or _estimer_pages(contenu, mime)
     timeout = opts.timeout_base_s + opts.timeout_par_page_s * max(1, n_estime)
-    with tempfile.TemporaryDirectory(prefix="cdo_pages_") as tmp:
-        entree = Path(tmp) / "entree.bin"
-        entree.write_bytes(contenu)
-        sortie = Path(tmp) / "sortie.json"
-        req = {"entree": str(entree), "sortie": str(sortie), "mime": mime,
-               "options": {**asdict(opts), "isoler": False, "cache_dir": None}}
-        env = {**_environnement_sans_secrets(), "OMP_THREAD_LIMIT": "1", "OPENBLAS_NUM_THREADS": "1"}
-        try:
-            proc = subprocess.run(
-                [sys.executable, "-m", "controldone.ingest._worker"],
-                input=json.dumps(req).encode(),
-                capture_output=True,
-                timeout=timeout,
-                env=env,
-                preexec_fn=_limiteur_memoire(opts.memoire_mo) if os.name == "posix" else None,
-                check=False,
-            )
-            if proc.returncode == 0 and sortie.exists():
-                data = json.loads(sortie.read_text("utf-8"))
-                return [PageText.from_dict(d) for d in data["pages"]]
-            motif = f"processus_pages_code_{proc.returncode}"
-        except subprocess.TimeoutExpired:
-            motif = "timeout"
+    options = {**asdict(opts), "isoler": False, "cache_dir": None}
+    if _FORKSERVER_DISPONIBLE:
+        donnees, motif = _executer_forkserver(contenu, mime, options, opts.memoire_mo, timeout)
+    else:
+        donnees, motif = _executer_sous_processus(contenu, mime, options, opts.memoire_mo, timeout)
+    if donnees is not None:
+        return [PageText.from_dict(d) for d in json.loads(donnees)["pages"]]
     # Échec ou délai dépassé : nouvel essai sans OCR (texte natif seulement), puis pages illisibles.
     if opts.ocr:
         pages = _extraire_isole(contenu, mime, replace(opts, ocr=False, timeout_par_page_s=5.0), n_pages)
@@ -242,6 +252,182 @@ def _extraire_isole(contenu: bytes, mime: str, opts: OptionsPages, n_pages: int 
             p.avertissements.append(f"ocr_abandonne:{motif}")
         return pages
     return [_page_illisible(i, motif) for i in range(1, max(1, n_estime) + 1)]
+
+
+def _executer_sous_processus(contenu: bytes, mime: str, options: dict, memoire_mo: int,
+                             timeout: float) -> tuple[str | None, str | None]:
+    """Processus isolé par un nouvel interpréteur (``python -m controldone.ingest._worker``)."""
+    with tempfile.TemporaryDirectory(prefix="cdo_pages_") as tmp:
+        entree = Path(tmp) / "entree.bin"
+        entree.write_bytes(contenu)
+        sortie = Path(tmp) / "sortie.json"
+        req = {"entree": str(entree), "sortie": str(sortie), "mime": mime, "options": options}
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "controldone.ingest._worker"],
+                input=json.dumps(req).encode(),
+                capture_output=True,
+                timeout=timeout,
+                env={**_environnement_sans_secrets(), **_ENV_PROCESSUS_PAGES},
+                preexec_fn=_limiteur_memoire(memoire_mo) if os.name == "posix" else None,
+                check=False,
+            )
+            if proc.returncode == 0 and sortie.exists():
+                return sortie.read_text("utf-8"), None
+            return None, f"processus_pages_code_{proc.returncode}"
+        except subprocess.TimeoutExpired:
+            return None, "timeout"
+
+
+# --- processus isolé issu d'un forkserver (D-1402) ------------------------------------------------------------
+
+#: Variables fixées dans le processus de pages : un fil par OCR (Tesseract multi-fils se dégrade sous charge).
+_ENV_PROCESSUS_PAGES = {"OMP_THREAD_LIMIT": "1", "OPENBLAS_NUM_THREADS": "1"}
+#: Modules chargés une fois dans le forkserver (code et bibliothèques seulement : aucune donnée de document).
+_PRECHARGES = ["controldone.ingest.pages", "controldone.ingest.sniff", "pdfplumber", "pypdfium2", "pytesseract",
+               "PIL.Image", "PIL.ImageStat", "openpyxl", "lxml.etree"]
+_FORKSERVER_DISPONIBLE = os.name == "posix" and "forkserver" in multiprocessing.get_all_start_methods()
+_VERROU_FS = threading.Lock()
+_PID_FS: list[int | None] = [None]  # processus qui a configuré le forkserver (un fork en hérite sans pouvoir l'utiliser)
+
+
+class _EnvironnementSansSecrets:
+    """Retire les secrets de l'environnement **C** du processus le temps de lancer le forkserver (qui hérite de
+    l'environnement C, RS-14). ``os.environ`` (Python) n'est pas modifié : les autres fils n'en voient rien."""
+
+    def __enter__(self):
+        self._retires = {k: v for k, v in os.environ.items() if _SECRETS_ENV.fullmatch(k)}
+        self._ajoutes = {k: os.environ.get(k) for k in _ENV_PROCESSUS_PAGES}
+        for k in self._retires:
+            os.unsetenv(k)
+        for k, v in _ENV_PROCESSUS_PAGES.items():
+            os.putenv(k, v)
+
+    def __exit__(self, *exc):
+        for k, v in self._retires.items():
+            os.putenv(k, v)
+        for k, v in self._ajoutes.items():
+            if v is None:
+                os.unsetenv(k)
+            else:
+                os.putenv(k, v)
+
+
+def _contexte_forkserver():
+    """Contexte ``forkserver`` dont le serveur tourne, lancé avec l'environnement sans secrets. À appeler sous
+    ``_VERROU_FS`` avant chaque ``start()`` : un serveur arrêté est relancé ici, jamais par ``start()`` avec
+    l'environnement complet."""
+    from multiprocessing import forkserver
+
+    serveur = forkserver._forkserver
+    if _PID_FS[0] != os.getpid():
+        if _PID_FS[0] is not None or serveur._forkserver_pid is not None:
+            # Processus issu d'un fork : le serveur hérité est celui du parent (``waitpid`` impossible ici).
+            serveur._forkserver_address = serveur._forkserver_alive_fd = serveur._forkserver_pid = None
+        _PID_FS[0] = os.getpid()
+    ctx = multiprocessing.get_context("forkserver")
+    ctx.set_forkserver_preload(_PRECHARGES)
+    with _EnvironnementSansSecrets():
+        serveur.ensure_running()
+    return ctx
+
+
+if _FORKSERVER_DISPONIBLE:
+    from multiprocessing import context as _mp_context
+    from multiprocessing import forkserver as _mp_forkserver
+    from multiprocessing import popen_forkserver as _mp_popen_forkserver
+    from multiprocessing import reduction as _mp_reduction
+    from multiprocessing import spawn as _mp_spawn
+    from multiprocessing import util as _mp_util
+
+    class _PopenSansMain(_mp_popen_forkserver.Popen):
+        """Lancement par le forkserver **sans** réimporter le module principal (``__main__``) du parent.
+
+        Par défaut, chaque enfant d'un forkserver ré-exécute le script ou le module principal du parent (banc,
+        serveur web, worker) : coût d'import et effets de bord à chaque fichier. Le processus de pages n'en a pas
+        besoin (sa cible est dans ce module) : les clés ``init_main_from_*`` sont retirées des données de
+        préparation. Reprend ``popen_forkserver.Popen._launch`` (CPython 3.11 à 3.13)."""
+
+        def _launch(self, process_obj):
+            prep = {k: v for k, v in _mp_spawn.get_preparation_data(process_obj._name).items()
+                    if k not in ("init_main_from_path", "init_main_from_name")}
+            buf = io.BytesIO()
+            _mp_context.set_spawning_popen(self)
+            try:
+                _mp_reduction.dump(prep, buf)
+                _mp_reduction.dump(process_obj, buf)
+            finally:
+                _mp_context.set_spawning_popen(None)
+            self.sentinel, w = _mp_forkserver.connect_to_new_process(self._fds)
+            _parent_w = os.dup(w)
+            self.finalizer = _mp_util.Finalize(self, _mp_util.close_fds, (_parent_w, self.sentinel))
+            with open(w, "wb", closefd=True) as f:
+                f.write(buf.getbuffer())
+            self.pid = _mp_forkserver.read_signed(self.sentinel)
+
+    class _ProcessusPages(_mp_context.ForkServerProcess):
+        @staticmethod
+        def _Popen(process_obj):
+            return _PopenSansMain(process_obj)
+
+
+def _processus_pages(envoi, contenu: bytes, mime: str, options: dict, memoire_mo: int, delai_s: float) -> None:
+    """Corps du processus isolé (enfant du forkserver)."""
+    import signal
+
+    try:
+        nul = os.open(os.devnull, os.O_RDWR)  # rien du document sur les sorties (comme ``capture_output``)
+        os.dup2(nul, 1)
+        os.dup2(nul, 2)
+        os.environ.update(_ENV_PROCESSUS_PAGES)
+        _limiteur_memoire(memoire_mo)()
+        signal.alarm(int(delai_s) + 30)  # garde-fou si le parent disparaît sans tuer ce processus
+        champs = set(OptionsPages.__dataclass_fields__)
+        opts = OptionsPages(**{k: v for k, v in options.items() if k in champs})
+        pages = extraire_pages_local(contenu, mime, opts)
+        envoi.send_bytes(json.dumps({"pages": [p.to_dict() for p in pages]}, ensure_ascii=False).encode("utf-8"))
+        envoi.close()
+    except BaseException:
+        os._exit(1)
+
+
+def _executer_forkserver(contenu: bytes, mime: str, options: dict, memoire_mo: int,
+                         timeout: float) -> tuple[str | None, str | None]:
+    with _VERROU_FS:
+        ctx = _contexte_forkserver()
+        recu, envoi = ctx.Pipe(duplex=False)
+        proc = _ProcessusPages(target=_processus_pages, name="cdo-pages", daemon=True,
+                                   args=(envoi, contenu, mime, options, memoire_mo, timeout))
+        # Le worker de jobs exécute le pipeline dans un processus « daemon » (jobs.handlers) : multiprocessing y
+        # refuse tout enfant parce qu'il ne les attendrait pas à la sortie. Ici l'enfant est toujours attendu ou
+        # tué avant de rendre la main (et se termine seul au-delà du délai) : on lève l'interdiction pour ce start.
+        config = multiprocessing.current_process()._config
+        daemon = config.pop("daemon", None)
+        try:
+            proc.start()
+        finally:
+            if daemon is not None:
+                config["daemon"] = daemon
+    envoi.close()
+    donnees = motif = None
+    try:
+        if recu.poll(timeout):
+            try:
+                donnees = recu.recv_bytes().decode("utf-8")
+            except (EOFError, OSError):
+                donnees = None
+        else:
+            motif = "timeout"
+    finally:
+        recu.close()
+        proc.join(5 if donnees is not None else 0.5)
+        if proc.is_alive():
+            proc.kill()
+            proc.join()
+        if donnees is None and motif is None:
+            motif = f"processus_pages_code_{proc.exitcode}"
+        proc.close()
+    return donnees, motif
 
 
 #: Variables jamais transmises au processus qui analyse les fichiers déposés (contenu hostile) : clés, secrets,
@@ -499,6 +685,16 @@ def _meilleure(natif: PageText, ocr: PageText, nb_natif: int) -> PageText:
 # --- OCR ------------------------------------------------------------------------------------------------
 
 
+def _pour_tesseract(image):
+    """Image passée à pytesseract, enregistrée en PGM/PPM (non compressé) au lieu de PNG.
+
+    pytesseract écrit l'image dans un fichier temporaire au format ``image.format`` (PNG par défaut) : l'encodage
+    PNG d'une page A4 à 300 dpi coûte ~1 s par appel Tesseract. Le PGM/PPM est sans perte comme le PNG : Tesseract
+    lit exactement les mêmes pixels (texte identique), ~0,01 s d'écriture (D-1400)."""
+    image.format = "PPM"  # mode « L » -> PGM (P5), « RGB » -> PPM (P6)
+    return image
+
+
 def _osd_rotation(image) -> int | None:
     """Rotation à appliquer (0/90/180/270) d'après l'OSD de Tesseract ; ``None`` sans verdict fiable.
 
@@ -509,7 +705,7 @@ def _osd_rotation(image) -> int | None:
     paysage = image.size[0] > image.size[1]
     for config in ("--psm 0", "--psm 0 -c min_characters_to_try=10"):
         try:
-            osd = pytesseract.image_to_osd(image, config=config, output_type=pytesseract.Output.DICT, timeout=60)
+            osd = pytesseract.image_to_osd(_pour_tesseract(image), config=config, output_type=pytesseract.Output.DICT, timeout=60)
         except Exception:
             continue
         rot = int(osd.get("rotate", 0)) % 360
@@ -522,25 +718,28 @@ def _osd_rotation(image) -> int | None:
 
 
 def _angle_inclinaison(image) -> float:
-    """Angle (degrés, sens trigonométrique) qui maximise la netteté du profil horizontal."""
-    import numpy as np
-    from PIL import Image
+    """Angle (degrés, sens trigonométrique) qui maximise la netteté du profil horizontal.
+
+    PIL seul (D-1404 : plus de numpy) : image réduite à 1000 px, binarisée (encre = 255), profil = nombre de
+    pixels d'encre par ligne, score = somme des carrés des différences entre lignes voisines (calcul exact en
+    entiers)."""
+    from PIL import Image, ImageStat
 
     petit = image.convert("L")
     w, h = petit.size
     facteur = 1000 / max(w, h)
     if facteur < 1:
         petit = petit.resize((max(1, int(w * facteur)), max(1, int(h * facteur))))
-    tableau = np.asarray(petit)
-    seuil = min(200, int(tableau.mean() * 0.8))
-    binaire = Image.fromarray(((tableau < seuil) * 255).astype("uint8"))
-    if (np.asarray(binaire) > 0).mean() < 0.002:
+    seuil = min(200, int(ImageStat.Stat(petit).mean[0] * 0.8))
+    binaire = petit.point([255 if v < seuil else 0 for v in range(256)])
+    pw, ph = binaire.size
+    if binaire.histogram()[255] < 0.002 * pw * ph:
         return 0.0
 
-    def score(angle: float) -> float:
-        r = np.asarray(binaire.rotate(angle, resample=Image.NEAREST, expand=False, fillcolor=0), dtype=np.float32)
-        profil = r.sum(axis=1)
-        return float(((profil[1:] - profil[:-1]) ** 2).sum())
+    def score(angle: float) -> int:
+        donnees = binaire.rotate(angle, resample=Image.NEAREST, expand=False, fillcolor=0).tobytes()
+        profil = [donnees.count(255, i, i + pw) for i in range(0, pw * ph, pw)]
+        return sum((b - a) ** 2 for a, b in pairwise(profil))
 
     meilleur = max((a / 2 for a in range(-10, 11)), key=score)
     fin = max((meilleur + a / 10 for a in range(-5, 6)), key=score)
@@ -550,7 +749,7 @@ def _angle_inclinaison(image) -> float:
 def _ocr_brut(image, opts: OptionsPages) -> tuple[list[Mot], float]:
     import pytesseract
 
-    data = pytesseract.image_to_data(image, lang=opts.langues, config="--psm 3",
+    data = pytesseract.image_to_data(_pour_tesseract(image), lang=opts.langues, config="--psm 3",
                                      output_type=pytesseract.Output.DICT, timeout=max(30, int(opts.timeout_par_page_s)))
     w, h = image.size
     mots: list[Mot] = []
@@ -795,10 +994,10 @@ def _page_texte_brut(contenu: bytes, source: str) -> PageText:
     texte = texte.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n")
     lignes_txt = texte.split("\n")
     n = max(1, len(lignes_txt))
+    largeur_max = max(1, max((len(x) for x in lignes_txt), default=1))  # une fois (D-1401 : était O(n²))
     lignes = []
     for r, li in enumerate(lignes_txt):
         mots = []
-        largeur_max = max(1, max((len(x) for x in lignes_txt), default=1))
         for m in re.finditer(r"\S+", li):
             mots.append(Mot(texte=m.group(), x0=m.start() / largeur_max, y0=r / n,
                             x1=min(1.0, m.end() / largeur_max), y1=(r + 1) / n))

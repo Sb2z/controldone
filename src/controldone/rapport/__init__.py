@@ -21,7 +21,7 @@ from controldone.guardrails import FormulationInterdite, check_text
 from controldone.pipeline import NonLu, ResultatDossier
 from controldone.rapport.export import ecrire_xlsx, findings_lot_json, rapport_json
 from controldone.rapport.html import rendre_html, texte_visible
-from controldone.rapport.images import rogner
+from controldone.rapport.images import rogner, vider_cache
 from controldone.rapport.pdf import rendre_pdf
 from controldone.rapport.vue import RapportVue, construire_vue
 from controldone.referentiel_io import ProfilClient
@@ -79,7 +79,10 @@ def generer_rapport(
     out.mkdir(parents=True, exist_ok=True)
     vue = construire_vue(resultats, profil, titre=titre, date_rapport=date_rapport, non_lus=non_lus)
     if images:
-        ajouter_images(vue)
+        try:
+            ajouter_images(vue)
+        finally:
+            vider_cache()  # pages rendues : ~9 Mo chacune, jamais réutilisées par un autre rapport (D-1406)
     html = rendre_html(vue)
     verifier_textes(vue, html)
     (out / "report.html").write_text(html, encoding="utf-8")

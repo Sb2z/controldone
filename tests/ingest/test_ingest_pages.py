@@ -179,3 +179,106 @@ def test_tableur_ods():
     assert f.type_mime == "application/vnd.oasis.opendocument.spreadsheet" and f.statut.value == "ok"
     pages = extraire_pages(b.getvalue(), fichier=f, options=LOCAL)
     assert [(p.page.feuille, p.page.texte) for p in pages] == [("Invoice", "Total | 12540.5")]
+
+
+# --- performance (audit final, D-1400 à D-1405) : mêmes sorties, moins de temps et de mémoire ------------------
+
+
+def test_texte_brut_long_lineaire():
+    import time
+
+    from controldone.ingest.pages import _page_texte_brut
+
+    texte = "\n".join(f"<Ligne n=\"{i}\">{'x' * (i % 70)} FICTIF</Ligne>" for i in range(20_000)).encode()
+    t0 = time.perf_counter()
+    p = _page_texte_brut(texte, "xml")
+    assert time.perf_counter() - t0 < 3.0  # était ~13 s (largeur recalculée pour chaque ligne)
+    assert len(p.lignes) == 20_000
+    largeur = max(len(x) for x in texte.decode().split("\n"))
+    m = p.lignes[-1].mots[-1]
+    assert m.x1 == min(1.0, len(p.texte.split("\n")[-1]) / largeur)
+
+
+@ocr
+def test_tesseract_recoit_un_pgm(monkeypatch):
+    import pytesseract.pytesseract as pt
+    from PIL import Image
+
+    from controldone.ingest.pages import _pour_tesseract
+
+    image = Image.new("L", (40, 20), 255)
+    assert pt.prepare(_pour_tesseract(image))[1] == "PPM"
+
+
+def test_angle_inclinaison_sans_numpy():
+    from PIL import Image, ImageDraw
+
+    from controldone.ingest.pages import _angle_inclinaison
+
+    image = Image.new("L", (1200, 1600), 255)
+    d = ImageDraw.Draw(image)
+    for y in range(100, 1500, 40):
+        d.rectangle((100, y, 1100, y + 12), fill=0)
+    assert _angle_inclinaison(image) == 0.0
+    assert abs(_angle_inclinaison(image.rotate(2.0, resample=Image.BICUBIC, fillcolor=255)) + 2.0) <= 0.2
+    assert _angle_inclinaison(Image.new("L", (800, 800), 255)) == 0.0
+
+
+def test_processus_isole_forkserver_meme_resultat_que_local():
+    contenu = fab.pdf([fab.FACTURE_COMMERCIALE, fab.LTA])
+    isole = extraire_pages(contenu, type_mime="application/pdf", options=OptionsPages(ocr=False))
+    local = extraire_pages(contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, isoler=False))
+    assert [p.texte.to_dict() for p in isole] == [p.texte.to_dict() for p in local]
+
+
+def test_processus_isole_echec_memoire():
+    contenu = fab.pdf([fab.LTA])
+    pages = extraire_pages(contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, memoire_mo=60))
+    assert pages[0].page.qualite_texte is QualiteTexte.illisible
+    assert pages[0].texte.avertissements[0].startswith("processus_pages_code_")
+
+
+def test_prechargement_parallele_identique_au_sequentiel():
+    from controldone.ids import IdGenerator
+    from controldone.ingest import Decoupeur
+    from controldone.pipeline import FichierSource
+
+    elements = [("facture.pdf", fab.pdf([fab.FACTURE_COMMERCIALE])), ("lta.pdf", fab.pdf([fab.LTA])),
+                ("dau.pdf", fab.pdf([fab.DECLARATION])), ("cii.xml", fab.cii()),
+                ("t.csv", b"MRN;Montant\n26FR000000000001A1;12540,00\n")]
+
+    def lot(precharger: bool):
+        rec = recevoir_octets(elements, ids=IdGenerator.deterministe(5))
+        sources = [FichierSource(fichier=f.fichier, contenu=f.contenu) for f in rec.fichiers]
+        dec = Decoupeur(OptionsPages(ocr=False))
+        if precharger:
+            dec.precharger(sources, 3)
+            assert all(s.textes_pages is not None for s in sources)
+        ids = IdGenerator.deterministe(9)
+        sortie = []
+        for s in sources:
+            r = dec.decouper(s, ids=ids)
+            assert s.textes_pages is None
+            sans_dates = {"cree_le", "modifie_le"}
+            sortie.append(([p.model_dump(exclude=sans_dates) for p in r.pages],
+                           [d.model_dump(exclude=sans_dates) for d in r.documents]))
+        return sortie
+
+    assert lot(True) == lot(False)
+
+
+def test_registre_libere_en_fin_de_lot():
+    from controldone.ingest import enregistrer_textes, liberer_textes, texte_positionne
+    from controldone.ingest.decoupage import _REGISTRE
+
+    contenu = fab.pdf([fab.LTA])
+    a = extraire_pages(contenu, type_mime="application/pdf", options=LOCAL)
+    b = extraire_pages(contenu, type_mime="application/pdf", options=LOCAL)  # même texte, autre lot
+    enregistrer_textes(a)
+    enregistrer_textes(b)
+    liberer_textes([p.page for p in a])
+    assert a[0].page.id not in _REGISTRE
+    assert texte_positionne(b[0].page) is b[0].texte  # le texte du lot B (clé sha) reste disponible
+    liberer_textes([p.page for p in b])
+    assert b[0].page.id not in _REGISTRE and f"sha:{b[0].page.sha256_texte}" not in _REGISTRE
+    assert texte_positionne(b[0].page).source == "inconnue"

@@ -32,7 +32,7 @@ from controldone.model import Document, Fichier, Page, PageRef
 from controldone.model.enums import MotifNonExploitable, TypeDocument
 
 from .classement import CONTINUATION, SEUIL_CONFIANCE, VERSION_CLASSIFIEUR, ClassementPage, classer_page
-from .pages import VERSION_PAGES, OptionsPages, PageExtraite, extraire_pages
+from .pages import VERSION_PAGES, OptionsPages, PageExtraite, extraire_pages, textes_pages, version_ocr
 from .reception import MIME_CORPS_COURRIEL
 from .sniff import MIME_CSV, MIME_PDF, MIME_XML
 from .structure import FicheCorrespondance, InfoStructure, analyser_contenu_structure
@@ -46,6 +46,7 @@ __all__ = [
     "decouper_fichier",
     "decouper_pages",
     "enregistrer_textes",
+    "liberer_textes",
     "texte_positionne",
 ]
 
@@ -78,6 +79,19 @@ def enregistrer_textes(pages: Iterable[PageExtraite]) -> None:
                 _REGISTRE.move_to_end(cle)
         while len(_REGISTRE) > _REGISTRE_MAX:
             _REGISTRE.popitem(last=False)
+
+
+def liberer_textes(pages: Iterable[Page]) -> None:
+    """Retire du registre les textes des pages d'un lot dont l'extraction est terminée (D-1403 : texte de document
+    en clair, ~85 Ko par page, gardé sinon jusqu'à 20 000 entrées dans un worker de longue durée). La clé
+    ``sha:`` n'est retirée que si elle désigne encore le texte de cette page (un autre lot en cours peut l'avoir
+    enregistrée pour une page de même texte)."""
+    with _VERROU:
+        for p in pages:
+            t = _REGISTRE.pop(p.id, None)
+            cle = f"sha:{p.sha256_texte}"
+            if t is not None and _REGISTRE.get(cle) is t:
+                del _REGISTRE[cle]
 
 
 def texte_positionne(page: Page) -> PageText:
@@ -267,14 +281,16 @@ def decouper_fichier(
     options: OptionsPages | None = None,
     corps_courriel: bool = False,
     fiches: Iterable[FicheCorrespondance] | None = None,
+    textes: list[PageText] | None = None,
     **_: Any,
 ) -> ResultatIngestion:
-    """Étapes 2 et 3 (§7) pour un fichier accepté : pages avec texte, classement, documents logiques."""
+    """Étapes 2 et 3 (§7) pour un fichier accepté : pages avec texte, classement, documents logiques.
+    ``textes`` : texte des pages déjà calculé (``Decoupeur.precharger``)."""
     if contenu is None:
         return ResultatIngestion(avertissements=["contenu_absent"])
     mime = fichier.type_mime
     corps = corps_courriel or mime == MIME_CORPS_COURRIEL
-    extraites = extraire_pages(contenu, fichier=fichier, options=options, ids=ids)
+    extraites = extraire_pages(contenu, fichier=fichier, options=options, ids=ids, textes=textes)
     enregistrer_textes(extraites)
     pages = [p.page for p in extraites]
     textes = {p.page.numero: p.texte for p in extraites}
@@ -333,8 +349,49 @@ class Decoupeur:
     def decouper(self, source: Any, *, ids: IdGenerator | None = None, client_id: str | None = None
                  ) -> ResultatIngestion:
         fichier: Fichier = source.fichier
-        contenu = getattr(source, "contenu", None)
-        if contenu is None and getattr(source, "chemin_local", None):
-            contenu = Path(source.chemin_local).read_bytes()
+        contenu = _contenu(source)
+        textes = getattr(source, "textes_pages", None)
+        if textes is not None:
+            source.textes_pages = None  # consommé : libéré avec le résultat du fichier
         return decouper_fichier(fichier, contenu, ids=ids, options=self.options,
-                                corps_courriel=bool(getattr(source, "corps_courriel", False)), fiches=self.fiches)
+                                corps_courriel=bool(getattr(source, "corps_courriel", False)), fiches=self.fiches,
+                                textes=textes)
+
+    def precharger(self, sources: Sequence[Any], paralleles: int) -> None:
+        """Étape 2 des fichiers d'un lot en parallèle (D-1405) : ``paralleles`` processus isolés à la fois, les plus
+        gros fichiers d'abord. Le texte de chaque fichier est posé sur sa source (``textes_pages``) ; ``decouper``
+        le consomme ensuite dans l'ordre habituel (identifiants et sortie inchangés). Sans effet hors processus
+        isolé (rendu PDF et OCR ne sont pas sûrs entre fils d'un même processus) ou pour un seul fichier ; un
+        échec laisse simplement ``decouper`` refaire le travail."""
+        if paralleles <= 1 or not self.options.isoler:
+            return
+        taches = [(s, c) for s in sources if (c := _contenu(s)) is not None and getattr(s, "fichier", None)]
+        if len(taches) < 2:
+            return
+        from concurrent.futures import ThreadPoolExecutor
+
+        version_ocr()  # mise en cache avant les fils
+        taches.sort(key=lambda t: -len(t[1]) * (t[0].fichier.nombre_pages or 1))
+
+        def _textes(tache):
+            s, contenu = tache
+            try:
+                return textes_pages(contenu, fichier=s.fichier, options=self.options)
+            except Exception:
+                return None
+
+        with ThreadPoolExecutor(min(paralleles, len(taches)), thread_name_prefix="cdo-pages") as ex:
+            for (s, _c), textes in zip(taches, ex.map(_textes, taches), strict=True):
+                if textes is not None:
+                    s.textes_pages = textes
+
+    def liberer(self, pages: Iterable[Page]) -> None:
+        """Fin de lot : textes positionnés des pages retirés du registre (``liberer_textes``)."""
+        liberer_textes(pages)
+
+
+def _contenu(source: Any) -> bytes | None:
+    contenu = getattr(source, "contenu", None)
+    if contenu is None and getattr(source, "chemin_local", None):
+        contenu = Path(source.chemin_local).read_bytes()
+    return contenu

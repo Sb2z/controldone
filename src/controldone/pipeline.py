@@ -77,6 +77,7 @@ __all__ = [
     "cle_redaction",
     "composants_par_defaut",
     "controler_lot",
+    "pages_paralleles",
     "preparer_lot",
     "traiter_lot",
 ]
@@ -164,6 +165,9 @@ class FichierSource:
     chemin_local: Path | None = None
     courriel: str | None = None
     corps_courriel: bool = False
+    #: Texte des pages déjà calculé (préchargement parallèle de l'étape 2, ``Decoupeur.precharger``), consommé
+    #: par ``decouper``.
+    textes_pages: list[Any] | None = field(default=None, repr=False)
 
 
 @dataclass
@@ -442,13 +446,50 @@ def preparer_lot(
     composants: Composants | None = None,
 ) -> LotPrepare:
     """Étapes 1 à 6 sur un lot (dossier, fichier ou liste de chemins)."""
+    comp = composants or composants_par_defaut()
+    pages: dict[str, list[Page]] = {}
+    try:
+        return _preparer_lot(source, client_profile, grilles, options=options, comp=comp, pages=pages)
+    finally:
+        # Fin de lot : les textes positionnés (registre du découpeur) ne servent qu'à l'extraction (D-1403).
+        liberer = getattr(comp.decoupeur, "liberer", None)
+        if callable(liberer):
+            liberer([p for ps in pages.values() for p in ps])
+
+
+def pages_paralleles() -> int:
+    """Nombre de fichiers d'un lot dont l'étape 2 tourne en parallèle (``CONTROLDONE_PAGES_PARALLELE`` ; défaut :
+    ``min(processeurs disponibles, 4)``). Chaque fichier en cours occupe un processus isolé (OCR : ~400 Mo)."""
+    import os
+
+    try:
+        n = int(os.environ.get("CONTROLDONE_PAGES_PARALLELE", "0"))
+    except ValueError:
+        n = 0
+    if n <= 0:
+        try:
+            cpus = len(os.sched_getaffinity(0))
+        except (AttributeError, OSError):
+            cpus = os.cpu_count() or 1
+        n = min(cpus, 4)
+    return max(1, n)
+
+
+def _preparer_lot(
+    source: Any,
+    client_profile: ProfilClient | Mapping[str, Any] | str | Path | None,
+    grilles: Sequence[GrilleTarifaire] | str | Path | None,
+    *,
+    options: OptionsPipeline | None,
+    comp: Composants,
+    pages: dict[str, list[Page]],
+) -> LotPrepare:
     debut = time.perf_counter()
     options = options or OptionsPipeline()
     profil = charger_profil_client(client_profile)
     if isinstance(grilles, str | Path):
         grilles = charger_grilles(grilles, client_id=profil.client_id)
     grilles = list(grilles or [])
-    comp = composants or composants_par_defaut()
     ids = IdGenerator.deterministe(options.seed) if options.seed is not None else IdGenerator()
     memo = options.memo
     cles: dict[str, Any] = {"reception": [], "pages": [], "classement": [], "extraction": []}
@@ -468,10 +509,15 @@ def preparer_lot(
     for s in sources:
         cles["reception"].append(_h("reception", s.fichier.sha256, profil.client_id, s.courriel))
 
-    # 2-3. pages, découpage, classement
-    pages: dict[str, list[Page]] = {}
+    # 2-3. pages, découpage, classement (étape 2 des fichiers préchargée en parallèle, D-1405)
     documents: list[Document] = []
     avertissements: list[str] = []
+    precharger = getattr(comp.decoupeur, "precharger", None)
+    if callable(precharger) and len(sources) > 1:
+        try:
+            precharger(sources, pages_paralleles())
+        except Exception as e:
+            log.warning("prechargement_pages_en_erreur exception=%s", type(e).__name__)
     for s in sources:
         if comp.decoupeur is None:
             non_lus.append(NonLu(fichier=s.fichier.chemin_relatif, motif="ingestion_indisponible"))

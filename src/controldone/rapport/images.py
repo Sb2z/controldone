@@ -12,7 +12,7 @@ import io
 import logging
 from functools import lru_cache
 
-__all__ = ["rogner", "zone_par_recherche"]
+__all__ = ["rogner", "vider_cache", "zone_par_recherche"]
 
 log = logging.getLogger("controldone.rapport.images")
 
@@ -23,7 +23,9 @@ LARGEUR_MIN = 0.6  # fraction de largeur minimale du rognage
 
 @lru_cache(maxsize=64)
 def _page_image(chemin: str, numero: int):
-    """Image PIL de la page (mise en cache) et dimensions en points."""
+    """Image PIL de la page (mise en cache) et dimensions en points.
+
+    Une page rendue pèse ~9 Mo : ``generer_rapport`` vide ce cache en fin de rapport (``vider_cache``, D-1406)."""
     import pypdfium2 as pdfium
 
     pdf = pdfium.PdfDocument(chemin)
@@ -35,6 +37,11 @@ def _page_image(chemin: str, numero: int):
     finally:
         pdf.close()
     return img, largeur, hauteur
+
+
+def vider_cache() -> None:
+    """Libère les pages rendues (images de pièces client déchiffrées) gardées par ``_page_image``."""
+    _page_image.cache_clear()
 
 
 def zone_par_recherche(chemin: str, numero: int, valeur: str) -> tuple[float, float, float, float] | None:
@@ -121,7 +128,7 @@ def rogner(
             outline=(196, 120, 0), width=3,
         )
         sortie = io.BytesIO()
-        rogne.save(sortie, format="PNG", optimize=True)
+        rogne.save(sortie, format="PNG")  # sans ``optimize`` : 3x plus rapide, même image (D-1406)
         return sortie.getvalue()
     except Exception as e:  # rendu impossible : pas d'image, jamais bloquant
         log.debug("rognage_en_erreur exception=%s", type(e).__name__)
