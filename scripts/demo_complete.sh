@@ -35,11 +35,12 @@ if [ ! -x "$PY" ]; then
   if command -v uv >/dev/null; then uv venv --python 3.11 "$VENV"; else python3.11 -m venv "$VENV" || python3 -m venv "$VENV"; fi
 fi
 if ! "$PY" -c "import controldone, fastapi, uvicorn, pdfplumber" 2>/dev/null; then
-  echo "Installation des dépendances (requirements.lock + paquet éditable)"
+  echo "Installation des dépendances (requirements.lock + paquet éditable + outils de test)"
+  # « .[dev] » : pytest et ruff aussi, pour que « make test » fonctionne après la démonstration (F-17)
   if command -v uv >/dev/null; then
-    uv pip install --python "$PY" -r requirements.lock && uv pip install --python "$PY" --no-deps -e .
+    uv pip install --python "$PY" -r requirements.lock && uv pip install --python "$PY" -e ".[dev]"
   else
-    "$PY" -m pip install -r requirements.lock && "$PY" -m pip install --no-deps -e .
+    "$PY" -m pip install -r requirements.lock && "$PY" -m pip install -e ".[dev]"
   fi
 fi
 command -v tesseract >/dev/null || echo "Avertissement : tesseract absent (OCR des scans indisponible ; apt install tesseract-ocr tesseract-ocr-fra)."

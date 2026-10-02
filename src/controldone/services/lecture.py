@@ -285,6 +285,12 @@ def _statut(code: str | None, constats: list[Constat], *, client: bool) -> tuple
         return code, code
 
 
+def hors_totaux(c: Constat) -> str | None:
+    """Motif d'exclusion des totaux inscrit à l'enregistrement par ``findings_io.constats_hors_totaux``
+    (E6 qui remplace un constat d'origine, F5 doublon d'un A4/A5/A6) ; ``None`` si le constat compte."""
+    return (c.contenu or {}).get("hors_totaux") or None
+
+
 def lister_dossiers(scope: TenantScope) -> list[DossierLigne]:
     client = scope.actor.est_client
     constats = constats_courants(scope)
@@ -295,9 +301,10 @@ def lister_dossiers(scope: TenantScope) -> list[DossierLigne]:
     for d in scope.lister(Dossier, ordre=Dossier.reference):
         cs = par_dossier.get(d.id, [])
         statut, code = _statut(d.statut_global, cs, client=client)
-        cert = sum((c.montant_en_jeu for c in cs if c.niveau == "ecart_certain" and c.statut_validation == "valide"
+        totaux = [c for c in cs if not hors_totaux(c)]  # même règle que le rapport (D-1319)
+        cert = sum((c.montant_en_jeu for c in totaux if c.niveau == "ecart_certain" and c.statut_validation == "valide"
                     and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
-        aver = sum((c.montant_en_jeu for c in cs if c.niveau == "a_verifier" and c.statut_validation != "rejete"
+        aver = sum((c.montant_en_jeu for c in totaux if c.niveau == "a_verifier" and c.statut_validation != "rejete"
                     and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
         out.append(DossierLigne(
             id=d.id, reference=d.reference or d.id, statut=statut, statut_code=code, version=d.version,

@@ -21,8 +21,13 @@ x-app: &app
     - .env.prod
   restart: unless-stopped
   read_only: true
+  # /tmp reste un petit tmpfs : téléversements, lots déchiffrés et sauvegardes passent par
+  # CONTROLDONE_TMP_DIR (/app/var/tmp, sur le volume de données — D-1305).
   tmpfs:
-    - /tmp:size=1g,mode=1777
+    - /tmp:size=256m,mode=1777
+  environment:
+    CONTROLDONE_TMP_DIR: /app/var/tmp
+    TMPDIR: /app/var/tmp
   security_opt:
     - no-new-privileges:true
   cap_drop:
@@ -63,6 +68,8 @@ services:
     <<: *app
     command: ["/app/deploy/scheduler.sh"]
     environment:
+      CONTROLDONE_TMP_DIR: /app/var/tmp   # (la fusion YAML remplace le bloc « environment » commun)
+      TMPDIR: /app/var/tmp
       BACKUP_DIR: /backups
       SCHED_BACKUP_HHMM: "${SCHED_BACKUP_HHMM:-0215}"
     volumes:

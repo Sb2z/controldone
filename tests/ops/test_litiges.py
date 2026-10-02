@@ -106,7 +106,7 @@ def test_preparer_dossier_redige_pour_le_client(monde, service):
     # relevé factuel puis modèle neutre à adapter par le client (brief juridique §1.3, §9 ; D-1315)
     assert t.startswith("RELEVÉ D'ÉCARTS ENTRE DOCUMENTS") and "MODÈLE À ADAPTER PAR LE CLIENT" in t
     assert t.index("RELEVÉ D'ÉCARTS") < t.index("MODÈLE À ADAPTER")
-    assert "Relevé d'écarts entre documents — factures n° FT-a-001" == d.objet
+    assert d.objet == "Relevé d'écarts entre documents — factures n° FT-a-001"
     assert "Différence calculée" in t and "Valeur facturée" in t and "Valeur de comparaison" in t
     assert "vérifier ces montants et nous indiquer si vous émettrez un avoir" in t
     assert "page 1" in t and "1 240,00" in t and "1 000,00" in t and "MRN 26FR00000000000001" in t
