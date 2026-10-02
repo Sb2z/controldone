@@ -17,7 +17,7 @@ from controldone.guardrails import AVERTISSEMENT
 from controldone.pipeline import ResultatDossier
 from controldone.rapport.vue import VERSION_RAPPORT, RapportVue
 
-__all__ = ["SCHEMA_RAPPORT", "ecrire_xlsx", "findings_lot_json", "rapport_json"]
+__all__ = ["SCHEMA_RAPPORT", "ecrire_xlsx", "findings_lot_json", "neutraliser_formules", "rapport_json"]
 
 SCHEMA_RAPPORT = f"controldone.rapport/{VERSION_RAPPORT}"
 COLONNES_REVUE = ["Décision (valider / rejeter / à vérifier)", "Commentaire", "Relu par", "Date de revue"]
@@ -61,6 +61,21 @@ def findings_lot_json(resultats: Sequence[ResultatDossier]) -> list[dict[str, An
     return [json.loads(findings_json(rd.findings)) for rd in resultats]
 
 
+def neutraliser_formules(ws: Any) -> int:
+    """Toute cellule texte qu'openpyxl a typée « formule » (chaîne commençant par « = ») redevient du texte.
+
+    Les valeurs viennent des documents déposés (numéros, références, noms de fichiers) : une chaîne
+    ``=HYPERLINK(…)`` ou ``=cmd|…`` ne doit jamais s'exécuter dans le tableur de celui qui ouvre l'export
+    (injection de formule, revue de sécurité RS-11). La valeur affichée reste identique."""
+    n = 0
+    for ligne in ws.iter_rows():
+        for cellule in ligne:
+            if cellule.data_type == "f" and isinstance(cellule.value, str):
+                cellule.data_type = "s"
+                n += 1
+    return n
+
+
 def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: Path | str) -> Path:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
@@ -91,6 +106,7 @@ def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: P
                 for r in range(2, len(lignes) + 2):
                     ws.cell(row=r, column=i).fill = revue_fill
         ws.freeze_panes = "A2"
+        neutraliser_formules(ws)
         return ws
 
     synth = [["Client", vue.client], ["Période", vue.periode], ["Offre", vue.offre], ["Date", vue.date],

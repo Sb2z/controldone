@@ -78,6 +78,8 @@ TD = TypeDocument.declaration
 # --- confiance -------------------------------------------------------------------------------------------
 
 CONF_NATIF = 0.97
+#: Ligne de taxation lue sans son code (sous-ligne d'un tableau condensé) : jamais une valeur sûre.
+PLAFOND_CODE_ILLISIBLE = 0.85
 CONF_NATIF_FAIBLE = 0.93
 #: Confiance d'un sens de taux déduit (§8.7).
 CONF_SENS_DERIVE = 0.85
@@ -531,6 +533,8 @@ class _Lecteur:
         self.codes_colonnes: dict[str, tuple[str, _Span]] = {}
         self.vs_articles: dict[int, ValeurSourcee] = {}
         self._reparees: set[str] = set()
+        #: Lignes de taxation dont le code n'a pas été lu (sous-ligne d'un tableau condensé) : plafonnées.
+        self._codes_illisibles: list[TaxationDeclaration] = []
 
     # --- chargement -------------------------------------------------------------------------------------
 
@@ -1024,6 +1028,10 @@ class _Lecteur:
         self._indices()
         self._sens_taux_derive()
         self._coherence()
+        for tx in self._codes_illisibles:
+            for vs in (tx.base_montant, tx.base_quantite, tx.taux, tx.montant):
+                if vs is not None and vs.confiance > PLAFOND_CODE_ILLISIBLE:
+                    self._remplacer(vs, PLAFOND_CODE_ILLISIBLE)
         return self.champs
 
     # --- en-tête -----------------------------------------------------------------------------------------------
@@ -1295,6 +1303,8 @@ class _Lecteur:
                     if motif.search(cl):
                         return cat
         if code:
+            if code not in _CATEGORIES_CODE and re.fullmatch(r"X\d{2}", code):
+                return CategorieTaxe.autre_taxe  # codes X.. : accises et taxes nationales (« autres taxes »)
             return _CATEGORIES_CODE.get(code, CategorieTaxe.inconnue)
         return CategorieTaxe.inconnue
 
@@ -1484,9 +1494,9 @@ class _Lecteur:
                 break
             cells = self._cellules(ligne, cols, types)
             code_sp = cells.get("type")
-            code_lu = _code_taxe(code_sp) if code_sp else None
+            code_lu = _code_taxe(code_sp, ligne) if code_sp else None
             if code_lu is None:
-                code_lu = _code_taxe(_Span(ligne.toks[:1]))
+                code_lu = _code_taxe(_Span(ligne.toks[:1]), ligne)
             if code_lu is None:
                 if _parasite(ligne):
                     continue
@@ -1648,7 +1658,7 @@ class _Lecteur:
                     re.match(r"(?i)\s*total\b", ligne.texte):
                 break
             cells = self._cellules(ligne, cols, types)
-            if _ligne_article(cells) or (cells.get("code") and _code_taxe(cells["code"])):
+            if _ligne_article(cells) or (cells.get("code") and _code_taxe(cells["code"], ligne)):
                 manquees = 0
                 derniere = idx + 1
                 continue
@@ -1698,12 +1708,22 @@ class _Lecteur:
                 if "masse_nette" in cells:
                     art.masse_nette = self._vs(f"{base}.masse_nette", self.v_masse(cells["masse_nette"]), unite="KGM")
                 self._taxes_condensees(courant, cells)
-            elif cells.get("code") and _code_taxe(cells["code"]) is not None:
+            elif cells.get("code") and _code_taxe(cells["code"], ligne) is not None:
                 # sous-ligne de taxe (« A30 Droit antidumping … ») rattachée à l'article courant
-                code_lu = _code_taxe(cells["code"])
+                code_lu = _code_taxe(cells["code"], ligne)
                 lib = cells.get("designation")
                 self._taxation(courant, code_lu, lib.texte if lib else None, cells.get("base_droits"),
                                cells.get("taux_droits"), cells.get("droits"), cells.get("statut"))
+            elif courant is not None and _sous_ligne_taxe_sans_code(cells):
+                # Sous-ligne de taxe dont le code est illisible (« x1 Droit spécifique … 623 LTR 0,12 74,76 ») :
+                # la ligne existe et son montant est imprimé ; l'ignorer rendrait la somme des lignes lues
+                # incomplète sans le signaler. Catégorie d'après le libellé seulement (sinon ``inconnue``),
+                # confiance plafonnée (jamais une valeur clé d'un écart certain).
+                lib = cells.get("designation")
+                self._taxation(courant, None, lib.texte if lib else None, cells.get("base_droits"),
+                               cells.get("taux_droits"), cells.get("droits"), cells.get("statut"))
+                self._codes_illisibles.append(self.champs.taxations[-1])
+                self.avertissements.append("code_taxe_illisible")
 
     def _taxes_condensees(self, article: ValeurSourcee | None, cells: dict[str, _Span]) -> None:
         """Colonnes droits / TVA d'un tableau condensé : une taxation par groupe de colonnes imprimé."""
@@ -2012,6 +2032,24 @@ _TYPES_ARTICLES = {"numero": "entier", "code": "code", "designation": "texte", "
                    "base_tva": "nombre", "tva": "nombre", "statut": "mp"}
 
 
+_LIBELLE_TAXE_RE = re.compile(r"\b(droits?|tax\w*|dut(y|ies)|accises?|excise|dumping|specifique|specific)\b")
+
+
+def _sous_ligne_taxe_sans_code(cells: dict[str, _Span]) -> bool:
+    """Sous-ligne d'un tableau condensé sans code de taxe lisible mais qui est une ligne de taxe : montant
+    décimal dans la colonne des droits, et libellé de taxe ou base en quantité (« 623 LTR »)."""
+    if _ligne_article(cells):
+        return False
+    droits = cells.get("droits")
+    if droits is None or droits.vide or not _DECIMAL_RE.search(droits.texte):
+        return False
+    lib = cells.get("designation")
+    if lib is not None and _LIBELLE_TAXE_RE.search(sans_accents(lib.texte).lower()):
+        return True
+    base = cells.get("base_droits")
+    return base is not None and re.search(r"\d\s?[A-Za-z]{2,4}\b", base.texte) is not None
+
+
 def _parasite(ligne: _Ligne) -> bool:
     """Ligne de débris d'OCR (filets, ponctuation) : aucun mot de trois caractères alphanumériques."""
     return not any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne.toks)
@@ -2093,9 +2131,9 @@ def _compatible(t: _Tok, genre: str) -> bool:
     if genre == "pays":
         return bool(re.fullmatch(r"[A-Z]{2}", s))
     if genre == "code":
-        return bool(re.fullmatch(r"[0-9OIlSB .]{6,12}", s)) or bool(_CODE_TAXE_RE.match(s))
+        return bool(re.fullmatch(r"[0-9OIlSB .]{6,12}", s)) or bool(_CODE_TAXE_RE.match(s)) or _code_minuscule(s)
     if genre == "code_taxe":
-        return bool(_CODE_TAXE_RE.match(s))
+        return bool(_CODE_TAXE_RE.match(s)) or _code_minuscule(s)
     if genre == "mp":
         return bool(re.fullmatch(r"[A-Z0-9©]", s))
     if genre == "entier":
@@ -2104,18 +2142,30 @@ def _compatible(t: _Tok, genre: str) -> bool:
     return bool(re.search(r"\d", s)) or s in ("%", "…") or bool(re.fullmatch(r"[A-Za-z/().]{1,12}", s))
 
 
-def _code_taxe(span: _Span) -> _Lu | None:
+def _code_minuscule(s: str) -> bool:
+    """Code de taxe dont la lettre a été lue en minuscule par l'OCR (« x01 »)."""
+    return bool(re.fullmatch(r"[a-z][0-9OoIlSZ]{2}", s)) and bool(re.search(r"\d", s))
+
+
+def _code_taxe(span: _Span, ligne: _Ligne | None = None) -> _Lu | None:
     if span is None or span.vide:
         return None
     t = span.toks[0]
     s = t.t.strip(".,:;()_|—-~'‘’\"°*«»[]{}")
+    if _code_minuscule(s) and ligne is not None and _DECIMAL_RE.search(ligne.texte):
+        # OCR : lettre du code lue en minuscule (« x01 » pour X01, droit spécifique). Seulement sur une ligne
+        # qui porte un montant décimal, et avec au moins un chiffre lu tel quel : un débris d'OCR (« s00 »
+        # sans montant) n'ouvre pas une ligne de taxation.
+        s_lu, s = s, s[0].upper() + s[1:]
+    else:
+        s_lu = s
     if not _CODE_TAXE_RE.match(s) or s in _MOTS_NON_TAXE:
         return None
     corr = s[0] + s[1:].upper().translate(_VERS_CHIFFRE) if re.fullmatch(r"[A-Z][0-9OoIlSZ]{2}", s) else s
     if not re.fullmatch(r"[A-Z]\d{2}|[A-Z]{3}", corr):
         return None
-    pen = 0.0 if corr == s else 0.12
-    return _Lu(span.depuis([t]), s, corr, pen)
+    pen = 0.0 if corr == s_lu else 0.12
+    return _Lu(span.depuis([t]), s_lu, corr, pen)
 
 
 def _ligne_article(cells: dict[str, _Span]) -> bool:
