@@ -11,6 +11,7 @@ par la BCE (``eurofxref-hist.csv``, format large : une colonne par devise) ; voi
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import zipfile
 from bisect import bisect_right
@@ -31,6 +32,17 @@ class TableTauxReference:
         self._taux: dict[str, list[tuple[date, Decimal]]] = {
             dev.upper(): sorted(par_date.items()) for dev, par_date in (taux or {}).items()
         }
+        self._empreinte: str | None = None
+
+    def empreinte(self) -> str:
+        """Empreinte du contenu de la table (clé d'idempotence de l'étape 7), calculée une fois."""
+        if self._empreinte is None:
+            h = hashlib.sha256()
+            for dev in sorted(self._taux):
+                for d, t in self._taux[dev]:
+                    h.update(f"{dev}|{d.isoformat()}|{t}\n".encode())
+            self._empreinte = h.hexdigest()
+        return self._empreinte
 
     @classmethod
     def depuis_csv(cls, chemin: Path | str) -> TableTauxReference:

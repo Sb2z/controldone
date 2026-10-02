@@ -120,7 +120,9 @@ def appliquer_regles_dedoublonnage(resultats: list[ResultatControle], ctx: Contr
     - R1 : C3 constate pour une unité (facture transitaire × déclaration) -> C4 de la même unité
       ``non_applicable`` (raison ``couvert_par_autre_controle``) ;
     - R2 : C1, C2 et C3 ou C4 tous évaluables pour l'unité -> le constat C5 de l'unité garde son niveau
-      mais ``montant_en_jeu = None`` et raison ``doublon_composantes`` (``montant_brut`` conservé) ;
+      mais ``montant_en_jeu = None`` et raison ``doublon_composantes`` (``montant_brut`` conservé) ; sinon
+      C5 ne porte que le **résidu** non porté par les constats C1–C4 de l'unité (``None`` si le résidu est
+      dans ``T_DEBOURS`` ou change de signe), D-1206 ;
     - R3 : A6 constate pour une unité -> A5 de la même unité ``non_applicable`` ;
     - R4 : G4 constate un excédent sur une facture transitaire et G5 constate le même excédent
       (à ``S_DEBOURS`` près) sur la même facture -> G5 ``montant_en_jeu = None``, ``doublon_composantes``.
@@ -146,13 +148,29 @@ def appliquer_regles_dedoublonnage(resultats: list[ResultatControle], ctx: Contr
             r = _neutraliser(r, RaisonCode.couvert_par_autre_controle, "A6")
         elif r.controle_id == "C5" and r.constat is not None and r.constat.montant_en_jeu is not None:
             tva_ok = evaluable("C3", r.unite) or evaluable("C4", r.unite)
+            c = r.constat
+            assert c.montant_en_jeu is not None
             if evaluable("C1", r.unite) and evaluable("C2", r.unite) and tva_ok:
-                c = r.constat
+                residu: Decimal | None = None
+            else:
+                # Une composante n'est pas évaluable : C5 est le seul porteur du montant **non porté** par
+                # les composantes constatées (§12 C5, §8.6 « pas de double comptage », D-1206).
+                portes = [
+                    x.constat.montant_en_jeu
+                    for cid in ("C1", "C2", "C3", "C4")
+                    for x in par_unite.get((cid, r.unite), [])
+                    if x.constat is not None and x.constat.montant_en_jeu is not None
+                ]
+                residu = c.montant_en_jeu - sum(portes, Decimal(0)) if portes else c.montant_en_jeu
+                tol = r.tolerance_appliquee if r.tolerance_appliquee is not None else Decimal("0.05")
+                if (residu > 0) != (c.montant_en_jeu > 0) or abs(residu) <= tol:
+                    residu = None
+            if residu != c.montant_en_jeu:
                 nouveau = _reconstruire_constat(
                     c,
-                    montant_en_jeu=None,
+                    montant_en_jeu=residu,
                     montant_brut=c.montant_brut if c.montant_brut is not None else c.montant_en_jeu,
-                    sens=None,
+                    sens=c.sens if residu is not None else None,
                     raisons=_avec_raisons(c, RaisonCode.doublon_composantes),
                 )
                 r = _reconstruire_resultat(r, constat=nouveau)

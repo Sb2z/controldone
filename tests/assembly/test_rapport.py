@@ -104,7 +104,7 @@ def test_exports_json_et_xlsx(demo):
     assert data["donnees_fictives"] is True and data["avertissement"] == AVERTISSEMENT
     assert len(data["dossiers"]) == 3
     findings = json.loads(demo.findings.read_text(encoding="utf-8"))
-    assert isinstance(findings, list) and all(f["schema"] == "controldone.findings/1.0.0" for f in findings)
+    assert isinstance(findings, list) and all(f["schema"] == "controldone.findings/1.1.0" for f in findings)
     from openpyxl import load_workbook
 
     wb = load_workbook(demo.xlsx)

@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from controldone import SCHEMA_VERSION, VERSION_MOTEUR, VERSION_REGLES
 from controldone.controls.specs import get_spec
+from controldone.findings_io import constats_hors_totaux
 from controldone.formatage import format_montant, format_nombre
 from controldone.guardrails import AVERTISSEMENT, PHRASE_RENVOI
 from controldone.model.documents import Document
@@ -201,6 +202,8 @@ class ConstatVue:
     dossier_reference: str
     bloque: bool = False
     statut_validation: str = "propose"
+    #: Motif d'exclusion des totaux (``remplace_par_e6``, ``doublon_documentaire``), D-1202 ; sinon ``None``.
+    hors_totaux: str | None = None
 
 
 @dataclass
@@ -353,6 +356,13 @@ def _preuve_vue(p: Preuve, rd: ResultatDossier) -> PreuveVue:
     )
 
 
+#: Mention publiée à la place du libellé d'un constat bloqué (§3.2) : HTML, PDF, JSON (D-1205).
+LIBELLE_RETENU = (
+    "Libellé retenu pour relecture avant publication (formulation à revoir) ; les valeurs comparées "
+    "figurent ci-dessous."
+)
+
+
 def _constat_vue(c: Constat, r, rd: ResultatDossier) -> ConstatVue:
     spec = get_spec(c.controle_id)
     codes = [x for x in c.raisons if not (c.renvoi and x in (RaisonCode.renvoi_reglementaire,
@@ -361,10 +371,7 @@ def _constat_vue(c: Constat, r, rd: ResultatDossier) -> ConstatVue:
         codes = [x for x in codes if x is not RaisonCode.controle_signal_seulement]
     raisons = [RAISON_LIBELLES.get(x, x.value) for x in codes]
     bloque = c.motif_blocage is not None
-    libelle = c.libelle if not bloque else (
-        "Libellé retenu pour relecture avant publication (formulation à revoir) ; les valeurs comparées "
-        "figurent ci-dessous."
-    )
+    libelle = c.libelle if not bloque else LIBELLE_RETENU
     action = c.prochaine_action if not bloque else ""
     if c.renvoi and PHRASE_RENVOI not in libelle and PHRASE_RENVOI not in action:
         action = (action + " " + PHRASE_RENVOI).strip()
@@ -480,10 +487,13 @@ def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVu
             faible=lien.force is ForceLien.faible,
         ))
     constats, resultats = [], []
+    exclus = constats_hors_totaux(rd.resultats)
     for r in rd.resultats:
         spec = get_spec(r.controle_id)
         if r.constat is not None:
-            constats.append(_constat_vue(r.constat, r, rd))
+            cv = _constat_vue(r.constat, r, rd)
+            cv.hors_totaux = exclus.get(r.constat.id)
+            constats.append(cv)
         resultats.append(ResultatVue(
             controle_id=r.controle_id + (f" ({r.sous_controle})" if r.sous_controle else ""),
             libelle=spec.libelle, resultat=LIBELLES_OUTCOME[r.outcome], resultat_code=r.outcome.value,
@@ -492,9 +502,9 @@ def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVu
         ))
     ordre_niveau = {"ecart_certain": 0, "a_verifier": 1}
     constats.sort(key=lambda c: (c.renvoi, ordre_niveau.get(c.niveau_code, 2), -(c.montant_valeur or 0), c.controle_id))
-    cert = sum((c.montant_valeur for c in constats if c.niveau_code == "ecart_certain"
+    cert = sum((c.montant_valeur for c in constats if c.niveau_code == "ecart_certain" and not c.hors_totaux
                 and c.nature_code == "recouvrable" and c.montant_valeur and c.montant_valeur > 0), Decimal(0))
-    aver = sum((c.montant_valeur for c in constats if c.niveau_code == "a_verifier"
+    aver = sum((c.montant_valeur for c in constats if c.niveau_code == "a_verifier" and not c.hors_totaux
                 and c.nature_code == "recouvrable" and c.montant_valeur and c.montant_valeur > 0), Decimal(0))
     raisons = Counter(r for c in constats for r in c.raisons)
     fc0 = fcs[0] if fcs else None
@@ -560,12 +570,14 @@ def construire_vue(
         return sum((c.montant_valeur for c in constats if filtre(c) and c.montant_valeur is not None), Decimal(0))
 
     def rec_cert(c):
-        return c.nature_code == "recouvrable" and c.niveau_code == "ecart_certain" and (c.montant_valeur or 0) > 0
+        return (c.nature_code == "recouvrable" and c.niveau_code == "ecart_certain" and not c.hors_totaux
+                and (c.montant_valeur or 0) > 0)
 
     def rec_aver(c):
-        return c.nature_code == "recouvrable" and c.niveau_code == "a_verifier" and (c.montant_valeur or 0) > 0
+        return (c.nature_code == "recouvrable" and c.niveau_code == "a_verifier" and not c.hors_totaux
+                and (c.montant_valeur or 0) > 0)
 
-    doc_c = [c for c in constats if c.nature_code == "ecart_documentaire"]
+    doc_c = [c for c in constats if c.nature_code == "ecart_documentaire" and not c.hors_totaux]
     calc_c = [c for c in constats if c.nature_code == "arithmetique_declaration"]
     renvois = [c for c in constats if c.renvoi or c.nature_code == "renvoi"]
     abs_doc = sum((abs(c.montant_valeur) for c in doc_c if c.montant_valeur is not None), Decimal(0))

@@ -4,12 +4,17 @@ Bail (``locked_until``) prolongé par un battement de cœur dans un fil séparé
 d'échec (30 s × 2^(n-1), plafond 1 h) ; ``dead`` après 5 essais (alerte au fondateur) ; arrêt propre sur
 SIGTERM/SIGINT : le job en cours se termine, aucun nouveau job n'est pris. Si le processus est tué, le
 bail expire et un autre worker reprend le job (les handlers sont idempotents).
+
+Battement de cœur (D-1303) : une erreur de la base (« database is locked »…) est journalisée et le
+battement réessaie au tick suivant ; le bail n'est déclaré perdu que si la ligne n'est plus détenue
+(``rowcount == 0``) ou si aucun renouvellement n'a réussi pendant ``lease_s - heartbeat_s`` secondes. Le
+handler voit alors ``ctx.bail_perdu`` et ``ctx.exiger_bail(session)`` refuse la validation de ses résultats
+(jeton ``locked_by`` + ``attempts``) : deux workers ne valident jamais le même job.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib
 import logging
 import os
 import signal
@@ -22,7 +27,7 @@ from typing import Any
 
 from controldone.jobs.journal import configurer_journaux, evenement
 from controldone.jobs.metriques import METRIQUES
-from controldone.jobs.registre import HANDLERS, ErreurDefinitive, Handler, JobContext
+from controldone.jobs.registre import HANDLERS, BailPerdu, ErreurDefinitive, Handler, JobContext, charger_handlers
 from controldone.storage.coltypes import maintenant
 from controldone.storage.db import Database
 from controldone.storage.file_jobs import JobInfo, JobStore
@@ -104,31 +109,54 @@ class Worker:
 
         fini = threading.Event()
         perdu = threading.Event()
+        verrou = threading.Lock()
+        dernier_ok = [time.monotonic()]
+        tentative = job.attempts
 
         def battre() -> bool:
-            ok = self.store.prolonger(job.id, self.worker_id, lease_s=self.lease_s, now=self.horloge())
-            if not ok:
-                perdu.set()
-            return ok
+            """Renouvelle le bail ; ``False`` seulement si le bail est perdu. Une erreur de base est
+            journalisée puis retentée au battement suivant (jamais propagée au fil ni au handler)."""
+            if perdu.is_set():
+                return False
+            with verrou:
+                try:
+                    ok = self.store.prolonger(job.id, self.worker_id, lease_s=self.lease_s, now=self.horloge(),
+                                              tentative=tentative)
+                except Exception as exc:
+                    evenement(log, "battement_echec", logging.WARNING, erreur=type(exc).__name__, **champs)
+                    if time.monotonic() - dernier_ok[0] >= max(self.heartbeat_s, self.lease_s - self.heartbeat_s):
+                        perdu.set()  # le bail a pu expirer : on cesse d'agir pour ce job
+                        evenement(log, "bail_perdu", logging.WARNING, motif="renouvellement_impossible", **champs)
+                        return False
+                    return True
+                if ok:
+                    dernier_ok[0] = time.monotonic()
+                else:
+                    perdu.set()
+                    evenement(log, "bail_perdu", logging.WARNING, **champs)
+                return ok
 
         def coeur() -> None:
             while not fini.wait(self.heartbeat_s):
                 if not battre():
-                    evenement(log, "bail_perdu", logging.WARNING, **champs)
                     return
 
         fil = threading.Thread(target=coeur, name=f"heartbeat-{job.id}", daemon=True)
         fil.start()
         debut = time.perf_counter()
-        ctx = JobContext(job=job, db=self.db, heartbeat=battre, services=self.services)
+        ctx = JobContext(job=job, db=self.db, heartbeat=battre, services=self.services, perdu=perdu,
+                         worker_id=self.worker_id)
         try:
             resultat = fn(ctx)
+        except BailPerdu:
+            statut, erreur = "perdu", "bail_perdu"
         except ErreurDefinitive as exc:
             statut = self.store.echouer(job.id, self.worker_id, _code_erreur(exc), definitif=True,
-                                        now=self.horloge()) or "perdu"
+                                        now=self.horloge(), tentative=tentative) or "perdu"
             erreur = _code_erreur(exc)
         except Exception as exc:
-            statut = self.store.echouer(job.id, self.worker_id, _code_erreur(exc), now=self.horloge()) or "perdu"
+            statut = self.store.echouer(job.id, self.worker_id, _code_erreur(exc), now=self.horloge(),
+                                        tentative=tentative) or "perdu"
             erreur = _code_erreur(exc)
         else:
             erreur = None
@@ -136,7 +164,7 @@ class Worker:
                 statut = "perdu"
             else:
                 ok = self.store.terminer(job.id, self.worker_id, resultat if isinstance(resultat, dict) else None,
-                                         now=self.horloge())
+                                         now=self.horloge(), tentative=tentative)
                 statut = "done" if ok else "perdu"
         finally:
             fini.set()
@@ -169,22 +197,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m controldone.jobs.worker")
     parser.add_argument("--once", action="store_true", help="traiter les jobs prêts puis s'arrêter")
     parser.add_argument("--worker-id", default=None)
-    parser.add_argument("--lease", type=int, default=int(os.environ.get("CONTROLDONE_JOB_LEASE_S", "120")))
-    parser.add_argument("--poll", type=float, default=float(os.environ.get("CONTROLDONE_JOB_POLL_S", "2")))
+    from controldone.config import get_settings
+
+    reglages = get_settings()
+    parser.add_argument("--lease", type=int, default=reglages.job_lease_s)
+    parser.add_argument("--poll", type=float, default=reglages.job_poll_s)
     parser.add_argument("--kinds", default=None, help="liste de kinds séparés par des virgules")
     parser.add_argument("--init-schema", action="store_true", help="créer les tables manquantes (dev)")
     args = parser.parse_args(argv)
-    configurer_journaux(os.environ.get("CONTROLDONE_LOG_LEVEL", "INFO"))
-
-    import controldone.jobs.handlers  # noqa: F401  (enregistre les handlers intégrés)
-
-    # Handlers de l'exploitation (agents, litiges, connecteurs), s'ils sont installés.
-    for module in ("controldone.agents.jobs", "controldone.litiges.jobs", "controldone.connecteurs.jobs",
-                   "controldone.referentiel.jobs"):
-        try:
-            importlib.import_module(module)
-        except ImportError:  # pragma: no cover
-            log.warning("handlers indisponibles : %s", module)
+    configurer_journaux(reglages.log_level)
+    reglages.appliquer_repertoire_temporaire()
+    charger_handlers()  # liste unique, partagée avec le worker intégré du web (D-1302)
     from controldone.storage.vault import FileVault
 
     db = Database()
@@ -204,4 +227,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
+    # Exécuté comme ``python -m`` : passer par le module importé (sinon ``ErreurTemporaire`` existerait en
+    # deux exemplaires, ``__main__`` et ``controldone.jobs.worker``, et ``_code_erreur`` ne la reconnaîtrait pas).
+    from controldone.jobs.worker import main as _main
+
+    raise SystemExit(_main())

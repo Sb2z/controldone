@@ -326,3 +326,17 @@ def test_classer_nature(libelle, nature):
 
 def test_classer_nature_inconnue():
     assert classer_nature("Ouverture de dossier") is None
+
+
+def test_consensus_mrn_deterministe_a_egalite_de_votes():
+    # F6 / D-1208 : à égalité de votes, le caractère de la lecture la plus fréquente, quel que soit l'ordre
+    import itertools
+
+    from controldone.extract.deterministe.facture_transitaire import consensus_lectures
+
+    membres = ["26FRAAAAAAAAAAAA01", "26FRAAAAAAAAAAAB01", "26FRAAAAAAAAAAAC01"]
+    compte = {membres[0]: 1, membres[1]: 1, membres[2]: 1}
+    resultats = {consensus_lectures(list(p), compte, membres[1]) for p in itertools.permutations(membres)}
+    assert resultats == {"26FRAAAAAAAAAAAB01"}
+    compte[membres[2]] = 2
+    assert consensus_lectures(membres, compte, membres[1]) == "26FRAAAAAAAAAAAC01"

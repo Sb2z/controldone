@@ -114,6 +114,11 @@ def _lire_noyau(noyau: str, separateur_decimal: str | None, sans_decimales: bool
         return None
 
 
+def _est_devise(mot: str) -> bool:
+    """Code ISO 4217 en capitales (« EUR ») ou symbole monétaire seul."""
+    return bool(re.fullmatch(r"[A-Z]{3}|[€$£¥₩]", mot))
+
+
 def _signe_negatif(avant: str, apres: str) -> bool:
     """Signe imprimé : parenthèses englobantes, moins avant (éventuellement devant la devise) ou après."""
     a, p = avant.rstrip(), apres.lstrip()
@@ -126,6 +131,15 @@ def _signe_negatif(avant: str, apres: str) -> bool:
     # Moins avant : « -1 234 », « - 12 », « -€12 », « EUR -12 » ; pas « 10-20 » (plage).
     m = re.search(r"(^|[^\d])[-−–]\s*[A-Za-z€$£¥₩]{0,4}\s*$", a)
     if m:
+        # Tiret isolé entre espaces après un mot ou un nombre : séparateur (« Frais de dossier - 45,00 »,
+        # « Ligne 3 - 1 234,56 »), sauf si ce mot est une devise (« EUR - 12 », D-1209).
+        tiret = a[m.start(0) + len(m.group(1)):]
+        devant = a[: m.start(0) + len(m.group(1))]
+        isole = re.match(r"[-−–]\s", tiret) is not None and devant.endswith((" ", "\t", "\u00a0", "\u202f"))
+        if isole:
+            mot = re.search(r"(\S+)\s*$", devant)
+            if mot is not None and re.search(r"[0-9A-Za-zÀ-ÿ]$", mot.group(1)) and not _est_devise(mot.group(1)):
+                return False
         return True
     # Moins après : « 1 234,56- », « 12,00 EUR- ».
     return bool(re.match(r"^[A-Za-z€$£¥₩\s]{0,5}[-−–](?!\s*\d)", p))

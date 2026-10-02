@@ -92,6 +92,17 @@ def mrn_prefixe(x: str | None) -> str:
     return norm_ref(x)[:15]
 
 
+#: Classes de confusion OCR (caractères souvent pris l'un pour l'autre) : 0/O/Q/D, 1/I/L, 4/A, 5/S, 8/B, 2/Z, 6/G.
+CONFUSION_OCR = str.maketrans({"0": "O", "Q": "O", "D": "O", "1": "I", "L": "I", "4": "A", "5": "S", "8": "B",
+                               "2": "Z", "6": "G"})
+
+
+def cle_confusion_ocr(x: str | None) -> str:
+    """Forme ``norm_ref`` où chaque caractère est remplacé par le représentant de sa classe de confusion OCR :
+    deux lectures d'une même référence qui ne diffèrent que par ces confusions ont la même clé."""
+    return norm_ref(x).translate(CONFUSION_OCR)
+
+
 def mrn_egaux(x: str | None, y: str | None) -> bool:
     """Comparaison des MRN sur le préfixe stable (§8.4)."""
     a, b = mrn_prefixe(x), mrn_prefixe(y)

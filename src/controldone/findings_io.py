@@ -27,7 +27,7 @@ from controldone.model.base import Modele, verifier_schema
 from controldone.model.champs import chemin_relatif
 from controldone.model.documents import Document, Fichier
 from controldone.model.dossier import Dossier
-from controldone.model.enums import Outcome, RaisonCode, StatutGlobal, StatutValidation
+from controldone.model.enums import NatureMontant, Outcome, RaisonCode, StatutGlobal, StatutValidation
 from controldone.model.resultats import Execution, ResultatControle
 
 __all__ = [
@@ -42,15 +42,17 @@ __all__ = [
     "FindingsPreuve",
     "FindingsResultat",
     "FindingsValeur",
+    "constats_hors_totaux",
     "construire_findings",
     "ecrire_findings",
     "findings_json",
+    "findings_json_rejeu",
     "lire_findings",
     "statut_global_depuis_resultats",
 ]
 
 NOM_SCHEMA_FINDINGS = "controldone.findings"
-VERSION_FINDINGS = "1.0.0"
+VERSION_FINDINGS = "1.1.0"
 SCHEMA_FINDINGS = f"{NOM_SCHEMA_FINDINGS}/{VERSION_FINDINGS}"
 
 
@@ -131,6 +133,8 @@ class FindingsConstat(Modele):
     montant_brut: str | None = None
     autres_dossiers: list[str] = Field(default_factory=list)
     motif_blocage: str | None = None
+    #: E6 : constat d'origine dont ce constat remplace le montant dans les totaux (§14 E6, D-1202).
+    remplace_constat_id: str | None = None
 
 
 class Findings(Modele):
@@ -150,6 +154,42 @@ class Findings(Modele):
         return self.model_dump(mode="json", by_alias=True)
 
 
+def constats_hors_totaux(resultats: Iterable[ResultatControle]) -> dict[str, str]:
+    """Constats à exclure des **totaux** (jamais de la liste des constats), avec le motif (D-1202) :
+
+    - ``remplace_par_e6`` : un constat E6 (avoir partiel) porte le reste à recouvrer et **remplace** le
+      montant de l'écart d'origine dans les totaux (§14 E6) ;
+    - ``doublon_documentaire`` : un F5 (même facture commerciale sur plusieurs déclarations) qui porte le
+      même écart de valeur, sur la même facture commerciale, qu'un A4/A5/A6 du dossier : l'écart n'est
+      compté qu'une fois dans « Écarts de valeur entre documents » (§18.3).
+
+    Règle unique pour tout agrégateur (rapport, tableau de bord) : les montants par constat sont inchangés.
+    """
+    rs = [r for r in resultats if r.constat is not None]
+    exclus: dict[str, str] = {}
+    for r in rs:
+        if r.controle_id == "E6" and r.details.get("remplace_constat_id"):
+            exclus[str(r.details["remplace_constat_id"])] = "remplace_par_e6"
+    documentaires = [
+        r for r in rs
+        if r.controle_id in ("A4", "A5", "A6") and r.constat is not None and r.constat.montant_en_jeu is not None
+        and r.constat.nature_montant is NatureMontant.ecart_documentaire
+    ]
+    for r in rs:
+        c = r.constat
+        if r.controle_id != "F5" or c is None or c.montant_en_jeu is None:
+            continue
+        for a in documentaires:
+            ca = a.constat
+            assert ca is not None and ca.montant_en_jeu is not None
+            if abs(ca.montant_en_jeu) == abs(c.montant_en_jeu) and set(ca.documents_concernes) & set(
+                c.documents_concernes
+            ):
+                exclus.setdefault(c.id, "doublon_documentaire")
+                break
+    return exclus
+
+
 def statut_global_depuis_resultats(
     resultats: Iterable[ResultatControle], *, valides_seulement: bool = False
 ) -> StatutGlobal:
@@ -161,6 +201,9 @@ def statut_global_depuis_resultats(
     Un dossier dont un contrôle C, A4 ou A5 est ``non_verifiable`` ne peut pas être ``conforme``.
     """
     rs = list(resultats)
+    # Aucun résultat ou un contrôle en erreur interne : impossible de conclure, jamais « conforme » (P8).
+    if not rs:
+        return StatutGlobal.a_verifier
     if any(r.controle_id == "P5" and r.details.get("non_concerne") for r in rs):
         return StatutGlobal.non_concerne
     if any(r.controle_id == "P1" and r.outcome.est_constat for r in rs):
@@ -182,8 +225,13 @@ def statut_global_depuis_resultats(
         return StatutGlobal.a_verifier
     bloquant = any(
         r.outcome is Outcome.non_verifiable
-        and (r.controle_id.startswith("C") or r.controle_id in ("A4", "A5"))
-        and r.raison_code is not RaisonCode.document_manquant
+        and (
+            r.raison_code is RaisonCode.erreur_interne
+            or (
+                (r.controle_id.startswith("C") or r.controle_id in ("A4", "A5"))
+                and r.raison_code is not RaisonCode.document_manquant
+            )
+        )
         for r in rs
     )
     if bloquant:
@@ -281,6 +329,7 @@ def construire_findings(
                 montant_brut=_dec(c.montant_brut),
                 autres_dossiers=list(c.autres_dossiers),
                 motif_blocage=c.motif_blocage,
+                remplace_constat_id=r.details.get("remplace_constat_id") if r.controle_id == "E6" else None,
             )
         )
     statut = statut_global or statut_global_depuis_resultats(rs)
@@ -314,6 +363,15 @@ def construire_findings(
 def findings_json(findings: Findings) -> str:
     """JSON déterministe (ordre des champs du modèle, indentation 2, UTF-8)."""
     return json.dumps(findings.vers_dict(), ensure_ascii=False, indent=2) + "\n"
+
+
+def findings_json_rejeu(findings: Findings) -> str:
+    """Forme de comparaison d'un rejeu (§6.2.12 « identiques octet pour octet, hors horodatages ») :
+    ``execution.duree_s`` est une mesure d'horloge, assimilée aux horodatages et retirée (D-1204).
+    ``findings.json`` garde ``duree_s`` (Annexe C)."""
+    d = findings.vers_dict()
+    d["execution"].pop("duree_s", None)
+    return json.dumps(d, ensure_ascii=False, indent=2) + "\n"
 
 
 def ecrire_findings(findings: Findings, chemin: Path | str) -> Path:

@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from controldone.config import env
+
 import base64
 import logging
 import os
@@ -42,7 +44,7 @@ _FICHIER_DEV = "dev_master.key"
 
 
 def mode_execution() -> str:
-    mode = os.environ.get("CONTROLDONE_ENV", "dev").strip().lower()
+    mode = env("CONTROLDONE_ENV", "dev").strip().lower()
     return mode if mode in ("dev", "test", "prod") else "prod"  # valeur inconnue : le plus strict
 
 
@@ -64,7 +66,7 @@ def _valider(cle: str) -> bytes:
 def charger_cles_maitresses(*, mode: str | None = None, data_dir: Path | str | None = None) -> list[bytes]:
     """Clés maîtresses (la première est la clé courante)."""
     mode = mode or mode_execution()
-    brut = os.environ.get("CONTROLDONE_MASTER_KEY", "").strip()
+    brut = env("CONTROLDONE_MASTER_KEY", "").strip()
     if brut:
         return [_valider(c) for c in brut.split(",") if c.strip()]
     if mode == "prod":
