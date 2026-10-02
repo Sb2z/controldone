@@ -13,25 +13,18 @@
 
 from __future__ import annotations
 
-import io
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
-from xml.sax.saxutils import escape
 
 from controldone.auth.roles import Acteur, Action, Role
-from controldone.formatage import format_montant
-from controldone.guardrails import AVERTISSEMENT, check_text
-from controldone.ids import Prefixe, nouvel_id
-from controldone.model.dossier import Dossier as DossierModele
 from controldone.model.enums import Composante, StatutEcart
-from controldone.model.recouvrement import ErreurTransition, PieceRecouvrement, Reclamation
-from controldone.outbox import FileSortante, TypeAction
+from controldone.model.recouvrement import ErreurTransition, PieceRecouvrement
 from controldone.rapport.vue import LIBELLES_COMPOSANTE
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide, exiger
 from controldone.storage.erreurs import AccesRefuse
-from controldone.storage.models import Constat, Dossier, Ecart, Entite, EvenementRecouvrement, Transitaire
+from controldone.storage.models import Constat, Dossier, Ecart, EvenementRecouvrement, Transitaire
 from controldone.storage.scope import TenantScope
 
 __all__ = ["LIBELLES_STATUT_ECART", "LigneRegistre", "declarer_envoi", "enregistrer_avoir", "preparer_dossier",
@@ -151,121 +144,18 @@ def enregistrer_avoir(scope: TenantScope, ecart_id: str, montant: Decimal, refer
 # --- dossier de réclamation (§17.3) ---------------------------------------------------------------------
 
 
-def _texte(entite: Entite | None, transitaire: Transitaire, lignes: list[LigneRegistre], factures: list[str]) -> str:
-    total = sum((x.reste for x in lignes), Decimal(0))
-    exp = entite.raison_sociale if entite else "[raison sociale de votre société]"
-    tva = f" — TVA {entite.tva}" if entite and entite.tva else ""
-    objet = "Demande d'avoir — factures n° " + (", ".join(factures) or "[à compléter]")
-    corps = [
-        f"Expéditeur : {exp}{tva}",
-        f"Destinataire : {transitaire.nom}",
-        f"Objet : {objet}",
-        "",
-        "Madame, Monsieur,",
-        "",
-        "Nous avons rapproché vos factures des déclarations en douane correspondantes. Pour les lignes "
-        "ci-dessous, le montant refacturé diffère du montant de référence indiqué sur les documents :",
-        "",
-    ]
-    for x in lignes:
-        corps.append(f"- Dossier {x.dossier_reference or x.dossier_id} — MRN {x.mrn or '—'} — {x.composante} : "
-                     f"écart constaté {format_montant(x.reste, 'EUR')}")
-    corps += [
-        "",
-        f"Total des écarts constatés : {format_montant(total, 'EUR')}.",
-        "",
-        "Nous vous remercions de bien vouloir vérifier ces éléments et, le cas échéant, émettre un avoir "
-        "correspondant. Les pièces justificatives (extraits des documents) sont jointes.",
-        "",
-        "Nous restons à votre disposition pour tout échange.",
-        "",
-        "[Nom, fonction et signature]",
-    ]
-    return "\n".join(corps)
-
-
-def _pdf(texte: str, lignes: list[LigneRegistre]) -> bytes:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-    from controldone.rapport.pdf import _polices
-
-    r, b, _i, _m = _polices()
-    base = ParagraphStyle("b", fontName=r, fontSize=9.5, leading=13)
-    petit = ParagraphStyle("p", parent=base, fontSize=7.5, leading=10, textColor=colors.HexColor("#555555"))
-    tampon = io.BytesIO()
-    doc = SimpleDocTemplate(tampon, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=20 * mm,
-                            bottomMargin=20 * mm, title="Demande d'avoir", author="", creator="")
-    story: list[Any] = []
-    for ligne in texte.split("\n"):
-        if ligne.startswith("- "):
-            continue
-        story.append(Paragraph(escape(ligne) or "&nbsp;", base))
-    donnees = [["Dossier", "MRN", "Composante", "Montant initial", "Déjà crédité", "Écart demandé"]]
-    for x in lignes:
-        donnees.append([x.dossier_reference or "—", x.mrn or "—", x.composante, format_montant(x.montant_initial, "EUR"),
-                        format_montant(x.montant_credite, "EUR"), format_montant(x.reste, "EUR")])
-    t = Table(donnees, repeatRows=1, colWidths=[28 * mm, 40 * mm, 34 * mm, 22 * mm, 22 * mm, 24 * mm])
-    t.setStyle(TableStyle([("FONT", (0, 0), (-1, -1), r, 7.5), ("FONT", (0, 0), (-1, 0), b, 7.5),
-                           ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.black),
-                           ("ALIGN", (3, 0), (-1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story += [Spacer(1, 6 * mm), t, Spacer(1, 8 * mm), Paragraph(escape(AVERTISSEMENT), petit)]
-    doc.build(story)
-    return tampon.getvalue()
-
-
 def preparer_dossier(plateforme: Plateforme, fondateur: Acteur, tenant_id: str, transitaire_id: str) -> str:
-    """Prépare le dossier de réclamation d'un transitaire (écarts certains validés, ouverts) et le propose
-    dans la file des sorties ; renvoie l'identifiant de l'action."""
+    """Prépare **et valide** (décision du fondateur) le dossier de demande d'avoir d'un transitaire, rédigé au
+    nom du client par ``controldone.litiges`` (D-600, D-601) ; le brouillon ``reclamation_dossier`` attend
+    ensuite l'approbation dans la file de validation (mise à disposition du client). Renvoie l'action."""
+    from controldone.litiges import ServiceLitiges
+
     if fondateur.role is not Role.fondateur:
         raise Interdit("préparation réservée au fondateur")
-    with plateforme.db.operateur(fondateur) as op:
-        scope = op.client(tenant_id, "préparation d'un dossier de réclamation")
-        transitaire = scope.obtenir(Transitaire, transitaire_id)
-        entites = scope.lister(Entite, ordre=Entite.raison_sociale)
-        entite = entites[0] if entites else None
-        lignes = [x for x in registre(scope) if x.transitaire_id == transitaire_id and x.statut_code == "ouvert"
-                  and x.niveau == "ecart_certain"]
-        if not lignes:
-            raise RequeteInvalide("aucun écart certain validé et ouvert pour ce transitaire")
-        factures = sorted({ref for x in lignes for ref in _factures_ft(scope, x)})
-        texte = _texte(entite, transitaire, lignes, factures)
-        if check_text(texte):
-            raise RequeteInvalide("le texte du dossier contient une formulation interdite")
-        pdf = _pdf(texte, lignes)
-        ref_pdf = plateforme.vault.deposer(tenant_id, pdf)
-        ref_txt = plateforme.vault.deposer(tenant_id, (texte + "\n\n" + AVERTISSEMENT + "\n").encode("utf-8"))
-        total = sum((x.reste for x in lignes), Decimal(0))
-        rec = Reclamation(id=nouvel_id(Prefixe.reclamation), client_id=tenant_id, transitaire_id=transitaire_id,
-                          entite_id=entite.id if entite else None,
-                          dossier_ids=sorted({x.dossier_id for x in lignes if x.dossier_id}),
-                          ecart_ids=[x.id for x in lignes], objet=texte.split("\n")[2][len("Objet : "):],
-                          total_demande=total)
-        scope.enregistrer_reclamation(rec)
-        nom = transitaire.nom
-    payload = {
-        "objet": f"Dossier de réclamation prêt — {nom}",
-        "corps": texte,
-        "destinataires": [],
-        "pieces": [{"format": "pdf", "ref": ref_pdf, "nom": "demande_avoir.pdf"},
-                   {"format": "txt", "ref": ref_txt, "nom": "demande_avoir.txt"}],
-        "reclamation_id": rec.id,
-        "total_eur": str(total),
-    }
-    action = FileSortante(plateforme.db).proposer(TypeAction.reclamation_dossier, payload, fondateur,
-                                                  tenant_id=tenant_id, idempotency_key=f"reclamation:{rec.id}")
-    return action.id
-
-
-def _factures_ft(scope: TenantScope, ligne: LigneRegistre) -> list[str]:
-    if not ligne.dossier_id:
-        return []
+    service = ServiceLitiges(plateforme.db, vault=plateforme.vault)
     try:
-        d = DossierModele.model_validate(scope.obtenir(Dossier, ligne.dossier_id).contenu)
-    except AccesRefuse:
-        return []
-    return list(d.cles.num_facture_transitaire)
-
+        d = service.preparer(fondateur, tenant_id, transitaire_id)
+    except ValueError as exc:
+        raise RequeteInvalide("aucun écart validé à demander pour ce transitaire") from exc
+    d = service.valider(fondateur, tenant_id, d.id)
+    return d.outbox_mise_a_disposition or ""

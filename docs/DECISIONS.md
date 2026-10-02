@@ -478,3 +478,59 @@ Numérotation D-600 et suivantes. Détails : `docs/AGENTS.md`, `docs/REFERENTIEL
 
 - **Choix** : interface `ClientPA` (lecture des factures mises à disposition du client par **sa** PA) et bouchon `ClientPAFictif` ; chaque facture devient un lot (canal `api`) et un job `controle_avant_paiement` (traitement puis, s'il y a des écarts certains recouvrables non rejetés, brouillon `statut_litige_pa` proposant au **client** le statut « en litige » avec le motif chiffré). **ControlDOne n'est pas une plateforme agréée** (SPEC §21.2) : il ne transmet aucun statut ; le client décide et l'applique dans sa PA. « Refusée » n'est jamais proposé (réservé aux motifs de la norme, `docs/recherche/einvoice.md`).
 - **Limite** : la liste des statuts de cycle de vie (dont « en litige ») vient de sources non officielles du brief ; à confirmer sur XP Z12-012 avant tout branchement réel.
+
+# Web, API, MCP
+
+Numérotation D-500 et suivantes. Code : `src/controldone/web/`, `src/controldone/api/`, `src/controldone/services/`,
+`src/controldone/mcp_server.py` ; documentation : `docs/API.md`, `docs/MCP.md` ; tests : `tests/web/`.
+
+## D-500 — Couche de services commune
+
+- **Choix** : `controldone.services` porte la logique partagée par l'interface web, l'API REST et le serveur MCP (dépôt, lectures, décisions du fondateur, publication, recouvrement, administration, base de démonstration) ; aucune requête SQL hors de `storage` (test d'architecture inchangé). Les routes ne font que lire le formulaire, ouvrir le bon périmètre et rendre.
+- **Client** : toujours celui de l'acteur authentifié (session ou clé d'API), jamais un paramètre. Le fondateur désigne un client dans l'URL (`/admin/clients/<id>/…`), mais chaque ouverture passe par `OperatorScope.client` avec un motif (audit `acces_admin`). Une page de dossier = un accès tracé : vignettes et extraits de preuve y sont intégrés (`data:` PNG) plutôt que servis par des requêtes séparées qui multiplieraient les entrées d'audit.
+- **SQLite** : un périmètre ouvert par `op.client` tient le verrou d'écriture ; les appels qui ouvrent leur propre transaction (file des tâches, file des sorties, comptes) sont faits après la sortie du bloc (sinon attente de 30 s).
+
+## D-501 — Rendu serveur, CSS maison, CSP stricte
+
+- **Choix** : Jinja2 (échappement automatique, `StrictUndefined`), une feuille `static/app.css` et un petit `static/app.js` facultatif ; aucune ressource externe, aucun script ni style en ligne (`Content-Security-Policy: default-src 'self'; img-src 'self' data:; …`) : les jauges utilisent des classes de largeur (`w-0` … `w-100`) plutôt qu'un attribut `style`. Pages lisibles sans JavaScript (rafraîchissement d'un lot par `<meta refresh>`), imprimables (`@media print`), adaptées au téléphone.
+- **Documentation de l'API** : `/api/v1/docs` est rendue par le serveur à partir du schéma OpenAPI (Swagger UI et ReDoc chargent des scripts depuis un CDN : écartés).
+- **Fichiers déposés** : jamais rendus ; téléchargement en pièce jointe, `application/octet-stream` (sauf PDF), `nosniff`. Le rapport HTML (gabarit maison, sans script) peut s'afficher sous `default-src 'none'; style-src 'unsafe-inline'; img-src data:`.
+
+## D-502 — Connexion en deux étapes, session, CSRF
+
+- **Choix** : `auth.service` gagne `verifier_mot_de_passe_compte`, `verifier_second_facteur` et `acteur_client` (ajouts ; `authentifier` inchangée). Après le mot de passe du fondateur, un jeton signé de 5 minutes (cookie `cd_2fa`) porte seulement l'identifiant ; la session n'est émise qu'avec le code TOTP (anti-rejeu existant). Limitation : 10 tentatives / 5 min par IP, 5 par compte (et par compte pour le second facteur).
+- **CSRF** : jeton `auth.jetons.jeton_csrf` lié à la session sur chaque formulaire POST ; avant connexion, lié à un identifiant de pré-session (cookie `HttpOnly`). Messages flash dans un cookie signé de 60 s (jamais un secret : mot de passe provisoire et clé d'API sont affichés dans la réponse même, une seule fois).
+- **Cookies** : `parametres_cookie` (production : `__Host-`, `Secure`, `SameSite=Strict`) ; HSTS si HTTPS déclaré (`--https`) ou schéma `https`.
+
+## D-503 — Limites de dépôt
+
+- **Choix** : lecture bornée de chaque fichier transmis (au-delà de 50 Mo, le contenu n'est pas conservé : métadonnées et motif `trop_gros` seulement), refus global au-delà de 500 Mo par dépôt, puis `ingest.reception.recevoir_octets` (archives, types, doublons). Un intergiciel ASGI coupe tout corps au-delà de 2 Mo (516 Mo pour les chemins de dépôt), `Content-Length` absent ou mensonger compris (413). Un dépôt sans fichier exploitable donne un lot `en_erreur` sans tâche.
+
+## D-504 — Corrections et recontrôle
+
+- **Choix** : table append-only `corrections` (`CorrectionValeur`, ajout de schéma rétrocompatible) ; `TenantScope.appliquer_correction` remplace la feuille par une `ValeurSourcee` `saisie_humaine` (confiance 1,0, `remplace` = ancienne valeur), conserve l'ancienne valeur complète dans la correction, incrémente `Dossier.version` ; le job `recontroler_dossier` relance les contrôles purs sur l'instantané en base (grilles validées, entités, transitaires, autres dossiers du client), sans relire les fichiers. Confirmer une valeur douteuse = la ressaisir à l'identique.
+- **Versions** : les résultats et constats d'une version antérieure restent en base ; les vues ne montrent que ceux de la version courante. Correctif de `enregistrer_resultats` : la version du dossier est mise à jour sur un résultat ou un constat existant ; la validation déjà donnée est conservée **seulement** si le niveau et le montant sont inchangés, sinon le constat est de nouveau proposé.
+- **Limite** : un recontrôle déclenché par une autre correction peut faire revenir en « écart certain » un constat rétrogradé (D-505) : il repasse alors en « proposé » et doit être revalidé.
+
+## D-505 — Décisions du fondateur sur un constat (§7.7)
+
+- **Choix** : valider (publie ; un constat `recouvrable` positif ouvre l'écart à recouvrer, identifiant `litiges.id_ecart`), rejeter (motif obligatoire), rétrograder un écart certain en « à vérifier » (motif obligatoire ; nouvelle raison `retrograde_par_fondateur`, ajout d'énumération rétrocompatible ; le constat reste proposé). **Aucune route de promotion** : un « à vérifier » ne devient « écart certain » que par recontrôle après correction ou confirmation de la valeur. `TenantScope.retrograder_constat` exige `valider_constat`.
+- **File de validation** : constats proposés de tous les clients (ordre §7.7 : écarts certains par montant décroissant, à vérifier, renvois), avec les deux valeurs, la tolérance et les extraits de page ; actions sortantes en brouillon (approuver, refuser avec motif, corriger puis approuver) ; points d'attention (documents non reconnus, rattachements faibles).
+
+## D-506 — Publication et mise à disposition
+
+- **Choix** : « Publier le rapport » reconstitue depuis la base les `ResultatDossier` du client en retirant tout constat non validé (statut global recalculé sur les seuls constats validés), génère HTML/PDF/JSON par `rapport.generer_rapport` (garde-fous sur le texte visible), range les fichiers chiffrés dans le coffre du client et propose une action `rapport_publication`. Approuver une action `rapport_publication` ou `reclamation_dossier` l'« envoie » aussitôt par `ExpediteurFichier` : c'est la mise à disposition dans l'espace du client (un rôle client ne voit que les actions `envoye` de son client). Rien n'est jamais envoyé à un transitaire. Aucune table ajoutée : les références des pièces sont dans le contenu de l'action.
+- **Dossier de réclamation** : délégué à `controldone.litiges.ServiceLitiges` (D-600, D-601) — le bouton du fondateur prépare puis valide le dossier, et le brouillon `reclamation_dossier` attend l'approbation. Le registre du client (`/espace/recouvrement`, API `/litiges`) agit au niveau des écarts (§17.1 : réclamation envoyée, avoir reçu) ; le statut d'un dossier de demande d'avoir se recalcule depuis ses écarts au prochain avoir traité par le service des litiges.
+
+## D-507 — Clés d'API dans le périmètre client
+
+- **Choix** : un acteur issu d'une clé d'API (`api:<clé>`) n'est membre d'aucun client ; `TenantScope` vérifie alors que la clé appartient au client, n'est pas révoquée et porte le même rôle (correctif minimal, la vérification d'appartenance des comptes est inchangée). Erreur d'accès indistincte (`404 {"detail": "introuvable"}`) ; `403` seulement pour une action interdite au rôle de la clé (ex. dépôt avec une clé lecteur).
+- **Factures électroniques** (`POST /api/v1/einvoices`) : Factur-X (PDF portant le XML embarqué), UBL ou CII reconnus par signature ; dépôt d'un lot `api` marqué `avant_paiement` puis `traiter_lot`. Le branchement à une plateforme agréée et la proposition de statut « en litige » relèvent de `controldone.connecteurs` (D-631).
+
+## D-508 — Serveur MCP
+
+- **Choix** : SDK installé en version 2 (`mcp.server.mcpserver.MCPServer` ; `mcp.server.fastmcp` n'existe plus), transport stdio ; clé d'API dans `CONTROLDONE_MCP_API_KEY` ; fonctions des outils dans `OutilsControldone` (testables sans transport). Descriptions et réponses : écarts factuels, pas un avis juridique ; textes des documents renvoyés comme données (`donnees_documents`). Dépôt depuis un chemin local : liens symboliques refusés, 500 fichiers au plus, limites de dépôt, répertoire restreint par `CONTROLDONE_MCP_RACINE`.
+
+## D-509 — Démonstration
+
+- **Choix** : `controldone init-demo` crée le compte fondateur (mot de passe et secret TOTP affichés une fois, stockés haché/chiffré), deux clients **fictifs** (`reglages.demo` → bandeau « DONNÉES FICTIVES » sur chaque page), leurs comptes, entités, transitaires et grilles validées, puis dépose les dossiers de `controldone.demo` par le service de dépôt et exécute le vrai worker. Pour illustrer la publication : écarts certains du premier client validés, rapport publié, dossier de réclamation en attente d'approbation, une réclamation déclarée envoyée ; tout reste à valider pour le second. `controldone serve` lance un worker dans un fil d'exécution (démonstration ; en production : `--sans-worker` et `python -m controldone.jobs.worker`). `make serve-demo` utilise `var/demo_web/`.

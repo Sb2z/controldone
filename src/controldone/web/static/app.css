@@ -278,3 +278,15 @@ pre.corps { white-space: pre-wrap; background: var(--fond); border: 1px solid va
   .bandeau-demo { background: none; border: 1px solid #000; }
   .pied { border-top: 1px solid #000; }
 }
+.document-tete > div { flex: 1 1 320px; min-width: 0; }
+.document-tete > .petit-lien { flex: 0 0 auto; }
+@media (max-width: 560px) {
+  .entete-int { padding: .5rem .75rem; }
+  .nav { order: 3; flex: 1 1 100%; }
+  .nav ul { overflow-x: auto; flex-wrap: nowrap; }
+  .compte { width: auto; flex: 1; justify-content: flex-end; gap: .5rem; }
+  .compte .role { display: none; }
+  .titre-dossier { flex-direction: column; }
+  .imprimer { display: none; }
+}
+.donnees tbody th a { white-space: nowrap; }

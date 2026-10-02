@@ -45,7 +45,7 @@
   {% for s in sorties %}
     <li><span class="badge {{ 'b-valide' if s.statut.value == 'envoye' else ('b-rejete' if s.statut.value == 'refuse' else 'b-propose') }}">{{ {"brouillon": "À approuver", "approuve": "Approuvé", "corrige": "Corrigé", "refuse": "Refusé", "envoye": "Mis à disposition"}[s.statut.value] }}</span>
       {{ libelles_sortie.get(s.kind.value, s.kind.value) }} — {{ s.payload_effectif.get("objet", "") }} <span class="discret">{{ s.cree_le|date }}</span>
-      {% for p in s.payload_effectif.get("pieces", []) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ p.format }}">{{ p.format|upper }}</a>{% endfor %}</li>
+      {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</li>
   {% endfor %}
   </ul>
   {% else %}<p class="vide">Aucune publication.</p>{% endif %}

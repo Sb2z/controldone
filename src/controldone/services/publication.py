@@ -22,6 +22,7 @@ from typing import Any
 
 from controldone.auth.roles import Acteur, Role
 from controldone.findings_io import construire_findings, statut_global_depuis_resultats
+from controldone.guardrails import AVERTISSEMENT
 from controldone.model.documents import Fichier as FichierModele
 from controldone.model.dossier import Dossier as DossierModele
 from controldone.model.enums import StatutFichier
@@ -203,11 +204,31 @@ def piece(plateforme: Plateforme, acteur: Acteur, action_id: str, fmt: str,
         raise AccesRefuse("introuvable ou hors périmètre")
     if acteur.est_client and (a.tenant_id != acteur.tenant_id or a.statut is not StatutAction.envoye):
         raise AccesRefuse("introuvable ou hors périmètre")
-    for p in a.payload_effectif.get("pieces") or []:
+    payload = a.payload_effectif
+    for p in payload.get("pieces") or []:
         if isinstance(p, dict) and p.get("format") == fmt and p.get("ref"):
             contenu = plateforme.vault.lire(a.tenant_id, p["ref"])
             return contenu, FORMATS[fmt][0], p.get("nom") or FORMATS[fmt][1]
+        # pièces du service des litiges : « coffre:<sha256> » (PDF du dossier de demande d'avoir)
+        if isinstance(p, str) and p.startswith("coffre:") and fmt == "pdf":
+            return plateforme.vault.lire(a.tenant_id, p[len("coffre:"):]), FORMATS["pdf"][0], "demande_avoir.pdf"
+    if fmt == "txt" and a.kind is TypeAction.reclamation_dossier and payload.get("corps"):
+        texte = str(payload["corps"]) + "\n\n" + AVERTISSEMENT + "\n"
+        return texte.encode("utf-8"), FORMATS["txt"][0], "demande_avoir.txt"
     raise AccesRefuse("introuvable ou hors périmètre")
+
+
+def formats_disponibles(action: Any) -> list[str]:
+    """Formats téléchargeables d'une action (rapport : pdf/html/json ; dossier de réclamation : pdf/txt)."""
+    out = []
+    for p in action.payload_effectif.get("pieces") or []:
+        if isinstance(p, dict) and p.get("format"):
+            out.append(p["format"])
+        elif isinstance(p, str) and p.startswith("coffre:"):
+            out.append("pdf")
+    if action.kind is TypeAction.reclamation_dossier and action.payload_effectif.get("corps"):
+        out.append("txt")
+    return list(dict.fromkeys(out))
 
 
 def actions_client(plateforme: Plateforme, acteur: Acteur, kind: TypeAction) -> list[Any]:

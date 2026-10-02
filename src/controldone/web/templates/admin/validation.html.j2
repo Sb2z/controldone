@@ -28,7 +28,7 @@
     </header>
     {% if s.motif_blocage %}<p class="alerte-ligne">Bloqué par les garde-fous : {{ s.motif_blocage }}</p>{% endif %}
     <pre class="corps">{{ s.payload.get("corps", "") }}</pre>
-    {% if s.payload.get("pieces") %}<p>Pièces : {% for p in s.payload.get("pieces") %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ p.format }}">{{ p.nom }}</a>{% endfor %}</p>{% endif %}
+    {% if formats(s) %}<p>Pièces : {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</p>{% endif %}
     <div class="decisions">
       <form method="post" action="/admin/sorties/{{ s.id }}/approuver" class="decision">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
         <button type="submit" class="btn btn-principal">Approuver</button></form>

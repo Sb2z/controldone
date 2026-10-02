@@ -7,7 +7,15 @@ from __future__ import annotations
 import warnings
 
 import pytest
-from aides_web import CLE_MAITRESSE, MDP_FONDATEUR, SECRET_SESSION, Modele, Monde, construire_monde, plateforme
+from aides_web import (
+    CLE_MAITRESSE,
+    MDP_FONDATEUR,
+    SECRET_SESSION,
+    Modele,
+    Monde,
+    construire_monde,
+    plateforme,
+)
 
 from controldone.auth.cles_api import creer_cle_api
 from controldone.auth.roles import Acteur, Role
@@ -55,6 +63,13 @@ def _modele(tmp_path_factory) -> Modele:
                 "constat_valide": [c.id for c in s.lister(Constat) if c.statut_validation == "valide"],
                 "ecart": [e.id for e in s.lister(Ecart)],
             }
+    from controldone.outbox import FileSortante
+
+    for a in FileSortante(pf.db).lister(fondateur):
+        if a.tenant_id in ids:
+            ids[a.tenant_id].setdefault("sortie", []).append(a.id)
+            if a.statut.value == "envoye":
+                ids[a.tenant_id].setdefault("sortie_envoyee", []).append(a.id)
     pf.db.fermer()
     mp.undo()
     return Modele(racine=racine, totp=res.totp_secret, comptes={c.email: c.mot_de_passe for c in res.comptes},
