@@ -4,6 +4,7 @@
     controldone demo [--out var/demo] [--demo-dir demo] [--moteur auto|reel|demo]
     controldone serve [--host 127.0.0.1] [--port 8000] [--sans-worker] [--init-schema]
     controldone init-demo [--force] [--si-absente]
+    controldone creer-fondateur --email <adresse> [--nom "…"] [--mot-de-passe-stdin]
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
 documents est une frontière de regroupement naturelle) et écrit ``report.html``, ``report.pdf``,
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -72,7 +74,7 @@ def _serve(args: argparse.Namespace) -> int:
     app = create_app(ParametresWeb(plateforme=plateforme, worker_integre=not args.sans_worker,
                                    https=True if args.https else None))
     print(f"ControlDOne — http://{args.host}:{args.port}/ (worker intégré : {'non' if args.sans_worker else 'oui'})")
-    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=args.proxy, forwarded_allow_ips="127.0.0.1",
+    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=args.proxy, forwarded_allow_ips=args.forwarded_allow_ips,
                 log_level="warning", server_header=False)
     return 0
 
@@ -99,6 +101,50 @@ def _init_demo(args: argparse.Namespace) -> int:
         print("Base de démonstration déjà initialisée.")
         return 0
     print("\n".join(resume(res)))
+    return 0
+
+
+def _creer_fondateur(args: argparse.Namespace) -> int:
+    """Compte fondateur de production : mot de passe saisi (jamais en argument), secret TOTP affiché une fois."""
+    import getpass
+    import secrets as _secrets
+
+    from controldone.auth.motdepasse import LONGUEUR_MIN, MotDePasseFaible, hacher_mot_de_passe
+    from controldone.auth.roles import Acteur, Role
+    from controldone.auth.totp import generer_secret, uri_provisioning
+    from controldone.services.plateforme import Plateforme
+    from controldone.storage.cles import chiffrer_secret
+    from controldone.storage.comptes import creer_utilisateur, enregistrer_totp, utilisateur_par_email
+
+    plateforme = Plateforme.depuis_env()
+    db = plateforme.db
+    db.creer_schema()
+    if utilisateur_par_email(db, args.email) is not None:
+        print(f"Un compte existe déjà pour {args.email} : rien n'est modifié.", file=sys.stderr)
+        return 1
+    if args.mot_de_passe_stdin:
+        mdp = sys.stdin.readline().rstrip("\n")
+    else:
+        mdp = getpass.getpass(f"Mot de passe du fondateur ({LONGUEUR_MIN} caractères minimum) : ")
+        if getpass.getpass("Confirmation : ") != mdp:
+            print("Les deux saisies diffèrent.", file=sys.stderr)
+            return 2
+    try:
+        empreinte = hacher_mot_de_passe(mdp)
+    except MotDePasseFaible as exc:
+        print(f"Mot de passe refusé : {exc}.", file=sys.stderr)
+        return 2
+    uid = f"usr_{_secrets.token_hex(8)}"
+    fondateur = Acteur(uid, Role.fondateur)
+    creer_utilisateur(db, user_id=uid, email=args.email, mot_de_passe_hash=empreinte, role=Role.fondateur,
+                      acteur=fondateur, nom=args.nom)
+    secret = generer_secret()
+    enregistrer_totp(db, uid, chiffrer_secret(plateforme.cles_maitresses, secret), acteur=fondateur)
+    print("Compte fondateur créé.")
+    print(f"  adresse     : {args.email}")
+    print(f"  secret TOTP : {secret}   (affiché une seule fois ; stocké chiffré)")
+    print(f"  URI TOTP    : {uri_provisioning(secret, args.email)}")
+    print("Ajouter le secret dans l'application d'authentification, puis se connecter sur /admin.")
     return 0
 
 
@@ -131,12 +177,22 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--init-schema", dest="init_schema", action="store_true", help="créer les tables manquantes")
     sv.add_argument("--https", action="store_true", help="servi derrière TLS : en-tête HSTS")
     sv.add_argument("--proxy", action="store_true", help="faire confiance aux en-têtes X-Forwarded-* du mandataire local")
+    sv.add_argument("--forwarded-allow-ips", dest="forwarded_allow_ips",
+                    default=os.environ.get("CONTROLDONE_FORWARDED_ALLOW_IPS", "127.0.0.1"),
+                    help="adresses du mandataire dont les en-têtes X-Forwarded-* sont crus (avec --proxy)")
     sv.set_defaults(fn=_serve)
 
     di = sous.add_parser("init-demo", help="base de démonstration (données fictives, deux clients)")
     di.add_argument("--force", action="store_true", help="supprimer la base SQLite et le coffre existants")
     di.add_argument("--si-absente", dest="si_absente", action="store_true", help="ne rien faire si déjà initialisée")
     di.set_defaults(fn=_init_demo)
+
+    cf = sous.add_parser("creer-fondateur", help="compte fondateur de production (mot de passe saisi + TOTP)")
+    cf.add_argument("--email", required=True)
+    cf.add_argument("--nom", default="Fondateur")
+    cf.add_argument("--mot-de-passe-stdin", dest="mot_de_passe_stdin", action="store_true",
+                    help="lire le mot de passe sur l'entrée standard (scripts) au lieu de le demander")
+    cf.set_defaults(fn=_creer_fondateur)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s")
