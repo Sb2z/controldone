@@ -42,7 +42,7 @@ from controldone.pipeline import (
 )
 from controldone.referentiel_io import ProfilClient, charger_grilles, charger_profil_client
 
-__all__ = ["DossierBanc", "assigner_clients", "fusionner_findings", "lister_dossiers", "main", "executer_banc"]
+__all__ = ["DossierBanc", "assigner_clients", "executer_banc", "fusionner_findings", "lister_dossiers", "main"]
 
 log = logging.getLogger("controldone.bench_run")
 
@@ -113,8 +113,11 @@ def _texte_brut(docs: Path, limite: int = 2_000_000) -> str:
                 import pypdfium2 as pdfium
 
                 pdf = pdfium.PdfDocument(str(f))
-                for i in range(min(len(pdf), 20)):
-                    morceaux.append(pdf[i].get_textpage().get_text_range())
+                try:
+                    for i in range(min(len(pdf), 20)):
+                        morceaux.append(pdf[i].get_textpage().get_text_range())
+                finally:
+                    pdf.close()
             elif f.suffix.lower() in (".xml", ".csv", ".txt", ".eml"):
                 morceaux.append(f.read_text(encoding="utf-8", errors="ignore"))
         except Exception:

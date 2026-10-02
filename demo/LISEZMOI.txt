@@ -1,0 +1,2 @@
+Jeu de démonstration ControlDOne — DONNÉES FICTIVES.
+Sociétés, adresses, numéros et montants inventés. Régénérer : controldone demo.

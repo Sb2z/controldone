@@ -1,0 +1,29 @@
+{
+  "schema": "controldone.bench.profil/1.0.0",
+  "client_id": "DEMO",
+  "raison_sociale": "ATELIERS DÉMO FICTIF SAS",
+  "offre": "diagnostic",
+  "demo": true,
+  "entites": [
+    {
+      "raison_sociale": "ATELIERS DÉMO FICTIF SAS",
+      "tva": "FR15000100008",
+      "siren": "000100008",
+      "eori": "FR00010000800000",
+      "alias": [
+        "ATELIERS DEMO FICTIF"
+      ]
+    }
+  ],
+  "transitaires": [
+    {
+      "transitaire_id": "TR-DEMO",
+      "nom": "TRANSIT DÉMO FICTIF SARL",
+      "tva": "FR39000100016",
+      "alias": [
+        "TRANSIT DEMO FICTIF"
+      ]
+    }
+  ],
+  "tolerances": {}
+}

@@ -125,7 +125,24 @@ def _grille_depuis_dict(data: Mapping[str, Any], client_id: str | None, defaut_v
     if "statut" not in d and defaut_validee:
         d["statut"] = StatutGrille.validee.value
     d.setdefault("client_id", client_id)
+    d["postes"] = [p for p in (_poste_tolerant(x) for x in d.get("postes") or []) if p is not None]
     return GrilleTarifaire.model_validate(d)
+
+
+def _poste_tolerant(p: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Valeurs d'énumération inconnues : base de pourcentage -> ``autre`` ; nature -> ``autre_prestation`` ;
+    mode inconnu : poste écarté (journal sans contenu)."""
+    from controldone.model.enums import BasePourcentage, ModePoste, NatureLigne
+
+    q = dict(p)
+    if q.get("base_pourcentage") not in (None, *[x.value for x in BasePourcentage]):
+        q["base_pourcentage"] = BasePourcentage.autre.value
+    if q.get("nature") not in [x.value for x in NatureLigne]:
+        q["nature"] = NatureLigne.autre_prestation.value
+    if q.get("mode") not in [x.value for x in ModePoste]:
+        log.warning("poste_de_grille_ecarte mode_inconnu")
+        return None
+    return q
 
 
 def charger_grilles(

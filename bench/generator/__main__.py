@@ -11,7 +11,7 @@ import sys
 import time
 
 from . import GENERATOR_VERSION
-from .common import dumps, sha256_bytes
+from .common import dumps
 
 _STATE = {}
 
@@ -56,6 +56,27 @@ def write_clients(out, seed):
     return reg
 
 
+CORPUS_README = """# Corpus synthétique du banc ControlDOne v2 (FICTIF)
+
+Toutes les données de ce répertoire sont **fictives** (sociétés, adresses, SIREN commençant par 000,
+numéros de TVA, EORI, MRN, transitaires) et chaque document porte la mention
+« DONNÉES FICTIVES — DOCUMENT DE TEST ».
+
+Arborescence (SPEC §19.2) :
+
+- `clients/<client_id>/profil.json` : entités, transitaires, tolérances (vide = défauts) ;
+- `clients/<client_id>/grilles/<grille_id>.json` : grilles tarifaires validées (§6.2.4) ;
+- `dev/<dossier_id>/docs/…` : fichiers d'entrée d'un dossier (un lot) ; `dev/<dossier_id>/truth.json` :
+  vérité du dossier (contrat §19.3, schéma Annexe B), lue par le correcteur ;
+- `holdout/…` : split d'évaluation, généré séparément, jamais lu par l'équipe moteur ;
+- `manifest.json` : liste des dossiers, split, graine, version du générateur, empreintes SHA-256.
+
+Les formats d'export de déclaration X1 (XML) et X2 (CSV) sont décrits dans
+`bench/generator/FORMATS.md` (seul fichier du générateur destiné à l'équipe moteur).
+Régénération : `python -m bench.generator --out bench/corpus --split dev --count 250 --seed 20261002`.
+"""
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m bench.generator")
     ap.add_argument("--out", default="bench/corpus")
@@ -75,6 +96,8 @@ def main(argv=None):
         return 0
     os.makedirs(args.out, exist_ok=True)
     write_clients(args.out, args.seed)
+    with open(os.path.join(args.out, "README.md"), "w", encoding="utf-8") as fh:
+        fh.write(CORPUS_README)
     sel = [p for p in plans if args.split == "all" or p["split"] == args.split]
     if args.only:
         keep = set(args.only.split(","))

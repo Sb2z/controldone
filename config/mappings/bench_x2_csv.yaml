@@ -1,0 +1,83 @@
+# Fiche de correspondance (SPEC §5.3.6) — export de déclaration CSV « X2 » du banc (format FICTIF,
+# décrit dans bench/generator/FORMATS.md). Fichier multi-enregistrements : « #TYPE;col… » déclare les
+# colonnes du type ; chaque ligne commence par son type d'enregistrement.
+format_id: bench_x2_csv
+version: "1.0.0"
+type: csv
+sous_type: export_csv
+detection:
+  marqueur: "^#ENTETE;mrn;"
+  colonnes_requises: [ENTETE.mrn, ENTETE.montant_total_facture, TAXE.type]
+  # colonnes connues sans champ du modèle (non journalisées comme inconnues)
+  ignorer: [ENTETE.devise_taux, TOTAL.type, TOTAL.montant, COMMENTAIRE.texte, TAXE.nature_taux]
+csv:
+  separateur: ";"
+  separateur_decimal: ","
+  format_date: "%d/%m/%Y"
+  multi_enregistrements: true
+  type_entete: ENTETE
+devise_par_defaut: EUR
+
+entete:
+  mrn: mrn
+  lrn: lrn
+  version: version
+  date_acceptation: date_acceptation
+  importateur.nom: importateur_nom
+  importateur.tva: importateur_tva
+  importateur.eori: importateur_eori
+  declarant.nom: declarant_nom
+  declarant.tva: declarant_tva
+  incoterm: incoterm
+  incoterm_lieu: incoterm_lieu
+  pays_expedition: pays_expedition
+  devise_facture: devise_facture
+  montant_total_facture: montant_total_facture
+  taux_change: taux_change
+  taux_change_sens: sens_taux
+  masse_brute_totale: masse_brute_totale
+  nombre_colis_total: nombre_colis_total
+  nombre_articles: nombre_articles
+  total_droits_taxes: total_droits_taxes
+  total_a_payer: total_a_payer
+
+listes:
+  documents_references:
+    type_enregistrement: DOCUMENT
+    champs:
+      type_code: code
+      reference: reference
+  articles:
+    type_enregistrement: ARTICLE
+    champs:
+      numero_article: numero
+      code_marchandise: code_marchandise
+      description: designation
+      pays_origine: pays_origine
+      code_preference: code_preference
+      regime: regime
+      montant_facture_article: montant_facture
+      valeur_statistique: valeur_statistique
+      masse_nette: masse_nette
+      masse_brute: masse_brute
+      quantite_unite_supplementaire: {source: quantite_supplementaire, source_unite: unite_supplementaire}
+      nombre_colis: nombre_colis
+  taxations:
+    type_enregistrement: TAXE
+    champs:
+      article: article
+      type_taxe: type
+      base_montant: base_montant
+      base_quantite: {source: base_quantite, source_unite: base_unite}
+      base_unite: base_unite
+      taux: taux
+      montant: montant
+      montant_a_payer: montant_a_payer
+      mode_paiement: mode_paiement
+    enumerations:
+      taux_nature: nature_taux
+
+tables:
+  categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, X01: autre_taxe, FPE: forfait_petits_envois,
+              B00: tva}
+  paiement: {A: comptant, E: differe, G: autoliquide}

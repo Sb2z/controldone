@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import datetime as dt
 import random
-from collections import Counter
 
 from .common import rng_for, split_of
 from .refdata import CLIENTS, SELLERS
@@ -316,7 +315,7 @@ def _assign_structure(seed: int, split: str, sub: list):
                 p["decl_mode"] = "converted"
         p["rate_sens"] = pr.choice(["devise_par_eur", "eur_par_devise"])
         p["autoliq"] = pr.random() < (0.5 if p["layout"] == "L4" else 0.44)
-        p["merged"] = p["template"] == "T6" or pr.random() < 0.22
+        p["merged"] = p["template"] == "T6" or pr.random() < 0.25
         p["n_ci"] = 1
         p["split_invoice"] = False
         p["n_decl"] = 1
@@ -365,10 +364,11 @@ def _assign_structure(seed: int, split: str, sub: list):
 
 TARGET = {"dev": 5, "holdout": 2}
 TARGET_OVERRIDE = {
-    "C5": {"dev": 4, "holdout": 2}, "C6": {"dev": 3, "holdout": 2}, "E5": {"dev": 3, "holdout": 2},
-    "E6": {"dev": 4, "holdout": 2}, "G3": {"dev": 4, "holdout": 2}, "G4": {"dev": 4, "holdout": 2},
+    "C5": {"dev": 4, "holdout": 2}, "C6": {"dev": 3, "holdout": 2},
+    "G3": {"dev": 4, "holdout": 2}, "G4": {"dev": 4, "holdout": 2},
     "C7": {"dev": 4, "holdout": 2}, "A4": {"dev": 6, "holdout": 3}, "C1": {"dev": 6, "holdout": 2},
-    "D3": {"dev": 6, "holdout": 2}, "C2": {"dev": 6, "holdout": 2}, "C4": {"dev": 6, "holdout": 2}, "E2": {"dev": 6, "holdout": 2},
+    "D3": {"dev": 6, "holdout": 2}, "C2": {"dev": 6, "holdout": 2}, "C4": {"dev": 6, "holdout": 2},
+    "E2": {"dev": 6, "holdout": 2},
     "E5": {"dev": 8, "holdout": 3}, "E6": {"dev": 6, "holdout": 2}, "E1": {"dev": 8, "holdout": 3},
 }
 

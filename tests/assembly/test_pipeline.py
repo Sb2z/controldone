@@ -208,5 +208,5 @@ def test_controle_en_erreur_isole(lot):
             raise ZeroDivisionError
 
         res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1), composants=_composants())
-    r = [x for x in res[0].resultats if x.controle_id == "B2"][0]
+    r = next(x for x in res[0].resultats if x.controle_id == "B2")
     assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.erreur_interne

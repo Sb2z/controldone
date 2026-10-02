@@ -13,10 +13,10 @@ import math
 from decimal import Decimal
 
 from .clients import grid_poste
-from .common import (D, D0, ZERO_DEC_CURRENCIES, is_confusion_variant, make_awb, make_bl, make_lrn, make_mrn, q0,
-                     q2, q3, q5, qcur, rng_for, transpose_digits)
-from .model import (FT_LABELS, NATURE_OF_CODE, OFF_GRID, Article, CILine, CommercialInvoice, CreditNote, Declaration,
-                    FTLine, ForwarderInvoice, Party, SupportDoc, Tax, composante_of)
+from .common import (D, D0, ZERO_DEC_CURRENCIES, make_awb, make_bl, make_lrn, make_mrn, q0,
+                     q2, q3, q5, qcur, rng_for)
+from .model import (FT_LABELS, NATURE_OF_CODE, Article, CILine, CommercialInvoice, Declaration,
+                    FTLine, ForwarderInvoice, Party, SupportDoc, Tax)
 from .refdata import (CARRIERS, OTHER_TAX_PRODUCTS, PRODUCTS, PRODUCTS_BY_KEY, REF_RATES, SELLERS, SELLERS_BY_KEY,
                       SMALL_PARCEL_PRODUCTS)
 
@@ -419,7 +419,6 @@ def build_declaration(dm, doc_id, ship_lines, cis, decl_cur_mode, rate_sens, lay
 
 def compute_taxes(dm, decl, keep_mp=None):
     r = dm.r
-    p = dm.plan
     mp_main = keep_mp or (dm.__dict__.setdefault("_mp_main", r.choice(["E", "E", "E", "A"])))
     paiement = {"E": "differe", "A": "comptant", "G": "autoliquide"}
     taxes = []
@@ -637,7 +636,6 @@ def prestation_lines(dm, decl, template, lang, tref, first=True, n_articles=None
 def make_faf_line(dm, template, lang, deb_lines, mrn=None, tref=None):
     base = faf_base(dm.grid, deb_lines)
     amt = faf_amount(dm.grid, base)
-    pst = grid_poste(dm.grid, "AVANCE_FONDS")
     l = _presta(dm, "AVANCE_FONDS", lang, template, 1, amt, mrn=mrn, tref=tref,
                 detail=faf_detail(dm.grid, base, lang))
     l.base_droit = None
@@ -753,7 +751,6 @@ def build_core(seed, plan, reg, plans_by_id, _depth=0):
             dk += 1
             doc_id = f"dec{dk}"
             dd = ddate + dt.timedelta(days=j * r.randint(3, 9))
-            importer = None
             if p["rectificative"] and s == 0:
                 v1 = build_declaration(dm, doc_id, part, cis, mode, p["rate_sens"], layout, dd,
                                        qcur(tgt * Decimal("1.06"), cis[0].currency),

@@ -1,0 +1,82 @@
+# Fiche de correspondance (SPEC §5.3.6) — export de déclaration XML « X1 » du banc (format FICTIF,
+# décrit dans bench/generator/FORMATS.md). Chemins XPath relatifs à la racine ; préfixe « d » = espace de noms.
+format_id: bench_x1_xml
+version: "1.0.0"
+type: xml
+sous_type: export_xml
+detection:
+  racine: DeclarationExport
+  espace_noms: "urn:fictif:bench:declaration-export:1"
+  # éléments connus sans champ du modèle (non journalisés comme inconnus)
+  ignorer: [Avertissement, JeuDonnees, TypeDeclaration, TotalParType, Totaux, DocumentsReferences, Articles,
+            Taxations]
+xml:
+  espaces_noms:
+    d: "urn:fictif:bench:declaration-export:1"
+# Montants en EUR sauf montant_total_facture et montant_facture_article (monnaie de facturation).
+devise_par_defaut: EUR
+
+entete:
+  mrn: d:Entete/d:MRN
+  lrn: d:Entete/d:LRN
+  version: d:Entete/d:Version
+  date_acceptation: d:Entete/d:DateAcceptation
+  importateur.nom: d:Entete/d:Importateur/d:Nom
+  importateur.tva: d:Entete/d:Importateur/d:TVA
+  importateur.eori: d:Entete/d:Importateur/d:EORI
+  declarant.nom: d:Entete/d:Declarant/d:Nom
+  declarant.tva: d:Entete/d:Declarant/d:TVA
+  incoterm: d:Entete/d:ConditionsLivraison/@incoterm
+  incoterm_lieu: d:Entete/d:ConditionsLivraison/@lieu
+  pays_expedition: d:Entete/d:PaysExpedition
+  devise_facture: d:Entete/d:MonnaieFacturation
+  montant_total_facture: d:Entete/d:MontantTotalFacture
+  taux_change: d:Entete/d:TauxChange
+  taux_change_sens: d:Entete/d:TauxChange/@sens
+  masse_brute_totale: d:Entete/d:MasseBruteTotale
+  nombre_colis_total: d:Entete/d:NombreColisTotal
+  nombre_articles: d:Entete/d:NombreArticles
+  total_droits_taxes: d:Totaux/d:TotalDroitsTaxes
+  total_a_payer: d:Totaux/d:TotalAPayer
+
+listes:
+  documents_references:
+    source: d:DocumentsReferences/d:Document
+    champs:
+      type_code: "@code"
+      reference: "@reference"
+  articles:
+    source: d:Articles/d:Article
+    champs:
+      numero_article: "@numero"
+      code_marchandise: d:CodeMarchandise
+      description: d:Designation
+      pays_origine: d:PaysOrigine
+      code_preference: d:CodePreference
+      regime: d:Regime
+      regime_complementaire: d:RegimeComplementaire
+      montant_facture_article: d:MontantFacture
+      valeur_statistique: d:ValeurStatistique
+      masse_nette: d:MasseNette
+      masse_brute: d:MasseBrute
+      quantite_unite_supplementaire: {source: d:QuantiteSupplementaire, source_unite: d:QuantiteSupplementaire/@unite}
+      nombre_colis: d:NombreColis
+  taxations:
+    source: d:Articles/d:Article/d:Taxations/d:Taxation
+    champs:
+      article: ../../@numero
+      type_taxe: "@type"
+      base_montant: d:BaseMontant
+      base_quantite: {source: d:BaseQuantite, source_unite: d:BaseQuantite/@unite}
+      base_unite: d:BaseQuantite/@unite
+      taux: d:Taux
+      montant: d:Montant
+      montant_a_payer: d:MontantAPayer
+      mode_paiement: d:ModePaiement
+    enumerations:
+      taux_nature: "@nature"
+
+tables:
+  categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, X01: autre_taxe, FPE: forfait_petits_envois,
+              B00: tva}
+  paiement: {A: comptant, E: differe, G: autoliquide}

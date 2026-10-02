@@ -17,8 +17,8 @@ __all__ = ["rogner", "zone_par_recherche"]
 log = logging.getLogger("controldone.rapport.images")
 
 ECHELLE = 2.0  # 144 dpi
-MARGE_VERTICALE = 0.035  # fraction de hauteur au-dessus et au-dessous de la zone
-LARGEUR_MIN = 0.55  # fraction de largeur minimale du rognage
+MARGE_VERTICALE = 0.045  # fraction de hauteur au-dessus et au-dessous de la zone
+LARGEUR_MIN = 0.6  # fraction de largeur minimale du rognage
 
 
 @lru_cache(maxsize=64)
@@ -27,9 +27,13 @@ def _page_image(chemin: str, numero: int):
     import pypdfium2 as pdfium
 
     pdf = pdfium.PdfDocument(chemin)
-    page = pdf[numero - 1]
-    largeur, hauteur = page.get_size()
-    img = page.render(scale=ECHELLE).to_pil().convert("RGB")
+    try:
+        page = pdf[numero - 1]
+        largeur, hauteur = page.get_size()
+        img = page.render(scale=ECHELLE).to_pil().convert("RGB")
+        page.close()
+    finally:
+        pdf.close()
     return img, largeur, hauteur
 
 
@@ -41,6 +45,7 @@ def zone_par_recherche(chemin: str, numero: int, valeur: str) -> tuple[float, fl
     v = " ".join(valeur.split())
     if len(v) < 2:
         return None
+    pdf = None
     try:
         pdf = pdfium.PdfDocument(chemin)
         page = pdf[numero - 1]
@@ -63,6 +68,9 @@ def zone_par_recherche(chemin: str, numero: int, valeur: str) -> tuple[float, fl
             return (g / largeur, 1 - h / hauteur, d / largeur, 1 - b / hauteur)
     except Exception as e:
         log.debug("recherche_zone_en_erreur exception=%s", type(e).__name__)
+    finally:
+        if pdf is not None:
+            pdf.close()
     return None
 
 

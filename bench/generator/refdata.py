@@ -7,7 +7,7 @@ les compléments à 8/10 chiffres et les taux imprimés sont fictifs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 FICTIF = "(FICTIF)"
 

@@ -7,10 +7,9 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
 
 from controldone import SCHEMA_VERSION, VERSION_MOTEUR, VERSION_REGLES
 from controldone.controls.specs import get_spec
@@ -356,7 +355,11 @@ def _preuve_vue(p: Preuve, rd: ResultatDossier) -> PreuveVue:
 
 def _constat_vue(c: Constat, r, rd: ResultatDossier) -> ConstatVue:
     spec = get_spec(c.controle_id)
-    raisons = [RAISON_LIBELLES.get(x, x.value) for x in c.raisons]
+    codes = [x for x in c.raisons if not (c.renvoi and x in (RaisonCode.renvoi_reglementaire,
+                                                              RaisonCode.controle_signal_seulement))]
+    if len(codes) > 1:
+        codes = [x for x in codes if x is not RaisonCode.controle_signal_seulement]
+    raisons = [RAISON_LIBELLES.get(x, x.value) for x in codes]
     bloque = c.motif_blocage is not None
     libelle = c.libelle if not bloque else (
         "Libellé retenu pour relecture avant publication (formulation à revoir) ; les valeurs comparées "
@@ -386,6 +389,8 @@ def _nombre_fr(x: str | None) -> str:
     """Valeur attendue / constatée affichée en français si c'est un nombre."""
     if x is None or x == "":
         return "—"
+    if "." not in x:  # entiers, codes, devises : tels quels
+        return x
     try:
         d = Decimal(x)
     except Exception:

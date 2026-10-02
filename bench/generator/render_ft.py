@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from .common import d_en, d_fr, fmt_num, fmt_qty, pct_str
-from .pdfkit import BLUE, DARK, GREY, LIGHT, LIGHT2, Color, Pen
+from .pdfkit import BLUE, DARK, GREY, LIGHT, Color, Pen
 
 NS = {"T1": "fr", "T2": "en", "T3": "frs", "T4": "fr", "T5": "de", "T6": "fr", "T7": "fr", "T8": "frn"}
 GREEN = Color(0.1, 0.4, 0.3)

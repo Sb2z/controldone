@@ -7,7 +7,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from .common import cur_decimals, d_fr, fmt_kg, fmt_num, fmt_qty, pct_str
-from .pdfkit import BLUE, DARK, GREY, LIGHT, LIGHT2, Pen
+from .pdfkit import DARK, GREY, LIGHT, LIGHT2, Pen
 
 MP_LEGEND = "Modes de paiement : A = comptant ; E = paiement différé (crédit d'enlèvement) ; G = TVA autoliquidée (ATVAI)"
 L2_STATUS = {"A": "0", "E": "1", "G": "7"}
@@ -294,7 +294,7 @@ def _l3_article(pen, d, a, y, ns, dec):
     y += 9
     pen.rect(10, y, 190, h47, lw=0.5)
     pen.text(11, y + 2.6, "47 Calcul des impositions", size=5.4, color=GREY)
-    yy = pen.table(14, y + 4, [("Type", 14, "center"), ("Base d'imposition", 40, "right"), ("Quotité", 28, "right"),
+    pen.table(14, y + 4, [("Type", 14, "center"), ("Base d'imposition", 40, "right"), ("Quotité", 28, "right"),
                                ("Montant", 32, "right"), ("MP", 10, "center")],
                    [[t.code, _base(t, ns), _taux(t, ns), _amt(t.montant, ns), t.mp] for t in taxes],
                    size=7.2, row_h=3.9, header_fill=LIGHT2, grid="h")

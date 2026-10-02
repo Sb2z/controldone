@@ -54,6 +54,7 @@ from controldone.model.enums import (
     TypeValeur,
 )
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, deriver_somme
+from controldone.normalize import normalize_unit
 
 from .sniff import MIME_CSV, MIME_PDF, MIME_XML, decoder_texte, detecter_type
 
@@ -296,8 +297,10 @@ class FicheCorrespondance:
             if chemin not in valides:
                 raise ValueError(f"{self.format_id} : champ inconnu du modèle : {chemin}")
         for nom, spec in self.listes.items():
-            for chemin in (spec.get("champs") or {}):
-                if f"{nom}[].{chemin}" not in valides and f"{nom}[]" != f"{nom}[].{chemin}":
+            if "source" not in spec and "type_enregistrement" not in spec:
+                raise ValueError(f"{self.format_id} : liste {nom} sans source")
+            for chemin in [*(spec.get("champs") or {}), *(spec.get("enumerations") or {})]:
+                if f"{nom}[].{chemin}" not in valides:
                     raise ValueError(f"{self.format_id} : champ inconnu du modèle : {nom}[].{chemin}")
 
     # --- détection ---
@@ -326,14 +329,37 @@ class FicheCorrespondance:
             not det.get("marqueur") or bool(re.search(det["marqueur"], texte[:4096])))
 
     def _lire_csv(self, texte: str) -> tuple[list[str], list[dict[str, str]], list[int]]:
+        """(colonnes, enregistrements, numéros de ligne). En mode ``multi_enregistrements`` (une ligne
+        ``#TYPE;col…`` déclare les colonnes du type), chaque enregistrement porte ``__type__`` et les
+        colonnes sont notées ``TYPE.col``."""
         sep = self.csv.get("separateur") or ";"
-        lignes = texte.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        lecteur = csv.reader(lignes, delimiter=sep, quotechar=self.csv.get("guillemet", '"'))
-        rangs = list(lecteur)
+        lignes = texte.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        rangs = list(csv.reader(lignes, delimiter=sep, quotechar=self.csv.get("guillemet", '"')))
         if not rangs:
             return [], [], []
+        out: list[dict[str, str]] = []
+        numeros: list[int] = []
+        if self.csv.get("multi_enregistrements"):
+            colonnes: dict[str, list[str]] = {}
+            vues: list[str] = []
+            for i, r in enumerate(rangs, start=1):
+                if not r or not any(c.strip() for c in r):
+                    continue
+                tete = r[0].strip()
+                if tete.startswith("#"):
+                    t = tete[1:].strip()
+                    colonnes[t] = [c.strip() for c in r[1:]]
+                    vues.extend(f"{t}.{c}" for c in colonnes[t] if f"{t}.{c}" not in vues)
+                    continue
+                cols = colonnes.get(tete)
+                if cols is None:
+                    continue
+                d = {cols[j]: r[j + 1].strip() for j in range(min(len(cols), len(r) - 1))}
+                d["__type__"] = tete
+                out.append(d)
+                numeros.append(i)
+            return vues, out, numeros
         entete = [c.strip() for c in rangs[0]]
-        out, numeros = [], []
         for i, r in enumerate(rangs[1:], start=2):
             if not any(c.strip() for c in r):
                 continue
@@ -483,9 +509,21 @@ def _txt_first(base: etree._Element, xp: str, ns: dict[str, str]) -> str | None:
 
 
 def _chemin_xpath(el: etree._Element) -> str:
-    """Chemin lisible d'un nœud (``/Invoice/cac:InvoiceLine[2]/cbc:ID``) pour ``texte_contexte``."""
+    """Chemin lisible d'un nœud (``/Invoice/InvoiceLine[2]/ID``, noms locaux, rang si répété) pour
+    ``texte_contexte``."""
     try:
-        return el.getroottree().getpath(el)
+        parties = []
+        courant = el
+        while courant is not None and isinstance(courant.tag, str):
+            nom = _local(courant.tag)
+            parent = courant.getparent()
+            if parent is not None:
+                freres = [x for x in parent if isinstance(x.tag, str) and x.tag == courant.tag]
+                if len(freres) > 1:
+                    nom = f"{nom}[{freres.index(courant) + 1}]"
+            parties.append(nom)
+            courant = parent
+        return "/" + "/".join(reversed(parties))
     except (ValueError, AttributeError):
         return ""
 
@@ -508,7 +546,7 @@ class _Constructeur:
         self.page = document.pages[0].numero if document.pages else 1
 
     def vs(self, chemin: str, brut: str | None, contexte: str | None, *, devise: str | None = None,
-           page: int | None = None) -> ValeurSourcee | None:
+           page: int | None = None, sep: str | None = None) -> ValeurSourcee | None:
         if brut is None or not str(brut).strip():
             return None
         brut = str(brut).strip()
@@ -516,7 +554,7 @@ class _Constructeur:
         v = valeur_sourcee(
             type_document=self.type_doc, chemin=chemin, brut=brut, document_id=self.document.id,
             page=page or self.page, extracteur=self.extracteur, methode=self.methode, confiance=self.confiance,
-            texte_contexte=contexte, separateur_decimal=self.sep, devise=devise,
+            texte_contexte=contexte, separateur_decimal=sep or self.sep, devise=devise,
             id_valeur=self.ctx.ids.nouveau("vs") if self.ctx.ids is not None else None,
         )
         if tv is TypeValeur.date and v.valeur is None:
@@ -543,12 +581,69 @@ def _date_structuree(brut: str, fmt: str | None) -> str | None:
 
 
 def _definir(champs, chemin: str, v: ValeurSourcee | None) -> None:
-    if v is not None:
-        champs.definir(chemin, v)
+    if v is None:
+        return
+    if chemin.endswith("[]"):
+        liste = champs.obtenir(chemin[:-2])
+        idx = len(liste) if isinstance(liste, list) else 0
+        tete, _, _ = v.chemin.rpartition("[]")
+        v = v.model_copy(update={"chemin": f"{tete}[{idx}]"})
+    champs.definir(chemin, v)
 
 
 def _extracteur_info(id_: str) -> ExtracteurInfo:
     return ExtracteurInfo(type=TypeExtracteur.structure, id=id_, version=VERSION_STRUCTURE)
+
+
+# --- notes (texte libre stocké comme donnée ; seuls des motifs fermés en sont lus) -------------------------
+
+_RX_MASSE_BRUTE = re.compile(r"gross weight\s*:?\s*([\d.,]+\s*kg)|poids brut\s*:?\s*([\d.,\s]+\s*kg)", re.I)
+_RX_MASSE_NETTE = re.compile(r"net weight\s*:?\s*([\d.,]+\s*kg)|poids net\s*:?\s*([\d.,\s]+\s*kg)", re.I)
+_RX_COLIS = re.compile(r"(?:packages|colis|bultos)\s*:?\s*(\d+)", re.I)
+_RX_POURCENT = re.compile(r"(\d+(?:[.,]\d+)?)\s?%")
+_RX_PERIODE = re.compile(r"(\d{2}/\d{2}/\d{4})\s*(?:-|au|to)\s*(\d{2}/\d{2}/\d{4})")
+_RX_MOTIF = re.compile(r"^\s*(?:motif|reason|motivo)\s*:\s*(.+)$", re.I)
+_TRANSPORT_NOMS = re.compile(r"\b(?:b/?l|lta|awb|bill of lading|air ?way ?bill|connaissement|cmr|hawb|mawb)\b", re.I)
+
+
+def _premier(rx: re.Pattern[str], texte: str) -> str | None:
+    m = rx.search(texte)
+    if not m:
+        return None
+    return next((g for g in m.groups() if g), None)
+
+
+def _sous_total_type(raison: str | None, charge: bool):
+    from controldone.model.enums import TypeSousTotal
+
+    t = _norm(raison or "")
+    if not charge or re.search(r"discount|remise|descuento|rabais|allowance", t):
+        return TypeSousTotal.remise
+    if re.search(r"freight|fret|flete|transport|shipping", t):
+        return TypeSousTotal.fret
+    if re.search(r"insurance|assurance|seguro", t):
+        return TypeSousTotal.assurance
+    if re.search(r"packing|emballage|embalaje|packaging", t):
+        return TypeSousTotal.emballage
+    return TypeSousTotal.autre
+
+
+def _champs_notes_fc(c, champs: ChampsFactureCommerciale, notes: list[tuple[str, str]]) -> None:
+    for texte, cx in notes:
+        for chemin, rx in (("masse_brute_totale", _RX_MASSE_BRUTE), ("masse_nette_totale", _RX_MASSE_NETTE),
+                           ("nombre_colis", _RX_COLIS)):
+            if champs.obtenir(chemin) is None:
+                _definir(champs, chemin, c.vs(chemin, _premier(rx, texte), cx))
+
+
+def _champs_notes_ligne_fc(c, champs, p: str, notes: list[tuple[str, str]]) -> None:
+    for texte, cx in notes:
+        _definir(champs, f"{p}.masse_brute", c.vs(f"{p}.masse_brute", _premier(_RX_MASSE_BRUTE, texte), cx))
+        _definir(champs, f"{p}.masse_nette", c.vs(f"{p}.masse_nette", _premier(_RX_MASSE_NETTE, texte), cx))
+
+
+def _notes(lec, base, xp: str) -> list[tuple[str, str]]:
+    return [(_txt(e), _chemin_xpath(e)) for e in lec.tous(base, xp) if _txt(e)]
 
 
 # --- CII ----------------------------------------------------------------------------------------------------
@@ -573,7 +668,10 @@ class _Lecteur:
             return None, None, None
         el = r[0]
         if isinstance(el, str):
-            return el.strip() or None, xp, None
+            parent = getattr(el, "getparent", lambda: None)()
+            nom_attr = getattr(el, "attrname", None)
+            ctx_ = f"{_chemin_xpath(parent)}/@{_local(nom_attr) if nom_attr else ''}" if parent is not None else xp
+            return el.strip() or None, ctx_, None
         v = _txt(el)
         return (v or None), _chemin_xpath(el), el
 
@@ -615,230 +713,246 @@ def _partie(c: _Constructeur, lec: _Lecteur, champs, prefixe: str, base_xp: str,
                      c.vs(f"{prefixe}.adresse", ", ".join(parties), _chemin_xpath(adresses[0])))
 
 
-def _champs_facture_cii(c: _Constructeur, lec: _Lecteur, type_doc: TypeDocument):
-    ns_hdr = _CII_HDR
-    devise_brut, devise_ctx, _ = lec.un(None, f"{_CII_SET}/ram:InvoiceCurrencyCode")
-    devise = (devise_brut or "").upper() or None
-    num, num_ctx, _ = lec.un(None, "rsm:ExchangedDocument/ram:ID")
-    date, date_ctx, _ = lec.un(None, "rsm:ExchangedDocument/ram:IssueDateTime/udt:DateTimeString")
-    if type_doc is TypeDocument.facture_commerciale:
-        champs = ChampsFactureCommerciale()
-        _definir(champs, "numero", c.vs("numero", num, num_ctx))
-        _definir(champs, "date", c.vs("date", date, date_ctx))
-        _partie(c, lec, champs, "vendeur", f"{ns_hdr}/ram:SellerTradeParty", ubl=False)
-        _partie(c, lec, champs, "acheteur", f"{ns_hdr}/ram:BuyerTradeParty", ubl=False)
-        _partie(c, lec, champs, "destinataire", f"{_CII_DEL}/ram:ShipToTradeParty", ubl=False)
-        _definir(champs, "devise", c.vs("devise", devise_brut, devise_ctx))
-        total, t_ctx, _ = lec.un(None, f"{_CII_SUM}/ram:GrandTotalAmount")
-        if total is None:
-            total, t_ctx, _ = lec.un(None, f"{_CII_SUM}/ram:DuePayableAmount")
-        v = c.vs("total_facture", total, t_ctx, devise=devise)
-        if v is not None:
-            from controldone.model.enums import TotalOrigine
+def _total_imprime(v: ValeurSourcee | None) -> ValeurSourcee | None:
+    from controldone.model.enums import TotalOrigine
 
-            v = v.model_copy(update={"total_origine": TotalOrigine.imprime})
-        _definir(champs, "total_facture", v)
-        inc, i_ctx, _ = lec.un(None, f"{ns_hdr}/ram:ApplicableTradeDeliveryTerms/ram:DeliveryTypeCode")
-        _definir(champs, "incoterm", c.vs("incoterm", inc, i_ctx))
-        for i, ligne in enumerate(lec.tous(None, "rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem")):
-            p = f"lignes[{i}]"
-            for rel, xp in (
-                ("numero_ligne", "ram:AssociatedDocumentLineDocument/ram:LineID"),
-                ("reference_article", "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
-                ("description", "ram:SpecifiedTradeProduct/ram:Name"),
-                ("code_marchandise_imprime", "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
-                ("pays_origine", "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
-            ):
-                val, cx, _ = lec.un(ligne, xp)
-                _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", val, cx))
-            q, cx, el = lec.un(ligne, "ram:SpecifiedLineTradeDelivery/ram:BilledQuantity")
-            if q is not None and el is not None:
-                v = c.vs(f"{p}.quantite", q, cx)
-                if v is not None and el.get("unitCode"):
-                    v = v.model_copy(update={"unite": el.get("unitCode"), "unite_brute": el.get("unitCode")})
-                _definir(champs, f"{p}.quantite", v)
-            pu, cx, _ = lec.un(ligne, "ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount")
-            _definir(champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", pu, cx, devise=devise))
-            mt, cx, _ = lec.un(ligne, "ram:SpecifiedLineTradeSettlement/"
-                                      "ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount")
-            _definir(champs, f"{p}.montant_ligne", c.vs(f"{p}.montant_ligne", mt, cx, devise=devise))
-        return champs
-    # facture transitaire / avoir
-    champs = ChampsFactureTransitaire() if type_doc is TypeDocument.facture_transitaire else ChampsAvoir()
-    _definir(champs, "numero", c.vs("numero", num, num_ctx))
-    _definir(champs, "date", c.vs("date", date, date_ctx))
-    _partie(c, lec, champs, "emetteur", f"{ns_hdr}/ram:SellerTradeParty", ubl=False)
-    if isinstance(champs, ChampsFactureTransitaire):
-        _partie(c, lec, champs, "client_facture", f"{ns_hdr}/ram:BuyerTradeParty", ubl=False)
-    _definir(champs, "devise", c.vs("devise", devise_brut, devise_ctx))
-    lignes = []
+    return v.model_copy(update={"total_origine": TotalOrigine.imprime}) if v is not None else None
+
+
+def _quantite(c: _Constructeur, chemin: str, lu: tuple) -> ValeurSourcee | None:
+    q, cx, el = lu
+    v = c.vs(chemin, q, cx)
+    if v is not None and el is not None and el.get("unitCode"):
+        v = v.model_copy(update={"unite": el.get("unitCode"), "unite_brute": el.get("unitCode")})
+    return v
+
+
+def _remplir_fc(c: _Constructeur, champs: ChampsFactureCommerciale, d: dict[str, Any]) -> None:
+    """``d`` : valeurs lues (``(brut, contexte, élément)``) communes à CII et UBL."""
+    devise = d["devise"]
+    _definir(champs, "numero", c.vs("numero", *d["numero"][:2]))
+    _definir(champs, "date", c.vs("date", *d["date"][:2]))
+    _definir(champs, "devise", c.vs("devise", *d["devise_lu"][:2]))
+    _definir(champs, "total_facture", _total_imprime(c.vs("total_facture", *d["total"][:2], devise=devise)))
+    _definir(champs, "incoterm", c.vs("incoterm", *d["incoterm"][:2]))
+    _definir(champs, "incoterm_lieu", c.vs("incoterm_lieu", *d["incoterm_lieu"][:2]))
+    for brut, cx, nom in d["refs_doc"]:
+        if brut and champs.ref_transport is None and (not nom or _TRANSPORT_NOMS.search(nom)):
+            _definir(champs, "ref_transport", c.vs("ref_transport", brut, cx))
+    for k, (raison, montant, charge, cx_r, cx_m) in enumerate(d["frais"]):
+        champs.definir(f"sous_totaux[{k}].type", _sous_total_type(raison[0] if raison else None, charge))
+        if raison and raison[0]:
+            _definir(champs, f"sous_totaux[{k}].libelle", c.vs(f"sous_totaux[{k}].libelle", raison[0], cx_r))
+        _definir(champs, f"sous_totaux[{k}].montant", c.vs(f"sous_totaux[{k}].montant", montant, cx_m, devise=devise))
+    _champs_notes_fc(c, champs, d["notes"])
+    for i, lg in enumerate(d["lignes"]):
+        p = f"lignes[{i}]"
+        for rel in ("numero_ligne", "reference_article", "description", "code_marchandise_imprime", "pays_origine"):
+            _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", *lg[rel][:2]))
+        _definir(champs, f"{p}.quantite", _quantite(c, f"{p}.quantite", lg["quantite"]))
+        _definir(champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", *lg["prix_unitaire"][:2], devise=devise))
+        _definir(champs, f"{p}.montant_ligne", c.vs(f"{p}.montant_ligne", *lg["montant"][:2], devise=devise))
+        _champs_notes_ligne_fc(c, champs, p, lg["notes"])
+
+
+def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
+    hdr, dl, st, sm = _CII_HDR, _CII_DEL, _CII_SET, _CII_SUM
+    total = lec.un(None, f"{sm}/ram:GrandTotalAmount")
+    if total[0] is None:
+        total = lec.un(None, f"{sm}/ram:DuePayableAmount")
+    devise_lu = lec.un(None, f"{st}/ram:InvoiceCurrencyCode")
+    d: dict[str, Any] = {
+        "numero": lec.un(None, "rsm:ExchangedDocument/ram:ID"),
+        "date": lec.un(None, "rsm:ExchangedDocument/ram:IssueDateTime/udt:DateTimeString"),
+        "devise_lu": devise_lu, "devise": (devise_lu[0] or "").upper() or None, "total": total,
+        "incoterm": lec.un(None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:DeliveryTypeCode"),
+        "incoterm_lieu": lec.un(None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:RelevantTradeLocation/ram:Name"),
+        "notes": _notes(lec, None, "rsm:ExchangedDocument/ram:IncludedNote/ram:Content"),
+        "refs_doc": [], "frais": [], "lignes": [],
+        "refs_origine": [lec.un(x, ".") for x in lec.tous(None, f"{st}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")],
+        "totaux": {
+            "ht": lec.un(None, f"{sm}/ram:TaxBasisTotalAmount"), "tva": lec.un(None, f"{sm}/ram:TaxTotalAmount"),
+            "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
+            "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
+        },
+        "vendeur": f"{hdr}/ram:SellerTradeParty", "acheteur": f"{hdr}/ram:BuyerTradeParty",
+        "destinataire": f"{dl}/ram:ShipToTradeParty",
+    }
+    for el in lec.tous(None, f"{hdr}/ram:AdditionalReferencedDocument"):
+        brut, cx, _ = lec.un(el, "ram:IssuerAssignedID")
+        d["refs_doc"].append((brut, cx, lec.un(el, "ram:Name")[0]))
+    for el in lec.tous(None, f"{st}/ram:SpecifiedTradeAllowanceCharge"):
+        charge = (lec.un(el, "ram:ChargeIndicator/udt:Indicator")[0] or "").strip().lower() == "true"
+        raison = lec.un(el, "ram:Reason")
+        montant, cx_m, _ = lec.un(el, "ram:ActualAmount")
+        d["frais"].append((raison, montant, charge, raison[1], cx_m))
     for el in lec.tous(None, "rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem"):
-        lignes.append({
+        d["lignes"].append({
+            "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
+            "reference_article": lec.un(el, "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
+            "description": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
             "libelle": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+            "code_marchandise_imprime": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
+            "code_marchandise": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
+            "pays_origine": lec.un(el, "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
             "quantite": lec.un(el, "ram:SpecifiedLineTradeDelivery/ram:BilledQuantity"),
             "prix_unitaire": lec.un(el, "ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount"),
-            "montant_ht": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/"
-                                     "ram:LineTotalAmount"),
+            "montant": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/"
+                                  "ram:LineTotalAmount"),
             "taux_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent"),
             "marqueur_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"),
-            "code_marchandise": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
+            "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
         })
-    totaux = {
-        "ht": lec.un(None, f"{_CII_SUM}/ram:TaxBasisTotalAmount"),
-        "tva": lec.un(None, f"{_CII_SUM}/ram:TaxTotalAmount"),
-        "ttc": lec.un(None, f"{_CII_SUM}/ram:GrandTotalAmount"),
-        "net": lec.un(None, f"{_CII_SUM}/ram:DuePayableAmount"),
-        "acomptes": lec.un(None, f"{_CII_SUM}/ram:TotalPrepaidAmount"),
+    return d
+
+
+def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
+    ligne_xp = "cac:CreditNoteLine" if credit else "cac:InvoiceLine"
+    qte_xp = "cbc:CreditedQuantity" if credit else "cbc:InvoicedQuantity"
+    total = lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount")
+    if total[0] is None:
+        total = lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount")
+    devise_lu = lec.un(None, "cbc:DocumentCurrencyCode")
+    d: dict[str, Any] = {
+        "numero": lec.un(None, "cbc:ID"), "date": lec.un(None, "cbc:IssueDate"),
+        "devise_lu": devise_lu, "devise": (devise_lu[0] or "").upper() or None, "total": total,
+        "incoterm": lec.un(None, "cac:DeliveryTerms/cbc:ID | cac:Delivery/cac:DeliveryTerms/cbc:ID"),
+        "incoterm_lieu": lec.un(None, "cac:DeliveryTerms/cac:DeliveryLocation/cbc:ID | "
+                                      "cac:DeliveryTerms/cac:DeliveryLocation/cac:Address/cbc:CityName"),
+        "notes": _notes(lec, None, "cbc:Note"),
+        "refs_doc": [], "frais": [], "lignes": [],
+        "refs_origine": [lec.un(x, ".") for x in lec.tous(None, "cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")],
+        "totaux": {
+            "ht": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount"),
+            "tva": lec.un(None, "cac:TaxTotal/cbc:TaxAmount"),
+            "ttc": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"),
+            "net": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount"),
+            "acomptes": lec.un(None, "cac:LegalMonetaryTotal/cbc:PrepaidAmount"),
+        },
+        "vendeur": "cac:AccountingSupplierParty", "acheteur": "cac:AccountingCustomerParty",
+        "destinataire": None,
     }
-    refs_origine = [lec.un(x, ".") for x in lec.tous(None, f"{_CII_SET}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")]
-    refs_doc = [lec.un(x, ".") for x in lec.tous(None, f"{_CII_HDR}/ram:AdditionalReferencedDocument/ram:IssuerAssignedID")]
-    _remplir_ft(c, champs, lignes, totaux, refs_origine, refs_doc, devise)
+    for el in lec.tous(None, "cac:AdditionalDocumentReference"):
+        brut, cx, _ = lec.un(el, "cbc:ID")
+        nom = lec.un(el, "cbc:DocumentDescription")[0] or lec.un(el, "cbc:DocumentType")[0]
+        d["refs_doc"].append((brut, cx, nom))
+    for el in lec.tous(None, "cac:AllowanceCharge"):
+        charge = (lec.un(el, "cbc:ChargeIndicator")[0] or "").strip().lower() == "true"
+        raison = lec.un(el, "cbc:AllowanceChargeReason")
+        montant, cx_m, _ = lec.un(el, "cbc:Amount")
+        d["frais"].append((raison, montant, charge, raison[1], cx_m))
+    for el in lec.tous(None, ligne_xp):
+        d["lignes"].append({
+            "numero_ligne": lec.un(el, "cbc:ID"),
+            "reference_article": lec.un(el, "cac:Item/cac:SellersItemIdentification/cbc:ID"),
+            "description": lec.un(el, "cac:Item/cbc:Name"),
+            "libelle": lec.un(el, "cac:Item/cbc:Name"),
+            "code_marchandise_imprime": lec.un(el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"),
+            "code_marchandise": lec.un(el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"),
+            "pays_origine": lec.un(el, "cac:Item/cac:OriginCountry/cbc:IdentificationCode"),
+            "quantite": lec.un(el, qte_xp),
+            "prix_unitaire": lec.un(el, "cac:Price/cbc:PriceAmount"),
+            "montant": lec.un(el, "cbc:LineExtensionAmount"),
+            "taux_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent"),
+            "marqueur_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:ID"),
+            "notes": _notes(lec, el, "cbc:Note"),
+        })
+    return d
+
+
+def _champs_facture(c: _Constructeur, lec: _Lecteur, d: dict[str, Any], type_doc: TypeDocument, *, ubl: bool):
+    if type_doc is TypeDocument.facture_commerciale:
+        champs = ChampsFactureCommerciale()
+        _partie(c, lec, champs, "vendeur", d["vendeur"], ubl=ubl)
+        _partie(c, lec, champs, "acheteur", d["acheteur"], ubl=ubl)
+        if d["destinataire"]:
+            _partie(c, lec, champs, "destinataire", d["destinataire"], ubl=ubl)
+        _remplir_fc(c, champs, d)
+        return champs
+    champs = ChampsFactureTransitaire() if type_doc is TypeDocument.facture_transitaire else ChampsAvoir()
+    _definir(champs, "numero", c.vs("numero", *d["numero"][:2]))
+    _definir(champs, "date", c.vs("date", *d["date"][:2]))
+    _partie(c, lec, champs, "emetteur", d["vendeur"], ubl=ubl)
+    if isinstance(champs, ChampsFactureTransitaire):
+        _partie(c, lec, champs, "client_facture", d["acheteur"], ubl=ubl)
+    _definir(champs, "devise", c.vs("devise", *d["devise_lu"][:2]))
+    _remplir_ft(c, champs, d)
     return champs
 
 
-def _remplir_ft(c: _Constructeur, champs, lignes, totaux, refs_origine, refs_doc, devise) -> None:
+def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
+    devise = d["devise"]
     debours: list[ValeurSourcee] = []
-    mrns: list[str] = []
-    for i, lg in enumerate(lignes):
+    mrns: list[tuple[str, str]] = []
+
+    def ajouter_mrn(m: str, cx: str) -> None:
+        if m not in [x for x, _ in mrns]:
+            mrns.append((m, cx))
+
+    for brut, cx, _nom in d["refs_doc"]:
+        if not brut:
+            continue
+        m = _MRN_RE.search(brut.upper())
+        if m:
+            ajouter_mrn(m.group(1), cx)
+        else:
+            _definir(champs, "refs_transport[]", c.vs("refs_transport[]", brut, cx))
+    for i, lg in enumerate(d["lignes"]):
         p = f"lignes[{i}]"
         lib = lg["libelle"][0]
         nature = nature_ligne(lib)
         champs.definir(f"{p}.nature", nature)
-        _definir(champs, f"{p}.libelle", c.vs(f"{p}.libelle", lib, lg["libelle"][1]))
-        q, cx, el = lg["quantite"]
-        v = c.vs(f"{p}.quantite", q, cx)
-        if v is not None and el is not None and el.get("unitCode"):
-            v = v.model_copy(update={"unite": el.get("unitCode"), "unite_brute": el.get("unitCode")})
-        _definir(champs, f"{p}.quantite", v)
-        for rel in ("prix_unitaire", "montant_ht"):
-            _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", lg[rel][0], lg[rel][1], devise=devise))
+        _definir(champs, f"{p}.libelle", c.vs(f"{p}.libelle", *lg["libelle"][:2]))
+        _definir(champs, f"{p}.quantite", _quantite(c, f"{p}.quantite", lg["quantite"]))
+        _definir(champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", *lg["prix_unitaire"][:2], devise=devise))
+        _definir(champs, f"{p}.montant_ht", c.vs(f"{p}.montant_ht", *lg["montant"][:2], devise=devise))
         for rel in ("taux_tva", "marqueur_tva", "code_marchandise"):
-            _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", lg[rel][0], lg[rel][1]))
-        if lib:
-            m = _MRN_RE.search(lib.upper())
-            if m:
-                _definir(champs, f"{p}.mrn", c.vs(f"{p}.mrn", m.group(1), lg["libelle"][1]))
-                if m.group(1) not in mrns:
-                    mrns.append(m.group(1))
+            _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", *lg[rel][:2]))
+        sources_mrn = [(lib or "", lg["libelle"][1]), *lg["notes"]]
+        for texte, cx in sources_mrn:
+            m = _MRN_RE.search(texte.upper())
+            if m and champs.obtenir(f"{p}.mrn") is None:
+                _definir(champs, f"{p}.mrn", c.vs(f"{p}.mrn", m.group(1), cx))
+                ajouter_mrn(m.group(1), cx)
+        for texte, cx in lg["notes"]:
+            reste = _MRN_RE.sub(" ", texte.upper())
+            pct = _RX_POURCENT.search(reste)
+            if pct and champs.obtenir(f"{p}.pourcentage") is None:
+                _definir(champs, f"{p}.pourcentage", c.vs(f"{p}.pourcentage", pct.group(1), cx,
+                                                         sep="," if "," in pct.group(1) else "."))
+            per = _RX_PERIODE.search(texte)
+            if per:
+                _definir(champs, f"{p}.date_debut", c.vs(f"{p}.date_debut", per.group(1), cx))
+                _definir(champs, f"{p}.date_fin", c.vs(f"{p}.date_fin", per.group(2), cx))
         mt = champs.obtenir(f"{p}.montant_ht")
         if nature.est_debours and mt is not None:
             debours.append(mt)
-    for brut, cx, _ in refs_doc:
-        if not brut:
-            continue
-        m = _MRN_RE.search(brut.upper())
-        if m and m.group(1) not in mrns:
-            mrns.append(m.group(1))
-        elif not m and isinstance(champs, ChampsFactureTransitaire | ChampsAvoir):
-            _definir(champs, "refs_transport[]", c.vs("refs_transport[]", brut, cx))
-    for mrn in mrns:
-        _definir(champs, "refs_mrn[]", c.vs("refs_mrn[]", mrn, "MRN cité"))
+    for mrn, cx in mrns:
+        _definir(champs, "refs_mrn[]", c.vs("refs_mrn[]", mrn, cx))
+    t = d["totaux"]
     if isinstance(champs, ChampsFactureTransitaire):
-        _definir(champs, "total_ht", c.vs("total_ht", totaux["ht"][0], totaux["ht"][1], devise=devise))
-        _definir(champs, "total_tva", c.vs("total_tva", totaux["tva"][0], totaux["tva"][1], devise=devise))
-        _definir(champs, "total_ttc", c.vs("total_ttc", totaux["ttc"][0], totaux["ttc"][1], devise=devise))
-        _definir(champs, "net_a_payer", c.vs("net_a_payer", totaux["net"][0], totaux["net"][1], devise=devise))
-        ac = totaux["acomptes"]
+        _definir(champs, "total_ht", c.vs("total_ht", *t["ht"][:2], devise=devise))
+        _definir(champs, "total_tva", c.vs("total_tva", *t["tva"][:2], devise=devise))
+        _definir(champs, "total_ttc", c.vs("total_ttc", *t["ttc"][:2], devise=devise))
+        _definir(champs, "net_a_payer", c.vs("net_a_payer", *t["net"][:2], devise=devise))
+        ac = t["acomptes"]
         if ac[0] and re.sub(r"[0.,\s]", "", ac[0]):
-            _definir(champs, "acomptes", c.vs("acomptes", ac[0], ac[1], devise=devise))
+            _definir(champs, "acomptes", c.vs("acomptes", *ac[:2], devise=devise))
         if debours:
             total = deriver_somme(chemin_complet(c.type_doc, "total_debours"), debours, document_id=c.document.id,
                                   extracteur=c.extracteur, unite=devise, regle="somme_lignes_debours",
                                   total_reconstruit=True)
-            champs.total_debours = total.model_copy(update={"page": c.page, "confiance": min(
-                total.confiance, 1.0)})
+            champs.total_debours = total.model_copy(update={"page": c.page})
     else:
-        for brut, cx, _ in refs_origine:
+        for brut, cx, _ in d["refs_origine"]:
             _definir(champs, "refs_facture_origine[]", c.vs("refs_facture_origine[]", brut, cx))
-        _definir(champs, "total_credite_ht", c.vs("total_credite_ht", totaux["ht"][0], totaux["ht"][1], devise=devise))
-        _definir(champs, "total_tva", c.vs("total_tva", totaux["tva"][0], totaux["tva"][1], devise=devise))
-        _definir(champs, "total_credite_ttc", c.vs("total_credite_ttc", totaux["ttc"][0], totaux["ttc"][1],
-                                                   devise=devise))
-
-
-# --- UBL ----------------------------------------------------------------------------------------------------
-
-
-def _champs_facture_ubl(c: _Constructeur, lec: _Lecteur, type_doc: TypeDocument, credit: bool):
-    devise_brut, devise_ctx, _ = lec.un(None, "cbc:DocumentCurrencyCode")
-    devise = (devise_brut or "").upper() or None
-    num, num_ctx, _ = lec.un(None, "cbc:ID")
-    date, date_ctx, _ = lec.un(None, "cbc:IssueDate")
-    ligne_xp = "cac:CreditNoteLine" if credit else "cac:InvoiceLine"
-    qte_xp = "cbc:CreditedQuantity" if credit else "cbc:InvoicedQuantity"
-    if type_doc is TypeDocument.facture_commerciale:
-        champs = ChampsFactureCommerciale()
-        _definir(champs, "numero", c.vs("numero", num, num_ctx))
-        _definir(champs, "date", c.vs("date", date, date_ctx))
-        _partie(c, lec, champs, "vendeur", "cac:AccountingSupplierParty", ubl=True)
-        _partie(c, lec, champs, "acheteur", "cac:AccountingCustomerParty", ubl=True)
-        dests = lec.tous(None, "cac:Delivery/cac:DeliveryParty")
-        if dests:
-            v, cx, _ = lec.un(dests[0], "cac:PartyName/cbc:Name")
-            _definir(champs, "destinataire.nom", c.vs("destinataire.nom", v, cx))
-        _definir(champs, "devise", c.vs("devise", devise_brut, devise_ctx))
-        total, t_ctx, _ = lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount")
-        if total is None:
-            total, t_ctx, _ = lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount")
-        v = c.vs("total_facture", total, t_ctx, devise=devise)
-        if v is not None:
-            from controldone.model.enums import TotalOrigine
-
-            v = v.model_copy(update={"total_origine": TotalOrigine.imprime})
-        _definir(champs, "total_facture", v)
-        inc, i_ctx, _ = lec.un(None, "cac:Delivery/cac:DeliveryTerms/cbc:ID | cac:DeliveryTerms/cbc:ID")
-        _definir(champs, "incoterm", c.vs("incoterm", inc, i_ctx))
-        for i, ligne in enumerate(lec.tous(None, ligne_xp)):
-            p = f"lignes[{i}]"
-            for rel, xp in (
-                ("numero_ligne", "cbc:ID"),
-                ("reference_article", "cac:Item/cac:SellersItemIdentification/cbc:ID"),
-                ("description", "cac:Item/cbc:Name"),
-                ("code_marchandise_imprime", "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"),
-                ("pays_origine", "cac:Item/cac:OriginCountry/cbc:IdentificationCode"),
-            ):
-                val, cx, _ = lec.un(ligne, xp)
-                _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", val, cx))
-            q, cx, el = lec.un(ligne, qte_xp)
-            if q is not None and el is not None:
-                v = c.vs(f"{p}.quantite", q, cx)
-                if v is not None and el.get("unitCode"):
-                    v = v.model_copy(update={"unite": el.get("unitCode"), "unite_brute": el.get("unitCode")})
-                _definir(champs, f"{p}.quantite", v)
-            pu, cx, _ = lec.un(ligne, "cac:Price/cbc:PriceAmount")
-            _definir(champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", pu, cx, devise=devise))
-            mt, cx, _ = lec.un(ligne, "cbc:LineExtensionAmount")
-            _definir(champs, f"{p}.montant_ligne", c.vs(f"{p}.montant_ligne", mt, cx, devise=devise))
-        return champs
-    champs = ChampsFactureTransitaire() if type_doc is TypeDocument.facture_transitaire else ChampsAvoir()
-    _definir(champs, "numero", c.vs("numero", num, num_ctx))
-    _definir(champs, "date", c.vs("date", date, date_ctx))
-    _partie(c, lec, champs, "emetteur", "cac:AccountingSupplierParty", ubl=True)
-    if isinstance(champs, ChampsFactureTransitaire):
-        _partie(c, lec, champs, "client_facture", "cac:AccountingCustomerParty", ubl=True)
-    _definir(champs, "devise", c.vs("devise", devise_brut, devise_ctx))
-    lignes = []
-    for el in lec.tous(None, ligne_xp):
-        lignes.append({
-            "libelle": lec.un(el, "cac:Item/cbc:Name"),
-            "quantite": lec.un(el, qte_xp),
-            "prix_unitaire": lec.un(el, "cac:Price/cbc:PriceAmount"),
-            "montant_ht": lec.un(el, "cbc:LineExtensionAmount"),
-            "taux_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent"),
-            "marqueur_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:ID"),
-            "code_marchandise": lec.un(el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"),
-        })
-    totaux = {
-        "ht": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount"),
-        "tva": lec.un(None, "cac:TaxTotal/cbc:TaxAmount"),
-        "ttc": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"),
-        "net": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount"),
-        "acomptes": lec.un(None, "cac:LegalMonetaryTotal/cbc:PrepaidAmount"),
-    }
-    refs_origine = [lec.un(x, ".") for x in lec.tous(None, "cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")]
-    refs_doc = [lec.un(x, ".") for x in lec.tous(None, "cac:AdditionalDocumentReference/cbc:ID")]
-    _remplir_ft(c, champs, lignes, totaux, refs_origine, refs_doc, devise)
-    return champs
+        _definir(champs, "total_credite_ht", c.vs("total_credite_ht", *t["ht"][:2], devise=devise))
+        _definir(champs, "total_tva", c.vs("total_tva", *t["tva"][:2], devise=devise))
+        _definir(champs, "total_credite_ttc", c.vs("total_credite_ttc", *t["ttc"][:2], devise=devise))
+        for texte, cx in d["notes"]:
+            m = _RX_MOTIF.match(texte)
+            if m and champs.motif is None:
+                _definir(champs, "motif", c.vs("motif", m.group(1), cx))
 
 
 # --- exports de déclaration -----------------------------------------------------------------------------------
@@ -878,7 +992,7 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
             if col and col not in connues:
                 avert.append(f"colonne_ignoree:{col}")
                 log.info("colonne_inconnue format=%s colonne=%s", fiche.format_id, col)
-        col_type = fiche.csv.get("colonne_type")
+        col_type = "__type__" if fiche.csv.get("multi_enregistrements") else fiche.csv.get("colonne_type")
 
         def lire(base, src: str):
             rang, n = base
@@ -906,7 +1020,7 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
             return None
         filtre = spec.get("type_enregistrement", fiche.csv.get("type_entete"))
         for r, n in zip(rangs, numeros, strict=True):
-            if filtre is not None and fiche.csv.get("colonne_type") and r.get(fiche.csv["colonne_type"]) != str(filtre):
+            if filtre is not None and col_type and r.get(col_type) != str(filtre):
                 continue
             if r.get(spec["source"]):
                 return (r, n)
@@ -946,9 +1060,29 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
                 unite = spec.get("unite")
                 if spec.get("source_unite"):
                     unite = lire(base, spec["source_unite"])[0] or unite
-                if unite is None and type_valeur_pour(rel) is TypeValeur.montant:
+                tv = type_valeur_pour(rel)
+                if unite is None and tv is TypeValeur.montant:
                     unite = (devise_lue if rel == "montant_facture_article" else None) or devise_defaut
-                _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", val, ctx_, devise=unite))
+                v = c.vs(f"{p}.{rel}", val, ctx_, devise=unite if tv is TypeValeur.montant else None)
+                if v is not None and tv is TypeValeur.quantite and unite:
+                    u = normalize_unit(unite)
+                    v = v.model_copy(update={"unite": u.code, "unite_brute": u.brut})
+                _definir(champs, f"{p}.{rel}", v)
+            objet = champs.obtenir(p)
+            for rel, brute in (spec_l.get("enumerations") or {}).items():
+                val = lire(base, _spec(brute)["source"])[0]
+                if objet is None or val is None:
+                    continue
+                cible = type(objet).model_fields.get(rel)
+                if cible is None:
+                    continue
+                for enum in (TauxNature, CategorieTaxe, PaiementNormalise, NatureLigne):
+                    if enum.__name__ in str(cible.annotation):
+                        try:
+                            setattr(objet, rel, enum(val.strip()))
+                        except ValueError:
+                            avert.append(f"enumeration_inconnue:{rel}")
+                        break
     _deriver_declaration(champs, fiche)
     _indices_autoliquidation(c, champs)
     return champs
@@ -968,8 +1102,8 @@ def _noms_xml_connus(fiche: FicheCorrespondance) -> set[str]:
         if s.get("source_unite"):
             ajouter(s["source_unite"])
     for spec_l in fiche.listes.values():
-        ajouter(spec_l["source"])
-        for spec in (spec_l.get("champs") or {}).values():
+        ajouter(spec_l.get("source", ""))
+        for spec in [*(spec_l.get("champs") or {}).values(), *(spec_l.get("enumerations") or {}).values()]:
             s = _spec(spec)
             ajouter(s["source"])
             if s.get("source_unite"):
@@ -979,22 +1113,30 @@ def _noms_xml_connus(fiche: FicheCorrespondance) -> set[str]:
 
 
 def _colonnes_csv_connues(fiche: FicheCorrespondance) -> set[str]:
+    multi = bool(fiche.csv.get("multi_enregistrements"))
+    type_entete = fiche.csv.get("type_entete")
     cols = set(fiche.detection.get("ignorer", []) or [])
     if fiche.csv.get("colonne_type"):
         cols.add(fiche.csv["colonne_type"])
+
+    def nom(src: str, spec: dict[str, Any], defaut: str | None) -> str:
+        t = spec.get("type_enregistrement", defaut)
+        return f"{t}.{src}" if multi and t else src
+
     for spec in fiche.entete.values():
-        s = _spec(spec)
-        cols.add(s["source"])
-        if s.get("source_unite"):
-            cols.add(s["source_unite"])
+        sp = _spec(spec)
+        cols.add(nom(sp["source"], sp, type_entete))
+        if sp.get("source_unite"):
+            cols.add(nom(sp["source_unite"], sp, type_entete))
     for spec_l in fiche.listes.values():
+        t = spec_l.get("type_enregistrement")
         if isinstance(spec_l.get("cle"), str):
-            cols.add(spec_l["cle"])
-        for spec in (spec_l.get("champs") or {}).values():
-            s = _spec(spec)
-            cols.add(s["source"])
-            if s.get("source_unite"):
-                cols.add(s["source_unite"])
+            cols.add(f"{t}.{spec_l['cle']}" if multi and t else spec_l["cle"])
+        for spec in [*(spec_l.get("champs") or {}).values(), *(spec_l.get("enumerations") or {}).values()]:
+            sp = _spec(spec)
+            cols.add(f"{t}.{sp['source']}" if multi and t else sp["source"])
+            if sp.get("source_unite"):
+                cols.add(f"{t}.{sp['source_unite']}" if multi and t else sp["source_unite"])
     return cols
 
 
@@ -1005,7 +1147,7 @@ def _deriver_declaration(champs: ChampsDeclaration, fiche: FicheCorrespondance) 
         t.categorie = categorie_taxe(t.type_taxe.valeur if t.type_taxe else None, t_cat)
         t.paiement_normalise = paiement_normalise(
             (t.mode_paiement.valeur_brute or t.mode_paiement.valeur) if t.mode_paiement else None, t_pai)
-        if t.taux is not None:
+        if t.taux is not None and t.taux_nature is None:
             if t.base_quantite is not None and t.base_montant is None:
                 t.taux_nature = TauxNature.specifique
             else:
@@ -1077,10 +1219,11 @@ class ExtracteurFactureXML:
         c = _Constructeur(document, type_doc, info_ex, Methode.xml_structure, conf, context)
         nom = _local(racine.tag)
         if nom == "CrossIndustryInvoice":
-            champs = _champs_facture_cii(c, _Lecteur(racine, NS_CII), type_doc)
+            lec = _Lecteur(racine, NS_CII)
+            champs = _champs_facture(c, lec, _lire_cii(lec), type_doc, ubl=False)
         else:
-            ns = {**NS_UBL, "inv": etree.QName(racine.tag).namespace}
-            champs = _champs_facture_ubl(c, _Lecteur(racine, ns), type_doc, credit=(nom == "CreditNote"))
+            lec = _Lecteur(racine, {**NS_UBL, "inv": etree.QName(racine.tag).namespace})
+            champs = _champs_facture(c, lec, _lire_ubl(lec, credit=(nom == "CreditNote")), type_doc, ubl=True)
         return ExtractionResult(extracteur=info_ex, champs=champs, avertissements=avert)
 
 

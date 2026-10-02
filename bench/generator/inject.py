@@ -5,13 +5,11 @@ from __future__ import annotations
 import datetime as dt
 from decimal import Decimal
 
-from .build import (VAT_RATE, _alloc_to, _conv, _lbl, _marker, _n, _p, _presta, compute_taxes, debours_lines,
-                    faf_amount, faf_base, faf_detail, ft_number, make_faf_line, recompute_decl_totals)
+from .build import (VAT_RATE, _alloc_to, _conv, _lbl, _marker, _n, _p, _presta, compute_taxes, faf_amount, faf_base, faf_detail, ft_number, recompute_decl_totals)
 from .clients import grid_poste
 from .common import (D, D0, ZERO_DEC_CURRENCIES, CONF_CLASSES, is_confusion_variant, make_awb, make_mrn, q0, q2, q3,
                      qcur, transpose_digits)
 from .model import OFF_GRID, CreditNote, FTLine, ForwarderInvoice, Party, SupportDoc, composante_of
-from .refdata import PRODUCTS_BY_KEY
 
 INCOTERMS = ["EXW", "FCA", "FOB", "FAS", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"]
 CUR_SWAP = {"EUR": "USD", "USD": "CNY", "CNY": "USD", "GBP": "USD", "CHF": "EUR", "INR": "USD", "TRY": "EUR",
@@ -177,7 +175,6 @@ def inject_declaration(dm):
                          key="A7")
         elif ctl == "F5":
             d2 = dm.final_decls[1]
-            old2 = d2.total_invoiced
             if d2.currency == "EUR" and ci.currency != "EUR":
                 new2 = q2(facture * d2.eur_per_unit)
             else:
@@ -709,7 +706,6 @@ def inject_forwarder(dm):
 
 def refresh_faf(dm):
     """Frais d'avance de fonds recalculés sur les débours effectivement refacturés."""
-    deb_ft = _deb_ft(dm)
     pre_ft = _pre_ft(dm)
     all_deb = [l for ft in dm.fts if ft.kind != "rebill" for l in ft.lines if l.is_debours]
     for l in pre_ft.lines:
