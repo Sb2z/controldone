@@ -24,8 +24,10 @@ def _env(monkeypatch, tmp_path):
     monkeypatch.setenv("CONTROLDONE_ENV", "test")
     monkeypatch.setenv("CONTROLDONE_MASTER_KEY", Fernet.generate_key().decode())
     monkeypatch.setenv("CONTROLDONE_DATA_DIR", str(tmp_path / "var"))
-    for k in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_LIVE_OK", "CONTROLDONE_TVA_APPLICABLE"):
+    for k in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_LIVE_OK"):
         monkeypatch.delenv(k, raising=False)
+    # config/offres.yaml part en franchise en base (tva_applicable: false) ; ces tests couvrent le cas assujetti.
+    monkeypatch.setenv("CONTROLDONE_TVA_APPLICABLE", "true")
     from controldone.config import reset_settings
 
     reset_settings()
@@ -49,7 +51,7 @@ def db(tmp_path):
 
 @pytest.fixture
 def catalogue():
-    c = charger_offres(CONFIG, env={})
+    c = charger_offres(CONFIG, env={"CONTROLDONE_TVA_APPLICABLE": "true"})  # cas assujetti (voir _env)
     return replace(c, vendeur=replace(c.vendeur, **VENDEUR_FICTIF))
 
 

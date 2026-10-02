@@ -94,9 +94,9 @@ Par contrôle : `docs/banc/holdout2_final.md`. Plus faibles en rappel sur cet é
 |---|---|---|
 | 1 | Lire ce rapport, lancer `make demo-complete`, ouvrir le rapport PDF et l'interface | 45 min |
 | 2 | **Relire votre contrat de travail** : activité accessoire, exclusivité, non-concurrence, propriété des créations. Si une clause bloque, tout s'arrête là. | 30 min (+ avis RH ou avocat si doute) |
-| 3 | **Avocat** : périmètre du droit (arrêt Alma Consulting 2010) et formulation de l'offre ; commission au résultat ; CGV, accord de sous-traitance, mentions légales, confidentialité (`site/*.html`, bandeau « À RELIRE PAR UN AVOCAT ») ; accord de diagnostic gratuit avec droit de publication anonymisée | 2 h de préparation + rendez-vous |
+| 3 | **Avocat** : périmètre du droit (arrêt Alma Consulting 2010) et formulation de l'offre ; commission au résultat ; CGV, accord de sous-traitance, mentions légales, confidentialité (`site/*.html`, bandeau « À RELIRE PAR UN AVOCAT ») ; accord de diagnostic (remise de lancement) et accord de publication anonymisée séparé et facultatif ; relevé d'écarts et modèle de courrier neutre (voir `docs/recherche/juridique_france_suisse.md` §10) | 2 h de préparation + rendez-vous |
 | 4 | **Statut juridique** (micro-entreprise ou société), puis immatriculation → **SIREN** | 1 h en ligne + 1 à 4 semaines de délai |
-| 5 | **Expert-comptable** : régime de TVA (franchise ou non, paramètre `tva_applicable`) ; TVA d'un diagnostic gratuit échangé contre un droit de publication (possible échange taxable) | 1 h |
+| 5 | **Expert-comptable** : régime de TVA (franchise en base par défaut, paramètre `tva_applicable: false`) ; traitement fiscal de la remise de lancement de 100 % avec accord de publication séparé | 1 h |
 | 6 | **Compte bancaire professionnel → IBAN** | 30 à 60 min |
 | 7 | **Assurance responsabilité civile professionnelle** (dès 13 EUR/mois selon Hiscox) avant le premier client | 30 min |
 | 8 | **Nom** : choisir entre ControlDOne, Probant, Apuro et Ecarto ; recherche de marque INPI / EUIPO ; **nom de domaine** | 1 h 15 |
@@ -113,6 +113,6 @@ Par contrôle : `docs/banc/holdout2_final.md`. Plus faibles en rappel sur cet é
 
 Détail : `commercial/plan_actions_commerciales.md`.
 
-1. **Obtenir et réaliser 3 diagnostics gratuits**, contre le droit de publier les résultats anonymisés : 25 à 35 h sur 8 semaines. Envoyez à la main les brouillons validés, 5 par jour au plus, avec relances à J+5 et J+12. Visez 6 à 8 rendez-vous pour obtenir 3 accords, chacun sur au moins 15 dossiers. **Critère d'arrêt fixé à l'avance** : moins de 3 000 à 4 000 EUR d'écarts par client et par an en moyenne (formule d'extrapolation écrite avant l'analyse). Dans ce cas on arrête, après six semaines perdues et non un an.
-2. **Ouvrir le canal experts-comptables** : 6 à 8 h. Contactez les 4 cabinets de la liste et montrez le rapport sur cas fictif. Aucune commission de prescription avant d'avoir des résultats mesurés.
+1. **Obtenir et réaliser 3 diagnostics gratuits** (remise de lancement ; publication de résultats anonymisés seulement si le client l'accepte, par un accord séparé) : 25 à 35 h sur 8 semaines. Envoyez à la main les brouillons validés, 5 par jour au plus, avec relances à J+5 et J+12. Visez 6 à 8 rendez-vous pour obtenir 3 accords, chacun sur au moins 15 dossiers. **Critère d'arrêt fixé à l'avance** : moins de 3 000 à 4 000 EUR d'écarts par client et par an en moyenne (formule d'extrapolation écrite avant l'analyse). Dans ce cas on arrête, après six semaines perdues et non un an.
+2. **Ouvrir le canal experts-comptables** : 6 à 8 h. Contactez les 4 cabinets de la liste et montrez le rapport sur cas fictif. Aucune commission d'apport à un cabinet : c'est interdit (art. 24 de l'ordonnance du 19 septembre 1945).
 3. **Publier la série LinkedIn** : 5 à 6 h. Un post par semaine pendant 5 semaines, l'article en semaine 3. Tous les cas sont fictifs et étiquetés comme tels, et la phrase de renvoi figure dès qu'un sujet réglementaire apparaît.

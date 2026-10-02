@@ -52,7 +52,7 @@
     <h1>Accord de sous-traitance des données (article 28 RGPD)</h1>
     <p class="meta-line">Version de travail du 2 octobre 2026.</p>
 
-    <p>Accord conclu en application de l'article 28 du règlement (UE) 2016/679 (RGPD) entre :</p>
+    <p>Accord conclu au titre de l'article 28 du règlement (UE) 2016/679 (RGPD) entre :</p>
     <ul>
       <li>le <strong>Client</strong>, responsable de traitement : <span class="ph">[À COMPLÉTER : dénomination, SIREN, adresse, représentant]</span> ;</li>
       <li>le <strong>Prestataire</strong>, sous-traitant : <span class="ph">[À COMPLÉTER : dénomination, SIREN, adresse, représentant]</span>.</li>
@@ -71,11 +71,16 @@
     <h2>3. Nature et finalités du traitement</h2>
     <ul>
       <li>Nature : réception, stockage chiffré, lecture automatisée (structurée, déterministe et, si le Client ne l'a pas
-      désactivée, par modèle de langage), comparaison, production de rapports, conservation, restitution, suppression.</li>
-      <li>Finalités : rapprocher les documents de chaque dossier d'import, chiffrer les écarts, préparer des demandes
-      d'avoir que le Client envoie lui-même, suivre les avoirs reçus.</li>
-      <li>Le Prestataire n'utilise pas les données pour ses propres finalités, sous réserve de la production de statistiques
-      agrégées et anonymisées prévue à l'article 14 des CGV, qui ne contiennent aucune donnée personnelle.</li>
+      désactivée, par modèle de langage), comparaison, production de rapports, conservation, restitution, suppression.
+      Le modèle de langage sert uniquement à lire les documents ; les relevés et modèles de courrier sont produits à partir
+      de gabarits.</li>
+      <li>Finalités : rapprocher les documents de chaque dossier d'import, chiffrer les écarts, établir un relevé
+      d'écarts et un modèle de courrier neutre que le Client adapte et envoie lui-même s'il le décide, suivre les avoirs
+      reçus.</li>
+      <li>Le Prestataire n'utilise pas les données pour ses propres finalités. Sur instruction du Client, il anonymise et
+      agrège des données tarifaires issues des dossiers validés pour constituer le référentiel prévu à l'article 14 des CGV ;
+      aucune donnée personnelle n'est utilisée dans ce calcul ni n'y figure. Le Client peut retirer cette instruction à tout
+      moment.</li>
     </ul>
 
     <h2>4. Catégories de données et de personnes concernées</h2>
@@ -98,22 +103,24 @@
 
     <h2 id="sous-traitants">7. Sous-traitants ultérieurs</h2>
     <p>Le Client autorise les sous-traitants ultérieurs ci-dessous. Le Prestataire informe le Client par écrit de tout ajout ou
-    remplacement au moins 30 jours à l'avance ; le Client peut s'y opposer et, à défaut d'accord, résilier sans frais.</p>
+    remplacement dès qu'il en est lui-même informé et au moins 15 jours à l'avance ; le Client peut s'y opposer et, à défaut d'accord, résilier sans frais.</p>
     <div class="table-wrap">
       <table>
         <thead><tr><th scope="col">Sous-traitant</th><th scope="col">Service</th><th scope="col">Lieu de traitement</th><th scope="col">Garanties</th></tr></thead>
         <tbody>
           <tr><td><span class="ph">[À COMPLÉTER : hébergeur de l'application]</span></td><td>Serveurs, base de données, stockage chiffré des fichiers</td><td>Union européenne <span class="ph">[À COMPLÉTER : pays, ville]</span></td><td>Contrat art. 28</td></tr>
           <tr><td><span class="ph">[À COMPLÉTER : stockage des sauvegardes]</span></td><td>Copie hors site des sauvegardes chiffrées</td><td>Union européenne <span class="ph">[À COMPLÉTER : pays]</span></td><td>Contrat art. 28 ; sauvegardes chiffrées avant envoi</td></tr>
-          <tr><td><span class="ph">[À COMPLÉTER : fournisseur du modèle de langage (le code actuel prévoit l'API d'Anthropic)]</span></td><td>Lecture de pages de documents et rédaction de textes ; aucun outil, aucun accès réseau</td><td><span class="ph">[À COMPLÉTER : lieu ; si hors UE, le préciser]</span></td><td><span class="ph">[À COMPLÉTER : clauses contractuelles types ou autre garantie]</span>. <strong>Désactivable</strong> par le Client : la lecture structurée et déterministe reste disponible.</td></tr>
+          <tr><td>Anthropic, PBC</td><td>Lecture de pages de documents (modèle de langage) ; aucun outil, aucun accès réseau</td><td>États-Unis</td><td>Clauses contractuelles types (décision (UE) 2021/914, modules 2 et 3) incorporées à l'accord de traitement d'Anthropic du 24 février 2025 ; addendum suisse pour les données soumises à la LPD <span class="ph">[À VALIDER]</span>. <strong>Désactivable</strong> par le Client : la lecture structurée et déterministe reste disponible.</td></tr>
           <tr><td>Stripe <span class="ph">[À COMPLÉTER : entité contractante]</span></td><td>Paiement par carte et abonnements</td><td><span class="ph">[À COMPLÉTER : lieu]</span></td><td>Ne reçoit que les données de facturation du Client, jamais les documents d'import. Stripe peut agir comme responsable de traitement pour une partie de ces données <span class="ph">[À VALIDER]</span>.</td></tr>
         </tbody>
       </table>
     </div>
 
     <h2>8. Transferts hors de l'Union européenne</h2>
-    <p>Les données sont hébergées dans l'Union européenne. Si le fournisseur du modèle de langage traite des données hors de
-    l'Union, le Client en est informé avant la signature et peut désactiver ce mode de lecture à tout moment, sans frais.</p>
+    <p>Les données sont hébergées dans l'Union européenne. Lorsque la lecture par modèle de langage est activée, des pages de
+    documents sont transférées aux États-Unis vers Anthropic, PBC, sur le fondement des clauses contractuelles types ; le
+    Prestataire tient à disposition du Client son évaluation de ce transfert. Le Client peut désactiver ce mode à tout
+    moment, sans frais.</p>
 
     <h2>9. Mesures de sécurité</h2>
     <ul>
@@ -150,7 +157,12 @@
     notamment son registre des traitements en tant que sous-traitant. Il permet un audit, une fois par an, par le Client ou
     un auditeur indépendant tenu au secret, sur préavis de 30 jours, aux frais du Client <span class="ph">[À VALIDER]</span>.</p>
 
-    <h2>13. Signature</h2>
+    <h2>13. Protection des données suisse</h2>
+    <p>Pour les données soumises à la loi fédérale sur la protection des données (LPD), les références au RGPD s'entendent
+    des dispositions correspondantes de la LPD, et l'autorité de contrôle est le Préposé fédéral à la protection des
+    données et à la transparence (PFPDT). Le présent accord vaut contrat de sous-traitance au sens de l'article 9 LPD.</p>
+
+    <h2>14. Signature</h2>
     <p>Fait le <span class="ph">[À COMPLÉTER : date]</span>, en deux exemplaires.<br>Pour le Client : <span class="ph">[À COMPLÉTER : nom, fonction]</span><br>Pour le Prestataire : <span class="ph">[À COMPLÉTER : nom, fonction]</span></p>
 
   </div>

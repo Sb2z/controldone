@@ -8,6 +8,8 @@
 - **Origine des données** : chaque message dit où l'adresse a été trouvée (page Contact du site, mentions légales). Ne jamais écrire à une adresse qui n'a pas été publiée par l'entreprise elle-même.
 - **Désinscription** : chaque message propose « répondez STOP ». Un STOP est noté le jour même dans `prospects.csv` (colonne `raison_ciblage` : « STOP reçu le … ») et l'adresse n'est plus jamais utilisée.
 - **Volume** : envois un par un, depuis la boîte du fondateur, pas d'outil d'envoi en masse. Si l'adresse est générique (contact@, info@), demander à qui transmettre.
+- **Suisse et Belgique** : en Suisse, uniquement des e-mails individuels et personnalisés, jamais d'envoi groupé (art. 3 al. 1 let. o LCD) ; en Belgique, uniquement des adresses impersonnelles (info@, contact@). Voir `prospects_methode.md` §5 bis.
+- **Offre de lancement** : la gratuité est une remise commerciale de lancement de 100 %. L'accord de publication est proposé à part, facultatif et révocable jusqu'à la publication, sans effet sur la remise. Ne jamais écrire « en échange », « contre » ou « en contrepartie » à propos de la publication.
 - **Arrêt de la séquence** : dès qu'il y a une réponse (positive, négative ou STOP), on n'envoie plus les relances.
 - **Interdits** : aucune promesse de gain chiffrée, aucun avis sur un droit, une taxe, un classement, une origine, une valeur en douane, aucun faux témoignage, aucun chiffre sans source.
 - Les champs entre crochets `[...]` sont à remplir. `[accroche]` = un fait public, sourcé, tiré du site de l'entreprise (voir `brouillons/`).
@@ -28,7 +30,7 @@ Dès qu'un message évoque le droit forfaitaire, la TVA à l'importation ou un a
 
 ```
 --
-[Prénom Nom], fondateur de ControlDOne, [SIREN à compléter]
+[Prénom Nom] EI, fondateur de ControlDOne, SIREN [ ]
 [adresse postale professionnelle] — [téléphone]
 Vous recevez ce message parce que votre adresse professionnelle figure sur [source exacte, ex. : la page Contact de votre site]. Si vous ne souhaitez plus recevoir de message de ma part, répondez simplement STOP : je supprimerai votre adresse de mon fichier.
 ControlDOne est un contrôle technique de cohérence entre documents et de calcul. Il ne constitue ni un conseil juridique, fiscal ou douanier, ni un avis sur la conformité des opérations.
@@ -51,9 +53,9 @@ Je m'appelle [Prénom Nom] et j'ai fondé ControlDOne, un service qui rapproche,
 
 [accroche : un fait public tiré de votre site, ex. « Votre site indique que vous importez directement des fruits d'Amérique latine et d'Afrique. »]
 
-Le service relève des écarts de fait : un montant refacturé qui ne correspond pas à celui de la déclaration, une ligne absente de la grille tarifaire convenue, un total qui ne correspond pas à la somme de ses lignes, un avoir annoncé mais jamais reçu. Il ne se prononce pas sur le bien-fondé des droits et taxes : ces points-là sont renvoyés vers votre représentant en douane ou un avocat.
+Le service relève des écarts de fait : un montant refacturé qui ne correspond pas à celui de la déclaration, un prix facturé différent du prix chiffré de votre grille tarifaire, un total qui ne correspond pas à la somme de ses lignes, un avoir annoncé mais jamais reçu. Il ne se prononce pas sur le bien-fondé des droits et taxes : ces points-là sont renvoyés vers votre représentant en douane ou un avocat.
 
-Pour démarrer, je propose 3 diagnostics gratuits à des PME importatrices, sur un lot de dossiers passés (par exemple les 20 derniers). En échange, je demande le droit de publier les résultats sous forme anonymisée (ni nom, ni montant permettant de vous reconnaître). Je ne promets pas de montant : le diagnostic peut aussi conclure que tout est cohérent.
+Pour démarrer, je propose 3 diagnostics gratuits (remise de lancement) à des PME importatrices, sur un lot de dossiers passés (par exemple les 20 derniers). Si vous l'acceptez ensuite, par un accord séparé, je publierai des résultats anonymisés (ni nom, ni montant permettant de vous reconnaître), après votre relecture. Je ne promets pas de montant : le diagnostic peut aussi conclure que tout est cohérent.
 
 Seriez-vous d'accord pour un échange de 20 minutes la semaine prochaine ? Si ce n'est pas vous qui suivez les factures du transitaire, à qui puis-je m'adresser ?
 
@@ -70,7 +72,7 @@ Vous recevez chaque mois les factures de votre transitaire, avec leurs débours 
 **Variante DAF** — remplacer le 2e paragraphe par :
 
 ```
-Côté comptabilité, les factures du transitaire mélangent débours et prestations. Une ligne de TVA refacturée alors que la TVA à l'importation est autoliquidée sur la déclaration de TVA, ou un avoir annoncé mais jamais reçu, se voit mal au moment du paiement.
+Côté comptabilité, les factures du transitaire mélangent débours et prestations. Une ligne de TVA refacturée alors que la déclaration en douane indique l'autoliquidation, ou un avoir annoncé mais jamais reçu, se voit mal au moment du paiement.
 ```
 
 ---
@@ -88,7 +90,7 @@ Je me permets une relance courte, avec un exemple (cas fictif, inventé pour l'i
 
 Le rapport donne, pour chaque écart, les deux valeurs, la page du document où elles figurent et la tolérance appliquée. Les sujets réglementaires (autoliquidation, droits, classement) sont signalés à part. Ce point relève d'une appréciation réglementaire : il est à faire vérifier par un représentant en douane enregistré ou un avocat. ControlDOne ne se prononce pas sur ce point.
 
-L'offre de lancement tient toujours : 3 diagnostics gratuits, contre le droit de publier les résultats anonymisés. Un créneau de 20 minutes vous conviendrait-il ?
+L'offre de lancement tient toujours : 3 diagnostics gratuits, avec, si vous l'acceptez, publication de résultats anonymisés. Un créneau de 20 minutes vous conviendrait-il ?
 
 Bien cordialement,
 [pied commun]
@@ -122,19 +124,19 @@ Bien cordialement,
 *Uniquement vers une personne dont la fonction est en lien avec l'offre, sans outil d'automatisation, sans extraction de profils.*
 
 ```
-Bonjour [Prénom], je lance ControlDOne, un contrôle croisé facture fournisseur / déclaration / facture transitaire pour PME importatrices. Je cherche 3 entreprises pour un diagnostic gratuit (résultats publiés anonymisés). Si le sujet ne vous concerne pas, ignorez simplement ce message.
+Bonjour [Prénom], je lance ControlDOne, un contrôle croisé facture fournisseur / déclaration / facture transitaire pour PME importatrices. Je cherche 3 entreprises pour un diagnostic gratuit (publication anonymisée si vous l'acceptez). Pas concerné ? Ignorez simplement ce message.
 ```
 
-(Longueur : 287 caractères.)
+(Longueur : 281 caractères.)
 
 ## LinkedIn — message de suivi (après acceptation uniquement)
 
 ```
 Merci pour la connexion, [Prénom].
 
-En deux lignes : ControlDOne rapproche, dossier par dossier, la facture du fournisseur, la déclaration en douane, la facture du transitaire et ses avoirs, et chiffre les écarts de fait (montant refacturé différent de la déclaration, ligne hors grille, avoir jamais reçu). Pas d'avis sur les droits et taxes : ces points sont renvoyés vers un représentant en douane ou un avocat.
+En deux lignes : ControlDOne rapproche, dossier par dossier, la facture du fournisseur, la déclaration en douane, la facture du transitaire et ses avoirs, et chiffre les écarts de fait (montant refacturé différent de la déclaration, prix différent de la grille tarifaire, avoir jamais reçu). Pas d'avis sur les droits et taxes : ces points sont renvoyés vers un représentant en douane ou un avocat.
 
-J'offre 3 diagnostics gratuits sur des dossiers passés, contre le droit de publier les résultats anonymisés. Est-ce un sujet chez [entreprise] ? Si vous préférez ne plus recevoir de message de ma part, dites-le simplement : je n'insisterai pas.
+J'offre 3 diagnostics gratuits sur des dossiers passés ; si vous l'acceptez, et seulement dans ce cas, des résultats anonymisés seront publiés après votre relecture. Est-ce un sujet chez [entreprise] ? Si vous préférez ne plus recevoir de message de ma part, dites-le simplement : je n'insisterai pas.
 
-[Prénom Nom], fondateur de ControlDOne, [SIREN à compléter]
+[Prénom Nom] EI, fondateur de ControlDOne, SIREN [ ]
 ```
