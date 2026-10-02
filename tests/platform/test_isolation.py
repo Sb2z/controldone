@@ -33,7 +33,7 @@ from controldone.storage.models import (
 
 NOMS = [m.__name__ for m in MODELES_CLIENT]
 MODELES = {m.__name__: m for m in MODELES_CLIENT}
-APPEND_ONLY = {"AiUsage", "EvenementRecouvrement"}
+APPEND_ONLY = {"AiUsage", "EvenementRecouvrement", "CorrectionValeur"}
 
 
 # --- lecture / écriture par devinette d'identifiant ---------------------------------------------------

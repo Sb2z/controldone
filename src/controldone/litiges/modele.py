@@ -73,7 +73,7 @@ class Relance(Modele):
 class AvoirImpute(Modele):
     avoir_id: str
     numero: str | None = None
-    date: date | None = None
+    date_avoir: date | None = None
     montant_total: Decimal
     impute: Decimal  # part imputée sur les écarts de cette réclamation
     reliquat: Decimal  # reliquat non imputé de l'avoir (toutes réclamations confondues, E5)

@@ -38,6 +38,7 @@ from controldone.storage.models import (
     Base,
     CleApi,
     Constat,
+    CorrectionValeur,
     Document,
     Dossier,
     DossierFichier,
@@ -422,12 +423,17 @@ class TenantScope:
                                       outcome=str(r.outcome), contenu=contenu))
             else:
                 ligne.contenu, ligne.outcome = contenu, str(r.outcome)
+                ligne.dossier_version, ligne.execution_id = r.dossier_version, r.execution_id
             c = r.constat
             if c is not None:
                 existant = self.session.execute(
                     select(Constat).where(Constat.tenant_id == self.tenant_id, Constat.id == c.id)
                 ).scalar_one_or_none()
-                cj = c.model_dump(mode="json")
+                cj = {**c.model_dump(mode="json"),
+                      # affichage des tolérances à côté du constat (§3.1 règle 6) sans lire les résultats bruts
+                      "tolerance_appliquee": contenu.get("tolerance_appliquee"),
+                      "seuil_certitude_applique": contenu.get("seuil_certitude_applique"),
+                      "attendu": contenu.get("attendu"), "constate": contenu.get("constate")}
                 if existant is None:
                     self._ajouter_interne(Constat(
                         id=c.id, resultat_id=r.id, dossier_id=r.dossier_id, dossier_version=r.dossier_version,
@@ -436,8 +442,19 @@ class TenantScope:
                         statut_validation=str(c.statut_validation), contenu=cj,
                     ))
                 else:
+                    # Recontrôle (nouvelle version du dossier) : la validation déjà donnée est conservée si
+                    # le niveau et le montant sont inchangés ; sinon le constat est de nouveau proposé.
+                    change = (existant.niveau != str(c.niveau) or existant.montant_en_jeu != c.montant_en_jeu)
+                    if change and existant.statut_validation != "propose":
+                        existant.statut_validation, existant.valide_par, existant.valide_le = "propose", None, None
+                        existant.commentaire_validation = None
+                    else:
+                        cj = {**cj, "statut_validation": existant.statut_validation,
+                              "valide_par": existant.valide_par,
+                              "commentaire_validation": existant.commentaire_validation}
                     existant.contenu, existant.niveau = cj, str(c.niveau)
                     existant.montant_en_jeu = c.montant_en_jeu
+                    existant.dossier_version, existant.resultat_id = r.dossier_version, r.id
             n += 1
         self.session.flush()
         return n
@@ -463,6 +480,59 @@ class TenantScope:
         self.session.flush()
         self._auditer("valider_constat", f"constats:{constat_id}", {"de": de, "vers": statut}, toujours=True)
         return c
+
+    def retrograder_constat(self, constat_id: str, motif: str) -> Constat:
+        """Le fondateur rétrograde un ``ecart_certain`` en ``a_verifier`` (§7.7) ; le constat reste proposé.
+        (L'inverse est impossible ici : seul un recontrôle après correction peut produire un écart certain.)"""
+        self.exiger(Action.valider_constat)
+        if not (motif and motif.strip()):
+            raise ValueError("la rétrogradation exige un motif")
+        c = self.obtenir(Constat, constat_id)
+        if c.niveau != "ecart_certain":
+            raise ValueError("seul un écart certain peut être rétrogradé")
+        raisons = list((c.contenu or {}).get("raisons") or [])
+        if "retrograde_par_fondateur" not in raisons:
+            raisons.append("retrograde_par_fondateur")
+        c.niveau = "a_verifier"
+        c.statut_validation, c.valide_par, c.valide_le = "propose", self.actor.id, maintenant()
+        c.commentaire_validation = motif.strip()[:1000]
+        c.contenu = {**c.contenu, "niveau": "a_verifier", "raisons": raisons, "statut_validation": "propose",
+                     "commentaire_validation": c.commentaire_validation}
+        self.session.flush()
+        self._auditer("retrograder_constat", f"constats:{constat_id}", {"vers": "a_verifier"}, toujours=True)
+        return c
+
+    # --- corrections (§6.2.11) ----------------------------------------------------------------------
+    def appliquer_correction(self, *, correction_id: str, dossier_id: str, document_id: str, cible: str,
+                             chemin: str, ancienne: dict[str, Any] | None, nouvelle: dict[str, Any],
+                             contenu_document: dict[str, Any], motif: str, role_auteur: str) -> Dossier:
+        """Enregistre une correction (append-only), remplace la valeur dans le document et incrémente la
+        version du dossier. Le recontrôle est mis en file par l'appelant. Fondateur ou ``client_admin``."""
+        self.exiger(Action.corriger)
+        if not (motif and motif.strip()):
+            raise ValueError("la correction exige un motif")
+        dossier = self.obtenir(Dossier, dossier_id)
+        doc = self.obtenir(Document, document_id)
+        if document_id not in {lien.get("document_id") for lien in (dossier.contenu or {}).get("liens", [])}:
+            raise AccesRefuse("introuvable ou hors périmètre")
+        self._ajouter_interne(CorrectionValeur(
+            id=correction_id, dossier_id=dossier_id, document_id=document_id, cible=cible, chemin=chemin[:300],
+            ancienne_valeur=(ancienne or {}).get("valeur"), nouvelle_valeur=nouvelle.get("valeur"),
+            auteur=self.actor.id, role_auteur=role_auteur, motif=motif.strip()[:1000],
+            contenu={"ancienne": ancienne, "nouvelle": nouvelle},
+        ))
+        contenu = dict(contenu_document)
+        contenu["client_id"] = self.tenant_id
+        doc.contenu = contenu
+        dossier.version = dossier.version + 1
+        dossier.contenu = {**dossier.contenu, "version": dossier.version}
+        self.session.flush()
+        self._auditer("corriger_valeur", f"documents:{document_id}",
+                      {"correction": correction_id, "dossier": dossier_id, "version": dossier.version}, toujours=True)
+        return dossier
+
+    def corrections(self, dossier_id: str) -> list[CorrectionValeur]:
+        return self.lister(CorrectionValeur, dossier_id=dossier_id, ordre=CorrectionValeur.le)
 
     # --- recouvrement (§17) -------------------------------------------------------------------------
     def enregistrer_ecart(self, ecart: EcartARecouvrer) -> Ecart:
@@ -668,6 +738,51 @@ class OperatorScope:
         for u in self.session.execute(select(AiUsage).where(AiUsage.mois == mois)).scalars():
             totaux[u.tenant_id] = totaux.get(u.tenant_id, Decimal(0)) + u.cout_eur
         return totaux
+
+    def statistiques(self) -> dict[str, dict[str, Any]]:
+        """Indicateurs agrégés par client pour le tableau de bord (lecture transversale journalisée) :
+        dossiers par statut, constats proposés, montants recouvrables (validés certains / à vérifier),
+        écarts ouverts. Identifiants et compteurs seulement."""
+        self._audit_immediat("lire_tableau_de_bord", None, "tenants")
+        stats: dict[str, dict[str, Any]] = {}
+
+        def bloc(t: str) -> dict[str, Any]:
+            return stats.setdefault(t, {"dossiers": {}, "nb_dossiers": 0, "proposes": 0,
+                                        "recouvrable_certain": Decimal(0), "recouvrable_a_verifier": Decimal(0),
+                                        "ecarts_ouverts": 0, "reste_a_recouvrer": Decimal(0)})
+
+        for t, st, n in self.session.execute(
+                select(Dossier.tenant_id, Dossier.statut_global, func.count()).group_by(Dossier.tenant_id,
+                                                                                         Dossier.statut_global)):
+            b = bloc(t)
+            b["dossiers"][st or "inconnu"] = n
+            b["nb_dossiers"] += n
+        versions = {d: v for d, v in self.session.execute(select(Dossier.id, Dossier.version))}
+        for c in self.session.execute(select(Constat)).scalars():
+            if versions.get(c.dossier_id) != c.dossier_version:
+                continue  # constat d'une version antérieure du dossier
+            b = bloc(c.tenant_id)
+            if c.statut_validation == "propose":
+                b["proposes"] += 1
+            if c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0:
+                if c.niveau == "ecart_certain" and c.statut_validation == "valide":
+                    b["recouvrable_certain"] += c.montant_en_jeu
+                elif c.niveau == "a_verifier" and c.statut_validation != "rejete":
+                    b["recouvrable_a_verifier"] += c.montant_en_jeu
+        for e in self.session.execute(select(Ecart)).scalars():
+            if e.statut not in ("credite", "abandonne"):
+                b = bloc(e.tenant_id)
+                b["ecarts_ouverts"] += 1
+                b["reste_a_recouvrer"] += e.reste
+        return stats
+
+    def marquer_alerte_lue(self, alerte_id: int) -> None:
+        from controldone.storage.alertes import marquer_lue
+
+        with self.db.transaction_systeme() as s:
+            marquer_lue(s, alerte_id)
+            journaliser(s, actor=self.actor.id, role=self.actor.role.value, action="alerte_lue",
+                        target=f"alertes:{alerte_id}", ip=self.actor.ip)
 
     def alertes(self, *, non_lues: bool = True) -> list[Alerte]:
         q = select(Alerte).order_by(Alerte.id)

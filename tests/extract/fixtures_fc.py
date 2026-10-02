@@ -91,7 +91,7 @@ def extraire(contenu: bytes, type_document: TypeDocument | str, *, mime: str = "
 # --- factures commerciales -------------------------------------------------------------------------------
 
 COLS_EN = [(42, "#", False), (60, "Item ref.", False), (125, "Description", False), (285, "HS code", False),
-           (345, "Orig.", False), (405, "Qty", True), (412, "Unit", False), (470, "Unit price", True),
+           (345, "Orig.", False), (405, "Qty", True), (412, "Unit", False), (500, "Unit price", True),
            (555, "Amount", True)]
 
 
@@ -132,7 +132,7 @@ def facture_en(*, lignes=None, pied=None, total: str | None = "USD 12,540.00", d
     for ln in lignes:
         no, ref, desc, code, orig, qte, unite, pu, mt = ln
         p.ligne(y, [(42, no, False), (60, ref, False), (125, desc, False), (285, code, False), (345, orig, False),
-                    (405, qte, True), (412, unite, False), (470, pu, True), (555, mt, True)])
+                    (405, qte, True), (412, unite, False), (500, pu, True), (555, mt, True)])
         y += 18
     y += 14
     p.t(42, y, "Total gross weight: 4,749.595 kg")
@@ -153,7 +153,7 @@ def facture_en(*, lignes=None, pied=None, total: str | None = "USD 12,540.00", d
 
 
 COLS_FR = [(42, "N°", False), (60, "Référence", False), (125, "Désignation", False), (285, "Code SH", False),
-           (345, "Orig.", False), (405, "Qté", True), (412, "Unité", False), (470, "Prix unitaire", True),
+           (345, "Orig.", False), (405, "Qté", True), (412, "Unité", False), (500, "Prix unitaire", True),
            (555, "Montant", True)]
 
 
@@ -187,7 +187,7 @@ def facture_fr_multipage() -> bytes:
         y = 198
         for no, ref, desc, code, orig, qte, unite, pu, mt in rangees:
             p.ligne(y, [(42, no, False), (60, ref, False), (125, desc, False), (285, code, False),
-                        (345, orig, False), (405, qte, True), (412, unite, False), (470, pu, True),
+                        (345, orig, False), (405, qte, True), (412, unite, False), (500, pu, True),
                         (555, mt, True)])
             y += 18
         if k == 0:
@@ -222,13 +222,13 @@ def facture_es_jpy() -> bytes:
     p.t(420, 136, "JPY")
     p.ligne(170, [(42, "N.º", False), (60, "Referencia", False), (125, "Descripción", False),
                   (285, "Partida", False), (345, "Orig.", False), (405, "Cant.", True), (412, "Ud.", False),
-                  (470, "Precio unit.", True), (555, "Importe", True)])
+                  (500, "Precio unit.", True), (555, "Importe", True)])
     p.ligne(188, [(42, "1", False), (60, "OS-5737-WH", False), (125, "Lámpara LED", False), (285, "9405 42 00", False),
-                  (345, "JP", False), (405, "46", True), (412, "uds", False), (470, "1,718", True),
+                  (345, "JP", False), (405, "46", True), (412, "uds", False), (500, "1,718", True),
                   (555, "79,028", True)])
     p.ligne(206, [(42, "2", False), (60, "OS-7755-A", False), (125, "Bomba centrífuga", False),
                   (285, "8413 70 21", False), (345, "JP", False), (405, "35", True), (412, "uds", False),
-                  (470, "12,812", True), (555, "448,420", True)])
+                  (500, "12,812", True), (555, "448,420", True)])
     p.t(42, 240, "Peso bruto total: 48.750 kg")
     p.t(42, 254, "Número de bultos: 3 cajas")
     p.t(330, 240, "TOTAL", gras=True)
@@ -289,7 +289,7 @@ def avoir_fournisseur() -> bytes:
     p.ligne(180, COLS_EN)
     p.ligne(198, [(42, "1", False), (60, "HA-5986-S", False), (125, "Cotton T-shirt", False),
                   (285, "6109.10", False), (345, "VN", False), (405, "100", True), (412, "pcs", False),
-                  (470, "2.60", True), (555, "-260.00", True)])
+                  (500, "2.60", True), (555, "-260.00", True)])
     p.t(330, 230, "TOTAL CREDIT", gras=True)
     p.t(555, 230, "USD -260.00", droite=True, gras=True)
     return pdf([p])

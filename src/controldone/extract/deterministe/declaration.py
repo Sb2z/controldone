@@ -790,8 +790,8 @@ class _Lecteur:
     def v_pays(self, span: _Span) -> _Lu | None:
         for t in span.toks[:3]:
             net = t.t.strip(".,:;()")
-            if re.fullmatch(r"[A-Z]{2}", net) and net in ISO2:
-                return _Lu(span.depuis([t]), net, net)
+            if re.fullmatch(r"[A-Za-z]{2}", net) and net.upper() in ISO2:
+                return _Lu(span.depuis([t]), net, net.upper(), 0.0 if net.isupper() else 0.1)
         return None
 
     def v_devise(self, span: _Span) -> _Lu | None:
@@ -1419,6 +1419,8 @@ class _Lecteur:
             if code_lu is None:
                 code_lu = _code_taxe(_Span(ligne.toks[:1]))
             if code_lu is None:
+                if _parasite(ligne):
+                    continue
                 manquees += 1
                 mots = any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne.toks)
                 if manquees > 1 or self.hits_par_ligne.get(idx) or (mots and not re.search(r"\d", ligne.texte)):
@@ -1540,6 +1542,8 @@ class _Lecteur:
                 manquees = 0
                 derniere = idx + 1
                 continue
+            if _parasite(ligne):
+                continue  # débris d'OCR (filets du tableau)
             manquees += 1
             if manquees > 1:
                 break
@@ -1892,6 +1896,11 @@ _TYPES_ARTICLES = {"numero": "entier", "code": "code", "designation": "texte", "
                    "montant_facture": "nombre", "valeur": "nombre", "quantite": "nombre", "masse_brute": "nombre",
                    "masse_nette": "nombre", "base_droits": "nombre", "taux_droits": "nombre", "droits": "nombre",
                    "base_tva": "nombre", "tva": "nombre", "statut": "mp"}
+
+
+def _parasite(ligne: _Ligne) -> bool:
+    """Ligne de débris d'OCR (filets, ponctuation) : aucun mot de trois caractères alphanumériques."""
+    return not any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne.toks)
 
 
 def _plusieurs(valeurs: Sequence[ValeurSourcee | None]) -> bool:

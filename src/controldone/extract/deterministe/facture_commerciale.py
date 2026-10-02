@@ -42,12 +42,10 @@ from controldone.extract.deterministe._mise_en_page import (
     Trouve,
     VueDocument,
     VueLigne,
-    VuePage,
     accepte_entier,
     accepte_masse,
     accepte_montant,
     accepte_reference,
-    accepte_texte,
     chercher,
     confiance_mots,
     devise_dans,
@@ -71,6 +69,7 @@ from controldone.model.enums import Methode, TotalOrigine, TypeDocument, TypeSou
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, deriver_somme
 from controldone.normalize import (
     DEVISE_INCONNUE,
+    DEVISES_SANS_DECIMALES,
     ISO_4217,
     code_marchandise,
     codes_iso_dans_texte,
@@ -156,7 +155,9 @@ LIB_TOTAL_DOUANE = motifs(
 )
 LIB_TOTAL = motifs(
     r"(?:grand\s*|invoice\s*|net\s*)?total(?:\s*(?:amount|invoice|value|due|general|a payer|a pagar|facture"
-    r"|factura|ttc|cif|fob|cfr|net|to pay|payable|invoice value|importe))?(?:\s*\(?[a-z]{3}\)?)?\s*:?",
+    r"|factura|ttc|cif|fob|cfr|net|to pay|payable|invoice value|importe|credit(?:ed)?|credite|avoir"
+    r"|del abono|nota de credito))?(?:\s*\(?[a-z]{3}\)?(?![a-z]))?\s*:?",
+    r"montant\s*(?:de\s*l'|total\s*de\s*l')avoir\s*:?", r"credit\s*(?:note\s*)?total\s*:?",
     r"amount\s*(?:due|payable)\s*:?", r"balance\s*due\s*:?", r"net\s*a\s*payer\s*:?", r"montant\s*(?:total|net|du)\s*:?",
     r"importe\s*(?:total|neto)\s*:?", r"valor\s*total\s*:?", r"invoice\s*(?:total|amount|value)\s*:?",
     r"total\s*a\s*(?:payer|pagar)\s*:?",
@@ -299,9 +300,10 @@ def extraire_facture_commerciale(
     fab = Fabrique(TypeDocument.facture_commerciale, document_id, INFO, vue, ids)
     e = _Etat(vue=vue, fab=fab)
     _devise(e)
+    _separateur_par_devise(e)
     _entete(e)
-    _parties(e)
     _tableau(e)
+    _parties(e)
     _pied(e)
     return e.champs, e.avert
 
@@ -361,7 +363,7 @@ def _devise(e: _Etat) -> None:
             continue
         for m in lt.mots:
             c = normalize_currency(m.texte, codes_iso_page=codes_page)
-            if c and c != DEVISE_INCONNUE and m.texte.strip("()-").isupper() or c and m.texte in ("€", "£"):
+            if (c and c != DEVISE_INCONNUE and m.texte.strip("()-").isupper()) or (c and m.texte in ("€", "£")):
                 lecd = Lecture((m,), lt.page, lt.methode, contexte=lt.contexte)
                 conf = min(confiance_mots(lecd), 0.9)
                 e.champs.devise = e.fab.valeur("devise", lecd, confiance=conf)
@@ -373,6 +375,17 @@ def _devise(e: _Etat) -> None:
                 return
     if lec is not None:  # « $ » non confirmé
         e.champs.devise = e.fab.valeur("devise", lec, confiance=0.3)
+
+
+def _separateur_par_devise(e: _Etat) -> None:
+    """Devise sans décimales (JPY, KRW…) : « 79,028 » groupe les milliers, donc l'autre signe est décimal."""
+    if e.vue.separateur_decimal is not None or e.devise not in DEVISES_SANS_DECIMALES:
+        return
+    texte = e.vue.texte
+    if re.search(r"(?<![\d.,])\d{1,3},\d{3}(?![\d])", texte):
+        e.vue.separateur_decimal = "."
+    elif re.search(r"(?<![\d.,])\d{1,3}\.\d{3}(?![\d])", texte):
+        e.vue.separateur_decimal = ","
 
 
 # --- en-tête --------------------------------------------------------------------------------------------------
@@ -418,7 +431,8 @@ def _entete(e: _Etat) -> None:
     if lec is not None:
         d = parse_date_detail(lec.texte)
         conf = confiance_mots(lec)
-        if d is not None and d.ambigu:
+        # jour/mois inversables : sûr seulement sur un document français ou espagnol (ordre JJ/MM)
+        if d is not None and d.ambigu and not re.search(r"\b(facture|factura|fecha)\b", cle_texte(vue.texte)):
             conf = min(conf, 0.7)
         ch.date = fab.valeur("date", lec, confiance=conf)
     lec = _premier(vue, LIB_INCOTERM, _accepte_incoterm)
@@ -567,7 +581,7 @@ def _tva_partie(e: _Etat, partie: str, lec: Lecture, corrigee: str | None = None
     v = e.fab.valeur(f"{partie}.tva", lec, confiance=_conf_tva(lec))
     if corrigee is not None and v is not None:
         v = v.model_copy(update={"valeur": corrigee, "confiance": min(0.85, max(confiance_mots(lec), 0.6))})
-    setattr(getattr(e.champs, partie), "tva", v)
+    getattr(e.champs, partie).tva = v
     if partie == "acheteur" and v is not None and v.valeur and v.valeur.startswith("FR") and extraire_siren(v.valeur):
         sv = e.fab.valeur("acheteur.siren", lec, confiance=v.confiance)
         if sv is not None and corrigee is not None:
