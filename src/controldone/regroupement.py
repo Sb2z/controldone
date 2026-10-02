@@ -122,8 +122,11 @@ POIDS_SIGNAL: dict[TypeDocument, dict[SignalLien, ForceLien]] = {
         SignalLien.ref_transport: _F,
         SignalLien.ref_facture_citee: _F,
         SignalLien.mrn_cite: _F,
-        SignalLien.meme_fichier_source: _M,
-        SignalLien.meme_dossier_source: _M,
+        # Un document support n'est jamais comparé avec certitude (A10, A11 : a_verifier ; CG et lettres
+        # écartées, §5.3.3) : la co-localisation (même fichier, seul dossier de la frontière) suffit à un lien
+        # « moyenne » (score 3 sans référence explicite, D-401), sans alerte P4 (D-708).
+        SignalLien.meme_fichier_source: _F,
+        SignalLien.meme_dossier_source: _F,
     },
     TypeDocument.facture_commerciale: {
         # facture commerciale rattachée à un dossier existant (fusion de frontière, §7.5 étape 7)
@@ -562,6 +565,9 @@ class _Regroupeur:
             elif cible.type is TypeDocument.facture_transitaire:
                 if any(ref_transport_compatibles(r, x) for r in refs for x in _transports_ft(cible)):
                     s.append(SignalLien.ref_transport)
+                num = _numero(cible)
+                if num and any(ref_compatibles(_txt(r), num) for r in sup.sup.refs_facture):
+                    s.append(SignalLien.ref_facture_citee)  # lettre d'accompagnement de la facture (D-708)
         if self._meme_fichier(sup, cible):
             s.append(SignalLien.meme_fichier_source)
         return s
@@ -598,7 +604,8 @@ class _Regroupeur:
         candidats = [g for g in self.groupes if d.id not in g.membres and self._compatible(d, g)]
         if len(candidats) != 1:
             return None
-        return score_actuel + POIDS_FORCE[ForceLien.moyenne], candidats[0]
+        poids = POIDS_SIGNAL.get(d.type, {}).get(SignalLien.meme_dossier_source, ForceLien.moyenne)
+        return score_actuel + POIDS_FORCE[poids], candidats[0]
 
     def executer(self) -> ResultatRegroupement:
         exploitables = [d for d in self.docs if _exploitable(d)]

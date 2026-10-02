@@ -537,8 +537,8 @@ _RECLAMES = (StatutEcart.reclame, StatutEcart.partiellement_credite, StatutEcart
 
 @control("E6")
 def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
-    """E6 — Un écart **réclamé** (registre de recouvrement) n'est couvert que partiellement par les avoirs
-    imputés du dossier ; reste à recouvrer > ``T_DEBOURS``. ``a_verifier`` ; montant ``recouvrable`` = reste.
+    """E6 — Un écart **réclamé** (registre de recouvrement) ou relevé dans ce dossier (constat ``recouvrable``
+    C/D, D-808) n'est couvert que partiellement par les avoirs imputés du dossier ; reste > ``T_DEBOURS``. ``a_verifier`` ; montant ``recouvrable`` = reste.
 
     Ce constat remplace le montant de l'écart d'origine dans les totaux : ``details.remplace_constat_id``
     désigne le constat d'origine (à exclure des totaux par le consommateur, D-306)."""
@@ -551,8 +551,10 @@ def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
     t = ctx.tol.t_debours(0)
     for e, constat_id in ecarts:
         origine = registre.get(e.id)
-        if origine is None or origine.statut not in _RECLAMES:
+        if origine is not None and origine.statut not in _RECLAMES:
             continue
+        # Écart relevé par un contrôle de ce dossier (C, D) et partiellement crédité par un avoir du dossier :
+        # l'avoir reçu montre que l'écart a été porté au transitaire ; le reste est à relancer (D-808).
         credit = res.credit_pour(e.id)
         if credit <= 0:
             continue
@@ -570,10 +572,12 @@ def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
         classement = ctx.classify("E6", ecart=etat.reste, tolerance=t, seuil_certitude=None, valeurs_cles=[],
                                   montant=etat.reste)
         av_docs = [d for d in (ctx.document(i) for i in av_ids) if d is not None]
+        composante = origine.composante if origine is not None else e.composante
+        mrn = origine.mrn if origine is not None else e.mrn
         libelle = (
-            f"L'écart réclamé de {format_montant(etat.montant_initial, 'EUR')} "
-            f"({(origine.composante.value).replace('_', ' ')}"
-            + (f", MRN {origine.mrn}" if origine.mrn else "")
+            f"L'écart {'réclamé' if origine is not None else 'relevé'} de "
+            f"{format_montant(etat.montant_initial, 'EUR')} ({(composante.value).replace('_', ' ')}"
+            + (f", MRN {mrn}" if mrn else "")
             + f") n'est couvert qu'à hauteur de {format_montant(credit, 'EUR')} par "
             + ", ".join(aides.ref_document(d, _numero(d)) for d in av_docs)
             + f" ; reste {format_montant(etat.reste, 'EUR')}."
@@ -581,7 +585,7 @@ def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
         preuves = [preuve(aides.montant_ht(d.av.lignes[i.ligne]), RolePreuve.valeur_b)
                    for i in imputs for d in av_docs if d.id == i.avoir_id and i.ligne is not None]
         out.append(ctx.constat("E6", classement, libelle=libelle, prochaine_action=ACTION_E6, montant=etat.reste,
-                               montant_brut=etat.reste, composante=origine.composante, preuves=preuves, **commun))
+                               montant_brut=etat.reste, composante=composante, preuves=preuves, **commun))
     return out or [ctx.non_applicable("E6", RaisonCode.valeur_absente,
-                                      details={"motif": "aucun écart réclamé couvert par un avoir du dossier"})]
+                                      details={"motif": "aucun écart couvert par un avoir du dossier"})]
 

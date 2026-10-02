@@ -58,7 +58,7 @@ from controldone.regroupement import (
     cle_idempotence_regroupement,
     regrouper,
 )
-from controldone.taux_reference import TableTauxReference
+from controldone.taux_reference import TableTauxReference, table_par_defaut
 
 __all__ = [
     "VERSION_GABARITS",
@@ -713,7 +713,8 @@ def controler_lot(
                 ctx = ControlContext.construire(
                     dossier, docs, profil.tolerances, grilles=prepare.grilles, entites=profil.entites,
                     transitaires=profil.transitaires, autres_dossiers=autres,
-                    taux_reference=options.taux_reference, parametres_petits_envois=profil.parametres_petits_envois,
+                    taux_reference=options.taux_reference or table_par_defaut(),
+                    parametres_petits_envois=profil.parametres_petits_envois,
                     execution_id=execution.id,
                 )
                 resultats = run_controls(ctx, controles=options.controles)

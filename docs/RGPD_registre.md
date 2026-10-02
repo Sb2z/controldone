@@ -1,0 +1,107 @@
+# ControlDOne — Registre des activités de traitement (brouillon)
+
+> **BROUILLON — À RELIRE PAR UN AVOCAT.** Document interne, non publié. Les champs
+> `[À COMPLÉTER : …]` sont à remplir par le fondateur ; rien n'y est inventé.
+> Modèle de référence : registre simplifié de la CNIL (https://www.cnil.fr/fr/RGDP-le-registre-des-activites-de-traitement).
+> Mise à jour : 2 octobre 2026.
+
+## Identification
+
+| Champ | Valeur |
+|---|---|
+| Organisme | [À COMPLÉTER : dénomination, forme juridique, SIREN, adresse] |
+| Représentant | [À COMPLÉTER : nom du fondateur] |
+| Contact pour les données personnelles | [À COMPLÉTER : adresse e-mail] |
+| Délégué à la protection des données | Non désigné [À VALIDER : non obligatoire a priori] |
+
+---
+
+## Partie 1 — Registre du sous-traitant (art. 30.2 RGPD)
+
+### 1.1 Responsables de traitement pour le compte desquels ControlDOne agit
+
+Un client par ligne ; mettre à jour à chaque signature d'un accord de sous-traitance (`site/dpa.html`).
+
+| Client (responsable) | Contact / représentant | Date de l'accord art. 28 | Extracteur `llm` activé | Fin de contrat / restitution |
+|---|---|---|---|---|
+| [À COMPLÉTER] | [À COMPLÉTER] | [À COMPLÉTER] | oui / non | — |
+
+### 1.2 Catégories de traitements effectués pour chaque client
+
+| Traitement | Description | Données personnelles concernées |
+|---|---|---|
+| Réception et stockage | Dépôt de fichiers (espace web, API, adresse dédiée, dossier surveillé, plateforme agréée), stockage chiffré par client | Noms, fonctions, coordonnées professionnelles figurant sur les documents d'import ; adresses e-mail d'expéditeurs autorisés |
+| Lecture automatisée | Découpage, classement, extraction structurée, déterministe (texte, OCR) et, si activée, par modèle de langage | Idem ; minimisation : les données personnelles ne sont pas reprises dans le modèle de dossier sauf nécessité |
+| Contrôles et rapports | Comparaisons et calculs, rapport de diagnostic, demandes d'avoir rédigées pour le client | Nom de l'entité et des contacts dans les en-têtes de demande d'avoir |
+| Suivi du recouvrement | Registre des écarts, avoirs reçus, relances suggérées au client | Identifiants des utilisateurs du client |
+| Comptes utilisateurs du client | Authentification, sessions, journal d'audit | Nom, e-mail, empreinte de mot de passe, horodatages, adresses IP |
+| Conservation, restitution, suppression | Purge des fichiers bruts 180 jours après clôture (réglable) ; export puis suppression sous 30 jours en fin de contrat | Toutes les données ci-dessus |
+
+### 1.3 Sous-traitants ultérieurs
+
+| Sous-traitant | Service | Lieu | Garanties |
+|---|---|---|---|
+| [À COMPLÉTER : hébergeur de l'application] | Serveurs, base, coffre de fichiers chiffré | UE [À COMPLÉTER : pays] | Contrat art. 28 |
+| [À COMPLÉTER : stockage des sauvegardes] | Copie hors site des sauvegardes chiffrées | UE [À COMPLÉTER] | Contrat art. 28 ; chiffrement avant envoi |
+| [À COMPLÉTER : fournisseur du modèle de langage — le code actuel prévoit l'API Anthropic] | Lecture de pages, rédaction de textes (sans outil ni accès réseau) | [À COMPLÉTER] | [À COMPLÉTER : clauses contractuelles types ou autre] ; désactivable par client |
+| Stripe [À COMPLÉTER : entité contractante] | Paiement (données de facturation du client seulement) | [À COMPLÉTER] | [À VALIDER : Stripe responsable de traitement pour partie] |
+
+### 1.4 Transferts hors UE
+
+[À COMPLÉTER : aucun, ou transfert vers le fournisseur du modèle de langage avec la garantie retenue ;
+seulement pour les clients qui n'ont pas désactivé l'extracteur `llm`.]
+
+### 1.5 Mesures de sécurité (art. 32) — résumé de `docs/SECURITY.md`
+
+- Cloisonnement par client : couche d'accès unique, trois barrières indépendantes, tests d'accès croisé.
+- Chiffrement au repos (Fernet, clé dérivée par client), sauvegardes chiffrées, TLS en transit, secrets hors dépôt.
+- Argon2id pour les mots de passe ; second facteur TOTP pour le fondateur ; sessions limitées (30 min d'inactivité, 8 h).
+- Journal d'audit append-only chaîné par SHA-256 ; chaque accès du fondateur à un client est journalisé avec motif.
+- Documents traités comme des données (anti-injection) ; modèle de langage sans outil ni réseau ; aucun envoi externe sans validation.
+- Journaux techniques sans contenu de document.
+- Points ouverts : ancrage externe du journal d'audit, chiffrement du volume de la base (voir `docs/SECURITY.md` §6).
+
+---
+
+## Partie 2 — Registre du responsable de traitement (art. 30.1 RGPD)
+
+### 2.1 Prospection commerciale B2B
+
+| Rubrique | Contenu |
+|---|---|
+| Finalité | Présenter le service à des responsables de PME importatrices et à des cabinets d'expertise comptable |
+| Base légale | Intérêt légitime ; message en rapport avec la fonction de la personne (art. L34-5 CPCE, CNIL) |
+| Personnes concernées | Dirigeants, responsables financiers, achats ou logistique ; experts-comptables |
+| Données | Nom, prénom, fonction, entreprise, e-mail et téléphone professionnels, historique des échanges |
+| Source | Collecte directe, annuaires professionnels, sites d'entreprise ; **pas d'extraction automatisée de LinkedIn** |
+| Information et opposition | Expéditeur identifié et lien ou réponse de désinscription dans chaque message ; liste d'opposition conservée |
+| Destinataires | Fondateur ; messagerie [À COMPLÉTER : fournisseur, pays] |
+| Durée | 3 ans après le dernier contact [À VALIDER] ; liste d'opposition conservée pour la respecter |
+| Transferts hors UE | [À COMPLÉTER] |
+| Sécurité | Compte de messagerie avec second facteur ; fichier de prospection chiffré [À COMPLÉTER] |
+
+### 2.2 Gestion des clients et facturation
+
+| Rubrique | Contenu |
+|---|---|
+| Finalité | Contrat, comptes d'accès, facturation (diagnostic, abonnement, commission), recouvrement |
+| Base légale | Exécution du contrat ; obligation légale (conservation comptable) |
+| Personnes concernées | Contacts et utilisateurs des clients |
+| Données | Identité, coordonnées professionnelles, identifiants, factures, paiements |
+| Destinataires | Fondateur ; Stripe ; [À COMPLÉTER : expert-comptable de ControlDOne] |
+| Durée | Durée du contrat ; pièces comptables 10 ans |
+| Transferts hors UE | [À COMPLÉTER] |
+
+### 2.3 Messages reçus (contact par e-mail)
+
+| Rubrique | Contenu |
+|---|---|
+| Finalité | Répondre aux demandes |
+| Base légale | Intérêt légitime |
+| Données | Nom, e-mail, entreprise, contenu du message |
+| Durée | [À COMPLÉTER : par exemple 3 ans après le dernier échange] |
+
+### 2.4 Site public
+
+Aucun cookie, aucun traceur, aucun formulaire. Journaux techniques de l'hébergeur :
+[À COMPLÉTER : hébergeur, contenu, durée].

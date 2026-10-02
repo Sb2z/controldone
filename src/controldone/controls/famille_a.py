@@ -760,17 +760,24 @@ def _a6_declenche(ctx: ControlContext, c: Couple, dv: Devises, m: Montants, t: T
     ``None`` si l'on ne peut pas trancher (même nombre, ni taux imprimé ni taux de référence)."""
     if dv.situation != "converti":
         return False
-    if abs(m.declare - m.total) > ctx.tol.t_valeur(m.total, m.declare):
+    tol = ctx.tol.t_valeur(m.total, m.declare)
+    if abs(m.declare - m.total) > tol:
         return False
+
+    def discriminant(eur_par_unite: Decimal) -> bool:
+        # « Même nombre » n'a de sens que si la conversion aurait déplacé le montant au-delà de T_VALEUR
+        # (petits montants : 2,28 USD convertis restent à moins d'une unité de 2,28) — D-807.
+        return abs(m.total * eur_par_unite - m.total) > tol
+
     p = ctx.profil
     if t.exploitable:
         assert t.taux is not None
         if abs(t.taux - 1) > p.a6_ecart_taux_min:
-            return True
+            return all(discriminant(eur) for s in TauxChangeSens if (eur := t.eur_par(s)) is not None)
     d = _date_acceptation(ctx, c)
     ref = ctx.taux_bce(dv.fc, d) if dv.fc and d else None
     if ref:
-        return abs(ref - 1) > p.a6_ecart_reference_min
+        return abs(ref - 1) > p.a6_ecart_reference_min and discriminant(Decimal(1) / ref)
     return None if not t.exploitable else False
 
 
