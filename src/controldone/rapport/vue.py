@@ -375,10 +375,25 @@ def _constat_vue(c: Constat, r, rd: ResultatDossier) -> ConstatVue:
         composante=LIBELLES_COMPOSANTE.get(c.composante) if c.composante else None,
         tolerance=format_nombre(r.tolerance_appliquee) if r.tolerance_appliquee is not None else None,
         seuil=format_nombre(r.seuil_certitude_applique) if r.seuil_certitude_applique is not None else None,
-        renvoi=c.renvoi, preuves=[_preuve_vue(p, rd) for p in c.preuves],
+        renvoi=c.renvoi,
+        preuves=[_preuve_vue(p, rd) for p in sorted(c.preuves, key=lambda p: _ORDRE_ROLES.index(p.role))],
         dossier_reference=rd.dossier.reference or rd.dossier.id, bloque=bloque,
         statut_validation=c.statut_validation.value,
     )
+
+
+def _nombre_fr(x: str | None) -> str:
+    """Valeur attendue / constatée affichée en français si c'est un nombre."""
+    if x is None or x == "":
+        return "—"
+    try:
+        d = Decimal(x)
+    except Exception:
+        return x
+    return format_nombre(d) if d.is_finite() else x
+
+
+_ORDRE_ROLES = [RolePreuve.valeur_a, RolePreuve.valeur_b, RolePreuve.operande, RolePreuve.contexte]
 
 
 def _valeur(v) -> str | None:
@@ -467,7 +482,7 @@ def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVu
         resultats.append(ResultatVue(
             controle_id=r.controle_id + (f" ({r.sous_controle})" if r.sous_controle else ""),
             libelle=spec.libelle, resultat=LIBELLES_OUTCOME[r.outcome], resultat_code=r.outcome.value,
-            attendu=r.attendu or "—", constate=r.constate or "—",
+            attendu=_nombre_fr(r.attendu), constate=_nombre_fr(r.constate),
             raison=RAISON_LIBELLES.get(r.raison_code, "") if r.raison_code else "",
         ))
     ordre_niveau = {"ecart_certain": 0, "a_verifier": 1}

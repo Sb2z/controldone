@@ -508,7 +508,8 @@ def finalize_errors(dm, doc_meta):
             "error_id": f"{did}-E{n}", "control_id": ctl, "accepted_control_ids": list(ACCEPTED[ctl]),
             "expected_level": e["level"], "expected_amount_eur": None if amount is None else s2(amount),
             "amount_nature": nature, "composante": _composante(ctl, e),
-            "documents": list(e["documents"]), "fields": list(e["fields"]), "injection": e["injection"],
+            "documents": list(dict.fromkeys(e["documents"])), "fields": list(e["fields"]),
+            "injection": e["injection"],
             "description": e["description"],
         }
         if ctl in ("F2", "F3", "F4", "F5"):

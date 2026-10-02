@@ -212,13 +212,14 @@ def _table(donnees, largeurs, *, entete=True, alignes_droite=(), style_extra=())
     return t
 
 
-def _badge(texte: str, code: str, s) -> Table:
+def _badge(texte: str, code: str, s, h_align: str = "LEFT") -> Table:
     fg, bg = COULEURS_STATUT.get(code, (ENCRE_2, FOND_2))
     st = ParagraphStyle("badge", parent=s["gras"], fontSize=7.4, leading=9, textColor=fg)
-    t = Table([[Paragraph(escape(texte), st)]])
+    largeur = pdfmetrics.stringWidth(texte, st.fontName, st.fontSize) + 10
+    t = Table([[Paragraph(escape(texte), st)]], colWidths=[largeur], hAlign=h_align)
     t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), bg), ("BOX", (0, 0), (-1, -1), 0.4, fg),
-                           ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                           ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
+                           ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
+                           ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5)]))
     return t
 
 
@@ -241,7 +242,7 @@ def _constat(c: ConstatVue, s) -> KeepTogether:
                     + (f"<br/><font size='7' color='#52606d'>Dossier {escape(c.dossier_reference)}</font>"
                        if c.renvoi else ""), ParagraphStyle("t", parent=s["base"], textColor=MARINE)),
           _p(c.montant, s["droite_gras"])]],
-        colWidths=[24 * mm, inner - 24 * mm - 36 * mm, 36 * mm],
+        colWidths=[27 * mm, inner - 27 * mm - 36 * mm, 36 * mm],
     )
     tete.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                               ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
@@ -309,16 +310,22 @@ def _cartes(v: RapportVue, s) -> Table:
               colors.HexColor("#6b7c93")),
         carte("Points à faire vérifier par un professionnel", str(v.nb_renvois), "sans montant", RENVOI),
     ]
-    larg = (LARGEUR - 8 * mm) / 3
-    lignes, cmds = [], [("VALIGN", (0, 0), (-1, -1), "TOP")]
+    gout = 4 * mm
+    larg = (LARGEUR - 2 * gout) / 3
+    lignes, cmds = [], [("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 0)]
     for k in range(0, 6, 3):
-        lignes.append([c[:3] for c in cartes[k:k + 3]])
+        trio = [c[:3] for c in cartes[k:k + 3]]
+        lignes.append([trio[0], "", trio[1], "", trio[2]])
+        lignes.append(["", "", "", "", ""])
     for idx, c in enumerate(cartes):
         r_, c_ = divmod(idx, 3)
+        r_, c_ = 2 * r_, 2 * c_
         cmds += [("BOX", (c_, r_), (c_, r_), 0.5, FILET), ("LINEABOVE", (c_, r_), (c_, r_), 3, c[3]),
                  ("TOPPADDING", (c_, r_), (c_, r_), 6), ("BOTTOMPADDING", (c_, r_), (c_, r_), 7),
-                 ("LEFTPADDING", (c_, r_), (c_, r_), 7)]
-    t = Table(lignes, colWidths=[larg] * 3, spaceBefore=2, spaceAfter=6)
+                 ("LEFTPADDING", (c_, r_), (c_, r_), 7), ("RIGHTPADDING", (c_, r_), (c_, r_), 5)]
+    t = Table(lignes, colWidths=[larg, gout, larg, gout, larg], rowHeights=[None, gout, None, 2],
+              spaceBefore=2, spaceAfter=4)
     t.setStyle(TableStyle(cmds))
     return t
 
@@ -335,8 +342,8 @@ def _filet():
 
 def _dossier(d: DossierVue, s) -> list:
     out: list = [PageBreak()]
-    entete = Table([[Paragraph(f"Dossier {escape(d.reference)}", s["h3"]), _badge(d.statut, d.statut_code, s)]],
-                   colWidths=[LARGEUR - 34 * mm, 34 * mm])
+    entete = Table([[Paragraph(f"Dossier {escape(d.reference)}", s["h3"]), _badge(d.statut, d.statut_code, s, "RIGHT")]],
+                   colWidths=[LARGEUR - 40 * mm, 40 * mm])
     entete.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (1, 0), (1, 0), "RIGHT"),
                                 ("LINEBELOW", (0, 0), (-1, 0), 1.4, MARINE), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
     out.append(entete)
@@ -372,7 +379,7 @@ def _dossier(d: DossierVue, s) -> list:
     out.append(Paragraph(f"Contrôles exécutés ({len(d.resultats)})", s["h4"]))
     couleur = {"conforme": "#2d6a4f", "ecart_certain": "#9b2226", "a_verifier": "#9a5b00",
                "non_verifiable": "#52606d", "non_applicable": "#7b8794"}
-    lignes = [["Contrôle", "Résultat", "Attendu", "Constaté", "Motif"]]
+    lignes = [["Contrôle", "Résultat", "Attendu", "Constaté", "Motif"]]  # en-tête
     for x in d.resultats:
         lignes.append([
             Paragraph(f"<b>{escape(x.controle_id)}</b> {escape(x.libelle)}", s["petit"]),
@@ -380,7 +387,7 @@ def _dossier(d: DossierVue, s) -> list:
                       s["petit"]),
             _p(x.attendu, s["mono"]), _p(x.constate, s["mono"]), _p(x.raison, s["mini"]),
         ])
-    out.append(_table(lignes, [58 * mm, 24 * mm, 26 * mm, 26 * mm, LARGEUR - 134 * mm], alignes_droite=(2, 3)))
+    out.append(_table(lignes, [58 * mm, 24 * mm, 26 * mm, 26 * mm, LARGEUR - 134 * mm]))
     out.append(_p("État du recouvrement : aucune demande d'avoir enregistrée pour ce dossier.", s["petit"]))
     return out
 
@@ -459,20 +466,21 @@ def _histoire(v: RapportVue, s) -> list:
     # 4. tableau des dossiers
     h.append(CondPageBreak(40 * mm))
     h.append(_h2(4, "Tableau des dossiers", s))
-    lignes = [["Dossier", "Clés", "TVA acheteur / importateur", "Facturé / déclaré", "Statut", "Recouvrable"]]
+    lignes = [[Paragraph(f"<b>{x}</b>", s["mini"]) for x in
+               ("Dossier", "Clés (facture transitaire · transport · MRN · facture)", "TVA acheteur / importateur",
+                "Facturé / déclaré", "Statut", "Recouvrable")]]
     for d in v.dossiers:
         cles = " · ".join(x for _k, x in d.cles)
         rec = _fm(d.recouvrable_certain) + (f"<br/><font size='7' color='#52606d'>à vérifier : "
                                             f"{_fm(d.recouvrable_a_verifier)}</font>" if d.recouvrable_a_verifier else "")
         lignes.append([
-            _p(d.reference, s["mono"]),
+            _p(d.reference, ParagraphStyle("ref", parent=s["mono"], fontSize=6.9)),
             Paragraph(f"{escape(cles)}<br/><font size='6.8' color='#7b8794'>{escape(d.raisons)}</font>", s["petit"]),
             _p(f"{d.tva_acheteur}\n{d.tva_importateur}", s["mono"]),
             Paragraph(f"{escape(d.montant_facture)}<br/>{escape(d.montant_declare)}", s["droite"]),
             _badge(d.statut, d.statut_code, s), Paragraph(rec, s["droite"]),
         ])
-    h.append(_table(lignes, [22 * mm, 52 * mm, 30 * mm, 28 * mm, 22 * mm, LARGEUR - 154 * mm],
-                    alignes_droite=(3, 5)))
+    h.append(_table(lignes, [25 * mm, 46 * mm, 30 * mm, 28 * mm, 25 * mm, LARGEUR - 154 * mm]))
     # 5. fiches
     h.append(PageBreak())
     h.append(_h2(5, "Fiches dossiers", s))

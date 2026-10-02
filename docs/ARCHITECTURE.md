@@ -427,3 +427,38 @@ Pour tester un enregistrement isolé : `with registre_temporaire(): ...`.
 stables ; avec un `IdGenerator.deterministe(seed)` pour les valeurs sourcées et `set_horloge` pour les
 horodatages, une exécution rejouée produit un `findings.json` identique octet pour octet.
 Changer la sémantique d'un contrôle : incrémenter `VERSION_REGLES` ; changer un champ : suivre §6.4.
+
+---
+
+## 10. Imputation des avoirs (`controldone.recouvrement.imputation`, §17.2)
+
+Fonction **pure et déterministe** (l'ordre des entrées est indifférent), utilisée par E5, E6 et G4, et
+disponible pour tout montant « net des avoirs déjà imputés » (§8.6, §12.2) :
+
+```python
+from controldone.recouvrement import (
+    EcartImputable, LigneCredit, cle_emetteur, imputer_avoirs, lignes_credit_depuis_avoir,
+)
+
+emetteur = cle_emetteur(doc_avoir.av.emetteur, ctx.transitaires)       # id du Transitaire, ou "tva:…"/"nom:…"
+lignes = lignes_credit_depuis_avoir(doc_avoir, emetteur=emetteur)       # une LigneCredit par ligne (montant HT)
+ecarts = [EcartImputable(id="u1", composante=Composante.droit, reste=Decimal("40.00"),
+                         emetteur=cle_emetteur(ft.ft.emetteur, ctx.transitaires),
+                         facture_ref="FT-001", mrn="26FR…", ref_transport=None,
+                         statut=StatutEcart.ouvert)]                    # ou EcartImputable.depuis_ecart(EcartARecouvrer)
+res = imputer_avoirs(lignes, ecarts, t_debours=ctx.tol.t_debours(nb_articles))
+res.credit_pour("u1")          # Decimal imputé sur l'écart          res.ecarts["u1"].reste / .statut
+res.reliquats                  # reliquats d'avoir non imputés (E5)  res.imputations (avoir, ligne, écart, palier)
+```
+
+- Candidats : même émetteur, même composante (`debours_combines` -> droit, autre taxe, TVA, forfait dans cet
+  ordre ; toute prestation -> `prestation`), statut imputable ; paliers facture d'origine
+  (`ref_compatibles`) -> MRN (préfixe) -> référence de transport, le palier suivant seulement si le précédent
+  ne donne aucun candidat. Ordre : réclamés avant `ouvert`, date de constat, `constat_id`.
+- Un avoir sans ventilation (aucune ligne lisible) donne une ligne sans nature, jamais imputée.
+- Pour un montant net dans un contrôle : créer un `EcartImputable` « virtuel » (identifiant = clé d'unité,
+  reste = écart brut), l'imputer avec les avoirs du dossier hors secondes réceptions (E3), puis
+  `net = brut − res.credit_pour(id)` et `montant_brut = brut` (exemple : `famille_g._credit_impute`).
+  Décisions : D-304 à D-306.
+- Les familles E, F et G partagent des lectures internes dans `controls/_aides_befg.py` (privé, non
+  contractuel) ; B2–B5 sont dans `famille_b.py` à la suite de B1 (inchangé).
