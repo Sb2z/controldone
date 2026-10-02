@@ -359,15 +359,16 @@ def nombres_dans(mots: Sequence[Mot]) -> list[Nombre]:
             while j < len(mots) and _GROUPE3.match(mots[j].texte) and _ecart_etroit(mots[j - 1], mots[j]):
                 j += 1
         # OCR : espace parasite après un séparateur (« 113, 212.72 », « 1.008, 46 »)
-        if j < len(mots) and re.search(r"\d[.,]$", mots[j - 1].texte) and re.match(r"^\d", mots[j].texte) \
-                and _est_num(mots[j].texte) and _ecart_etroit(mots[j - 1], mots[j]):
-            j += 1
+        while j < len(mots) and _ecart_etroit(mots[j - 1], mots[j]) and (
+                (re.search(r"\d[.,]$", mots[j - 1].texte) and re.match(r"^\d", mots[j].texte) and _est_num(mots[j].texte))
+                or (re.search(r"\d$", mots[j - 1].texte) and re.fullmatch(r"[.,]\d{1,3}\)?-?", mots[j].texte))):
+            j += 1  # OCR : espace parasite autour d'un séparateur (« 113, 212.72 », « 2,902 .060 »)
         out.append(Nombre(k, j, " ".join(m.texte for m in mots[k:j])))
         k = j
     return out
 
 
-_ESPACE_APRES_SEP = re.compile(r"(?<=\d[.,])\s+(?=\d)")
+_ESPACE_APRES_SEP = re.compile(r"(?<=\d[.,])\s+(?=\d)|(?<=\d)\s+(?=[.,]\d)")
 
 
 def texte_nombre(texte: str) -> str:
@@ -482,8 +483,10 @@ class Trouve:
 def _decoupe_mots(segment: Segment) -> tuple[str, list[int]]:
     """Texte normalisé du segment et position de début de chaque mot dans ce texte."""
     pos, parts, n = [], [], 0
-    for m in segment.mots:
+    for k, m in enumerate(segment.mots):
         c = cle_texte(m.texte)
+        if k == 0 and c != "#":
+            c = re.sub(r"^[_|'\"“”‘’.,:;°*~-]+", "", c)  # bruit d'OCR en tête de libellé (« _Invoice No: »)
         pos.append(n)
         parts.append(c)
         n += len(c) + 1
@@ -529,7 +532,7 @@ Accepte = Callable[[Sequence[Mot]], tuple[int, int] | None]
 
 def valeur_apres(
     vue: VueDocument, t: Trouve, accepte: Accepte, *, droite: bool = True, dessous: bool = True,
-    max_dx: float = 0.6, lignes_dessous: int = 2, marge_dessous: float = 0.01,
+    max_dx: float = 0.6, lignes_dessous: int = 2, marge_dessous: float = 0.01, dessous_seul: bool = False,
 ) -> Lecture | None:
     """Valeur associée à un libellé : reste du segment, puis segment(s) à droite, puis en dessous."""
     page = t.page
@@ -558,6 +561,8 @@ def valeur_apres(
                 if s.x1 < t.segment.x0 - 0.01 or s.x0 > t.segment.x1 + marge_dessous:
                     continue  # la valeur sous un libellé chevauche horizontalement ce libellé
                 r = accepte(s.mots)
+                if r is not None and dessous_seul and (r[1] - r[0]) < len(s.mots):
+                    continue  # la valeur prise dessous doit occuper seule son segment
                 # une valeur prise dessous ne doit pas appartenir à un autre couple « libellé : valeur »
                 if r is not None and not any(m.texte.endswith(":") for m in s.mots[:r[0]]) and not (
                         r[0] > 0 and re.search(r"[A-Za-z]{3}", s.mots[0].texte) and s.mots[0].texte.endswith(":")):
