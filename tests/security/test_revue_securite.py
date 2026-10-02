@@ -546,15 +546,19 @@ def test_rs13_le_document_ne_peut_pas_fermer_le_bloc_non_fiable():
 # --- RS-14 : secrets transmis au processus qui analyse les fichiers hostiles ---------------------------------------
 
 
+_SECRETS_RS14 = {"CONTROLDONE_MASTER_KEY": "cle-fictive", "STRIPE_SECRET_KEY": "sk_test_fictif",
+                 "ANTHROPIC_API_KEY": "sk-ant-fictif", "CONTROLDONE_IMAP_CLI_A": "mot-de-passe-fictif",
+                 "CONTROLDONE_SECRET_KEY": "secret-fictif"}
+
+
 def test_rs14_processus_d_analyse_sans_secrets(monkeypatch):
+    """Repli « nouvel interpréteur » (plateforme sans forkserver)."""
     import subprocess
 
     from controldone.ingest import pages
 
-    monkeypatch.setenv("CONTROLDONE_MASTER_KEY", "cle-fictive")
-    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_fictif")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fictif")
-    monkeypatch.setenv("CONTROLDONE_IMAP_CLI_A", "mot-de-passe-fictif")
+    for k, v in _SECRETS_RS14.items():
+        monkeypatch.setenv(k, v)
     vus = {}
 
     def faux_run(cmd, **kw):
@@ -562,8 +566,34 @@ def test_rs14_processus_d_analyse_sans_secrets(monkeypatch):
         raise subprocess.TimeoutExpired(cmd, 1)
 
     monkeypatch.setattr(pages.subprocess, "run", faux_run)
+    monkeypatch.setattr(pages, "_FORKSERVER_DISPONIBLE", False)
     pages._extraire_isole(b"a;b\n1;2\n", "text/csv", pages.OptionsPages(ocr=False), 1)
     assert vus and "PATH" in vus
-    for k in ("CONTROLDONE_MASTER_KEY", "STRIPE_SECRET_KEY", "ANTHROPIC_API_KEY", "CONTROLDONE_IMAP_CLI_A",
-              "CONTROLDONE_SECRET_KEY"):
+    for k in _SECRETS_RS14:
         assert k not in vus, k
+
+
+def test_rs14_forkserver_lance_sans_secrets(monkeypatch):
+    """Processus de pages issus d'un forkserver (D-1402) : le serveur, dont ils héritent l'environnement, est lancé
+    sans les secrets ; le processus courant les garde."""
+    import os
+    import subprocess
+    from multiprocessing import forkserver
+
+    from controldone.ingest import pages
+
+    if not pages._FORKSERVER_DISPONIBLE:
+        return
+    for k, v in _SECRETS_RS14.items():
+        monkeypatch.setenv(k, v)
+    forkserver._forkserver._stop()  # relancé avec l'environnement courant (secrets compris)
+    p = pages._extraire_isole(b"a;b\n1;2\n", "text/csv", pages.OptionsPages(ocr=False), 1)
+    assert p[0].texte.startswith("a;b")
+    with open(f"/proc/{forkserver._forkserver._forkserver_pid}/environ", "rb") as f:
+        env = f.read().split(b"\0")
+    noms = {e.split(b"=", 1)[0].decode() for e in env if e}
+    assert "PATH" in noms and "OMP_THREAD_LIMIT" in noms
+    assert not noms & set(_SECRETS_RS14)
+    assert os.environ["CONTROLDONE_MASTER_KEY"] == "cle-fictive"
+    sortie = subprocess.run(["sh", "-c", "echo $CONTROLDONE_MASTER_KEY"], capture_output=True, check=True).stdout
+    assert sortie.strip() == b"cle-fictive"  # environnement du processus courant rétabli

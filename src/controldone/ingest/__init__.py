@@ -25,6 +25,7 @@ from .decoupage import (
     decouper_fichier,
     decouper_pages,
     enregistrer_textes,
+    liberer_textes,
     texte_positionne,
 )
 from .pages import (
@@ -113,6 +114,7 @@ __all__ = [
     "extraire_pages",
     "extraire_pages_local",
     "extraire_refs",
+    "liberer_textes",
     "nature_ligne",
     "ocr_disponible",
     "paiement_normalise",

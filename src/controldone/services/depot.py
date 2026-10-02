@@ -14,6 +14,7 @@ Aucun fichier déposé n'est jamais rendu comme une page HTML par l'application.
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import threading
 from collections.abc import Iterable
@@ -169,7 +170,8 @@ def preparer_depot(plateforme: Plateforme, tenant_id: str, fichiers: Iterable[Fi
                                         deja_recus=vus, limites=_limites_restantes(plateforme.limites, consomme),
                                         lot=lot)
             del contenu
-            consomme += reception.taille_totale
+            consomme_fichier = reception.taille_totale
+            consomme += consomme_fichier
             for recu in reception.fichiers:
                 fm = recu.fichier.model_copy(update={"lot_id": prep.lot_id})
                 ref = None
@@ -188,6 +190,11 @@ def preparer_depot(plateforme: Plateforme, tenant_id: str, fichiers: Iterable[Fi
                                          LIBELLES_REFUS.get(fm.motif_refus or "", fm.motif_refus or "refusé")))
                 recu.contenu = None
                 prep.fichiers.append((fm, ref))
+            del reception
+            if consomme_fichier > 1024 * 1024:
+                # l'analyse d'un PDF (pypdf) laisse des cycles de références qui retiennent les octets du
+                # fichier : sans collecte, la mémoire cumulait tout le lot (F-14)
+                gc.collect()
     except BaseException:
         annuler_blobs(plateforme, tenant_id, prep)
         raise

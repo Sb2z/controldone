@@ -9,21 +9,34 @@
   droits 0600.
 - Espaces : ``fichiers`` (fichiers bruts) et ``textes`` (textes de page), purgés séparément (§20.4).
 - Rotation : ``tourner_cles(nouvelles_cles)`` rechiffre tout avec la nouvelle clé courante.
+- Contenus d'au moins ``SEUIL_SEGMENTS`` octets (D-1305) : format ``CDV2`` chiffré **par segments**
+  d'1 Mio (AES-256-GCM, clé dérivée HKDF ``vault-gcm:<client>``) écrit et lu segment par segment ; le
+  chiffrement Fernet d'un bloc coûtait environ 6 fois la taille du fichier en mémoire (300 Mo pour 45 Mo).
+  En-tête ``b"CDV2"`` + préfixe de nonce aléatoire (8 octets) ; chaque segment : longueur (4 octets) ||
+  chiffré+étiquette ; nonce = préfixe || numéro (4 octets) ; données associées = en-tête || numéro ||
+  drapeau final (réordonner, tronquer ou substituer un segment est détecté). Les objets Fernet existants
+  restent lisibles.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import re
 import shutil
+import struct
 import tempfile
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
+from cryptography.exceptions import InvalidTag
 from cryptography.fernet import InvalidToken, MultiFernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from controldone.storage.cles import charger_cles_maitresses, deriver_multifernet
+from controldone.storage.cles import SEL_HKDF, charger_cles_maitresses, deriver_multifernet
 from controldone.storage.erreurs import ErreurCoffre, ErreurIntegrite
 
 __all__ = ["ESPACES", "FileVault"]
@@ -31,6 +44,9 @@ __all__ = ["ESPACES", "FileVault"]
 ESPACES = ("fichiers", "textes")
 _TENANT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+MAGIE_V2 = b"CDV2"
+SEUIL_SEGMENTS = 256 * 1024
+TAILLE_SEGMENT = 1024 * 1024
 
 
 class FileVault:
@@ -76,6 +92,93 @@ class FileVault:
             raise ErreurCoffre("chemin hors du coffre")
         return chemin
 
+    def _aes(self, tenant_id: str) -> list[AESGCM]:
+        """Clés AES-GCM du client (une par clé maîtresse, la première chiffre)."""
+        t = self._tenant(tenant_id)
+        cle = f"aes:{t}"
+        if cle not in self._cache:
+            aes = []
+            for m in self._cles:
+                hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=SEL_HKDF, info=f"vault-gcm:{t}".encode())
+                aes.append(AESGCM(hkdf.derive(base64.urlsafe_b64decode(m))))
+            self._cache[cle] = aes  # type: ignore[assignment]
+        return self._cache[cle]  # type: ignore[return-value]
+
+    def _ecrire_segments(self, chemin: Path, tenant_id: str, contenu: bytes) -> None:
+        """Chiffrement par segments, écrit au fil de l'eau dans un fichier temporaire (mémoire : un segment)."""
+        aes = self._aes(tenant_id)[0]
+        prefixe = os.urandom(8)
+        entete = MAGIE_V2 + prefixe
+        vue = memoryview(contenu)
+        n = max(1, -(-len(contenu) // TAILLE_SEGMENT))
+        chemin.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd, tmp = tempfile.mkstemp(dir=chemin.parent, prefix=".tmp-")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(entete)
+                for i in range(n):
+                    morceau = vue[i * TAILLE_SEGMENT:(i + 1) * TAILLE_SEGMENT]
+                    final = i == n - 1
+                    chiffre = aes.encrypt(prefixe + struct.pack(">I", i), bytes(morceau),
+                                          entete + struct.pack(">IB", i, final))
+                    f.write(struct.pack(">I", len(chiffre)) + chiffre)
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, chemin)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+    def _lire_segments(self, chemin: Path, tenant_id: str) -> bytes:
+        erreur = ErreurIntegrite("contenu indéchiffrable (clé d'un autre client ou fichier altéré)")
+        for aes in self._aes(tenant_id):
+            sortie = bytearray()
+            try:
+                with chemin.open("rb") as f:
+                    entete = f.read(12)
+                    if len(entete) != 12 or entete[:4] != MAGIE_V2:
+                        raise erreur
+                    prefixe = entete[4:]
+                    i = 0
+                    while True:
+                        tete = f.read(4)
+                        if len(tete) != 4:
+                            raise erreur  # tronqué : segment final absent
+                        (n,) = struct.unpack(">I", tete)
+                        if n > TAILLE_SEGMENT + 64:
+                            raise erreur
+                        chiffre = f.read(n)
+                        nonce = prefixe + struct.pack(">I", i)
+                        try:
+                            clair = aes.decrypt(nonce, chiffre, entete + struct.pack(">IB", i, True))
+                            sortie += clair
+                            if f.read(1):
+                                raise erreur  # données après le segment final
+                            return bytes(sortie)
+                        except InvalidTag:
+                            sortie += aes.decrypt(nonce, chiffre, entete + struct.pack(">IB", i, False))
+                        i += 1
+            except InvalidTag:
+                continue  # autre clé maîtresse (rotation) ou altération
+        raise erreur
+
+    def _chiffrer_vers(self, chemin: Path, tenant_id: str, contenu: bytes) -> None:
+        if len(contenu) >= SEUIL_SEGMENTS:
+            self._ecrire_segments(chemin, tenant_id, contenu)
+        else:
+            self._ecrire_atomique(chemin, self._fernet(tenant_id).encrypt(bytes(contenu)))
+
+    def _dechiffrer(self, chemin: Path, tenant_id: str) -> bytes:
+        with chemin.open("rb") as f:
+            debut = f.read(4)
+        if debut == MAGIE_V2:
+            return self._lire_segments(chemin, tenant_id)
+        try:
+            return self._fernet(tenant_id).decrypt(chemin.read_bytes())
+        except InvalidToken as exc:
+            raise ErreurIntegrite("contenu indéchiffrable (clé d'un autre client ou fichier altéré)") from exc
+
     def _fernet(self, tenant_id: str) -> MultiFernet:
         t = self._tenant(tenant_id)
         if t not in self._cache:
@@ -91,8 +194,7 @@ class FileVault:
         chemin = self._chemin(tenant_id, sha, espace)
         if chemin.exists():
             return sha
-        jeton = self._fernet(tenant_id).encrypt(bytes(contenu))
-        self._ecrire_atomique(chemin, jeton)
+        self._chiffrer_vers(chemin, tenant_id, bytes(contenu) if isinstance(contenu, bytearray) else contenu)
         return sha
 
     def _ecrire_atomique(self, chemin: Path, donnees: bytes) -> None:
@@ -113,10 +215,7 @@ class FileVault:
         chemin = self._chemin(tenant_id, sha, espace)
         if not chemin.is_file():
             raise FileNotFoundError("contenu absent du coffre")
-        try:
-            clair = self._fernet(tenant_id).decrypt(chemin.read_bytes())
-        except InvalidToken as exc:
-            raise ErreurIntegrite("contenu indéchiffrable (clé d'un autre client ou fichier altéré)") from exc
+        clair = self._dechiffrer(chemin, tenant_id)
         if hashlib.sha256(clair).hexdigest() != sha:
             raise ErreurIntegrite("empreinte du contenu différente de la référence")
         return clair
@@ -163,14 +262,13 @@ class FileVault:
         self._cache.clear()
         n = 0
         for t in self.clients():
-            mf = self._fernet(t)
             for e in ESPACES:
                 for sha in list(self.lister(t, espace=e)):
                     chemin = self._chemin(t, sha, e)
                     try:
-                        jeton = mf.rotate(chemin.read_bytes())
-                    except InvalidToken as exc:  # les objets déjà tournés restent lisibles
+                        clair = self._dechiffrer(chemin, t)
+                    except ErreurIntegrite as exc:  # les objets déjà tournés restent lisibles
                         raise ErreurIntegrite("objet indéchiffrable avec les clés fournies") from exc
-                    self._ecrire_atomique(chemin, jeton)
+                    self._chiffrer_vers(chemin, t, clair)
                     n += 1
         return n
