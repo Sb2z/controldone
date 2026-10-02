@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API — ControlDOne</title><link rel="stylesheet" href="/static/app.css"></head>
+<body>
+<header class="entete"><div class="entete-int"><a class="marque" href="/">Control<span>DOne</span></a><span class="discret">API v1 — <a href="/api/v1/openapi.json">openapi.json</a></span></div></header>
+<main class="page">
+<div class="titre-page"><h1>API REST v1</h1></div>
+<section class="carte"><pre class="corps">{{ description }}</pre></section>
+<section class="carte">
+<table class="donnees">
+<thead><tr><th scope="col">Méthode</th><th scope="col">Chemin</th><th scope="col">Description</th></tr></thead>
+<tbody>
+{% for r in routes %}<tr><td><code>{{ r.methode }}</code></td><td><code>{{ r.chemin }}</code>{% if r.parametres %}<br><span class="discret">paramètres : {{ r.parametres|join(", ") }}</span>{% endif %}</td><td><strong>{{ r.resume }}</strong>{% if r.description %}<br><span class="discret">{{ r.description }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table>
+</section>
+<p class="discret">Exemples complets : <code>docs/API.md</code>.</p>
+</main>
+<footer class="pied"><p class="avertissement"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p></footer>
+</body></html>

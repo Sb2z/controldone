@@ -1,0 +1,17 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% block contenu %}
+<div class="titre-page"><h1>Alertes</h1></div>
+<section class="carte">
+<table class="donnees">
+  <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Client</th><th scope="col">Message</th><th scope="col">État</th></tr></thead>
+  <tbody>
+  {% for a in alertes %}
+  <tr{% if not a.lue_le %} class="non-lue"{% endif %}><td>{{ a.cree_le|date }}</td><td>{{ {"job_mort": "Tâche morte", "cout_ia_alerte": "Coût IA 80 %", "cout_ia_plafond": "Plafond IA atteint"}.get(a.kind, a.kind) }}</td>
+    <td><code>{{ a.tenant_id or "—" }}</code></td><td>{{ a.message }}</td>
+    <td>{% if a.lue_le %}Lue le {{ a.lue_le|date }}{% else %}<form method="post" action="/admin/alertes/{{ a.id }}/lue" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Marquer comme lue</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="vide">Aucune alerte.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</section>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html.j2" %}
+{% block contenu %}
+<div class="titre-page"><h1>Journal d'audit</h1></div>
+{% if anomalies %}
+<div class="message erreur" role="alert"><strong>Chaîne rompue :</strong> {{ anomalies|length }} anomalie(s) détectée(s).
+<ul>{% for a in anomalies[:20] %}<li>Entrée {{ a.id }} : {{ a.motif }}</li>{% endfor %}</ul></div>
+{% else %}
+<div class="message succes" role="status"><strong>Chaîne intacte :</strong> chaque entrée est liée à la précédente par son empreinte SHA-256.</div>
+{% endif %}
+<section class="carte">
+<div class="defilement">
+<table class="donnees compacte">
+  <thead><tr><th scope="col" class="num">N°</th><th scope="col">Date</th><th scope="col">Acteur</th><th scope="col">Action</th><th scope="col">Client</th><th scope="col">Cible</th><th scope="col">Détails</th><th scope="col">Empreinte</th></tr></thead>
+  <tbody>
+  {% for e in lignes %}
+  <tr><td class="num">{{ e.id }}</td><td>{{ e.ts|date }}</td><td><code>{{ e.actor }}</code><br><span class="discret">{{ e.role }}</span></td><td>{{ e.action }}</td><td><code>{{ e.tenant_id or "—" }}</code></td><td><code>{{ e.target or "—" }}</code></td>
+    <td class="details">{% for k, v in e.details.items() %}<span>{{ k }} : {{ v }}</span>{% endfor %}</td><td><code>{{ e.hash }}…</code></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</section>
+{% endblock %}

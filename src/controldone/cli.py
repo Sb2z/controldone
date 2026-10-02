@@ -2,6 +2,8 @@
 
     controldone diagnostic <dossier_ou_fichier> [--client-profile p.json] [--grilles dir] --out <dir>
     controldone demo [--out var/demo] [--demo-dir demo] [--moteur auto|reel|demo]
+    controldone serve [--host 127.0.0.1] [--port 8000] [--sans-worker] [--init-schema]
+    controldone init-demo [--force] [--si-absente]
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
 documents est une frontière de regroupement naturelle) et écrit ``report.html``, ``report.pdf``,
@@ -58,6 +60,48 @@ def _demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from controldone.services.plateforme import Plateforme
+    from controldone.web import ParametresWeb, create_app
+
+    plateforme = Plateforme.depuis_env()
+    if args.init_schema:
+        plateforme.db.creer_schema()
+    app = create_app(ParametresWeb(plateforme=plateforme, worker_integre=not args.sans_worker,
+                                   https=True if args.https else None))
+    print(f"ControlDOne — http://{args.host}:{args.port}/ (worker intégré : {'non' if args.sans_worker else 'oui'})")
+    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=args.proxy, forwarded_allow_ips="127.0.0.1",
+                log_level="warning", server_header=False)
+    return 0
+
+
+def _init_demo(args: argparse.Namespace) -> int:
+    import shutil
+
+    from controldone.services.demo_init import initialiser_demo, resume
+    from controldone.services.plateforme import Plateforme
+
+    plateforme = Plateforme.depuis_env()
+    if args.force:
+        chemin = plateforme.db.chemin_sqlite()
+        if chemin is None:
+            print("--force n'est possible qu'avec une base SQLite.", file=sys.stderr)
+            return 2
+        plateforme.db.fermer()
+        for suffixe in ("", "-wal", "-shm"):
+            Path(str(chemin) + suffixe).unlink(missing_ok=True)
+        shutil.rmtree(plateforme.vault.racine, ignore_errors=True)
+        plateforme = Plateforme.depuis_env()
+    res = initialiser_demo(plateforme)
+    if res.deja_initialisee and args.si_absente:
+        print("Base de démonstration déjà initialisée.")
+        return 0
+    print("\n".join(resume(res)))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="controldone", description="ControlDOne — contrôle technique de cohérence "
                                  "des documents d'import.")
@@ -78,6 +122,21 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--demo-dir", dest="demo_dir", default="demo", help="où écrire le jeu fictif")
     m.add_argument("--moteur", choices=["auto", "reel", "demo"], default="auto")
     m.set_defaults(fn=_demo)
+
+    sv = sous.add_parser("serve", help="interface web et API (uvicorn)")
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument("--sans-worker", dest="sans_worker", action="store_true",
+                    help="ne pas lancer le worker intégré (production : python -m controldone.jobs.worker)")
+    sv.add_argument("--init-schema", dest="init_schema", action="store_true", help="créer les tables manquantes")
+    sv.add_argument("--https", action="store_true", help="servi derrière TLS : en-tête HSTS")
+    sv.add_argument("--proxy", action="store_true", help="faire confiance aux en-têtes X-Forwarded-* du mandataire local")
+    sv.set_defaults(fn=_serve)
+
+    di = sous.add_parser("init-demo", help="base de démonstration (données fictives, deux clients)")
+    di.add_argument("--force", action="store_true", help="supprimer la base SQLite et le coffre existants")
+    di.add_argument("--si-absente", dest="si_absente", action="store_true", help="ne rien faire si déjà initialisée")
+    di.set_defaults(fn=_init_demo)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s")

@@ -1,0 +1,40 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import badge_niveau %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ info.raison_sociale }}</h1>
+  <p class="discret">Écarts constatés entre vos documents d'import, validés avant publication.</p>
+</div>
+<section class="kpis" aria-label="Indicateurs">
+  <div class="kpi"><div class="kpi-lib">Dossiers contrôlés</div><div class="kpi-val num"><a href="/espace/dossiers">{{ kpi.dossiers }}</a></div><div class="kpi-note">{{ kpi.constats }} constat(s) publié(s)</div></div>
+  <div class="kpi kpi-accent"><div class="kpi-lib">Montant recouvrable certain</div><div class="kpi-val num">{{ kpi.certain|montant }}</div><div class="kpi-note">écarts certains validés</div></div>
+  <div class="kpi"><div class="kpi-lib">Montant à vérifier</div><div class="kpi-val num">{{ kpi.a_verifier|montant }}</div><div class="kpi-note">affiché à part, jamais additionné</div></div>
+  <div class="kpi"><div class="kpi-lib">Reste à recouvrer</div><div class="kpi-val num"><a href="/espace/recouvrement">{{ kpi.reste|montant }}</a></div><div class="kpi-note">avoirs reçus : {{ kpi.credite|montant }}</div></div>
+</section>
+<div class="grille-2 grille-large-etroite">
+<section class="carte">
+  <div class="carte-tete"><h2>Derniers dossiers</h2><a class="petit-lien" href="/espace/dossiers">Tous les dossiers</a></div>
+  <div class="defilement">
+  <table class="donnees">
+    <thead><tr><th scope="col">Dossier</th><th scope="col">Statut</th><th scope="col">MRN</th><th scope="col" class="num">Recouvrable certain</th></tr></thead>
+    <tbody>
+    {% for d in dossiers %}
+    <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td class="num">{{ d.recouvrable_certain|montant if d.recouvrable_certain else "—" }}</td></tr>
+    {% else %}<tr><td colspan="4" class="vide">Aucun dossier pour l'instant. {% if peut_deposer %}<a href="/espace/depot">Déposer des documents</a>.{% endif %}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+<section class="carte">
+  <h2>Rapports</h2>
+  {% if rapports %}
+  <ul class="liste-simple">{% for r in rapports|reverse %}<li>{{ r.payload_effectif.get("objet") }} <span class="discret">{{ r.envoye_le|date(false) }}</span><br>
+    <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/html?afficher=1">Version web</a></li>{% endfor %}</ul>
+  {% else %}<p class="vide">Votre rapport sera disponible ici après validation des constats.</p>{% endif %}
+  <h2>Derniers dépôts</h2>
+  {% if lots %}<ul class="liste-simple">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> — {{ l.statut_libelle }}</li>{% endfor %}</ul>
+  {% else %}<p class="vide">Aucun dépôt.</p>{% endif %}
+  {% if peut_deposer %}<p><a class="btn btn-principal" href="/espace/depot">Déposer des documents</a></p>{% endif %}
+</section>
+</div>
+{% endblock %}

@@ -148,7 +148,7 @@ def enregistrer_depot(plateforme: Plateforme, scope: TenantScope, elements: list
         elif f.statut is StatutFichier.refuse:
             refuses.append((f.chemin_relatif, LIBELLES_REFUS.get(f.motif_refus or "", f.motif_refus or "refusé")))
         scope.enregistrer_fichier(f, lot_id=lot_id, coffre_ref=ref)
-    for chemin, motif in refuses_prealables or []:
+    for chemin, _motif in refuses_prealables or []:
         # fichier au-delà de la limite : métadonnées seulement (aucun contenu conservé)
         sha = hashlib.sha256(f"refuse:{lot_id}:{chemin}".encode()).hexdigest()
         scope.enregistrer_fichier(FichierModele(client_id=tenant_id, lot_id=lot_id, nom_original=chemin.split("/")[-1],

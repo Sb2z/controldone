@@ -1,0 +1,20 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% block contenu %}
+<div class="titre-page"><h1>Autonomie des actions sortantes</h1>
+<p class="discret">« Manuel » (défaut) : chaque action attend votre approbation. « Automatique » : approbation automatique si les garde-fous passent ; la mise à disposition reste une étape explicite.</p></div>
+<section class="carte">
+<table class="donnees">
+  <thead><tr><th scope="col">Type d'action</th><th scope="col">Mode</th><th scope="col">Modifier</th></tr></thead>
+  <tbody>
+  {% for kind, lib, mode in modes %}
+  <tr><th scope="row">{{ lib }} <code class="discret">{{ kind }}</code></th>
+    <td>{% if mode == "auto" %}<span class="badge b-verifier">Automatique</span>{% else %}<span class="badge b-neutre">Manuel</span>{% endif %}</td>
+    <td><form method="post" action="/admin/autonomie" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="kind" value="{{ kind }}">
+      <input type="hidden" name="mode" value="{{ 'manuel' if mode == 'auto' else 'auto' }}">
+      <button type="submit" class="btn btn-petit">Passer en {{ "manuel" if mode == "auto" else "automatique" }}</button></form></td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</section>
+{% endblock %}

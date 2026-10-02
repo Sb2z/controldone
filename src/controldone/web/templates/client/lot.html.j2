@@ -1,0 +1,22 @@
+{% extends "base.html.j2" %}
+{% block meta %}{% if rafraichir %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block contenu %}
+<nav class="fil" aria-label="Fil d'Ariane"><a href="/espace/depot">Dépôts</a> › <span>{{ lot.recu_le|date }}</span></nav>
+<div class="titre-page"><h1>Dépôt du {{ lot.recu_le|date }}</h1>
+<p>{{ lot.statut_libelle }}{% if lot.job %} — traitement : {{ {"pending": "en attente", "running": "en cours", "done": "terminé", "dead": "en erreur (le fondateur est alerté)"}.get(lot.job.statut, lot.job.statut) }}{% endif %}{% if rafraichir %} <span class="discret">(cette page se met à jour toute seule)</span>{% endif %}</p></div>
+{% if lot.dossiers %}
+<section class="carte"><h2>Dossiers produits</h2>
+<ul class="liste-simple">{% for d in lot.dossiers %}<li><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></li>{% endfor %}</ul>
+<p class="discret">Les constats apparaissent après validation par le fondateur.</p></section>
+{% endif %}
+<section class="carte"><h2>Fichiers</h2>
+<div class="defilement">
+<table class="donnees compacte"><thead><tr><th scope="col">Fichier</th><th scope="col">Type</th><th scope="col" class="num">Taille</th><th scope="col">État</th></tr></thead><tbody>
+{% for f in lot.fichiers %}
+<tr><td>{{ f.chemin }}</td><td><code>{{ f.type }}</code></td><td class="num">{{ f.taille|taille }}</td>
+<td>{% if f.statut == "refuse" %}<span class="badge b-rejete">Refusé</span> {{ {"protege": "protégé par mot de passe", "corrompu": "corrompu ou illisible", "vide": "vide", "non_supporte": "type non pris en charge", "trop_gros": "trop volumineux", "archive_dangereuse": "archive dangereuse"}.get(f.motif, f.motif) }}{% elif f.doublon %}<span class="badge b-neutre">Déjà reçu</span>{% else %}<span class="badge b-valide">Reçu</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table>
+</div>
+</section>
+{% endblock %}
