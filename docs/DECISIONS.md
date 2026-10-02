@@ -144,7 +144,7 @@ Chaque choix structurant est noté ici, avec sa raison et l'option écartée. En
 
 ## D-107 — A2 : références citées
 
-- **Choix** : références retenues = `documents_references` dont le code contient 380, 325 ou 935 (ou sans code), plus `references_facture` des articles. Aucune référence de facture citée : `non_verifiable` (`valeur_absente`) plutôt qu'un constat (H7 sans références : pas de signal sans objet).
+- **Choix** : références retenues = `documents_references` dont le code contient 380, 325 ou 935 (ou sans code), plus `references_facture` des articles. Aucune référence de facture citée : `non_verifiable` (`valeur_absente`) plutôt qu'un constat (H7 sans références : pas de signal sans objet). **Remplacé en partie par D-803.**
 
 ## D-108 — A7 : texte et seuil
 
@@ -626,3 +626,165 @@ Numérotation D-1001 et suivantes. Détails : `docs/FACTURATION.md` ; code : `sr
 
 - **Choix** : `reglages["facturation"]` du client : SIREN, TVA, adresse, courriel, adresse électronique (par défaut le SIREN), adresse de livraison si elle diffère. À défaut, la raison sociale du client et le premier contact. Un instantané est figé dans la facture émise.
 - **Limite** : les champs manquants (SIREN de l'acheteur…) n'empêchent pas l'émission : ils sont listés dans `contenu.controles_reforme`, à corriger avant le passage par une PA (obligatoire au plus tard le 1er septembre 2027).
+
+# Mise au point : précision
+
+## D-701 — Relevé ou facture partagé entre dossiers : chaque ligne jugée une fois, dans le bon dossier
+
+- **Constat** : un relevé (facture mensuelle, plusieurs MRN) appartient à plusieurs dossiers (D-202). Les contrôles D4, D9 (et C6) comparaient chaque ligne de FAF ou de lignes supplémentaires à la déclaration du dossier courant, quel que soit le MRN cité par la ligne (220 « écarts certains » faux sur le banc de développement).
+- **Choix** : une ligne de prestation qui cite le MRN d'une déclaration absente du dossier mais présente dans un autre dossier contenant la même facture relève de cet autre dossier (`ligne_hors_dossier`). Elle n'est évaluée ni par D2–D9, ni par C6. Une ligne sans MRN d'une facture partagée est jugée dans le dossier « principal », c'est-à-dire celui de plus petit identifiant parmi les dossiers qui la contiennent. Les contrôles de niveau facture (D1, C7, C8) ne s'exécutent que dans ce dossier principal. Ailleurs, ils rendent `non_applicable` (`couvert_par_autre_controle`).
+- **Assiette et articles par ligne** (§13 D4 et D9, §12.2) : `declarations_de_ligne` renvoie la déclaration dont la ligne cite le MRN. À défaut, elle renvoie les déclarations couvertes par la facture. Elle renvoie une liste vide dans deux cas : le MRN de la ligne est inconnu sur une facture multi-MRN, ou une ligne non ventilée porte sur une facture qui cite aussi des MRN hors du dossier. Le FAF se calcule sur les débours de ce seul MRN, toutes factures du dossier confondues (une facture de débours et une facture de prestations peuvent être séparées). Le nombre d'articles de D9 est celui de cette déclaration. Sans déclaration retenue, D4 calcule l'assiette sur les débours de la facture elle-même (même MRN si la ligne en cite un), sans correction C.
+- **Lecture de la grille** retenue (et vérifiée sur les factures correctement établies du banc) : le pourcentage, le minimum et le maximum s'appliquent **par déclaration** ; `inclus` est un nombre d'articles par déclaration.
+
+## D-702 — Assiette « débours hors TVA » quand une taxe de la déclaration n'est pas ventilée
+
+- Quand une ligne de taxation de catégorie inconnue (code non libellé) rend les composantes indisponibles (D-201), l'excédent hors TVA reste calculable si la TVA de chaque déclaration de l'unité est autoliquidée et qu'aucune TVA n'est refacturée. Il est alors égal à l'excédent total. Dans les autres cas, il n'est pas calculable (`None`).
+
+## D-703 — D3, D4, D6, D7 : montant net des avoirs déjà reçus
+
+- §8.6 : le montant recouvrable est net des avoirs déjà imputés. Une ligne d'avoir du dossier, de même nature que la ligne facturée, est déduite de l'écart tarifaire. L'avoir doit citer la facture (`ref_compatibles`), ou à défaut le MRN de la ligne ; si la ligne d'avoir cite un MRN, ce doit être le même. Chaque ligne d'avoir n'est imputée qu'à une seule ligne : la première ligne compatible de la facture. Le constat porte `montant_brut` (écart avant avoir), cite l'avoir et le mentionne dans le libellé. Si l'avoir couvre l'écart, le résultat est `conforme`.
+
+## D-704 — Rapprochement d'une ligne « autre prestation »
+
+- `autre_prestation` est la nature fourre-tout (« tout le reste », §5.3.3) : elle n'identifie pas un poste. Une telle ligne est rapprochée par son libellé seulement. Sans libellé reconnu, elle est « hors grille » (D2) et n'est plus comparée au seul poste de cette nature (D3).
+
+## D-705 — Composante non vérifiable quand le total à payer contient des lignes non lues
+
+- Quand la règle de complétude de §12.1 s'applique, le montant non retrouvé est `manquant = total_a_payer − Σ lignes lues`. C'est le cas si `total_a_payer` dépasse la somme lue, ou si une ligne est illisible. Un excédent de composante (C1, C2, C4) compris entre la tolérance et `manquant + tolérance` est alors `non_verifiable` (`ecart_explicable_par_une_ligne_de_taxation_non_lue`), car une ligne de cette composante non extraite l'explique. C5 compare toujours le total.
+
+## D-706 — D1 : ligne probablement non lue, acomptes
+
+- **Ligne non lue** : les totaux imprimés peuvent se confirmer entre eux. Deux cas : le total des débours et le total HT dépassent la somme lue du même montant, ou bien, avec un taux de TVA unique sur les prestations, le total de TVA imprimé vaut le taux × la base HT imprimée et non le taux × la somme des lignes lues. L'écart positif vient alors d'une ligne non lue, pas d'une erreur d'addition : `non_verifiable` (`ligne_probablement_non_lue`), §8.5.1 conditions 4 et 6. Une erreur d'addition injectée sur un seul total reste détectée.
+- **Acomptes** : un acompte est une déduction, qu'il soit imprimé en positif ou précédé d'un signe moins (valeur absolue).
+
+## D-707 — C8 : un constat par numéro de TVA facturé et par dossier
+
+- Une facture de débours et une facture de prestations adressées au même numéro de TVA, différent de celui de l'importateur, constituent un seul fait. Elles donnent un seul constat qui cite les deux factures. Une facture partagée n'est jugée que dans le dossier principal (D-701).
+
+## D-708 — Documents support co-localisés et lettre d'accompagnement
+
+- Un document support n'est jamais comparé avec certitude : A10 et A11 sont `a_verifier`, et les conditions générales et lettres sont écartées (§5.3.3). Pour un support, `meme_fichier_source` et `meme_dossier_source` pèsent 3. Sans référence explicite, D-401 plafonne alors la force à `moyenne` : le lien est conservé, sans alerte P4 de rattachement faible. Les déclarations et factures gardent le poids 2 (P4 inchangé).
+- Un support qui cite le numéro de la facture transitaire (lettre d'accompagnement) reçoit `ref_facture_citee` (forte).
+
+## D-709 — C7 : références d'un relevé réparti, lecture OCR, regroupement
+
+- **Correspondances admises** : les MRN et les références de transport des autres dossiers qui contiennent **la même facture** (relevé réparti). Un MRN d'un autre dossier sans lien avec la facture reste « sans correspondance ». C'est l'objet même de C7 (refacturation du MRN d'un autre dossier, F3/F4), ce qui revient sur D-205 pour ce point.
+- **Lecture OCR** : une référence qui ne diffère d'une référence connue que par 1 ou 2 caractères n'est pas signalée, si l'une des deux est lue par OCR. Les confusions admises sont celles de §8.5.4 et, pour un identifiant, les lettres I/J/L, O/Q et U/V.
+- **Sans déclaration dans le dossier** : les MRN cités ne sont pas jugés (P1 : contrôle dépendant d'un document manquant).
+- **Regroupement** : les factures du dossier qui citent les mêmes références sans correspondance donnent un seul constat.
+
+## D-710 — B2 : TVA autoliquidée signalée par la déclaration
+
+- L'hypothèse « TVA autoliquidée exclue » de B2 traite comme autoliquidée une ligne de TVA dont le mode de paiement n'est pas lu, si la déclaration porte un indice d'autoliquidation : code 1008 et TVA, ou FR7 (§12.1). Cela corrige le constat faux de la démonstration, où le total à payer n'incluait pas la TVA autoliquidée.
+
+## D-711 — C5 et forfait petits envois
+
+- Le forfait refacturé sur une ligne distincte n'est retiré des deux côtés (G4 le compare) que si chaque déclaration de l'unité en porte une ligne lue. Sinon, le retirer de la seule facture créerait un écart égal au forfait.
+
+## D-712 — Lectures de déclaration (extracteur déterministe)
+
+- **Formulaire à cases lu par OCR** : quand le libellé de case suivant est reconnu mais que son numéro n'a pas été vu comme tel, un seul nombre de 1 ou 2 chiffres entre deux libellés de case est un numéro de case. Exemple : « 35 Masse brute (kg) 38 Masse nette (kg) ». La valeur est alors lue sous le libellé. `v_masse` refuse aussi « 38 » suivi d'un mot.
+- **Tableau condensé** : quand la colonne St est vide, un montant à trois décimales en virgule décimale (« 929,527 ») est un montant suivi du chiffre de statut collé. Un montant dont la virgule a été lue « / » ou « | » (« 31/87 ») est relu avec la virgule. Ces deux réparations appliquent une pénalité de confiance de 0,15.
+
+# Mise au point : rappel
+
+Mesures sur le split `dev` (202 dossiers) : `bench/out/dev_r1` (avant) -> `bench/out/dev_rec_6` (après, avec les
+travaux de précision menés en parallèle). Rappel global 68,6 % -> 80,5 % ; précision certain 100 % ; P1 9/9.
+
+## D-801 — P1 : documents concernés ; mention « sans valeur commerciale »
+
+- **Choix** : le constat P1 cite les documents restés sans contrepartie (factures commerciales exploitables, ou
+  déclarations) et les documents non exploitables qui tiennent lieu du document manquant. Un constat sans document
+  n'était ni vérifiable par le fondateur ni rattachable à une pièce.
+- **Classement (§7.2, P2)** : une mention explicite du corps (« document sans valeur commerciale », « ceci n'est pas
+  une facture », `P2_CORPS`) l'emporte sur l'intitulé « FACTURE » même quand un motif P2 a été lu à un niveau
+  d'intitulé inférieur (« FACTURE - BON DE LIVRAISON ») ; le motif lu est conservé.
+
+## D-802 — Fichier en double (§7.1) : copie rattachée au lot
+
+- **Choix** : le fichier identique (sha256) n'est toujours pas retraité (mention `doublon_de_fichier` dans
+  `non_lus`), mais le pipeline crée pour chaque document de l'original une **copie** (mêmes type, champs, identité ;
+  pages du fichier en double ; `doublon_de` = document original). Le regroupement la place avec son original ; les
+  contrôles l'excluent de leurs sommes (`documents_par_role`) ; F1 la signale (le banc accepte F1 pour E3). P4
+  rend `non_applicable` (`couvert_par_autre_controle`) pour la copie (pas de second « rattachement faible »).
+- **Limite** : un doublon d'un fichier reçu dans un **autre** lot (`deja_recus`) n'a pas d'original dans le lot :
+  seule la mention subsiste.
+
+## D-803 — A2 : aucune référence de facture citée (remplace la fin de D-107)
+
+- **Choix** : §10 A2 dit « sinon constat ». Si la liste des documents produits a bien été lue — export structuré, ou
+  au moins une autre référence lue (titre de transport, 1008…) — et qu'aucune référence de facture n'y figure :
+  constat `a_verifier` (signal, liste des documents cités). Aucune référence lue sur une déclaration imprimée
+  (la section a pu échapper à la lecture, H7 sans références) : `non_verifiable` comme avant.
+
+## D-804 — Déclarations : références « référence + libellé » et séparateurs
+
+- **Choix** : dans la section « Documents produits / références », une ligne dont la colonne des codes est perdue
+  (OCR) « FAC/2026/0060-0  Facture commerciale » est lue avec un code déduit du libellé imprimé (facture commerciale
+  -> N380, pro forma -> N325, connaissement -> N705, LTA -> N740 ; pénalité 0,10 ; valeur brute = libellé, ancrée).
+  Un séparateur de colonne lu entre le code et la référence (« N380 | FAC/… », « 1008 | FR… ») est sauté.
+- **Effet** : regroupement par référence citée et A2 sur les H1 scannées (32 déclarations dev sans aucune
+  référence lue auparavant).
+
+## D-805 — `ref_compatibles` : inclusion sur la forme `norm_ref` (§8.4)
+
+- **Choix** : l'inclusion est testée sur la forme `norm_ref` (texte de §8.4 : « l'une contient l'autre et la plus
+  courte a au moins 5 caractères ») **puis** sur la forme sans zéros de tête (comportement existant). « 0001-0 » (troncature
+  de « FAC/2026/0001-0 ») était refusé car sa forme sans zéros (« 10 ») est trop courte.
+
+## D-806 — Taux de référence BCE : alimentation et chargement par défaut
+
+- **Choix** : `ref/taux_bce.csv` est alimenté depuis le fichier historique officiel de la BCE
+  (`eurofxref-hist.zip`, données publiques réutilisables avec mention de la source) par
+  `scripts/importer_taux_bce.py` (fonction `convertir_historique_bce`, format large -> `date,devise,devise_par_eur`,
+  « N/A » ignorés), depuis le 2024-01-01. Le pipeline charge cette table par défaut (`table_par_defaut()`,
+  `CONTROLDONE_REF_DIR` sinon `<dépôt>/ref`) quand `OptionsPipeline.taux_reference` n'est pas fourni. Usage
+  inchangé (§8.7) : sens d'un taux non libellé et A7 ; jamais un montant.
+- **Pourquoi** : la table était vide, A7 ne pouvait jamais s'exécuter (0/5). Écart des taux imprimés du corpus dev
+  aux taux BCE : −21 % à +6 %, dans les bandes de A7.
+- **À faire (exploitation)** : rafraîchir la table périodiquement (tâche hors ligne).
+
+## D-807 — A6 : « même nombre » discriminant seulement
+
+- **Choix** : A6 ne se déclenche que si la conversion (taux imprimé dans les deux sens, à défaut taux de référence)
+  aurait déplacé le montant de plus de `T_VALEUR`. Pour 2,28 USD déclarés 2,04 EUR, conversion et non-conversion
+  tombent toutes deux à moins d'une unité : rien ne permet de conclure (A5/A7 jugent).
+
+## D-808 — E6 : écart relevé dans le dossier et crédité en partie
+
+- **Choix** : outre les écarts « réclamés » du registre (D-306), E6 traite les constats `recouvrable` (C, D) du
+  dossier que les avoirs du dossier créditent en partie (imputation §17.2) : un avoir reçu sur la facture montre que
+  l'écart a été porté au transitaire ; le reste (> `T_DEBOURS`) est à relancer. Montant = reste ;
+  `details.remplace_constat_id` = constat d'origine (le montant d'origine, déjà net des avoirs selon §8.6, ne doit
+  pas être additionné).
+
+## D-809 — E2 : comparaison par MRN cité ; facture sans ligne ; numéro illisible
+
+- **Par MRN** : quand une ligne d'avoir cite un MRN que la facture d'origine cite aussi pour la même nature, le
+  « montant facturé d'origine » du crédit est celui de ce MRN (145,73 de dédouanement crédités sur un MRN facturé
+  85, alors que 2 × 85 sont facturés sur la facture). Sans MRN sur la ligne : comparaison par nature (inchangée).
+- **Facture d'origine sans ligne lue** : `non_verifiable` (et non « 0,00 facturé », source de faux signaux).
+- **Numéro illisible** : l'avoir cite une facture d'origine, l'unique facture du transitaire du dossier (même
+  émetteur) a un numéro illisible : comparaison sur elle, raison `rattachement_faible`.
+
+## D-810 — A15 : « contient une référence d'article »
+
+- **Choix** : une désignation contient une référence d'article si elle cite une référence de la facture **ou** un
+  mot de même forme (lettres -> A, chiffres -> 9, séparateurs conservés : « LA-1012-Z » ~ « LA-1012-M »). Une
+  référence tronquée dans la désignation (« OS-2191- ») est retrouvée par `ref_compatibles` (§8.4). Un article sans
+  désignation lisible -> `non_verifiable` (la référence cherchée peut y figurer).
+
+## D-811 — H7 : ligne de forfait lue hors tableau
+
+- **Choix** : en-tête du tableau des taxes illisible (OCR), la ligne « Droit forfaitaire petits envois N article(s)
+  T EUR/art. M » est lue hors tableau, seulement si aucune ligne de forfait n'a été lue : présence, base et taux ;
+  **pas le montant** (le reste du tableau a pu échapper à la lecture : un montant isolé faussait B2 et G4, mesuré).
+  Sert G2, G3 et G6 (G6 4/5).
+
+## D-812 — F3 : autre facture citant le MRN mais illisible
+
+- **Choix** : une autre facture du client (autre dossier, numéro différent, fenêtre) cite le même MRN mais aucune
+  de ses lignes n'a été lue. Si la facture du dossier est la plus récente, n'est pas annulée par un avoir et couvre
+  seule le liquidé (quand il est connu ; sinon la complémentarité n'est pas exclue mais le signal reste à vérifier) :
+  constat `a_verifier` (raisons `valeur_absente`, `controle_signal_seulement`), montant = ses débours. Jamais
+  certain.

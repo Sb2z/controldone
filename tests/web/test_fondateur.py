@@ -68,12 +68,19 @@ def test_retrograder_un_ecart_certain(monde):
 def test_aucune_promotion_directe(monde):
     f = monde.client()
     connecter_fondateur(f, monde)
+    # constat « à vérifier » proposé : celui de la démonstration, à défaut un écart certain rétrogradé
+    with monde.pf.db.tenant(B, Acteur.systeme("t"), lecture=True) as s:
+        proposes = [c for c in s.lister(Constat) if c.statut_validation == "propose"]
+    a_verifier = [c.id for c in proposes if c.niveau == "a_verifier"]
+    cid = a_verifier[0] if a_verifier else proposes[0].id
+    if not a_verifier:
+        poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/retrograder",
+               {"motif": "montant à confirmer sur l'original"})
     t = jeton(f.get("/admin/validation").text)
-    cid = monde.ids[A]["constat_propose"][0]
     for chemin in ("promouvoir", "certain", "ecart_certain"):
-        r = f.post(f"/admin/clients/{A}/constats/{cid}/{chemin}", data={"csrf": t}, follow_redirects=False)
+        r = f.post(f"/admin/clients/{B}/constats/{cid}/{chemin}", data={"csrf": t}, follow_redirects=False)
         assert r.status_code in (404, 405)
-    assert _constat(monde, A, cid)[1] == "a_verifier"
+    assert _constat(monde, B, cid)[1] == "a_verifier"
 
 
 def test_correction_de_valeur_relance_les_controles(monde):
