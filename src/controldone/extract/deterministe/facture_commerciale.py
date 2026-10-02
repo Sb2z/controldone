@@ -251,10 +251,6 @@ _FIN_TABLEAU = re.compile(
 # --- extracteur -----------------------------------------------------------------------------------------------
 
 
-class ExtracteurFacturesCommercialesErreur(Exception):
-    """Erreur interne (jamais levée vers le pipeline pour un document difficile)."""
-
-
 class ExtracteurFactureCommerciale:
     """Extracteur ``deterministe`` des factures commerciales (texte natif, OCR, tableur)."""
 
@@ -1053,9 +1049,6 @@ def _confiance_total(e: _Etat, retenu: _Candidat, payables: list[_Candidat], som
         coherent = any(abs(b + pieds - total) <= tol or abs(b - total) <= tol for b in bases)
         if somme is not None and marchandises is not None and abs(somme - marchandises) > tol:
             coherent = coherent and abs(marchandises + pieds - total) <= tol
-    pages = [c for c in cands if c.classe == "page"]
-    if pages and somme is not None:
-        pass
     if coherent:
         conf = 0.98 if natif else max(min(0.95, conf + 0.1), 0.92) if (lec.confiance_ocr or 0) >= 0.5 else conf
     elif coherent is False:

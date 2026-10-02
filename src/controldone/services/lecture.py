@@ -17,18 +17,36 @@ from controldone.formatage import format_montant, format_nombre
 from controldone.guardrails import AVERTISSEMENT, PHRASE_RENVOI
 from controldone.model.documents import Document as DocumentModele
 from controldone.model.dossier import Dossier as DossierModele
-from controldone.model.enums import RAISON_LIBELLES, RaisonCode, StatutGlobal, TypeDocument
+from controldone.model.enums import (
+    RAISON_LIBELLES,
+    Composante,
+    NatureMontant,
+    Outcome,
+    RaisonCode,
+    StatutGlobal,
+    TypeDocument,
+)
 from controldone.rapport.vue import (
     LIBELLES_COMPOSANTE,
     LIBELLES_FORCE,
     LIBELLES_NATURE,
+    LIBELLES_OUTCOME,
     LIBELLES_SIGNAL,
     LIBELLES_STATUT,
     LIBELLES_TYPE,
 )
 from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.file_jobs import JobStore
-from controldone.storage.models import Constat, Document, Dossier, Fichier, Lot, PageTexte, Resultat
+from controldone.storage.models import (
+    Constat,
+    Document,
+    Dossier,
+    Fichier,
+    Lot,
+    PageTexte,
+    Resultat,
+    Transitaire,
+)
 from controldone.storage.scope import TenantScope
 
 __all__ = [
@@ -182,16 +200,12 @@ def vue_constat(c: Constat, libelles_docs: dict[str, str] | None = None) -> Cons
         preuves.append(PreuveLue(role=LIBELLES_ROLE.get(p.get("role"), p.get("role") or ""),
                                  role_code=p.get("role") or "", document_id=doc_id, document=lib, page=p.get("page"),
                                  valeur_lue=p.get("valeur_brute"), calcul=p.get("calcul"), index=i))
-    from controldone.model.enums import NatureMontant
-
     try:
         nature_lib = LIBELLES_NATURE[NatureMontant(nature)]
     except ValueError:
         nature_lib = nature
     composante = j.get("composante")
     try:
-        from controldone.model.enums import Composante
-
         composante_lib = LIBELLES_COMPOSANTE.get(Composante(composante)) if composante else None
     except ValueError:
         composante_lib = composante
@@ -404,15 +418,11 @@ def detail_dossier(scope: TenantScope, dossier_id: str) -> DossierLu:
     resultats: list[dict[str, Any]] = []
     corrections: list[Any] = []
     if not scope.actor.est_client:
-        from controldone.rapport.vue import LIBELLES_OUTCOME
-
         for r in scope.lister(Resultat, dossier_id=dossier_id, ordre=Resultat.controle_id):
             if r.dossier_version != row.version:
                 continue
             j = r.contenu or {}
             try:
-                from controldone.model.enums import Outcome
-
                 res = LIBELLES_OUTCOME[Outcome(r.outcome)]
             except ValueError:
                 res = r.outcome
@@ -431,26 +441,10 @@ def detail_dossier(scope: TenantScope, dossier_id: str) -> DossierLu:
 
 
 def _transitaires(scope: TenantScope) -> list[Any]:
-    from controldone.storage.models import Transitaire
-
     return scope.lister(Transitaire)
 
 
 # --- lots ------------------------------------------------------------------------------------------------
-
-
-def _job_du_lot(scope: TenantScope, lot_id: str) -> Any:
-    for j in JobStore(scope_db(scope)).lister(tenant_id=scope.tenant_id, limite=1000):
-        if j.kind == "traiter_lot" and j.payload.get("lot_id") == lot_id:
-            return j
-    return None
-
-
-def scope_db(scope: TenantScope) -> Any:
-    db = scope.session.info.get("controldone_db")
-    if db is None:
-        raise RuntimeError("base inconnue pour ce périmètre")
-    return db
 
 
 def lister_lots(scope: TenantScope, limite: int = 50) -> list[dict[str, Any]]:

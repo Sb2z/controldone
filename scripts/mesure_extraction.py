@@ -567,7 +567,8 @@ def _pct(a: int, b: int) -> str:
     return f"{100 * a / b:6.1f} %" if b else "     — "
 
 
-def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool) -> str:
+def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool,
+            cles: Iterable[str] | None = None) -> str:
     lignes: list[str] = []
     sel = [c for c in comps if tous or c["obligatoire"] or c["champ"].endswith("(en trop)") is False]
     # 1. par champ
@@ -618,6 +619,22 @@ def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool) -> 
                 n = sum(s.values())
                 cells.append(f"{100 * (s['correct'] + s['absent_ok']) / n:8.1f}%")
             lignes.append(f"{champ[:40]:40} " + " ".join(cells))
+    # 2 bis. champs clés (*) de §5.3 : leur confiance conditionne un « écart certain »
+    if cles:
+        cles = sorted(set(cles))
+        grp_cles: dict[str, Counter] = defaultdict(Counter)
+        for c in comps:
+            if c["champ"] in cles:
+                grp_cles[c["groupe"]][c["statut"]] += 1
+                grp_cles["(tous)"][c["statut"]] += 1
+        lignes.append("")
+        lignes.append(f"Champs clés ({', '.join(cles)}) par groupe")
+        lignes.append(f"{'groupe':16} {'valeurs':>8} {'exact.':>8} {'absent':>7} {'faux':>6}")
+        for g in sorted(grp_cles, key=lambda g: (g == "(tous)", g)):
+            s_ = grp_cles[g]
+            n = sum(s_.values())
+            lignes.append(f"{g:16} {n:8d} {_pct(s_['correct'] + s_['absent_ok'], n):>8} {s_['absent']:7d} "
+                          f"{s_['faux']:6d}")
     # 3. calibration
     lignes.append("")
     lignes.append("Calibration des confiances (valeurs lues, toutes comparaisons)")
@@ -694,7 +711,14 @@ def main(argv: Iterable[str] | None = None) -> int:
           f"« {a.type} », {len(comps)} comparaisons, {time.perf_counter() - t0:.1f} s"
           + (f" (extraction moyenne {sum(durees) / len(durees):.2f} s/doc)" if durees else ""))
     print()
-    print(rapport(comps, ecarts=a.ecarts, par_groupe=a.par_groupe, tous=a.tous))
+    try:
+        from controldone.model.champs import CHAMPS_CLES
+        from controldone.model.enums import TypeDocument
+
+        cles = CHAMPS_CLES.get(TypeDocument(a.type), frozenset())
+    except Exception:
+        cles = frozenset()
+    print(rapport(comps, ecarts=a.ecarts, par_groupe=a.par_groupe, tous=a.tous, cles=cles))
     if erreurs:
         print()
         print(f"Erreurs ({len(erreurs)}) :")
