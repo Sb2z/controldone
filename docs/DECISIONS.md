@@ -534,3 +534,8 @@ Numérotation D-500 et suivantes. Code : `src/controldone/web/`, `src/controldon
 ## D-509 — Démonstration
 
 - **Choix** : `controldone init-demo` crée le compte fondateur (mot de passe et secret TOTP affichés une fois, stockés haché/chiffré), deux clients **fictifs** (`reglages.demo` → bandeau « DONNÉES FICTIVES » sur chaque page), leurs comptes, entités, transitaires et grilles validées, puis dépose les dossiers de `controldone.demo` par le service de dépôt et exécute le vrai worker. Pour illustrer la publication : écarts certains du premier client validés, rapport publié, dossier de réclamation en attente d'approbation, une réclamation déclarée envoyée ; tout reste à valider pour le second. `controldone serve` lance un worker dans un fil d'exécution (démonstration ; en production : `--sans-worker` et `python -m controldone.jobs.worker`). `make serve-demo` utilise `var/demo_web/`.
+
+## D-901 — Niveaux 3 et 4 lancés pendant la mise au point du niveau 1
+
+- **Choix** : le moteur, le banc et l'exploitation tournent de bout en bout ; la mise au point de la précision (seuil 0,97) se fait en parallèle par deux agents dédiés. Les niveaux 3 et 4 (facturation, finance, site, documents juridiques, prospection) ne modifient pas le moteur et ont été répartis entre sous-agents à ce moment.
+- **Garde-fou** : le niveau 1 n'est déclaré « vert » qu'après la mesure finale sur le corpus tenu à l'écart (voir rapport du matin).
