@@ -24,7 +24,7 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from controldone.auth import DonneesSession, GestionnaireSessions, LimiteurDebit, jeton_csrf, verifier_csrf
-from controldone.auth.roles import Acteur
+from controldone.auth.roles import Acteur, Role
 
 __all__ = [
     "CSP",
@@ -141,9 +141,21 @@ async def formulaire(request: Request, *, fichiers: bool = False) -> FormData:
 
 
 def acteur_de(request: Request) -> Acteur:
+    """Acteur de la session. Le compte est relu en base à chaque requête : un compte désactivé, supprimé ou
+    dont le rôle fondateur a changé perd aussitôt ses sessions (le jeton signé seul ne suffit pas, RS-09).
+    L'appartenance d'un rôle client à son client est vérifiée à l'ouverture de chaque ``TenantScope``."""
     s: DonneesSession | None = getattr(request.state, "session", None)
     if s is None:
         raise NonConnecte()
+    plateforme = getattr(request.app.state, "plateforme", None)
+    if plateforme is not None:
+        from controldone.storage.comptes import utilisateur
+
+        compte = utilisateur(plateforme.db, s.user_id)
+        if (compte is None or not compte.actif
+                or (s.role is Role.fondateur) != (compte.role == Role.fondateur.value)):
+            request.app.state.securite.sessions.revoquer(s.sid)
+            raise NonConnecte()
     return s.acteur(ip=request.client.host if request.client else None)
 
 

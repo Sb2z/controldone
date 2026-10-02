@@ -21,6 +21,10 @@ _CACHE: OrderedDict[tuple, bytes | None] = OrderedDict()
 _VERROU = threading.Lock()
 _MAX = 128
 _LARGEURS = {"mini": 220, "moyen": 640, "grand": 1240}
+#: Plafond de pixels d'une image rendue (≈ A4 à 1240 px de large, × 2,5) : une page au format aberrant (1 pt de
+#: large sur 5 m de haut) ou une image très étroite ne doit pas réclamer un bitmap de plusieurs gigaoctets dans le
+#: processus web (revue de sécurité RS-04).
+MAX_PIXELS = 1240 * 1754 * 5 // 2
 
 
 def _cache(cle: tuple, fabrique) -> bytes | None:
@@ -36,6 +40,15 @@ def _cache(cle: tuple, fabrique) -> bytes | None:
     return valeur
 
 
+def _echelle(w: float, h: float, largeur: int) -> float:
+    """Facteur d'échelle pour une largeur cible, réduit si l'image dépasserait ``MAX_PIXELS``."""
+    w, h = max(1.0, float(w)), max(1.0, float(h))
+    echelle = largeur / w
+    if w * h * echelle * echelle > MAX_PIXELS:
+        echelle = (MAX_PIXELS / (w * h)) ** 0.5 * 0.9  # marge pour les arrondis au pixel
+    return echelle
+
+
 def _image_page(contenu: bytes, mime: str, numero: int, largeur: int):
     """Image PIL RGB de la page ``numero`` (1-based) à ``largeur`` pixels."""
     if mime.startswith("image/"):
@@ -44,9 +57,9 @@ def _image_page(contenu: bytes, mime: str, numero: int, largeur: int):
         img = Image.open(io.BytesIO(contenu))
         if numero > 1:
             img.seek(numero - 1)
-        img = img.convert("RGB")
-        ratio = largeur / max(1, img.width)
-        return img.resize((largeur, max(1, int(img.height * ratio))))
+        ratio = _echelle(img.width, img.height, largeur)
+        cible = (max(1, int(img.width * ratio)), max(1, int(img.height * ratio)))
+        return img.convert("RGB").resize(cible)
     if mime == "application/pdf":
         import pypdfium2 as pdfium
 
@@ -55,8 +68,8 @@ def _image_page(contenu: bytes, mime: str, numero: int, largeur: int):
             if numero < 1 or numero > len(pdf):
                 return None
             page = pdf[numero - 1]
-            w, _h = page.get_size()
-            img = page.render(scale=largeur / max(1.0, w)).to_pil().convert("RGB")
+            w, h = page.get_size()
+            img = page.render(scale=_echelle(w, h, largeur)).to_pil().convert("RGB")
             page.close()
             return img
         finally:

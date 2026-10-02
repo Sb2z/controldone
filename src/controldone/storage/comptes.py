@@ -25,6 +25,7 @@ __all__ = [
     "changer_mot_de_passe",
     "cle_api_par_prefixe",
     "creer_utilisateur",
+    "desactiver_utilisateur",
     "enregistrer_totp",
     "marquer_connexion",
     "marquer_usage_cle",
@@ -166,3 +167,17 @@ def changer_mot_de_passe(db: Database, user_id: str, nouveau_hash: str, *, acteu
         u.mot_de_passe_hash = nouveau_hash
         journaliser(s, actor=acteur.id, role=acteur.role.value, action="changer_mot_de_passe",
                     tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip)
+
+
+def desactiver_utilisateur(db: Database, user_id: str, *, acteur: Acteur, actif: bool = False) -> None:
+    """Désactive (ou réactive) un compte : connexion refusée et sessions en cours rejetées à la requête
+    suivante (``web.securite.acteur_de``). Fondateur seulement."""
+    if acteur.role is not Role.fondateur:
+        raise AccesRefuse("désactivation d'un compte réservée au fondateur")
+    with db.transaction_systeme() as s:
+        u = s.get(User, user_id)
+        if u is None:
+            raise AccesRefuse("introuvable")
+        u.actif = bool(actif)
+        journaliser(s, actor=acteur.id, role=acteur.role.value, action="activer_utilisateur" if actif
+                    else "desactiver_utilisateur", target=f"users:{user_id}", ip=acteur.ip)

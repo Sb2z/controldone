@@ -450,12 +450,26 @@ def _transitaires(scope: TenantScope) -> list[Any]:
 def lister_lots(scope: TenantScope, limite: int = 50) -> list[dict[str, Any]]:
     lots = scope.lister(Lot, ordre=Lot.recu_le.desc(), limite=limite)
     return [{"id": lot.id, "canal": lot.canal, "statut": lot.statut, "statut_libelle": LIBELLES_LOT.get(lot.statut,
-             lot.statut), "recu_le": lot.recu_le, "resume": lot.resume or {}} for lot in lots]
+             lot.statut), "recu_le": lot.recu_le, "resume": resume_visible(scope, lot.resume)} for lot in lots]
 
 
 def jobs_du_client(db: Any, tenant_id: str) -> list[Any]:
     """Jobs du client (à appeler **hors** d'un périmètre ouvert en écriture : transaction système)."""
     return JobStore(db).lister(tenant_id=tenant_id, limite=2000)
+
+
+#: Clés du résumé d'un lot montrées à un rôle client. Le résumé du moteur compte aussi les constats **non
+#: publiés** (``constats``) et indique l'usage du modèle de langage (``llm``) : réservé au fondateur (règle de
+#: publication §4 ; revue de sécurité RS-05).
+CLES_RESUME_CLIENT = frozenset({"fichiers", "doublons", "refuses", "dossiers", "non_lus", "avant_paiement", "source",
+                                "format"})
+
+
+def resume_visible(scope: TenantScope, resume: dict[str, Any] | None) -> dict[str, Any]:
+    resume = dict(resume or {})
+    if scope.actor.est_client:
+        resume = {k: v for k, v in resume.items() if k in CLES_RESUME_CLIENT}
+    return resume
 
 
 def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None) -> dict[str, Any]:
@@ -468,7 +482,7 @@ def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None) 
     dossiers = [d for d in scope.lister(Dossier, lot_id=lot_id, ordre=Dossier.reference)]
     return {
         "id": lot.id, "canal": lot.canal, "statut": lot.statut, "statut_libelle": LIBELLES_LOT.get(lot.statut, lot.statut),
-        "recu_le": lot.recu_le, "resume": lot.resume or {},
+        "recu_le": lot.recu_le, "resume": resume_visible(scope, lot.resume),
         "fichiers": [{"id": f.id, "chemin": f.chemin_relatif, "taille": f.taille, "type": f.type_mime,
                       "statut": f.statut, "motif": f.motif_refus, "doublon": f.doublon_de is not None}
                      for f in fichiers],

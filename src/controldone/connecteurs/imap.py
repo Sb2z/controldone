@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import imaplib
 import os
+import re
 import ssl
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,6 +26,9 @@ from .base import Depot, ResultatDepot
 
 __all__ = ["BoiteImap", "ConfigImap"]
 
+#: Seules variables d'environnement qu'un connecteur IMAP peut lire comme mot de passe.
+PREFIXE_SECRET_RE = re.compile(r"CONTROLDONE_IMAP_[A-Z0-9_]+")
+
 
 @dataclass(frozen=True)
 class ConfigImap:
@@ -34,6 +38,12 @@ class ConfigImap:
     port: int = 993
     dossier: str = "INBOX"
     dossier_quarantaine: str = "Quarantaine"
+
+    def __post_init__(self) -> None:
+        # Le mot de passe est envoyé à ``hote`` : la configuration (réglages du client) ne doit pouvoir nommer
+        # qu'une variable dédiée, jamais CONTROLDONE_MASTER_KEY, un secret Stripe ou une clé d'API (RS-10).
+        if not PREFIXE_SECRET_RE.fullmatch(self.secret_env or ""):
+            raise ValueError("secret_env : variable CONTROLDONE_IMAP_<NOM> attendue")
 
     @classmethod
     def depuis_reglages(cls, d: dict[str, Any]) -> ConfigImap:

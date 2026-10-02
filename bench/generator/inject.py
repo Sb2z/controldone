@@ -380,6 +380,8 @@ def _inject_g_decl(dm, d, ctl, inj, ci):
     n = len(d.articles)
     if ctl == "G1":
         delta = D(r.choice(["3.00", "6.00", "-3.00", "4.50", "9.00"] + ([] if _strong(dm, "G1") else ["1.50"])))
+        if ft.base_quantite * ft.taux + delta <= 0:
+            delta = abs(delta)  # un forfait imprimé nul ou négatif n'a pas de sens (aucun tirage aléatoire en plus)
         ft.montant = q2(ft.base_quantite * ft.taux + delta)
         recompute_decl_totals(d)
         dm.add_error("G1", inj, [d.doc_id], amount=delta, nature="arithmetique_declaration",
@@ -507,6 +509,11 @@ def inject_forwarder(dm):
         elif ctl in ("G4", "G5"):
             l = _line(deb, "FORFAIT", d.mrn)
             tx = next(t for t in d.taxes if t.categorie == "forfait_petits_envois")
+            if l is None:
+                # forfait liquidé nul : la ligne de refacturation est créée à partir du montant liquidé
+                l = FTLine("debours_forfait_petits_envois", "FORFAIT", _lbl("FORFAIT", lang), Decimal(1),
+                           tx.montant, tx.montant, D0, D0, _marker(tpl, "debours"), mrn=d.mrn, ref_transport=tref)
+                deb.lines.insert(0, l)
             if ctl == "G4":
                 k = r.randint(1, 3)
                 newv = l.montant_ht + Decimal(3) * k

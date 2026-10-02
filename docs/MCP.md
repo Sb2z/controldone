@@ -8,7 +8,7 @@ transport **stdio**.
 
 | Outil | Effet |
 |---|---|
-| `deposer_dossier(chemin? , contenu_base64?, nom_fichier?)` | Dépose un fichier, un dossier ou une archive ZIP local (`chemin`), ou un contenu base64 ; renvoie `lot_id` (traitement asynchrone). |
+| `deposer_dossier(chemin? , contenu_base64?, nom_fichier?)` | Dépose un fichier, un dossier ou une archive ZIP local (`chemin`, seulement sous `CONTROLDONE_MCP_RACINE`), ou un contenu base64 ; renvoie `lot_id` (traitement asynchrone). |
 | `lire_lot(lot_id)` | Avancement d'un dépôt et dossiers produits. |
 | `lire_dossier(dossier_id?)` | Un dossier (clés, documents, constats publiés) ; sans identifiant : la liste des dossiers. |
 | `lire_ecarts(dossier_id?)` | Constats **publiés** (validés par le fondateur), valeurs comparées avec document et page, tolérance. |
@@ -26,7 +26,7 @@ un identifiant inexistant.
 | Variable | Rôle |
 |---|---|
 | `CONTROLDONE_MCP_API_KEY` | Clé d'API du client (`cdk_…`), créée par le fondateur. Obligatoire. |
-| `CONTROLDONE_MCP_RACINE` | Facultatif : seul répertoire local dont `deposer_dossier(chemin=…)` peut lire. |
+| `CONTROLDONE_MCP_RACINE` | Seul répertoire local dont `deposer_dossier(chemin=…)` peut lire. **Sans elle, le dépôt par chemin est refusé** (seul `contenu_base64` fonctionne) : le processus MCP lit la base et le coffre, il ne doit pas pouvoir verser dans l'espace d'un client un fichier quelconque du serveur (revue de sécurité RS-02). |
 | `CONTROLDONE_DATABASE_URL`, `CONTROLDONE_DATA_DIR`, `CONTROLDONE_MASTER_KEY`, `CONTROLDONE_ENV` | Comme pour le service (voir `docs/EXPLOITATION.md`). |
 
 Le serveur MCP accède directement à la base et au coffre : il tourne sur la machine du service (ou d'un

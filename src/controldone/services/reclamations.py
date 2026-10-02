@@ -35,6 +35,7 @@ LIBELLES_STATUT_ECART = {
     "credite": "Crédité", "conteste": "Contesté", "abandonne": "Abandonné",
 }
 RELANCES = (30, 60, 90)
+MONTANT_AVOIR_MAX = Decimal("1000000000")
 
 
 @dataclass
@@ -130,6 +131,9 @@ def enregistrer_avoir(scope: TenantScope, ecart_id: str, montant: Decimal, refer
     """Avoir reçu du transitaire : crédite l'écart (partiellement ou totalement)."""
     exiger(scope.actor, Action.declarer_recouvrement, scope.tenant_id)
     ligne = registre(scope, ecart_id=ecart_id)[0]
+    # NaN, infini ou valeur démesurée : refus propre (et non une erreur 500 à la comparaison ou à l'arrondi, RS-08)
+    if not isinstance(montant, Decimal) or not montant.is_finite() or montant > MONTANT_AVOIR_MAX:
+        raise RequeteInvalide("montant de l'avoir invalide")
     if montant <= 0:
         raise RequeteInvalide("le montant de l'avoir doit être positif")
     vers = StatutEcart.credite if montant >= ligne.reste else StatutEcart.partiellement_credite

@@ -121,8 +121,27 @@ def purger_expires(db: Database, vault: FileVault, now: datetime | None = None) 
     return rapport
 
 
-def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, motif: str) -> dict[str, int]:
-    """Efface toutes les données d'un client (base + coffre). Réservé au fondateur ; motif obligatoire."""
+def _supprimer_traces_envoi(dossier: Path, tenant_id: str) -> int:
+    """Traces en clair de l'expéditeur fichier (``<dossier>/<kind>/<id>.json``, champ ``tenant_id``)."""
+    n = 0
+    if not dossier.is_dir():
+        return 0
+    for p in dossier.glob("*/*.json"):
+        try:
+            if json.loads(p.read_text(encoding="utf-8")).get("tenant_id") != tenant_id:
+                continue
+            p.unlink()
+            n += 1
+        except (OSError, ValueError, AttributeError):
+            continue
+    return n
+
+
+def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, motif: str, *,
+                     dossier_sorties: Path | str | None = None) -> dict[str, int]:
+    """Efface toutes les données d'un client (base + coffre + traces des envois mis à disposition, écrites en
+    clair par l'expéditeur fichier dans ``dossier_sorties``, défaut ``<data_dir>/outbox_envoyee``). Réservé au
+    fondateur ; motif obligatoire."""
     if not peut(acteur, Action.supprimer_client, Ressource("client", tenant_id)):
         raise AccesRefuse("effacement réservé au fondateur")
     if not (motif and motif.strip()):
@@ -151,6 +170,11 @@ def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Act
                     target=f"tenants:{tenant_id}", ip=acteur.ip,
                     details={"motif": motif[:200], "lignes": {k: v for k, v in comptes.items() if v}})
     vault.supprimer_client(tenant_id)
+    if dossier_sorties is None:
+        from controldone.config import get_settings
+
+        dossier_sorties = Path(get_settings().data_dir) / "outbox_envoyee"
+    comptes["traces_envoi"] = _supprimer_traces_envoi(Path(dossier_sorties), tenant_id)
     return comptes
 
 
@@ -208,11 +232,14 @@ def exporter_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acte
                 manifeste[nom] = hashlib.sha256(data).hexdigest()
 
             ecrire("client.json", _json(_ligne(scope.client())))
-            for nom, modele in (("entites", Entite), ("transitaires", Transitaire), ("grilles", Grille),
-                                ("lots", Lot), ("fichiers", Fichier), ("couts_ia", AiUsage),
-                                ("sorties", Outbox)):
-                ecrire(f"{nom}.json", _json([_ligne(o) for o in scope.lister(modele)]))
             voit_resultats = acteur.role is Role.fondateur
+            for nom, modele in (("entites", Entite), ("transitaires", Transitaire), ("grilles", Grille),
+                                ("lots", Lot), ("fichiers", Fichier), ("couts_ia", AiUsage)):
+                ecrire(f"{nom}.json", _json([_ligne(o) for o in scope.lister(modele)]))
+            # Actions sortantes : un rôle client ne voit que celles mises à disposition (``envoye``), comme dans
+            # son espace ; brouillons, refus et corrections internes restent au fondateur (revue RS-06).
+            sorties_ = scope.lister(Outbox) if voit_resultats else scope.lister(Outbox, statut="envoye")
+            ecrire("sorties.json", _json([_ligne(o) for o in sorties_]))
             for d in scope.lister(Dossier, ordre=Dossier.id):
                 bloc = {
                     "dossier": _ligne(d),
