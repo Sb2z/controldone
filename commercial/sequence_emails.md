@@ -18,7 +18,7 @@
 |---|---|---|
 | Droit de douane forfaitaire de 3 EUR par article | « Depuis le 1er juillet 2026, les envois de faible valeur (jusqu'à 150 EUR) vendus à distance supportent un droit forfaitaire de 3 EUR par article (règlement (UE) 2026/382, applicable jusqu'au 1er juillet 2028). » | https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-imports-which-will-apply-until-1-july-2028-2026-06-08_en |
 | Facturation électronique | « Depuis le 1er septembre 2026, toute entreprise assujettie doit pouvoir recevoir ses factures par une plateforme agréée ; les PME émettront au plus tard le 1er septembre 2027. » | https://www.impots.gouv.fr/actualite/facturation-electronique |
-| Taux d'erreur sur les factures de fret | « Des éditeurs de solutions d'audit avancent des chiffres très variables (par exemple « 3 à 5 % » des factures de fret maritime selon NYSHEX, « jusqu'à 10 % » des factures de transport selon un autre éditeur). Ce sont des chiffres de vendeurs : nous ne connaissons aucune mesure indépendante. » | https://nyshex.com/knowledge-base/how-to-audit-ocean-freight-invoices ; https://intelmsagent.com/freight-invoice-audit-errors |
+| Taux d'erreur sur les factures de transitaires | « Aucune mesure indépendante du taux d'erreur sur les factures de transitaires n'existe à notre connaissance : le diagnostic sert à mesurer votre propre situation. » | — (aucun chiffre utilisé) |
 
 Dès qu'un message évoque le droit forfaitaire, la TVA à l'importation ou un autre sujet réglementaire, il contient la phrase de renvoi exacte :
 

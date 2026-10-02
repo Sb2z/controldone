@@ -67,7 +67,7 @@ Source : CNIL, « La prospection commerciale par courrier électronique », http
 
 ## 6. Limites connues de ce fichier
 
-- **Volume** : l'objectif de 40 lignes n'est pas atteint (voir le résumé en tête de `prospects.csv` et le rapport). La limite de débit de l'API (refus 429/503 fréquents) et le temps de vérification d'une preuve d'import sur le site de chaque entreprise ont été les facteurs limitants.
+- **Volume** : 26 lignes qualifiées (22 PME importatrices, 4 cabinets d'expertise comptable), pour un objectif de 40. Deux lignes restent à confirmer avant tout envoi (LX FRANCE : preuve et contact ; TERR'ASIA : rattachement du SIREN à l'établissement de Saint-Genis-Laval) et les SIREN de deux cabinets sont « à vérifier ». La limite de débit de l'API (refus 429/503 fréquents) et le temps de vérification d'une preuve d'import sur le site de chaque entreprise ont été les facteurs limitants.
 - **Biais sectoriel** : surreprésentation de l'alimentaire importé (produits asiatiques, fruits, fruits secs, café, thé), parce que ces entreprises écrivent explicitement « importateur » sur leur site. Les marques non alimentaires qui font fabriquer en Asie l'écrivent rarement : elles sont sous-représentées.
 - **Effectifs** : tranches INSEE de 2023, possiblement datées.
 - **Absence de service douane interne** : présumée, non vérifiée. Un grossiste en fruits frais peut avoir un déclarant en interne ; à demander au premier échange.
