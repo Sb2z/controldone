@@ -250,8 +250,21 @@ def _ref_dec(dec: Document, v: ValeurSourcee | None = None) -> str:
     return "la déclaration" + (f" ({', '.join(morceaux)})" if morceaux else "")
 
 
+def _vals_par_document(docs: Sequence[Document], vals: Sequence[ValeurSourcee | None]) -> list[ValeurSourcee | None]:
+    """Une valeur (ou ``None``) par document, pour citer sa page.
+
+    Les valeurs peuvent être une par document (totaux) ou plusieurs par document (valeurs par article, quand
+    le total n'est pas lu) : on rattache alors à chaque document sa première valeur (A10, A11)."""
+    vals = list(vals)
+    if len(vals) == len(docs) and all(v is None or v.document_id in (None, d.id) for d, v in zip(docs, vals)):
+        return vals
+    if len(vals) <= len(docs) and all(v is None or v.document_id is None for v in vals):
+        return vals + [None] * (len(docs) - len(vals))
+    return [next((v for v in vals if v is not None and v.document_id == d.id), None) for d in docs]
+
+
 def _refs_fc(fcs: Sequence[Document], vals: Sequence[ValeurSourcee | None] = ()) -> str:
-    vals = list(vals) + [None] * (len(fcs) - len(vals))
+    vals = _vals_par_document(fcs, vals)
     if len(fcs) == 1:
         return _ref_fc(fcs[0], vals[0])
     items = []
@@ -264,7 +277,7 @@ def _refs_fc(fcs: Sequence[Document], vals: Sequence[ValeurSourcee | None] = ())
 
 
 def _refs_dec(decs: Sequence[Document], vals: Sequence[ValeurSourcee | None] = ()) -> str:
-    vals = list(vals) + [None] * (len(decs) - len(vals))
+    vals = _vals_par_document(decs, vals)
     if len(decs) == 1:
         return _ref_dec(decs[0], vals[0])
     items = []

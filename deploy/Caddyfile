@@ -1,0 +1,58 @@
+# ControlDOne — mandataire TLS (Caddy 2). HTTPS automatique (Let's Encrypt / ZeroSSL), HTTP -> HTTPS.
+# Variables (fichier .env.prod, transmises par docker-compose.yml) :
+#   CONTROLDONE_DOMAIN  nom de domaine public (ex. app.exemple.fr) ; son enregistrement A/AAAA pointe vers la VM
+#   ACME_EMAIL          adresse de contact pour l'autorité de certification (expiration, incidents)
+{
+	email {$ACME_EMAIL}
+	# Pas de page d'administration de Caddy exposée.
+	admin off
+}
+
+{$CONTROLDONE_DOMAIN} {
+	encode zstd gzip
+
+	# --- Taille des requêtes ---------------------------------------------------------------------------
+	# Dépôt de lots (interface et API) : jusqu'à 500 Mo par lot côté application (ingest.reception.Limites).
+	@depot path /espace/depot /api/v1/lots /api/v1/einvoices
+	request_body @depot {
+		max_size 520MB
+	}
+	# Tout le reste (formulaires, grilles, avoirs, webhooks Stripe) : 60 Mo au plus.
+	@autres not path /espace/depot /api/v1/lots /api/v1/einvoices
+	request_body @autres {
+		max_size 60MB
+	}
+
+	# --- En-têtes de sécurité ----------------------------------------------------------------------------
+	# L'application pose déjà CSP, X-Frame-Options, Referrer-Policy… (web/securite.py) ; le préfixe « ? »
+	# ne les pose que s'ils manquent (réponses d'erreur, fichiers statiques), sans écraser ceux de l'application.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		?X-Content-Type-Options "nosniff"
+		?X-Frame-Options "DENY"
+		?Referrer-Policy "same-origin"
+		?Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		?Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		-Server
+		-Via
+	}
+
+	# Journal d'accès JSON sur la sortie standard (pas de corps de requête, pas de cookie).
+	log {
+		output stdout
+		format json
+	}
+
+	reverse_proxy web:8000 {
+		# Remplace X-Forwarded-For par l'adresse réelle du client (anti-usurpation pour le limiteur de débit).
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		# Délais adaptés aux dépôts volumineux.
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+		health_uri /sante
+		health_interval 30s
+	}
+}

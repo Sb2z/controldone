@@ -406,8 +406,12 @@ def apparier(constats: list[Constat], erreurs: list[Erreur], index: Index) -> No
         for e in erreurs:
             if est_candidat(c, e, index):
                 d = ecart_montant(c, e)
-                cle = ((0, d) if d is not None else (1, Decimal(0)), e.error_id,
-                       c.finding_id, c.dossier_id)
+                # Départage à écart de montant égal (D-901 bis, SPEC §19.4-3) : constat du
+                # contrôle principal de l'erreur, puis niveau ecart_certain, puis identifiants.
+                cle = ((0, d) if d is not None else (1, Decimal(0)),
+                       0 if c.controle_id == e.control_id else 1,
+                       0 if c.niveau == "ecart_certain" else 1,
+                       e.error_id, c.finding_id, c.dossier_id)
                 candidats.append((cle, c, e))
     candidats.sort(key=lambda x: x[0])
     for _, c, e in candidats:

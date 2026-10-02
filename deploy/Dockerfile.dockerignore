@@ -1,0 +1,14 @@
+# Contexte de construction de deploy/Dockerfile (BuildKit lit <Dockerfile>.dockerignore).
+# On n'envoie que ce que l'image utilise : jamais de données, de secrets ni de venv.
+*
+!requirements.lock
+!pyproject.toml
+!README.md
+!src/
+!config/
+!ref/
+!scripts/backup.sh
+!deploy/backup-cron.sh
+!deploy/scheduler.sh
+**/__pycache__
+**/*.pyc
