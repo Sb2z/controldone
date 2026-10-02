@@ -77,6 +77,10 @@ def preparer_pack(lignes: Iterable[LigneMACF], *, annee: int, client: str, date_
                     liste=liste, date_preparation=date_preparation, textes=textes)
 
 
+def _statut_liste(pack: PackMACF) -> str:
+    return "à vérifier" if pack.liste.a_verifier else pack.liste.statut
+
+
 def _neutre(x: Any) -> Any:
     if isinstance(x, str) and x[:1] in ("=", "+", "-", "@", "\t", "\r"):
         return "'" + x
@@ -98,7 +102,7 @@ def _agregat(a: Agregat) -> list[Any]:
 
 def _entete(pack: PackMACF) -> list[list[Any]]:
     return [[MENTION_PREPARATION.upper()], [f"Client : {pack.client}"], [f"Année : {pack.annee}"],
-            [f"Liste des codes : version {pack.liste.version} ({pack.liste.statut}) — {pack.liste.source_url}"],
+            [f"Liste des codes : version {pack.liste.version} ({_statut_liste(pack)}) — {pack.liste.source_url}"],
             [NE_FAIT_PAS], [PHRASE_RENVOI], [AVERTISSEMENT], []]
 
 
@@ -207,7 +211,7 @@ def ecrire_pdf(pack: PackMACF, chemin: Path | str) -> Path:
     elems += [
         p("Sources et hypothèses", h2),
         p(f"Liste des codes NC : {pack.liste.source_texte} — version {pack.liste.version}, statut "
-          f"« {pack.liste.statut} », consultée le {pack.liste.consulte_le} ({pack.liste.source_url})."),
+          f"« {_statut_liste(pack)} », consultée le {pack.liste.consulte_le} ({pack.liste.source_url})."),
         p(f"Seuil de 50 t : {pack.liste.seuil_source_url}."),
         p("Correspondance faite sur le code imprimé de la déclaration, sans avis de classement ; chaque ligne est "
           "à faire vérifier."),
