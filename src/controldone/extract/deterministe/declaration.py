@@ -1420,7 +1420,8 @@ class _Lecteur:
                 code_lu = _code_taxe(_Span(ligne.toks[:1]))
             if code_lu is None:
                 manquees += 1
-                if manquees > 1 or self.hits_par_ligne.get(idx) or not re.search(r"\d", ligne.texte):
+                mots = any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne.toks)
+                if manquees > 1 or self.hits_par_ligne.get(idx) or (mots and not re.search(r"\d", ligne.texte)):
                     break  # fin du tableau (une ligne illisible d'OCR est tolérée)
                 continue
             manquees = 0
