@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import pkgutil
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 
@@ -11,6 +10,7 @@ from controldone.controls.specs import ORDRE_CONTROLES, get_spec
 from controldone.model.resultats import ResultatControle
 
 __all__ = [
+    "MODULES_CONTROLES",
     "ControlFn",
     "charger_controles",
     "control",
@@ -56,15 +56,23 @@ def controles_enregistres() -> dict[str, ControlFn]:
     return {cid: _REGISTRE[cid] for cid in ORDRE_CONTROLES if cid in _REGISTRE}
 
 
+#: Modules de contrôles, chargés explicitement (pas de découverte silencieuse, D-1214) : un module absent ou
+#: en erreur d'import fait échouer le chargement.
+MODULES_CONTROLES: tuple[str, ...] = tuple(
+    f"controldone.controls.famille_{f}" for f in ("p", "a", "b", "c", "d", "e", "f", "g")
+)
+
+
 def charger_controles() -> None:
-    """Importe tous les modules ``controldone.controls.famille_*`` (qui s'enregistrent à l'import)."""
+    """Importe les modules de contrôles (qui s'enregistrent à l'import) et vérifie que chaque contrôle de
+    l'Annexe A est enregistré (``RuntimeError`` sinon)."""
     if not _CHARGEMENT_AUTO:
         return
-    import controldone.controls as paquet
-
-    for info in sorted(pkgutil.iter_modules(paquet.__path__), key=lambda m: m.name):
-        if info.name.startswith("famille_"):
-            importlib.import_module(f"{paquet.__name__}.{info.name}")
+    for module in MODULES_CONTROLES:
+        importlib.import_module(module)
+    manquants = [cid for cid in ORDRE_CONTROLES if cid not in _REGISTRE]
+    if manquants:
+        raise RuntimeError(f"contrôles non enregistrés : {', '.join(manquants)}")
 
 
 @contextmanager

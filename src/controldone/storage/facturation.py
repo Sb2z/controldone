@@ -87,7 +87,7 @@ def _compteur(s: Session, emetteur: str, serie: str, annee: int) -> CompteurFact
 def emettre_numerotee(db: Database, *, emetteur: str, serie: str, date_emission: date, chiffres: int,
                       construire: Callable[[str], dict[str, Any]], acteur_id: str, acteur_role: str,
                       outbox_id: str | None = None, coupon: dict[str, Any] | None = None,
-                      essais: int = 5) -> FactureEmise:
+                      essais: int = 5, verifier: Callable[[Session], None] | None = None) -> FactureEmise:
     """Attribue le numéro suivant de la série et insère la facture construite par ``construire(numero)``
     (qui renvoie les colonnes de ``FactureEmise`` hors numérotation). Idempotent par ``outbox_id``.
 
@@ -101,7 +101,9 @@ def emettre_numerotee(db: Database, *, emetteur: str, serie: str, date_emission:
                     deja = s.execute(select(FactureEmise).where(FactureEmise.outbox_id == outbox_id)).scalar_one_or_none()
                     if deja is not None:
                         return deja
-                c = _compteur(s, emetteur, serie, annee)
+                c = _compteur(s, emetteur, serie, annee)  # verrou de la série
+                if verifier is not None:
+                    verifier(s)  # contrôles revérifiés sous le verrou (cumul des avoirs…)
                 if c.derniere_date is not None and date_emission < c.derniere_date:
                     raise ChronologieRompue(f"date d'émission {date_emission} antérieure à la dernière facture "
                                             f"de la série ({c.derniere_date})")
@@ -134,6 +136,12 @@ def emettre_numerotee(db: Database, *, emetteur: str, serie: str, date_emission:
             if essai == essais - 1:
                 raise
     raise RuntimeError("numérotation impossible")  # pragma: no cover
+
+
+def cumul_avoirs(s: Session, facture_id: str) -> Decimal:
+    """Somme HT (positive) des avoirs émis sur une facture, lue dans la transaction ``s``."""
+    montants = s.execute(select(FactureEmise.total_ht).where(FactureEmise.facture_origine_id == facture_id)).scalars()
+    return sum((abs(Decimal(m)) for m in montants), Decimal("0.00"))
 
 
 def facture(db: Database, facture_id: str) -> FactureEmise | None:

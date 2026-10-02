@@ -22,7 +22,7 @@
       {% if acteur.role.value == "fondateur" %}
         {% set liens = [("tableau", "/admin", "Tableau de bord"), ("validation", "/admin/validation", "File de validation"), ("clients", "/admin/clients", "Clients"), ("finances", "/admin/finances", "Finances"), ("jobs", "/admin/jobs", "Tâches"), ("journal", "/admin/journal", "Journal"), ("alertes", "/admin/alertes", "Alertes"), ("autonomie", "/admin/autonomie", "Autonomie")] %}
       {% else %}
-        {% set liens = [("tableau", "/espace", "Tableau de bord"), ("depot", "/espace/depot", "Déposer"), ("dossiers", "/espace/dossiers", "Dossiers"), ("rapports", "/espace/rapports", "Rapports"), ("recouvrement", "/espace/recouvrement", "Recouvrement")] %}
+        {% set liens = [("tableau", "/espace", "Tableau de bord"), ("depot", "/espace/depot", "Déposer"), ("dossiers", "/espace/dossiers", "Dossiers"), ("rapports", "/espace/rapports", "Rapports"), ("recouvrement", "/espace/recouvrement", "Suivi des avoirs")] %}
       {% endif %}
       <ul>
       {% for cle, url, lib in liens %}
@@ -49,7 +49,7 @@
 </main>
 <footer class="pied">
   <p class="avertissement"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p>
-  <p class="mentions">ControlDOne — contrôle technique de cohérence des documents d'import. Les réclamations sont préparées pour être envoyées par le client lui-même.</p>
+  <p class="mentions">ControlDOne — contrôle technique de cohérence des documents d'import. Les relevés d'écarts sont remis au client, qui décide seul de leur usage.</p>
 </footer>
 </body>
 </html>

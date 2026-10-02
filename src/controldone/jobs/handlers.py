@@ -6,12 +6,17 @@
   dossiers, documents, résultats et constats, textes de page (chiffrés), coût IA ; le tout en **une**
   transaction qui marque aussi le lot ``traite`` (rejouer un job déjà appliqué ne crée aucun doublon).
   Le modèle de langage est désactivé si le plafond mensuel du client est atteint.
-- ``purger_retention`` : ``storage.retention.purger_expires``.
+  Jeton de clôture (D-1303) : bail vérifié avant le pipeline, après, et **dans** la transaction finale.
+  Durée maximale (``CONTROLDONE_LOT_DUREE_MAX_S``, D-1311) : le pipeline tourne alors dans un processus
+  fils tué au-delà ; le job devient ``dead`` (alerte) et le worker passe au lot suivant.
+- ``purger_retention`` : clôture des dossiers et lots inactifs (``storage.retention.cloturer_inactifs``),
+  puis ``storage.retention.purger_expires``, puis purge des jobs ``done`` anciens.
 """
 
 from __future__ import annotations
 
 import hashlib
+import multiprocessing
 import tempfile
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
@@ -88,6 +93,59 @@ def _rattacher_fichiers(doc: Any, fichiers_pipeline: dict[str, Any], par_sha: di
     return doc.model_copy(update={"pages": pages})
 
 
+def _pipeline_fils(conn: Any, pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+    try:
+        conn.send(("ok", pipeline(*args, **kwargs)))
+    except BaseException as exc:  # pragma: no cover - exécuté dans le processus fils
+        conn.send(("erreur", f"{type(exc).__name__}"))
+    finally:
+        conn.close()
+
+
+def executer_avec_delai(pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any],
+                        delai_s: float, *, battement: Callable[[], bool] | None = None) -> Any:
+    """Exécute ``pipeline`` dans un processus fils (``spawn`` : aucun verrou hérité du parent) ; au-delà de
+    ``delai_s`` secondes le fils est tué et ``ErreurDefinitive`` est levée. ``battement`` est appelé
+    pendant l'attente (bail du job) ; s'il renvoie ``False`` le fils est tué aussi."""
+    import time
+
+    mp = multiprocessing.get_context("spawn")
+    recu, envoi = mp.Pipe(duplex=False)
+    fils = mp.Process(target=_pipeline_fils, args=(envoi, pipeline, args, kwargs), daemon=True)
+    fils.start()
+    envoi.close()
+    fin = time.monotonic() + delai_s
+    try:
+        while True:
+            if recu.poll(min(5.0, max(0.05, fin - time.monotonic()))):
+                etat, valeur = recu.recv()
+                if etat != "ok":
+                    raise ErreurTemporaire(f"pipeline en échec ({valeur})")
+                return valeur
+            if not fils.is_alive():
+                raise ErreurTemporaire("pipeline interrompu")
+            if battement is not None and not battement():
+                raise ErreurTemporaire("bail perdu pendant le pipeline")
+            if time.monotonic() >= fin:
+                raise ErreurDefinitive(f"durée maximale de traitement du lot dépassée ({int(delai_s)} s)")
+    finally:
+        if fils.is_alive():
+            fils.kill()
+        fils.join(5)
+        recu.close()
+
+
+def _executer_pipeline(ctx: JobContext, pipeline: Callable[..., Any], racine: Path, profil: Any, grilles: Any,
+                       options: Any) -> Any:
+    from controldone.config import get_settings
+
+    delai = get_settings().lot_duree_max_s
+    if delai and delai > 0 and getattr(pipeline, "__module__", "") == "controldone.pipeline":
+        return executer_avec_delai(pipeline, (racine, profil, grilles), {"options": options}, float(delai),
+                                   battement=ctx.heartbeat)
+    return pipeline(racine, profil, grilles, options=options)
+
+
 @handler("traiter_lot")
 def traiter_lot(ctx: JobContext) -> dict[str, Any]:
     tenant_id = ctx.tenant_id
@@ -108,7 +166,11 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
         grilles = scope.grilles_validees()
         plafond = etat_plafond(scope)
 
-    with tempfile.TemporaryDirectory(prefix="cd-lot-") as tmp:
+    from controldone.config import get_settings
+
+    reglages = get_settings()
+    ctx.exiger_bail()
+    with tempfile.TemporaryDirectory(prefix="cd-lot-", dir=_tmp(reglages)) as tmp:
         racine = Path(tmp) / "lot"
         racine.mkdir()
         for fid, chemin, nom, ref, _sha in fichiers:
@@ -118,9 +180,13 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
             cible.parent.mkdir(parents=True, exist_ok=True)
             cible.write_bytes(vault.lire(tenant_id, ref))
         ctx.heartbeat()
+        ctx.exiger_bail()
         options = options_cls(llm=plafond.llm_autorise)
-        resultats = pipeline(racine, profil, grilles, options=options)
+        if hasattr(options, "plafond_ia_dossier_eur"):
+            options.plafond_ia_dossier_eur = reglages.llm_plafond_dossier_eur
+        resultats = _executer_pipeline(ctx, pipeline, racine, profil, grilles, options)
     ctx.heartbeat()
+    ctx.exiger_bail()
 
     par_sha = {sha: fid for fid, _c, _n, _r, sha in fichiers}
     n_constats = 0
@@ -165,15 +231,32 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
                   "llm": plafond.llm_autorise}
         lot.statut, lot.resume = "traite", resume
         scope.flush()
+        ctx.exiger_bail(scope.session)  # jeton de clôture, dans la transaction qui valide les résultats
     return resume
+
+
+def _tmp(reglages: Any) -> str | None:
+    try:
+        rep = Path(reglages.repertoire_temporaire)
+        rep.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return str(rep)
+    except OSError:
+        return None
 
 
 @handler("purger_retention")
 def purger_retention(ctx: JobContext) -> dict[str, Any]:
-    from controldone.storage.retention import purger_expires
+    from controldone.config import get_settings
+    from controldone.storage.file_jobs import JobStore
+    from controldone.storage.retention import cloturer_inactifs, purger_expires
 
-    rapport = purger_expires(ctx.db, _vault(ctx), maintenant())
-    return {"fichiers": sum(rapport.fichiers.values()), "textes": sum(rapport.textes.values())}
+    reglages = get_settings()
+    now = maintenant()
+    clotures = cloturer_inactifs(ctx.db, now, jours=reglages.cloture_auto_jours)
+    rapport = purger_expires(ctx.db, _vault(ctx), now)
+    jobs = JobStore(ctx.db).purger_termines(jours=reglages.jobs_conservation_jours, now=now)
+    return {"fichiers": sum(rapport.fichiers.values()), "textes": sum(rapport.textes.values()),
+            "dossiers_clos": clotures["dossiers"], "lots_clos": clotures["lots"], "jobs_purges": jobs}
 
 
 # Handlers de la plateforme web (recontrôle après correction, §6.2.11) : enregistrés au chargement.

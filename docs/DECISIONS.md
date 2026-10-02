@@ -69,7 +69,7 @@ Chaque choix structurant est noté ici, avec sa raison et l'option écartée. En
 
 ## D-014 — Filtre des formulations interdites : insensibilité aux accents
 
-- **Choix** : comparaison sur le texte en minuscules, sans accents, tirets ramenés à des espaces, avec variantes de pluriel et de féminin générées par mot (mots grammaticaux invariables). Conséquence assumée : « droit dû » bloque aussi « droit du » sans accent ; les gabarits évitent la tournure « droit du … ». Un constat dont le libellé ou la prochaine action contient une expression interdite reçoit `motif_blocage = formulation_interdite` (il part en file de validation, il n'est pas supprimé).
+- **Choix** : comparaison sur le texte en minuscules, sans accents, tirets ramenés à des espaces, avec variantes de pluriel et de féminin générées par mot (mots grammaticaux invariables). Conséquence assumée : « droit dû » bloque aussi « droit du » sans accent ; les gabarits évitent la tournure « droit du … ». *(Conséquence remplacée par D-1215 : seul le participe « dû » est variable ; « droit du tarif » n'est plus bloqué.)* Un constat dont le libellé ou la prochaine action contient une expression interdite reçoit `motif_blocage = formulation_interdite` (il part en file de validation, il n'est pas supprimé).
 
 ## D-015 — Base des tolérances en pourcentage
 
@@ -936,3 +936,161 @@ contrôles `non_verifiable` par dossier : A1, A4, A9, A10, A11, A12, A13, A15 et
 (`dev_r4`) : identique à `dev_r3` (précision certain 100 %, rappel 81,3 %), `declaration.importateur.tva`
 288 -> 290 exactes. Calibration (`scripts/mesure_extraction.py`, dev) : déclaration 22 882 valeurs ≥ 0,90, 100 %
 exactes (22 880 avant) ; facture commerciale 9 111, 100 % (inchangé).
+
+# Audit final : corrections du moteur
+
+Corrections issues des audits A (moteur, constats F1–F14) et D (architecture, volet moteur). Chaque correction a un
+test unitaire sur données fictives qui échoue avant et passe après. Banc dev mesuré après chaque groupe
+(`bench/out/dev_fix_1` à `dev_fix_9`) ; référence `dev_r4`. Résultat final (`dev_fix_9`) : seuil bloquant PASSE,
+précision certain 100 % (0 FP certain, 114 VP), rappel 81,3 % (inchangé), exactitude des montants 95,8 % -> 96,5 %,
+bruit `a_verifier` 1,411 -> 1,381 par dossier, violations de pièges 40 -> 38 ; aucune formulation interdite.
+
+## D-1201 — Contexte des contrôles en erreur : jamais « conforme » (audit A, F4)
+
+- **Constat** : une exception dans `ControlContext.construire` donnait `resultats = []`, puis `conforme`.
+- **Choix** : le pipeline produit un résultat `P1` `non_verifiable` (raison `erreur_interne`, unité `erreur`) ;
+  `statut_global_depuis_resultats` rend `a_verifier` pour une liste vide et dès qu'un résultat porte la raison
+  `erreur_interne` (P8 : « impossible de conclure » n'est jamais « conforme »).
+
+## D-1202 — Exclusions des totaux : règle unique `constats_hors_totaux` (F1, F8)
+
+- **E6** (§14) : le constat d'origine désigné par `details.remplace_constat_id` est exclu des totaux « recouvrable »
+  (le reste porté par E6 le remplace). Le lien est publié dans `findings.json` (`constats[].remplace_constat_id`,
+  champ optionnel : schéma `controldone.findings/1.1.0`, mineure).
+- **F5** : un F5 qui porte le même écart (valeur absolue égale, document commun) qu'un A4/A5/A6 du dossier n'est
+  compté qu'une fois dans « Écarts de valeur entre documents ».
+- Les montants par constat sont inchangés (banc inchangé) ; seuls les agrégats du rapport (`rapport/vue.py`) changent.
+  `findings_io.constats_hors_totaux(resultats)` est la règle à réutiliser par tout autre agrégateur (tableaux de bord
+  de la plateforme, à brancher par l'équipe plateforme).
+
+## D-1203 — Clé d'idempotence de l'étape 7 (F10)
+
+- La clé `cle_controles` inclut désormais une empreinte du contexte : grilles (contenu), sous-ensemble
+  `options.controles` (`*` = tous), table de taux de référence (contenu), entités, transitaires, paramètres petits
+  envois. Un résultat mémorisé n'est jamais rejoué dans un autre contexte.
+
+## D-1204 — Rejeu octet pour octet (F12)
+
+- `execution.duree_s` reste dans `findings.json` (Annexe C) mais est **assimilé aux horodatages** exclus de la
+  comparaison de rejeu (§6.2.12) : `findings_io.findings_json_rejeu` donne la forme comparable.
+- L'année des références lisibles `D-AAAA-NNNNN` vient de la date de réception du lot (`Lot.recu_le`), plus de
+  l'horloge au moment du traitement.
+
+## D-1205 — Libellés bloqués : jamais publiés en JSON (F5) ; tableur sans `float` (F14)
+
+- `report.json` et le `findings.json` du rapport remplacent le libellé et la prochaine action d'un constat
+  `motif_blocage` par la même mention neutre que la vue HTML (`LIBELLE_RETENU`), puis vérifient tous les textes de
+  constats (`FormulationInterdite` sinon), comme `verifier_textes` pour le HTML.
+- Tableur : les montants sont passés en `Decimal` (openpyxl les écrit en nombre) ; plus de conversion `float`
+  dans notre code.
+
+## D-1206 — C5 avec une composante non évaluable : résidu seulement (F2)
+
+- **Constat** : R2 ne neutralisait C5 que si C1, C2 et C3/C4 étaient tous évaluables ; sinon C5 gardait l'écart
+  total, alors que les constats C2/C4 de la même unité portaient déjà une partie de cet écart (somme comptée deux
+  fois).
+- **Choix** : C5 ne porte que le **résidu** `écart_C5 − Σ montants des constats C1–C4 de l'unité` (« seul porteur
+  du montant » non porté par les composantes, §12 C5 ; part TVA de C3 retirée de fait, §8.6). Résidu dans
+  `T_DEBOURS` ou de signe opposé : `montant_en_jeu = None`. Dans les deux cas `montant_brut` = écart total et
+  raison `doublon_composantes`.
+- **Banc** : BX0055 C5 50 000,00 -> sans montant (composantes C2/C4 déjà portées).
+
+## D-1207 — Ligne non ventilée d'une facture multi-MRN : comparaison sur la somme (F3)
+
+- **Constat** : une allocation `prorata` du regroupement était prise pour une ventilation par C1–C5 : paire d'écarts
+  +X / −X fictifs entre les deux déclarations.
+- **Choix** : une allocation `prorata` désigne seulement les déclarations que la ligne couvre ; la ligne est
+  comparée à la **somme** de ces déclarations (unité « facture × ensemble des déclarations », §12.2). Les allocations
+  `prorata` restent dans le dossier : un constat sur cette unité garde la raison `allocation_prorata` (jamais
+  certain, §8.5.1 condition 5). Parts au prorata arrondies demi vers le haut (§8.2) et reliquat d'arrondi affecté à la
+  dernière part (`regroupement.repartir_prorata`).
+- **Essai écarté** : reconnaître un MRN cité « à une confusion OCR près » pour élargir les déclarations couvertes
+  ajoutait deux constats de bruit au banc (lectures de taxation incomplètes) sans gain : retiré.
+- **Banc** : BX0130 (piège : Σ refacturé = Σ liquidé) C5 ±172,76 et C6 -> plus aucun constat C ; BX0168 C1 ±90,00
+  -> aucun.
+
+## D-1208 — Vote OCR des MRN déterministe (F6)
+
+- À égalité de votes caractère par caractère, le caractère de la lecture la plus fréquente, puis l'ordre
+  alphabétique (`consensus_lectures`) — jamais l'ordre d'itération d'un ensemble (aléa `PYTHONHASHSEED`).
+  Vérifié : BX0041 identique pour `PYTHONHASHSEED` 0, 1, 2, 3, 7, 11.
+
+## D-1209 — Tiret séparateur dans un montant (F13)
+
+- Un tiret entouré d'espaces après un mot ou un nombre est un séparateur (« Frais de dossier - 45,00 » = 45,00 ;
+  « Ligne 3 - 1 234,56 » = 1 234,56), sauf après une devise (« EUR - 12,00 » = −12,00). Le moins en tête, collé, ou
+  après une ponctuation (« Remise : - 12,00 ») reste un signe.
+
+## D-1210 — Imputation des avoirs : une règle §17.2 pour C, D et E (F7, audit D P1-1)
+
+- **Constat** : trois rattachements différents (C : facture puis MRN, émetteur non vérifié, doublon par numéro
+  seul ; D : idem avec égalité stricte des MRN de ligne même quand l'avoir cite la facture ; E : paliers §17.2 sans
+  seuil `C_MIN_UTILE`). D3 et E6 n'imputaient pas les mêmes lignes (BX0026 : MRN lu « O » pour « 0 »).
+- **Choix** : une seule source de lignes d'avoir (`_aides_befg.lignes_credit_du_dossier` : avoirs du dossier hors
+  seconde réception E3, émetteur reconnu, montants et références `≥ C_MIN_UTILE`) et un seul rattachement par
+  paliers (`recouvrement.imputation.choisir_par_paliers` : facture d'origine, à défaut MRN, à défaut transport) avec
+  la même règle d'émetteur (`emetteurs_compatibles`, D-304/D-305) pour C (déduction par unité), D (déduction par
+  ligne, D-703) et E (imputation sur les écarts). En D, quand plusieurs lignes de même nature existent, le MRN de la
+  ligne d'avoir choisit la ligne à une confusion OCR près (`cle_confusion_ocr`) ; sinon la première.
+- C et D déduisent toujours avant de calculer l'écart (montant net, §8.6) ; E impute sur les écarts (§17.2). Les
+  trois appliquent désormais les mêmes avoirs avec les mêmes rattachements.
+- **Banc** : BX0026 D3 29,56 -> 10,63 (net de l'avoir, attendu par la vérité) ; exactitude des montants
+  95,8 % -> 96,5 %.
+
+## D-1211 — Reconnaissance d'un transitaire : règle unique (audit D P1-2)
+
+- `normalize.parties.identifier_transitaire(tva, nom, transitaires)` : TVA égale ; sinon nom égal au nom ou à un
+  alias ; sinon nom ou alias d'au moins 4 caractères contenu en **mots entiers** ; un seul transitaire doit
+  correspondre (sinon ambigu, `None`). Utilisée par le regroupement (`Dossier.transitaire_id`, avant : inclusion en
+  sous-chaîne, premier trouvé), `cle_emetteur` (avant : égalité seulement) et le choix de la grille (avant : mots
+  entiers, unique). Banc inchangé.
+
+## D-1212 — C6 : FAF corrigé arrondi avant la différence (F11, interprétation de §8.6 / §12 C6)
+
+- **Lecture retenue** : `excedent_faf = min(arrondi(FAF au taux sur l'assiette facturée), FAF facturé) −
+  arrondi(FAF au taux sur l'assiette corrigée)`, borné à 0 : on compare centimes à centimes ce que le client a payé
+  et ce qui aurait été facturé sans l'excédent. La lettre de §12 C6 (`arrondi(taux × excédent)`) donnait 1,55 là où
+  la facture corrigée donne 86,11 − 84,55 = 1,56.
+- **Banc** : BX0096 C6 1,55 -> 1,56 ; BX0234 3,68 -> 3,69 (valeurs de la vérité ; déjà dans la tolérance du
+  correcteur, métriques inchangées).
+
+## D-1213 — Nature d'une ligne : une table (audit D P0-3)
+
+- `normalize/natures.py` (`NATURES_LIBELLES`, `nature_libelle`) remplace les deux tables divergentes de
+  `ingest/structure.py` (UBL, CII, tableurs) et de l'extracteur PDF. Union des motifs, ordonnée par spécificité.
+  « forfait » seul n'est plus un débours petits envois (« Forfait dédouanement » -> `frais_dedouanement`) ; « TVA »
+  seul -> `debours_tva` ; « Fret », « stockage », « Chargement » reconnus. Restrictions assumées pour les exports
+  structurés : « droits » seulement en tête de libellé (« Droits du port » n'est pas un droit de douane), « TVA 20 % »
+  n'est plus un débours.
+- **Banc** : aucune différence de `findings.json` sur dev.
+
+## D-1214 — Chargement explicite des composants (audit D P1-3)
+
+- `pipeline.composants_par_defaut` importe explicitement le découpeur (`controldone.ingest.Decoupeur`) et les
+  extracteurs (`ingest.structure.extracteurs`, `extract.deterministe.extracteurs`) ; plus de liste de modules
+  essayés avec exceptions avalées. `extract/deterministe/__init__.py` importe ses cinq extracteurs directement : une
+  erreur d'import lève. `controls.registry.charger_controles` importe la liste `MODULES_CONTROLES` et lève si l'un des
+  59 contrôles de l'Annexe A n'est pas enregistré. Test : `tests/test_chargement_composants.py`.
+- Non traité ici (fichiers hors moteur) : valeur par défaut `--moteur auto` de `cli.py` et repli de `demo/`.
+
+## D-1215 — Participe « dû » : variabilité décidée sur l'expression accentuée (F9, remplace la conséquence de D-014)
+
+- « dû » dans le fichier des formulations est variable à toute position (`dû|dus|due|dues`) : « montants dus à la
+  douane » est bloqué (pluriel exigé par §3.2). « du » article reste invariable.
+- La seule forme ambiguë « du » sans accent, en fin d'expression (« droit dû »), n'est bloquée que si le texte source
+  porte l'accent, si elle termine une proposition (« le droit du. », « droit du ; ») ou si le texte est entièrement en
+  capitales. « droit du tarif », « Droit du port », « droits du dossier » ne sont plus bloqués.
+- Le trait d'union conditionnel (U+00AD) est retiré et les espaces de largeur nulle (U+200B–U+200D, U+2060, U+FEFF)
+  deviennent des espaces avant comparaison ; l'extrait signalé reste celui du texte d'origine.
+
+## D-1216 — Dette : aides dupliquées et code mort (audit D P2)
+
+- `_dec`, `_somme`, `_par`/`_entre_parentheses` de C et D et `_num` de B : une seule définition dans `_aides_befg`
+  (`num_utilisable`, `somme`, `entre_parentheses`, `num`). Huit copies de `re.sub("[^A-Z0-9]", "", x.upper())` dans les
+  extracteurs : `normalize.refs.norm_alnum`.
+- Supprimés après vérification (aucun appelant dans `src`, `tests`, `scripts`) : `UniteC.credit_total`,
+  `_mise_en_page.accepte_texte`, `_mise_en_page.est_zero_decimale`, paramètre `texte_ligne` de `_segmenter`,
+  `declaration._re_sous`, `Champs.valeurs_par_id`, `rapport.pdf._filet`, `regroupement._refs_transport_groupe`,
+  `ControlContext.other_dossiers`. Gardé : `ingest/texte.lignes_haut` (périmètre ingestion/OCR).
+- Banc : `findings.json` identiques avant et après (hors `duree_s`).
+

@@ -57,6 +57,7 @@ class LigneReclamation(Modele):
     montant_reference: str | None = None
     source_reference: str | None = None
     ecart: Decimal  # montant de l'écart constaté entre documents (EUR)
+    tolerance: str | None = None  # tolérance appliquée par le contrôle (affichée dans le relevé)
     constat: str = ""  # libellé comparatif du constat
     pieces: list[PieceLigne] = Field(default_factory=list)
 
@@ -79,6 +80,11 @@ class AvoirImpute(Modele):
     reliquat: Decimal  # reliquat non imputé de l'avoir (toutes réclamations confondues, E5)
     imputations: dict[str, Decimal] = Field(default_factory=dict)  # ecart_id -> montant
     le: datetime
+    #: ``transitaire`` (avoir émis par le transitaire) ou ``administration`` (remboursement, remise ou
+    #: dégrèvement accordé par la douane ou une autre autorité : hors assiette de la commission, D-1314).
+    origine: str = "transitaire"
+    hors_assiette: bool = False
+    montant_tva: Decimal | None = None  # TVA portée par l'avoir (information ; jamais dans l'assiette)
 
 
 class Commission(Modele):

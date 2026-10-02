@@ -16,7 +16,7 @@ from controldone.auth.roles import Role
 from controldone.auth.service import acteur_client, verifier_mot_de_passe_compte, verifier_second_facteur
 from controldone.storage.comptes import changer_mot_de_passe, utilisateur
 from controldone.web.rendu import page, redirection
-from controldone.web.securite import EtatSecurite, acteur_de, formulaire
+from controldone.web.securite import EtatSecurite, acteur_de, formulaire_sync
 
 routeur = APIRouter()
 COOKIE_2FA = "cd_2fa"
@@ -53,8 +53,8 @@ def connexion_form(request: Request) -> Response:
 
 
 @routeur.post("/connexion")
-async def connexion(request: Request) -> Response:
-    form = await formulaire(request)
+def connexion(request: Request) -> Response:
+    form = formulaire_sync(request)
     etat = _etat(request)
     email = str(form.get("email") or "").strip().lower()[:320]
     mdp = str(form.get("mot_de_passe") or "")[:1024]
@@ -85,8 +85,8 @@ def totp_form(request: Request) -> Response:
 
 
 @routeur.post("/connexion/totp")
-async def totp(request: Request) -> Response:
-    form = await formulaire(request)
+def totp(request: Request) -> Response:
+    form = formulaire_sync(request)
     etat = _etat(request)
     user_id = etat.lire_2fa(request.cookies.get(COOKIE_2FA))
     if user_id is None:
@@ -104,8 +104,8 @@ async def totp(request: Request) -> Response:
 
 
 @routeur.post("/deconnexion")
-async def deconnexion(request: Request) -> Response:
-    await formulaire(request)
+def deconnexion(request: Request) -> Response:
+    formulaire_sync(request)
     etat = _etat(request)
     s = getattr(request.state, "session", None)
     if s is not None:
@@ -122,9 +122,9 @@ def mdp_form(request: Request) -> Response:
 
 
 @routeur.post("/compte/mot-de-passe")
-async def mdp(request: Request) -> Response:
+def mdp(request: Request) -> Response:
     acteur = acteur_de(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     pf = request.app.state.plateforme
     actuel, nouveau, confirmation = (str(form.get(k) or "")[:1024] for k in ("actuel", "nouveau", "confirmation"))
     compte = utilisateur(pf.db, acteur.id)

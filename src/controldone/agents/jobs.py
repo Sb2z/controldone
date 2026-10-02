@@ -7,12 +7,10 @@ que si ``CONTROLDONE_VEILLE_RESEAU=1``.
 
 from __future__ import annotations
 
-from controldone.config import env
-
-import os
 from typing import Any
 
 import controldone.litiges.jobs  # noqa: F401  (enregistre « preparer_reclamation »)
+from controldone.config import env
 from controldone.jobs.registre import ErreurDefinitive, JobContext, handler
 
 from .base import ContexteAgent

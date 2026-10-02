@@ -210,9 +210,6 @@ class Champs(_Noeud):
 
     TYPE: ClassVar[TypeDocument]
 
-    def valeurs_par_id(self) -> dict[str, ValeurSourcee]:
-        return {v.id: v for v in self.iter_valeurs()}
-
 
 # --- Sous-objets communs --------------------------------------------------------------------------
 

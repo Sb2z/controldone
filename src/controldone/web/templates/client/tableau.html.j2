@@ -9,7 +9,7 @@
   <div class="kpi"><div class="kpi-lib">Dossiers contrôlés</div><div class="kpi-val num"><a href="/espace/dossiers">{{ kpi.dossiers }}</a></div><div class="kpi-note">{{ kpi.constats }} constat(s) publié(s)</div></div>
   <div class="kpi kpi-accent"><div class="kpi-lib">Montant recouvrable certain</div><div class="kpi-val num">{{ kpi.certain|montant }}</div><div class="kpi-note">écarts certains validés</div></div>
   <div class="kpi"><div class="kpi-lib">Montant à vérifier</div><div class="kpi-val num">{{ kpi.a_verifier|montant }}</div><div class="kpi-note">affiché à part, jamais additionné</div></div>
-  <div class="kpi"><div class="kpi-lib">Reste à recouvrer</div><div class="kpi-val num"><a href="/espace/recouvrement">{{ kpi.reste|montant }}</a></div><div class="kpi-note">avoirs reçus : {{ kpi.credite|montant }}</div></div>
+  <div class="kpi"><div class="kpi-lib">Écarts sans avoir reçu</div><div class="kpi-val num"><a href="/espace/recouvrement">{{ kpi.reste|montant }}</a></div><div class="kpi-note">avoirs reçus : {{ kpi.credite|montant }}</div></div>
 </section>
 <div class="grille-2 grille-large-etroite">
 <section class="carte">

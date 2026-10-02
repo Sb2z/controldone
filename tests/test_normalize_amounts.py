@@ -96,3 +96,27 @@ def test_parse_decimal_et_int():
     assert parse_int("12") == 12
     assert parse_int("12,5") is None
     assert parse_int("x") is None
+
+
+@pytest.mark.parametrize(
+    ("texte", "attendu"),
+    [
+        # F13 / D-1209 : tiret isolé après un mot ou un nombre = séparateur
+        ("Frais de dossier - 45,00", "45.00"),
+        ("Dédouanement - 45,00 EUR", "45.00"),
+        ("Ligne 3 - 1 234,56", "1234.56"),
+        ("N° 12 - EUR 100", "100"),
+        # le signe moins reste lu
+        ("- 12,00", "-12.00"),
+        ("-12,00", "-12.00"),
+        ("EUR - 12,00", "-12.00"),
+        ("Remise : - 12,00", "-12.00"),
+        ("Total : -12,00", "-12.00"),
+        ("45,00-", "-45.00"),
+        ("(1 234,56)", "-1234.56"),
+    ],
+)
+def test_tiret_separateur_ou_signe(texte, attendu):
+    from decimal import Decimal
+
+    assert parse_amount(texte).valeur_signee == Decimal(attendu)

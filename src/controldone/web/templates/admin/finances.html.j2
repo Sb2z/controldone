@@ -94,7 +94,7 @@
   <form method="post" action="/admin/finances/diagnostic" class="formulaire">{{ csrf_champ(csrf) }}
     <label for="d-client">Client</label><select id="d-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
     <label for="d-coupon">Coupon (facultatif)</label><select id="d-coupon" name="coupon"><option value="">Aucun</option>{% for code, c in cat.coupons.items() %}<option value="{{ code }}">{{ code }} — {{ coupons[code] }}/{{ c.utilisations_max }} utilisé(s)</option>{% endfor %}</select>
-    <fieldset><legend>Accord de publication des résultats anonymisés (obligatoire avec le coupon)</legend>
+    <fieldset><legend>Accord de publication des résultats anonymisés (facultatif, distinct de la remise, révocable)</legend>
       <label><input type="checkbox" name="consentement_signe" value="1"> Accord signé par le client</label>
       <label for="d-par">Signé par</label><input id="d-par" name="signe_par" maxlength="200">
       <label for="d-le">Signé le</label><input id="d-le" name="signe_le" type="date">

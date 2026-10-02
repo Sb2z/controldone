@@ -67,18 +67,21 @@ def test_commission_et_abonnement(service, db):
 
 
 def test_coupon_de_lancement(service, db):
-    with pytest.raises(CouponRefuse, match="accord"):
-        service.proposer_diagnostic("cli_a", FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS")
     emises = []
-    for cid in ("cli_a", "cli_c0", "cli_c1"):
-        a = service.proposer_diagnostic(cid, FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=SIGNE)
-        assert a.payload["total_ttc"] == "0.00" and a.payload["facturation"]["coupon"]["consentement"]["signe"]
+    # D-1313 : remise sans aucun accord de publication (cli_a) ; l'accord, s'il existe, est seulement cité
+    for cid, consentement in (("cli_a", None), ("cli_c0", SIGNE), ("cli_c1", SIGNE)):
+        a = service.proposer_diagnostic(cid, FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=consentement)
+        fx = a.payload["facturation"]["coupon"]
+        assert a.payload["total_ttc"] == "0.00" and fx["accord_publication_condition"] is False
+        assert ("consentement" in fx) is (consentement is not None)
+        if consentement is not None:
+            assert fx["consentement"]["signe"] and fx["consentement"]["revocable"]
         approuver(db, a.id)
         emises.append(service.emettre(a.id, FONDATEUR, le=LE))
     assert [f.total_ttc for f in emises] == [Decimal("0.00")] * 3
     assert all(b"AllowanceTotalAmount>390.00<" in f.xml.encode() for f in emises)
     us = stock.coupon_utilisations(db, "LANCEMENT-3-DIAGNOSTICS")
-    assert len(us) == 3 and us[0].consentement["reference_document"] == "accord-FICTIF.pdf"
+    assert len(us) == 3 and us[0].consentement == {} and us[1].consentement["reference_document"] == "accord-FICTIF.pdf"
     with pytest.raises(CouponRefuse, match="épuisé"):  # quatrième diagnostic gratuit
         service.proposer_diagnostic("cli_c2", FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=SIGNE)
     with pytest.raises(CouponRefuse):  # même client

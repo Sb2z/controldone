@@ -23,6 +23,11 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
 
+from controldone.controls import _aides_befg as aides
+from controldone.controls._aides_befg import ZERO
+from controldone.controls._aides_befg import entre_parentheses as _entre_parentheses
+from controldone.controls._aides_befg import num_utilisable as _dec
+from controldone.controls._aides_befg import somme as _somme
 from controldone.controls.confusion import (
     CLASSES_CONFUSION,
     LETTRES_CHIFFRES,
@@ -59,6 +64,7 @@ from controldone.model import (
     ValeurSourcee,
 )
 from controldone.normalize.fiscal import normalize_vat
+from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import (
     mrn_prefixe,
     norm_ref,
@@ -67,6 +73,7 @@ from controldone.normalize.refs import (
     ref_transport_compatibles,
 )
 from controldone.normalize.text import cle_texte
+from controldone.recouvrement.imputation import choisir_par_paliers
 
 __all__ = [
     "ACTION_C",
@@ -100,7 +107,6 @@ __all__ = [
     "unites_pour_ligne",
 ]
 
-ZERO = Decimal(0)
 _CENT = Decimal(100)
 
 #: Prochaine action d'un écart refacturé au-delà de la référence (jamais d'accusation, §3.1 règle 3).
@@ -170,32 +176,12 @@ _REFACTURE_CATEGORIE = {
 # =====================================================================================================
 
 
-def _dec(ctx: ControlContext, v: ValeurSourcee | None) -> Decimal | None:
-    """Montant signé d'une valeur utilisable (``None`` si absente, illisible ou trop douteuse)."""
-    if not ctx.utilisable(v):
-        return None
-    assert v is not None
-    try:
-        return v.decimal_signe()
-    except ValueError:
-        return None
-
-
-def _somme(xs: Iterable[Decimal]) -> Decimal:
-    return sum(xs, ZERO)
-
-
 def page_txt(valeurs: Iterable[ValeurSourcee | None]) -> str:
     """« page 2 » / « pages 1, 3 » (vide si aucune page connue)."""
     pages = sorted({v.page for v in valeurs if v is not None and v.page is not None})
     if not pages:
         return ""
     return ("page " if len(pages) == 1 else "pages ") + ", ".join(str(p) for p in pages)
-
-
-def _entre_parentheses(*morceaux: str) -> str:
-    m = [x for x in morceaux if x]
-    return f" ({', '.join(m)})" if m else ""
 
 
 def _numero(doc: Document) -> str:
@@ -535,9 +521,6 @@ class UniteC:
     def credit(self, cat: CategorieTaxe | None) -> Decimal:
         return _somme(c.montant for c in self.credits if c.categorie is cat)
 
-    def credit_total(self) -> Decimal:
-        return _somme(c.montant for c in self.credits)
-
 
 def _montant_ligne(ctx: ControlContext, ligne: LigneFactureTransitaire) -> ValeurSourcee | None:
     """Montant d'une ligne : HT, à défaut TTC si aucune TVA n'est portée."""
@@ -689,40 +672,31 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
 
 
 def _imputer_avoirs(ctx: ControlContext, unites: list[UniteC]) -> None:
-    vus: set[str] = set()
-    for a in ctx.avoirs():
-        num = norm_ref(a.av.numero.valeur) if a.av.numero is not None and a.av.numero.valeur else a.id
-        if num in vus:  # même avoir reçu deux fois (E3) : imputé une seule fois
+    """Avoirs déjà reçus déduits des débours refacturés (§12.2, §8.6), selon la règle unique de §17.2
+    (D-1210) : lignes d'avoir du dossier (E3, ``C_MIN_UTILE``), même émetteur, rattachement par paliers
+    (facture d'origine, à défaut MRN) ; une ligne n'est déduite que d'une seule unité."""
+    if not unites:
+        return
+    emetteurs = {id(u): [aides.emetteur_de(ctx, f) for f in u.factures] for u in unites}
+
+    def factures(u: UniteC) -> list[str | None]:
+        return [f.ft.numero.valeur if f.ft.numero is not None else None for f in u.factures]
+
+    def mrns(u: UniteC) -> list[str | None]:
+        return [d.dec.mrn_prefixe for d in u.declarations]
+
+    for lc in aides.lignes_credit_du_dossier(ctx):
+        if lc.nature is None or not lc.nature.est_debours or lc.ligne is None:
             continue
-        vus.add(num)
-        refs = [v.valeur for v in a.av.refs_facture_origine if ctx.utilisable(v)]
-        if refs:
-            cibles = [
-                u for u in unites
-                if any(f.ft.numero is not None and ref_compatibles(r, f.ft.numero.valeur)
-                       for f in u.factures for r in refs)
-            ]
-        else:
-            prefixes = {mrn_prefixe(v.valeur) for v in a.av.refs_mrn if ctx.utilisable(v)}
-            cibles = [u for u in unites if any(d.dec.mrn_prefixe in prefixes for d in u.declarations)]
-        if not cibles:
-            continue
-        for i, lg in enumerate(a.av.lignes):
-            if not lg.nature.est_debours:
-                continue
-            v = _montant_ligne(ctx, lg)
-            m = _dec(ctx, v)
-            if m is None or v is None:
-                continue
-            cands = cibles
-            if ctx.utilisable(lg.mrn):
-                assert lg.mrn is not None
-                p = mrn_prefixe(lg.mrn.valeur)
-                cands = [u for u in cibles if any(d.dec.mrn_prefixe == p for d in u.declarations)]
-            if len(cands) == 1:
-                cands[0].credits.append(
-                    CreditAvoir(avoir=a, index=i, valeur=v, montant=abs(m), categorie=_NATURE_CATEGORIE[lg.nature])
-                )
+        cibles = [u for u in unites if any(aides.memes_emetteurs(lc.emetteur, e) for e in emetteurs[id(u)])]
+        palier, cands = choisir_par_paliers(lc, cibles, factures=factures, mrns=mrns)
+        if palier == "facture" and len(cands) > 1:
+            prefixes = {mrn_prefixe(m) for m in lc.mrns}
+            cands = [u for u in cands if any(p in prefixes for p in mrns(u))] or cands
+        avoir = ctx.document(lc.avoir_id)
+        if len(cands) == 1 and avoir is not None and lc.valeur is not None:
+            cands[0].credits.append(CreditAvoir(avoir=avoir, index=lc.ligne, valeur=lc.valeur, montant=lc.montant,
+                                                categorie=_NATURE_CATEGORIE[lc.nature]))
 
 
 def _donnees(ctx: ControlContext, cid: str) -> tuple[list[UniteC], dict[str, ReferenceDeclaration]] | list[
@@ -1312,19 +1286,9 @@ def grille_pour_facture(ctx: ControlContext, f: Document) -> GrilleTarifaire | N
     tid = ctx.dossier.transitaire_id
     if tid is None:
         em = f.ft.emetteur
-        tva = normalize_vat(em.tva.valeur) if ctx.utilisable(em.tva) and em.tva is not None else None
-        for t in ctx.transitaires:
-            if tva and t.tva and normalize_vat(t.tva) == tva:
-                tid = t.id
-                break
-        if tid is None and ctx.utilisable(em.nom) and em.nom is not None:
-            nom = cle_texte(em.nom.valeur or "")
-            candidats = [
-                t.id for t in ctx.transitaires
-                if any(a and (cle_texte(a) == nom or f" {cle_texte(a)} " in f" {nom} ") for a in [t.nom, *t.alias])
-            ]
-            if len(set(candidats)) == 1:
-                tid = candidats[0]
+        tva = em.tva.valeur if ctx.utilisable(em.tva) and em.tva is not None else None
+        nom = em.nom.valeur if ctx.utilisable(em.nom) and em.nom is not None else None
+        tid = identifier_transitaire(tva, nom, ctx.transitaires)
     if tid is None:
         return None
     le = None
@@ -1378,8 +1342,9 @@ def _dependance(ctx: ControlContext, unites: Sequence[UniteC]) -> tuple[bool, li
 def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
     """C6 — Frais d'avance de fonds calculés sur l'excédent de débours (§12, C6).
 
-    ``excedent_faf = FAF(assiette facturée) − FAF(assiette sans l'excédent)``, borné par le minimum et le
-    maximum de la grille, et par le FAF facturé (FAF au minimum : excédent nul). Taux : grille validée,
+    ``excedent_faf = FAF(assiette facturée) − FAF(assiette sans l'excédent)``, chaque FAF arrondi au centime
+    avant la différence (D-1212), borné par le minimum et le maximum de la grille, et par le FAF facturé (FAF
+    au minimum : excédent nul). Taux : grille validée,
     sinon pourcentage imprimé sur la ligne. Unité : la ligne FAF (``cle_unite(ft=…, ligne=…)``).
     """
     d = _donnees(ctx, "C6")
@@ -1435,7 +1400,10 @@ def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
         assiette = _somme(assiette_debours(u, base) for u in concernees)
         sur_facture = borner(taux * assiette / _CENT, minimum, maximum)
         corrige = borner(taux * (assiette - excedent) / _CENT, minimum, maximum)
-        excedent_faf = arrondi_centime(min(sur_facture - corrige, max(ZERO, faf - corrige)))
+        # Centimes contre centimes (D-1212) : FAF au taux sur l'assiette facturée et FAF corrigé sont arrondis
+        # avant la différence, comme ils seraient imprimés sur une facture.
+        sur_facture, corrige = arrondi_centime(sur_facture), arrondi_centime(corrige)
+        excedent_faf = arrondi_centime(max(ZERO, min(sur_facture - corrige, faf - corrige)))
         details |= {"excedent_debours": str(arrondi_centime(excedent)), "assiette": str(arrondi_centime(assiette))}
         tol = ctx.tol.t_tarif()
         seuil = ctx.tol.s_debours()

@@ -68,6 +68,7 @@ from controldone.normalize import (
     siren_luhn_valide,
     tva_fr_valide,
 )
+from controldone.normalize.refs import norm_alnum
 from controldone.normalize.text import sans_accents
 
 __all__ = ["EXTRACTEUR_ID", "VERSION", "ExtracteurDeclaration"]
@@ -1247,7 +1248,7 @@ class _Lecteur:
                 ref_brut = ref_brut.strip(";,")
                 if not re.search(r"[A-Za-z0-9]{2}", ref_brut) or _CODE_DOC_RE.match(ref_brut):
                     continue
-                cle_ref = (code, re.sub(r"[^A-Z0-9]", "", ref_brut.upper()))
+                cle_ref = (code, norm_alnum(ref_brut))
                 if cle_ref in vus:
                     continue
                 vus.add(cle_ref)
@@ -2093,7 +2094,7 @@ class _Lecteur:
 
     def _lectures(self, vs: ValeurSourcee) -> int:
         """Nombre de lectures concordantes de la valeur ailleurs dans le document (titre, signature…)."""
-        cible = re.sub(r"[^A-Z0-9]", "", (vs.valeur or "").upper())
+        cible = norm_alnum(vs.valeur)
         n = 0
         for ligne in self.lignes:
             sp = _Span(ligne.toks)
@@ -2104,7 +2105,7 @@ class _Lecteur:
                         n += 1
                 continue
             for t in ligne.toks:
-                if re.sub(r"[^A-Z0-9]", "", t.t.upper()) == cible:
+                if norm_alnum(t.t) == cible:
                     n += 1
         return n
 
@@ -2303,10 +2304,6 @@ def _devise_colonne(ligne: _Ligne, cols: list[_Colonne], cle: str, entete: _Lign
             if m and m.group(1) in ISO_4217:
                 return m.group(1)
     return None
-
-
-def _re_sous(span: _Span, m: re.Match[str], groupe: int) -> re.Match[str] | None:
-    return _NUM_RE.search(span.texte, m.start(groupe), m.end(groupe))
 
 
 def _tva(t: _Tok) -> tuple[str, str, float] | None:

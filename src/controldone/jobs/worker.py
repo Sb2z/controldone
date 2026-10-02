@@ -27,7 +27,14 @@ from typing import Any
 
 from controldone.jobs.journal import configurer_journaux, evenement
 from controldone.jobs.metriques import METRIQUES
-from controldone.jobs.registre import HANDLERS, BailPerdu, ErreurDefinitive, Handler, JobContext, charger_handlers
+from controldone.jobs.registre import (
+    HANDLERS,
+    BailPerdu,
+    ErreurDefinitive,
+    Handler,
+    JobContext,
+    charger_handlers,
+)
 from controldone.storage.coltypes import maintenant
 from controldone.storage.db import Database
 from controldone.storage.file_jobs import JobInfo, JobStore

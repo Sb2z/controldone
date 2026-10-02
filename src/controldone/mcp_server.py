@@ -5,7 +5,7 @@
 Authentification : la clé d'API (variable ``CONTROLDONE_MCP_API_KEY``) désigne **un** client et un rôle
 client ; aucun outil ne prend d'identifiant de client. Les outils exposent les mêmes fonctions que l'API
 REST : dépôt d'un dossier (chemin local ou base64), lecture des dossiers et des constats **publiés**, suivi
-des litiges et enregistrement d'un événement (réclamation envoyée, avoir reçu).
+des avoirs reçus et enregistrement d'un événement (courrier envoyé par le client, avoir reçu).
 
 Les résultats sont des **écarts factuels** constatés entre documents (comparaisons, calculs), jamais un avis
 juridique, fiscal ou douanier. Les textes lus dans les documents sont renvoyés comme **données** (champ
@@ -14,17 +14,14 @@ juridique, fiscal ou douanier. Les textes lus dans les documents sont renvoyés 
 
 from __future__ import annotations
 
-from controldone.config import env
-
 import base64
 import binascii
-import os
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 from controldone.auth.cles_api import verifier_cle_api
 from controldone.auth.roles import Acteur
+from controldone.config import env
 from controldone.guardrails import AVERTISSEMENT
 from controldone.model.enums import CanalLot
 from controldone.services import depot, reclamations
@@ -32,13 +29,13 @@ from controldone.services.lecture import (
     MENTION_DOCUMENTS,
     constats_courants,
     detail_dossier,
-    jobs_du_client,
-    lire_lot,
     lister_dossiers,
+    resume_lot,
     trier_constats,
     vue_constat,
 )
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
+from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 
 __all__ = ["NATURE", "OutilsControldone", "construire_serveur", "main"]
@@ -125,11 +122,10 @@ class OutilsControldone:
 
     def lire_lot(self, lot_id: str) -> dict[str, Any]:
         def faire() -> dict[str, Any]:
-            jobs = jobs_du_client(self.pf.db, self.acteur.tenant_id)
-            with self.pf.db.tenant(self.acteur.tenant_id, self.acteur, lecture=True) as scope:
-                d = lire_lot(scope, lot_id, jobs=jobs)
-            return {"lot_id": d["id"], "statut": d["statut"], "traitement": d["job"]["statut"] if d["job"] else None,
-                    "resume": d["resume"], "dossiers": d["dossiers"]}
+            d = resume_lot(self.pf, self.acteur, lot_id)  # même projection que l'API
+            # compatibilité : « dossiers » au format historique du MCP ({id, reference})
+            return {"lot_id": d["lot_id"], "statut": d["statut"], "traitement": d["traitement"], "resume": d["resume"],
+                    "dossiers": [{"id": x["dossier_id"], "reference": x["reference"]} for x in d["dossiers"]]}
 
         return self._proteger(faire)
 
@@ -169,17 +165,13 @@ class OutilsControldone:
     def enregistrer_evenement_litige(self, litige_id: str, type_evenement: str, montant: str | None = None,
                                      reference: str | None = None, commentaire: str | None = None) -> dict[str, Any]:
         def faire() -> dict[str, Any]:
-            with self.pf.db.tenant(self.acteur.tenant_id, self.acteur) as scope:
-                if type_evenement == "reclamation_envoyee":
-                    reclamations.declarer_envoi(scope, litige_id, commentaire)
-                elif type_evenement == "avoir_recu":
-                    try:
-                        m = Decimal(str(montant or "").replace(",", "."))
-                    except InvalidOperation as exc:
-                        raise RequeteInvalide("montant invalide") from exc
-                    reclamations.enregistrer_avoir(scope, litige_id, m, reference, commentaire)
-                else:
-                    raise RequeteInvalide("type d'événement : reclamation_envoyee ou avoir_recu")
+            if type_evenement in ("reclamation_envoyee", "releve_envoye"):
+                reclamations.declarer_envoi_releve(self.pf, self.acteur, litige_id, commentaire)
+            elif type_evenement == "avoir_recu":
+                m = montant_saisi(montant, nom="montant HT de l'avoir")
+                reclamations.enregistrer_avoir_recu(self.pf, self.acteur, litige_id, m, reference, commentaire)
+            else:
+                raise RequeteInvalide("type d'événement : releve_envoye (ou reclamation_envoyee) ou avoir_recu")
             return self.suivre_litige(litige_id)
 
         return self._proteger(faire)
@@ -196,9 +188,10 @@ DESCRIPTIONS = {
     "lire_dossier": "Lit un dossier (clés, documents, constats publiés) ; sans identifiant, liste les dossiers.",
     "lire_ecarts": "Constats publiés (validés) d'un dossier ou de tous les dossiers : niveau (écart certain ou à "
                    "vérifier), valeurs comparées avec document et page, tolérance, montant de l'écart constaté.",
-    "suivre_litige": "Registre de recouvrement : écarts à recouvrer, statut, avoirs reçus, relances suggérées.",
-    "enregistrer_evenement_litige": "Enregistre un événement sur un litige : `reclamation_envoyee` (vous avez "
-                                    "envoyé vous-même la réclamation) ou `avoir_recu` (montant et numéro d'avoir).",
+    "suivre_litige": "Suivi des avoirs reçus : écarts constatés, statut, avoirs enregistrés, rappels suggérés.",
+    "enregistrer_evenement_litige": "Enregistre un événement sur un écart : `releve_envoye` (alias "
+                                    "`reclamation_envoyee` : vous avez envoyé vous-même votre courrier) ou "
+                                    "`avoir_recu` (montant hors taxes et numéro d'avoir).",
 }
 
 

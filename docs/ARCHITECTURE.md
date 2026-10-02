@@ -220,7 +220,7 @@ Tout s'importe depuis `controldone.controls.framework`. Un module par famille :
   A obligatoire ; un seul enregistrement par identifiant).
 - `ControlContext` (vue figée, copie profonde) :
   - données : `dossier`, `documents` (lecture seule), `profil`, `grilles` (validées seulement),
-    `entites`, `transitaires`, `autres_dossiers` / `other_dossiers` (famille F, même client),
+    `entites`, `transitaires`, `autres_dossiers` (famille F, même client),
     `taux_reference`, `parametres_petits_envois`, `ecarts_recouvrement`, `execution_id`, `ids` ;
   - documents par rôle : `factures_commerciales()`, `declarations(dernieres_versions=True)` (dernière
     version de chaque préfixe MRN), `versions_anterieures(dec)`, `factures_transitaires()`, `avoirs()`,
@@ -485,7 +485,8 @@ generer_rapport(resultats, profil_client, "var/rapport")
 - Composant de découpage attendu de l'ingestion : objet `decouper(source: FichierSource, *, ids, client_id)
   -> ResultatDecoupage(pages, documents, avertissements)` (`controldone.ingest.Decoupeur`). Extracteurs :
   protocole `Extracteur` (§4), publiés par `controldone.ingest.structure.extracteurs()` et
-  `controldone.extract.deterministe.extracteurs()` (découverts à l'exécution).
+  `controldone.extract.deterministe.extracteurs()` (importés explicitement par `composants_par_defaut` ; une
+  erreur d'import échoue bruyamment, D-1214).
 - Banc : `python -m controldone.bench_run --corpus bench/corpus --split dev --out bench/out/<run> [--limit N]
   [--workers K]` (puis appel du correcteur) ; `make bench-dev`.
 - Démonstration : `controldone demo` (jeu fictif sous `demo/`, rapport dans `var/demo/`) ; `make demo`.

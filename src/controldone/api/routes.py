@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, File, Query, Request, UploadFile
@@ -19,14 +18,15 @@ from controldone.services.lecture import (
     MENTION_DOCUMENTS,
     constats_courants,
     detail_dossier,
-    jobs_du_client,
-    lire_lot,
     lister_dossiers,
+    resume_lot,
     trier_constats,
     vue_constat,
 )
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
+from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
+from controldone.web.securite import depuis_boucle
 
 __all__ = ["creer_api"]
 
@@ -138,7 +138,9 @@ class DossierDetail(DossierResume):
 
 class RapportResume(BaseModel):
     rapport_id: str
-    type: str = Field(description="`rapport_publication` ou `reclamation_dossier`")
+    type: str = Field(description="`rapport_publication` ou `reclamation_dossier` (relevé d'écarts ; nom technique "
+                                  "conservé)")
+    type_libelle: str = Field(default="", description="`rapport` ou `releve_ecarts`")
     objet: str
     mis_a_disposition_le: str | None
     formats: list[str]
@@ -158,15 +160,24 @@ class Litige(BaseModel):
     reste_eur: str
     statut: str = Field(description="`ouvert`, `reclame`, `partiellement_credite`, `credite`, `conteste`, `abandonne`")
     age_jours: int | None
-    relance_suggeree: str | None
+    relance_suggeree: str | None = Field(description="rappel interne suggéré (alias historique de `rappel_suggere`)")
+    rappel_suggere: str | None = None
+    ecart_id: str | None = Field(default=None, description="identique à `litige_id` (nom historique conservé)")
+    statut_libelle: str | None = None
     evenements: list[dict[str, Any]]
     nature: str
 
 
 class EvenementLitige(BaseModel):
-    type: Literal["reclamation_envoyee", "avoir_recu"] = Field(
-        description="`reclamation_envoyee` : vous avez envoyé vous-même la réclamation ; `avoir_recu` : avoir reçu")
-    montant: str | None = Field(default=None, description="montant de l'avoir (EUR), obligatoire pour `avoir_recu`")
+    type: Literal["reclamation_envoyee", "releve_envoye", "avoir_recu"] = Field(
+        description="`releve_envoye` (alias historique `reclamation_envoyee`) : vous avez envoyé vous-même votre "
+                    "courrier ; `avoir_recu` : avoir reçu")
+    montant: str | None = Field(default=None, description="montant **hors taxes** de l'avoir (EUR, ex. `1 234,56`), "
+                                                          "obligatoire pour `avoir_recu`")
+    montant_tva: str | None = Field(default=None, description="TVA portée par l'avoir (information, hors assiette)")
+    origine: Literal["transitaire", "administration"] = Field(
+        default="transitaire", description="`administration` : remboursement ou remise accordé par la douane ou "
+                                           "une autre autorité (jamais d'assiette de commission)")
     reference: str | None = Field(default=None, max_length=200, description="numéro de l'avoir")
     commentaire: str | None = Field(default=None, max_length=500)
 
@@ -219,27 +230,18 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
     # --- dépôt ---
     @api.post("/lots", response_model=DepotReponse, status_code=201, tags=["dépôt"],
               summary="Déposer un dossier (fichiers ou archive ZIP)")
-    async def deposer(acteur: Auth, fichiers: Annotated[list[UploadFile], File(description="fichiers ou ZIP")]) -> Any:
-        transmis = []
-        for f in fichiers:
-            contenu, taille = depot.lire_borne(f.file, plateforme.limites.taille_fichier)
-            transmis.append(depot.FichierTransmis(nom=f.filename or "fichier", contenu=contenu, taille=taille))
+    def deposer(acteur: Auth, fichiers: Annotated[list[UploadFile], File(description="fichiers ou ZIP")]) -> Any:
+        # route synchrone (exécutée hors de la boucle) ; téléversements lus depuis le disque, un à la fois
+        transmis = [depot.FichierTransmis.depuis_flux(f.filename or "fichier", f.file, f.size) for f in fichiers]
         return depot.deposer(plateforme, acteur, transmis, canal=CanalLot.api).en_dict()
 
     @api.get("/lots/{lot_id}", response_model=LotReponse, tags=["dépôt"], summary="État d'un dépôt")
     def lot(acteur: Auth, lot_id: str) -> Any:
-        jobs = jobs_du_client(plateforme.db, acteur.tenant_id)
-        with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
-            d = lire_lot(scope, lot_id, jobs=jobs)
-        return {"lot_id": d["id"], "statut": d["statut"], "traitement": d["job"]["statut"] if d["job"] else None,
-                "resume": d["resume"], "dossiers": [{"dossier_id": x["id"], "reference": x["reference"]}
-                                                     for x in d["dossiers"]],
-                "fichiers": [{"fichier": f["chemin"], "statut": f["statut"], "motif": f["motif"], "taille": f["taille"]}
-                             for f in d["fichiers"]]}
+        return resume_lot(plateforme, acteur, lot_id)
 
     @api.post("/einvoices", response_model=DepotReponse, status_code=202, tags=["dépôt"],
               summary="Réception d'une facture électronique (Factur-X, UBL, CII) : contrôle avant paiement")
-    async def einvoice(acteur: Auth, request: Request) -> Any:
+    def einvoice(acteur: Auth, request: Request) -> Any:
         """Point d'entrée simple pour une facture électronique **reçue par le client** (Factur-X en PDF,
         UBL ou CII en XML) : dépôt d'un lot `api` marqué « avant paiement » et mise en file du contrôle.
         Le produit n'est pas une plateforme de facturation électronique : ni émission, ni transmission, ni
@@ -247,14 +249,14 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
         application/xml` ou `application/pdf`, nom facultatif dans l'en-tête `X-Filename`)."""
         ctype = request.headers.get("content-type", "")
         if ctype.startswith("multipart/form-data"):
-            form = await request.form(max_files=1, max_fields=5)
+            form = depuis_boucle(request.form, max_files=1, max_fields=5)
             f = form.get("fichier")
             if not isinstance(f, UploadFile) and not hasattr(f, "read"):
                 raise RequeteInvalide("champ « fichier » manquant")
             contenu, taille = depot.lire_borne(f.file, plateforme.limites.taille_fichier)  # type: ignore[union-attr]
             nom = f.filename or "facture"  # type: ignore[union-attr]
         else:
-            corps = await request.body()
+            corps = depuis_boucle(request.body)
             contenu, taille = (corps, len(corps)) if len(corps) <= plateforme.limites.taille_fichier else (None, len(corps))
             nom = (request.headers.get("x-filename") or "").strip()[:150] or (
                 "facture.pdf" if ctype.startswith("application/pdf") else "facture.xml")
@@ -273,9 +275,20 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
 
     # --- dossiers et constats ---
     @api.get("/dossiers", response_model=list[DossierResume], tags=["dossiers"], summary="Lister les dossiers")
-    def dossiers(acteur: Auth) -> Any:
+    def dossiers(acteur: Auth, response: Response,
+                 limite: Annotated[int, Query(ge=1, le=1000, description="taille de la page")] = 500,
+                 apres: Annotated[str | None, Query(max_length=64, description="curseur : `dossier_id` du dernier "
+                                                                               "élément de la page précédente")] = None
+                 ) -> Any:
         with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
-            return [d.en_dict() for d in lister_dossiers(scope)]
+            tous = lister_dossiers(scope)
+        if apres:
+            ids = [d.id for d in tous]
+            tous = tous[ids.index(apres) + 1:] if apres in ids else []
+        page_ = tous[:limite]
+        if len(tous) > limite:
+            response.headers["X-Page-Suivante"] = page_[-1].id  # curseur pour ?apres=
+        return [d.en_dict() for d in page_]
 
     @api.get("/dossiers/{dossier_id}", response_model=DossierDetail, tags=["dossiers"],
              summary="Lire un dossier (documents et constats publiés)")
@@ -301,9 +314,11 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
                 *publication.actions_client(plateforme, acteur, TypeAction.reclamation_dossier)]
 
     @api.get("/rapports", response_model=list[RapportResume], tags=["rapports"],
-             summary="Rapports et dossiers de réclamation mis à disposition")
+             summary="Rapports et relevés d'écarts mis à disposition")
     def rapports(acteur: Auth) -> Any:
-        return [{"rapport_id": a.id, "type": a.kind.value, "objet": a.payload_effectif.get("objet", ""),
+        return [{"rapport_id": a.id, "type": a.kind.value,
+                 "type_libelle": "releve_ecarts" if a.kind is TypeAction.reclamation_dossier else "rapport",
+                 "objet": a.payload_effectif.get("objet", ""),
                  "mis_a_disposition_le": a.envoye_le.isoformat() if a.envoye_le else None,
                  "formats": publication.formats_disponibles(a)}
                 for a in _rapports(acteur)]
@@ -318,31 +333,38 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
         return fichier_attache(contenu, nom, mime if format != "html" else "application/octet-stream")
 
     # --- litiges (recouvrement) ---
-    @api.get("/litiges", response_model=list[Litige], tags=["recouvrement"],
-             summary="Registre de recouvrement (écarts à recouvrer)")
+    @api.get("/litiges", response_model=list[Litige], tags=["suivi des avoirs"],
+             summary="Suivi des avoirs reçus (écarts constatés et avoirs enregistrés)")
     def litiges(acteur: Auth) -> Any:
         with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
             return [x.en_dict() for x in reclamations.registre(scope)]
 
-    @api.get("/litiges/{litige_id}", response_model=Litige, tags=["recouvrement"], summary="Suivre un litige")
+    @api.get("/litiges/{litige_id}", response_model=Litige, tags=["suivi des avoirs"],
+             summary="Suivre un écart et ses avoirs")
     def litige(acteur: Auth, litige_id: str) -> Any:
         with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
             return reclamations.registre(scope, ecart_id=litige_id)[0].en_dict()
 
-    @api.post("/litiges/{litige_id}/evenements", response_model=Litige, tags=["recouvrement"],
-              summary="Enregistrer un événement : réclamation envoyée, avoir reçu")
+    @api.post("/litiges/{litige_id}/evenements", response_model=Litige, tags=["suivi des avoirs"],
+              summary="Enregistrer un événement : courrier envoyé par vous, avoir reçu")
     def evenement(acteur: Auth, litige_id: str, evt: EvenementLitige) -> Any:
-        with plateforme.db.tenant(acteur.tenant_id, acteur) as scope:
-            if evt.type == "reclamation_envoyee":
-                reclamations.declarer_envoi(scope, litige_id, evt.commentaire)
-            else:
-                try:
-                    montant = Decimal((evt.montant or "").replace(",", "."))
-                except InvalidOperation as exc:
-                    raise RequeteInvalide("montant invalide") from exc
-                reclamations.enregistrer_avoir(scope, litige_id, montant, evt.reference, evt.commentaire)
+        if evt.type in ("reclamation_envoyee", "releve_envoye"):
+            reclamations.declarer_envoi_releve(plateforme, acteur, litige_id, evt.commentaire)
+        else:
+            montant = montant_saisi(evt.montant, nom="montant HT de l'avoir")
+            tva = montant_saisi(evt.montant_tva, nom="TVA de l'avoir", zero=True) if evt.montant_tva else None
+            reclamations.enregistrer_avoir_recu(plateforme, acteur, litige_id, montant, evt.reference, evt.commentaire,
+                                                origine=evt.origine, montant_tva=tva)
         with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
             return reclamations.registre(scope, ecart_id=litige_id)[0].en_dict()
+
+    # alias de vocabulaire (D-1315) : mêmes réponses que /litiges
+    api.add_api_route("/suivi-avoirs", litiges, methods=["GET"], response_model=list[Litige],
+                      tags=["suivi des avoirs"], summary="Suivi des avoirs reçus (alias de /litiges)")
+    api.add_api_route("/suivi-avoirs/{litige_id}", litige, methods=["GET"], response_model=Litige,
+                      tags=["suivi des avoirs"], summary="Suivre un écart (alias de /litiges/{id})")
+    api.add_api_route("/suivi-avoirs/{litige_id}/evenements", evenement, methods=["POST"], response_model=Litige,
+                      tags=["suivi des avoirs"], summary="Enregistrer un événement (alias de /litiges/{id}/evenements)")
 
     # --- documentation (rendue par le serveur, sans ressource externe) ---
     @api.get("/docs", include_in_schema=False, response_class=HTMLResponse)

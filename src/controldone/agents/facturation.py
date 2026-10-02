@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from controldone.calendrier import mois_paris
 from controldone.litiges import commission_cle
 
 from .base import Agent, ContexteAgent, RapportAgent
@@ -37,8 +38,10 @@ class AgentFacturation(Agent):
                                    cle=f"facture:diagnostic:{ctx.tenant_id}",
                                    references={"lot_id": lots[0]["id"]})
                 rapport.propositions.append(out)
-        elif client["offre"] == "continu":
-            mois = ctx.maintenant().strftime("%Y-%m")
+        elif client["offre"] == "continu" and not client.get("abonnement_stripe_actif"):
+            # abonnement Stripe actif : l'échéance est proposée par le webhook ``invoice.paid`` (palier et
+            # montant déjà payé font foi, F-08) ; l'agent ne la préempte pas
+            mois = mois_paris(ctx.maintenant())
             out = self.appeler(ctx, "proposer_facture", type_facture="abonnement",
                                lignes=[{"libelle": f"Contrôle continu — abonnement {mois}",
                                         "prix_unitaire_ht": client["abonnement_mensuel_eur"]}],

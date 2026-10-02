@@ -32,7 +32,6 @@ from controldone.model.enums import Methode, QualiteTexte, TypeDocument, TypeVal
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, Zone
 from controldone.normalize import (
     DEVISE_INCONNUE,
-    DEVISES_SANS_DECIMALES,
     ISO_4217,
     normalize_currency,
     normalize_vat,
@@ -254,7 +253,7 @@ def _mots_cellule(cellule: Mot) -> list[Mot]:
                 cellule.y1, cellule.confiance, cellule.taille) for m in re.finditer(r"\S+", texte)]
 
 
-def _segmenter(mots: Sequence[Mot], *, tableur: bool, texte_ligne: str | None = None) -> list[list[Mot]]:
+def _segmenter(mots: Sequence[Mot], *, tableur: bool) -> list[list[Mot]]:
     if not mots:
         return []
     if tableur:
@@ -740,10 +739,6 @@ def accepte_reference(mots: Sequence[Mot]) -> tuple[int, int] | None:
     return None
 
 
-def accepte_texte(mots: Sequence[Mot]) -> tuple[int, int] | None:
-    return (0, len(mots)) if mots and any(re.search(r"\w", m.texte) for m in mots) else None
-
-
 def accepte_entier(mots: Sequence[Mot]) -> tuple[int, int] | None:
     for n in nombres_dans(mots):
         if not n.tronque and re.fullmatch(r"\d{1,3}(?:[ ,.'’]\d{3})*|\d+", n.texte):
@@ -1132,7 +1127,3 @@ def separateur_masse(vue: VueDocument, texte: str) -> tuple[str | None, bool]:
     if m:
         return m.group(1), True
     return None, False
-
-
-def est_zero_decimale(devise: str | None) -> bool:
-    return devise in DEVISES_SANS_DECIMALES

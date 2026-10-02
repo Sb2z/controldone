@@ -58,17 +58,42 @@ def _iso(d: datetime | None) -> str | None:
 # --- lectures ---------------------------------------------------------------------------------------------
 
 
+def _abonnement(ctx: ContexteAgent, tenant_id: str, reglages: dict[str, Any]) -> dict[str, Any]:
+    """Palier souscrit et prix du catalogue (F-08) : ``reglages["abonnement_mensuel_eur"]`` s'il est fixé,
+    sinon le prix du palier du compte de paiement (ou ``reglages["palier"]``) dans ``offres.yaml``.
+    ``stripe_actif`` : un abonnement Stripe actif existe — c'est alors le webhook ``invoice.paid`` qui
+    propose l'échéance (avec le montant déjà payé), pas l'agent."""
+    from controldone.storage import facturation as stock
+
+    compte = stock.compte_paiement(ctx.db, tenant_id)
+    palier = (compte.palier if compte and compte.palier else None) or reglages.get("palier")
+    stripe_actif = bool(compte and compte.abonnement_id and (compte.statut_abonnement or "") in ("active", "trialing"))
+    prix = reglages.get("abonnement_mensuel_eur")
+    if prix is None:
+        try:
+            from controldone.facturation.offres import charger_offres
+
+            cat = charger_offres()
+            p = cat.palier(palier) if palier else cat.paliers[0]
+            prix, palier = p.prix_mensuel_ht, p.code
+        except Exception:
+            prix = "99.00"
+    return {"prix": str(prix), "palier": palier, "stripe_actif": stripe_actif}
+
+
 def lire_client(ctx: ContexteAgent) -> dict[str, Any]:
     """Raison sociale, offre et réglages utiles du client du contexte."""
     t = _exiger_client(ctx)
     with perimetre(ctx.db, t, ctx.acteur, lecture=True) as sc:
         c = sc.client()
-        r = c.reglages or {}
-        return {"raison_sociale": c.raison_sociale, "offre": c.offre, "contacts": destinataires_client(r, t),
-                "diagnostic_prix_eur": str(r.get("diagnostic_prix_eur", "390.00")),
-                "abonnement_mensuel_eur": str(r.get("abonnement_mensuel_eur", "99.00")),
-                "litiges_inactivite_jours": int(r.get("litiges_inactivite_jours", 60)),
-                "seuil_confiance_revue": float(r.get("seuil_confiance_revue", 0.70))}
+        raison_sociale, offre, r = c.raison_sociale, c.offre, dict(c.reglages or {})
+    abonnement = _abonnement(ctx, t, r)  # hors du périmètre : lit les tables de facturation (plateforme)
+    return {"raison_sociale": raison_sociale, "offre": offre, "contacts": destinataires_client(r, t),
+            "diagnostic_prix_eur": str(r.get("diagnostic_prix_eur", "390.00")),
+            "abonnement_mensuel_eur": abonnement["prix"], "abonnement_palier": abonnement["palier"],
+            "abonnement_stripe_actif": abonnement["stripe_actif"],
+            "litiges_inactivite_jours": int(r.get("litiges_inactivite_jours", 60)),
+            "seuil_confiance_revue": float(r.get("seuil_confiance_revue", 0.70))}
 
 
 def lister_lots(ctx: ContexteAgent, statut: str | None = None) -> list[dict[str, Any]]:

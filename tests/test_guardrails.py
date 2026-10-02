@@ -96,9 +96,32 @@ def test_assert_clean_et_extrait():
     assert v.extrait == "fraude" and v.categorie == "qualification_juridique" and v.motif == "formulation_interdite"
 
 
-def test_droit_du_sans_accent_bloque():
-    # conséquence assumée de l'insensibilité aux accents (D-014)
-    assert check_text("le droit du transitaire")
+@pytest.mark.parametrize(
+    "texte",
+    [
+        "droit dû", "le droit dû par l'importateur", "droits dus", "taxe due", "montant dû à la douane",
+        "montants dus à la douane",  # pluriel exigé par §3.2 (« dû » non final)
+        "Le montant du droit du.", "droit du ; voir", "DROIT DU",  # « du » sans accent : fin de proposition
+        "droit\u200bdû", "taxe\u200bdue", "dro\u00adit dû", "fr\u00adaude",  # caractères invisibles
+    ],
+)
+def test_participe_du_bloque(texte):
+    # D-1215 (remplace la conséquence assumée de D-014)
+    assert check_text(texte)
+
+
+@pytest.mark.parametrize(
+    "texte", ["le droit du transitaire", "droit du tarif", "La ligne « Droit du port »", "droits du dossier"]
+)
+def test_article_du_non_bloque(texte):
+    # D-1215 : l'article « du » suivi d'un nom n'est pas le participe « dû »
+    assert check_text(texte) == []
+
+
+def test_extrait_avec_caracteres_invisibles():
+    texte = "Le dro\u00adit dû est indiqué."
+    v = check_text(texte)[0]
+    assert v.extrait == "dro\u00adit dû" and texte[v.debut:v.fin] == v.extrait
 
 
 def test_libelles_de_raisons_propres():

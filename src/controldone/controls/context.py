@@ -192,11 +192,6 @@ class ControlContext:
     def empreinte_tolerances(self) -> str:
         return self._empreinte  # type: ignore[attr-defined]
 
-    @property
-    def other_dossiers(self) -> tuple[AutreDossier, ...]:
-        """Alias anglais de ``autres_dossiers``."""
-        return self.autres_dossiers
-
     def document(self, document_id: str) -> Document | None:
         return self.documents.get(document_id)
 

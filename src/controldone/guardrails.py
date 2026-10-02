@@ -7,8 +7,12 @@
 
 La liste vient de ``config/formulations_interdites.yaml`` (versionnée, enrichissable sans code).
 
-Conséquence assumée de l'insensibilité aux accents (D-014) : « droit dû » bloque aussi « droit du »
-(sans accent) ; les gabarits évitent donc la tournure « droit du … ».
+Le participe « dû » (D-1215, remplace la conséquence assumée de D-014) : la variabilité d'un mot se décide
+sur l'expression **accentuée** du fichier. « dû » donne ``dû|dus|due|dues`` à toute position ; « du » (article)
+reste invariable. La seule forme ambiguë « du » sans accent, en fin d'expression (« droit dû »), n'est bloquée
+que si le texte source porte l'accent, si elle termine une proposition (« le droit du. ») ou si le texte est
+entièrement en capitales : « droit du tarif » ou « Droit du port » ne sont plus bloqués. Les caractères
+invisibles (trait d'union conditionnel, espaces de largeur nulle) ne contournent pas le filtre.
 """
 
 from __future__ import annotations
@@ -105,13 +109,22 @@ _MOTS_INVARIABLES = frozenset({"le", "la", "les", "de", "du", "des", "a", "en", 
                                "nous", "vous", "il", "faut", "une", "un", "notre", "the"})
 
 
+#: Participe « dû » : seule forme accentuée ambiguë avec l'article « du » une fois les accents retirés.
+_PARTICIPE_DU = "dû"
+_FIN_PROPOSITION = re.compile(r"\s*(?:[.,;:!?)»\"]|$)")
+
+
 def _compiler(expression: str) -> re.Pattern[str]:
-    norm = _normaliser(expression).strip()
-    mots = norm.split()
+    # Variabilité décidée sur l'expression accentuée : « dû » (participe) est variable à toute position.
+    bruts = [b for b in re.split(r"[\s\-‐‑‒–—]+", expression.strip()) if b]
+    mots = [_normaliser(m).strip() for m in bruts]
     parties = []
-    for i, mot in enumerate(mots):
-        # les mots grammaticaux restent invariables, sauf « du » final (« droit dû » -> du/dus/due/dues)
-        if mot in _MOTS_INVARIABLES and not (mot == "du" and i == len(mots) - 1):
+    for i, (brut, mot) in enumerate(zip(bruts, mots, strict=True)):
+        if brut.casefold() == _PARTICIPE_DU:
+            # groupe nommé : la forme « du » sans flexion est vérifiée dans le texte source (_du_ambigu)
+            final = "f" if i == len(mots) - 1 else "m"
+            parties.append(f"(?P<du{final}{i}>du(?:s|e|es)?)")
+        elif mot in _MOTS_INVARIABLES:
             parties.append(re.escape(mot))
         else:
             parties.append(f"(?:{_variantes(mot)})")
@@ -153,21 +166,57 @@ def charger_formulations(chemin: Path | None = None) -> dict:
     return data
 
 
+#: Caractères invisibles : le trait d'union conditionnel est retiré, les espaces de largeur nulle deviennent
+#: des espaces (« dro\u00adit », « droit\u200bdû » ne contournent pas le filtre).
+_RETIRES = frozenset("\u00ad")
+_ESPACES_INVISIBLES = frozenset("\u200b\u200c\u200d\u2060\ufeff")
+
+
+def _nettoyer(texte: str) -> tuple[str, list[int]]:
+    """Texte sans caractères invisibles et, pour chaque caractère gardé, sa position dans ``texte``."""
+    sortie, positions = [], []
+    for i, c in enumerate(texte):
+        if c in _RETIRES:
+            continue
+        sortie.append(" " if c in _ESPACES_INVISIBLES else c)
+        positions.append(i)
+    return "".join(sortie), positions
+
+
+def _du_ambigu_accepte(m: re.Match[str], net: str) -> bool:
+    """Pour un « du » sans flexion en fin d'expression : vrai si c'est bien le participe (accent dans le
+    texte source, fin de proposition, ou texte entièrement en capitales)."""
+    for nom, val in m.groupdict().items():
+        if val is None or not nom.startswith("duf") or val != "du":
+            continue
+        debut, fin = m.span(nom)
+        if "û" in net[debut:fin].casefold():
+            continue
+        if _FIN_PROPOSITION.match(net, fin) or net.isupper():
+            continue
+        return False
+    return True
+
+
 def check_text(texte: str | None, *, chemin: Path | None = None) -> list[Violation]:
     """Formulations interdites trouvées dans ``texte`` (liste vide si le texte est propre)."""
     if not texte:
         return []
-    norm = _normaliser(texte)
+    net, positions = _nettoyer(texte)
+    norm = _normaliser(net)
     trouvees: list[Violation] = []
     for regle in _regles(str(chemin) if chemin else None):
         for m in regle.motif.finditer(norm):
+            if not _du_ambigu_accepte(m, net):
+                continue
+            debut, fin = positions[m.start()], positions[m.end() - 1] + 1
             trouvees.append(
                 Violation(
                     expression=regle.expression,
                     categorie=regle.categorie,
-                    extrait=texte[m.start(): m.end()],
-                    debut=m.start(),
-                    fin=m.end(),
+                    extrait=texte[debut:fin],
+                    debut=debut,
+                    fin=fin,
                 )
             )
     trouvees.sort(key=lambda v: (v.debut, v.expression))

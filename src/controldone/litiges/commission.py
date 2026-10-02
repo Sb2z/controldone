@@ -11,18 +11,35 @@ from collections.abc import Iterable, Mapping
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
-__all__ = ["TAUX_COMMISSION_DEFAUT", "base_commission", "montant_commission", "taux_commission"]
+__all__ = ["ORIGINES_COMMISSIONNABLES", "ORIGINES_CREDIT", "TAUX_COMMISSION_DEFAUT", "base_commission",
+           "montant_commission", "taux_catalogue", "taux_commission"]
 
 TAUX_COMMISSION_DEFAUT = Decimal("0.20")
 _CENTIME = Decimal("0.01")
+#: Origine d'un crédit reçu : avoir émis par le transitaire, ou remboursement / remise / dégrèvement
+#: accordé par une administration (douane, fisc…). Seul le premier entre dans l'assiette (CGV art. 5,
+#: brief juridique §1.3 point 4, D-1314).
+ORIGINES_CREDIT = ("transitaire", "administration")
+ORIGINES_COMMISSIONNABLES = frozenset({"transitaire"})
 
 
-def taux_commission(reglages: Mapping[str, Any] | None) -> Decimal:
-    """Taux lu dans les réglages de l'offre du client (``reglages["commission_taux"]``, fraction :
-    ``"0.20"`` = 20 %), sinon 20 %. Un taux invalide (hors [0, 1]) lève ``ValueError``."""
+def taux_catalogue() -> Decimal:
+    """Taux du catalogue (``config/offres.yaml``, ``offres.commission.taux``) ; 20 % s'il est illisible."""
+    try:
+        from controldone.facturation.offres import charger_offres
+
+        return charger_offres().taux_commission
+    except Exception:  # catalogue absent ou invalide : valeur contractuelle par défaut
+        return TAUX_COMMISSION_DEFAUT
+
+
+def taux_commission(reglages: Mapping[str, Any] | None, *, defaut: Decimal | None = None) -> Decimal:
+    """**Source unique** du taux (D-1307) : ``reglages["commission_taux"]`` du client (fraction : ``"0.20"``
+    = 20 %), sinon ``defaut``, sinon le taux du catalogue (``offres.yaml``). Utilisée par le service des
+    litiges et par la page Finances. Un taux invalide (hors [0, 1]) lève ``ValueError``."""
     brut = (reglages or {}).get("commission_taux")
     if brut is None:
-        return TAUX_COMMISSION_DEFAUT
+        return Decimal(defaut) if defaut is not None else taux_catalogue()
     try:
         taux = Decimal(str(brut))
     except InvalidOperation as exc:

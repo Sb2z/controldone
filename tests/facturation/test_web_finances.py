@@ -99,10 +99,9 @@ def test_page_finances_et_cycle_complet(web, db, pa):
     assert stock.evenements_paiement(db)[0].facture_id == f.id
     csv = c.get("/admin/finances/export.csv")
     assert csv.status_code == 200 and "cli_a;CLIENT A FICTIF SAS;1;390,00;468,00" in csv.content.decode("utf-8")
-    # coupon sans accord signé : refus lisible
+    # coupon sans accord de publication : la remise s'applique quand même (accord distinct, D-1313)
     r = _poster(c, "/admin/finances/diagnostic", {"client_id": "cli_b", "coupon": "LANCEMENT-3-DIAGNOSTICS"})
-    assert r.status_code == 303 and r.headers["location"] == "/admin/finances"
-    assert "accord" in c.get("/admin/finances").text
+    assert r.status_code == 303 and r.headers["location"].startswith("/admin/validation")
 
 
 def test_finances_refusees_a_un_client(web):

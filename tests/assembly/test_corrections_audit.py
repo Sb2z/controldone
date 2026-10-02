@@ -168,7 +168,7 @@ def test_f14_tableur_montants_sans_float(lot, tmp_path):  # noqa: F811
 # --- F12 : rejeu identique octet pour octet (hors horodatages) -----------------------------------------
 
 def test_f12_rejeu_identique_et_annee_du_lot(lot, monkeypatch):  # noqa: F811
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     import controldone.pipeline as pl
     from controldone.findings_io import findings_json_rejeu
@@ -179,6 +179,6 @@ def test_f12_rejeu_identique_et_annee_du_lot(lot, monkeypatch):  # noqa: F811
     assert findings_json_rejeu(a.findings) == findings_json_rejeu(b.findings)
     assert "duree_s" not in findings_json_rejeu(a.findings)
     # La référence D-AAAA-NNNNN suit la date du lot, pas l'horloge au moment du traitement.
-    monkeypatch.setattr(pl, "horodatage", lambda: datetime(2031, 1, 1, tzinfo=timezone.utc))
+    monkeypatch.setattr(pl, "horodatage", lambda: datetime(2031, 1, 1, tzinfo=UTC))
     r = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1), composants=_composants())[0]
     assert not r.dossier.reference.startswith("D-2031-")

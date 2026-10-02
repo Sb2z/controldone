@@ -39,7 +39,7 @@
 
 <div class="grille-2">
 <section class="carte" id="sorties">
-  <h2>Publications et dossiers de réclamation</h2>
+  <h2>Publications et relevés d'écarts</h2>
   {% if sorties %}
   <ul class="liste-simple">
   {% for s in sorties %}
@@ -49,7 +49,7 @@
   {% endfor %}
   </ul>
   {% else %}<p class="vide">Aucune publication.</p>{% endif %}
-  <h3>Préparer un dossier de réclamation</h3>
+  <h3>Préparer un relevé d'écarts (et son modèle de courrier à adapter par le client)</h3>
   <form method="post" action="/admin/clients/{{ t }}/reclamations" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
     <label for="rec-tr">Transitaire</label>
     <select id="rec-tr" name="transitaire_id" required>{% for tr in c.transitaires %}<option value="{{ tr.id }}">{{ tr.nom }}</option>{% endfor %}</select>
@@ -81,7 +81,7 @@
   <form method="post" action="/admin/clients/{{ t }}/utilisateurs" class="formulaire">{{ csrf_champ(csrf) }}
     <label for="u-email">Adresse électronique</label><input id="u-email" name="email" type="email" required maxlength="320">
     <label for="u-nom">Nom</label><input id="u-nom" name="nom" maxlength="200">
-    <label for="u-role">Rôle</label><select id="u-role" name="role"><option value="client_admin">Administrateur (dépôt, recouvrement)</option><option value="client_lecteur">Lecteur</option></select>
+    <label for="u-role">Rôle</label><select id="u-role" name="role"><option value="client_admin">Administrateur (dépôt, suivi des avoirs reçus)</option><option value="client_lecteur">Lecteur</option></select>
     <button type="submit" class="btn">Créer le compte</button>
   </form>
 </section>
@@ -105,14 +105,14 @@
 <div class="grille-2">
 <section class="carte" id="transitaires">
   <h2>Transitaires</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Nom</th><th scope="col">TVA</th><th scope="col">Contact réclamation</th></tr></thead><tbody>
+  <table class="donnees compacte"><thead><tr><th scope="col">Nom</th><th scope="col">TVA</th><th scope="col">Contact (relevés d'écarts)</th></tr></thead><tbody>
   {% for tr in c.transitaires %}<tr><td>{{ tr.nom }}</td><td><code>{{ tr.tva or "—" }}</code></td><td>{{ tr.contact or "—" }}</td></tr>{% else %}<tr><td colspan="3" class="vide">Aucun transitaire.</td></tr>{% endfor %}
   </tbody></table>
   <form method="post" action="/admin/clients/{{ t }}/transitaires" class="formulaire">{{ csrf_champ(csrf) }}
     <label for="t-nom">Nom</label><input id="t-nom" name="nom" required maxlength="300">
     <div class="champs-2"><div><label for="t-tva">TVA</label><input id="t-tva" name="tva" maxlength="32"></div>
     <div><label for="t-alias">Alias</label><input id="t-alias" name="alias" maxlength="1000"></div></div>
-    <label for="t-contact">Contact pour les réclamations</label><input id="t-contact" name="contact" maxlength="500">
+    <label for="t-contact">Contact pour les relevés d'écarts</label><input id="t-contact" name="contact" maxlength="500">
     <button type="submit" class="btn">Enregistrer le transitaire</button>
   </form>
 </section>

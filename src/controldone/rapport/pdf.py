@@ -334,12 +334,6 @@ def _h2(num: int, titre: str, s) -> Paragraph:
     return Paragraph(f'<font color="#7b8794">{num}</font>  {escape(titre)}', s["h2"])
 
 
-def _filet():
-    t = Table([[""]], colWidths=[LARGEUR], rowHeights=[1.2])
-    t.setStyle(TableStyle([("LINEABOVE", (0, 0), (-1, -1), 1.4, MARINE)]))
-    return t
-
-
 def _dossier(d: DossierVue, s) -> list:
     out: list = [PageBreak()]
     entete = Table([[Paragraph(f"Dossier {escape(d.reference)}", s["h3"]), _badge(d.statut, d.statut_code, s, "RIGHT")]],
