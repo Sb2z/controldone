@@ -239,7 +239,6 @@ FORMAT_OF = {"pdf": "pdf_natif", "facturx": "factur_x", "xlsx": "xlsx", "eml": "
 
 
 def _doc_entry(dm, o, kind, f):
-    p = dm.plan
     fmt = FORMAT_OF.get(f.kind)
     if f.kind == "pdf" and f.degrade:
         fmt = "pdf_scan"

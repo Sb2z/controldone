@@ -9,7 +9,7 @@ import zipfile
 from decimal import Decimal
 from xml.sax.saxutils import escape
 
-from .common import ZERO_DEC_CURRENCIES, cur_decimals, fmt_num
+from .common import cur_decimals, fmt_num
 from .pdfkit import MARKER
 
 FIXED_DT = dt.datetime(2026, 1, 1, 0, 0, 0)

@@ -94,7 +94,7 @@ def _polices() -> tuple[str, str, str, str]:
 
 
 def _styles() -> dict[str, ParagraphStyle]:
-    r, b, i, m = _polices()
+    r, b, _i, m = _polices()
     base = ParagraphStyle("base", fontName=r, fontSize=8.8, leading=12, textColor=ENCRE)
     return {
         "base": base,
@@ -140,7 +140,7 @@ class _Canevas(rl_canvas.Canvas):
         self._vue = vue
         self._horo = horodatage
 
-    def showPage(self):  # noqa: N802 (API ReportLab)
+    def showPage(self):
         self._pages.append(dict(self.__dict__))
         self._startPage()
 
@@ -153,7 +153,7 @@ class _Canevas(rl_canvas.Canvas):
         super().save()
 
     def _decor(self, total: int) -> None:
-        r, b, i, _m = _polices()
+        r, b, _i, _m = _polices()
         v = self._vue
         largeur, hauteur = A4
         if v.demo:
@@ -393,7 +393,7 @@ def _dossier(d: DossierVue, s) -> list:
 
 
 def _histoire(v: RapportVue, s) -> list:
-    r_, b_, _i, _m = _polices()
+    r_, _b, _i, _m = _polices()
     h: list = []
     # couverture
     h.append(Spacer(1, 6 * mm))
@@ -471,16 +471,17 @@ def _histoire(v: RapportVue, s) -> list:
                 "Facturé / déclaré", "Statut", "Recouvrable")]]
     for d in v.dossiers:
         cles = " · ".join(x for _k, x in d.cles)
-        rec = _fm(d.recouvrable_certain) + (f"<br/><font size='7' color='#52606d'>à vérifier : "
+        rec = escape(_fm(d.recouvrable_certain)) + (f"<br/><font size='7' color='#52606d'>à vérifier : "
                                             f"{_fm(d.recouvrable_a_verifier)}</font>" if d.recouvrable_a_verifier else "")
         lignes.append([
             _p(d.reference, ParagraphStyle("ref", parent=s["mono"], fontSize=6.9)),
-            Paragraph(f"{escape(cles)}<br/><font size='6.8' color='#7b8794'>{escape(d.raisons)}</font>", s["petit"]),
+            Paragraph(escape(cles) + (f"<br/><font size='6.8' color='#7b8794'>{escape(d.raisons)}</font>"
+                                      if d.raisons != "—" else ""), s["petit"]),
             _p(f"{d.tva_acheteur}\n{d.tva_importateur}", s["mono"]),
             Paragraph(f"{escape(d.montant_facture)}<br/>{escape(d.montant_declare)}", s["droite"]),
             _badge(d.statut, d.statut_code, s), Paragraph(rec, s["droite"]),
         ])
-    h.append(_table(lignes, [25 * mm, 46 * mm, 30 * mm, 28 * mm, 25 * mm, LARGEUR - 154 * mm]))
+    h.append(_table(lignes, [25 * mm, 44 * mm, 28 * mm, 27 * mm, 26 * mm, LARGEUR - 150 * mm]))
     # 5. fiches
     h.append(PageBreak())
     h.append(_h2(5, "Fiches dossiers", s))

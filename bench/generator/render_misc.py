@@ -4,7 +4,7 @@ non exploitables intitulés « facture » (pré-alerte, devis, bon de commande�
 from __future__ import annotations
 
 from .common import d_en, d_fr, fmt_kg, fmt_qty
-from .pdfkit import DARK, GREY, LIGHT, Pen
+from .pdfkit import GREY, Pen
 from .refdata import UNIT_LABELS
 
 CG_TEXT = [

@@ -8,7 +8,7 @@ from decimal import Decimal
 from .build import faf_amount, faf_base
 from .clients import grid_poste
 from .common import D, D0, q2, s2, sdec
-from .inject import _explicit, _ref_compatible
+from .inject import _explicit
 from .model import composante_of
 from .plan import CERTAIN_ELIGIBLE
 

@@ -105,15 +105,19 @@ def _type_zip(contenu: bytes) -> str:
 
 
 def _est_csv(texte: str) -> bool:
-    lignes = [ligne for ligne in texte.splitlines()[:20] if ligne.strip()]
+    """Texte tabulé : au moins 80 % des lignes non vides contiennent le même séparateur (``;``, tabulation,
+    ``|`` ou ``,``) ; les largeurs peuvent varier (exports multi-enregistrements)."""
+    lignes = [ligne for ligne in texte.splitlines()[:50] if ligne.strip()]
     if len(lignes) < 2:
         return False
+    for sep in (";", "\t", "|"):
+        if sum(1 for li in lignes if sep in li) >= 0.8 * len(lignes):
+            return True
     try:
-        dialecte = csv.Sniffer().sniff("\n".join(lignes), delimiters=";,\t|")
+        dialecte = csv.Sniffer().sniff("\n".join(lignes[:20]), delimiters=",")
     except csv.Error:
         return False
-    lecteur = csv.reader(lignes, dialecte)
-    largeurs = [len(r) for r in lecteur]
+    largeurs = [len(r) for r in csv.reader(lignes, dialecte)]
     return largeurs[0] >= 2 and sum(1 for n in largeurs if n == largeurs[0]) >= 0.8 * len(largeurs)
 
 

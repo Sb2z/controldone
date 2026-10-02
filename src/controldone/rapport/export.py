@@ -17,7 +17,7 @@ from controldone.guardrails import AVERTISSEMENT
 from controldone.pipeline import ResultatDossier
 from controldone.rapport.vue import VERSION_RAPPORT, RapportVue
 
-__all__ = ["SCHEMA_RAPPORT", "rapport_json", "ecrire_xlsx", "findings_lot_json"]
+__all__ = ["SCHEMA_RAPPORT", "ecrire_xlsx", "findings_lot_json", "rapport_json"]
 
 SCHEMA_RAPPORT = f"controldone.rapport/{VERSION_RAPPORT}"
 COLONNES_REVUE = ["Décision (valider / rejeter / à vérifier)", "Commentaire", "Relu par", "Date de revue"]

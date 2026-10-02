@@ -8,7 +8,6 @@ import io
 import numpy as np
 import pypdfium2 as pdfium
 from PIL import Image, ImageFilter
-from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 

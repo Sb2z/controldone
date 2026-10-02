@@ -197,13 +197,15 @@ _TOTAL_NEGATIF = re.compile(
 _PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|p\.)\s*(\d{1,3})\s*(?:/|of|sur|de|von)\s*(\d{1,3})\b")
 _SUITE = re.compile(r"\b(?:suite|continued|continuation|a reporter|report|carried forward|(?:\(|-)\s?cont)\b")
 _NUM_FACTURE = re.compile(
-    r"(?:invoice|facture|factura|avoir|credit note|nota de credito|inv)\.?\s*(?:no|n°|nº|n o|nr|num(?:ero|ber)?|#|ref)?"
-    r"\.?\s*(?:de facture)?\s*[:#]?\s*([a-z0-9][a-z0-9\-/_.]{2,30})"
-)
-_NUM_FACTURE2 = re.compile(
-    r"(?:n°|no\.?|numero|number|num\.?)\s*(?:de |of )?(?:la )?(?:facture|invoice|factura|avoir|credit note)\s*[:#]?\s*"
+    r"(?:invoice|facture|factura|avoir|credit note|nota de credito|note de credit|inv)\.?[ \t]*"
+    r"(?:(?:no|n°|nº|n o|nr|num(?:ero|ber)?|#|ref)\.?[ \t]*(?:de facture)?[ \t]*[:#]?|[:#])[ \t]*"
     r"([a-z0-9][a-z0-9\-/_.]{2,30})"
 )
+_NUM_FACTURE2 = re.compile(
+    r"(?:n°|no\.?|numero|number|num\.?)[ \t]*(?:de |of )?(?:la )?(?:facture|invoice|factura|avoir|credit note)"
+    r"[ \t]*[:#]?[ \t]*([a-z0-9][a-z0-9\-/_.]{2,30})"
+)
+_AVANT_NUM_EXCLU = re.compile(r"(?:montant|total|valeur|amount|value|date|importe|ref(?:erence)?s?)[^\n]{0,12}$")
 _MOTS_LANGUE = {
     "fr": {"le", "la", "les", "des", "du", "et", "pour", "facture", "montant", "pays", "poids", "droits", "taxe",
            "date", "total", "avec", "sur", "par"},
@@ -277,6 +279,10 @@ def extraire_refs(texte: str) -> RefsPage:
     for rx in (_NUM_FACTURE2, _NUM_FACTURE):
         for m in rx.finditer(t):
             cand = m.group(1).strip("._-/")
+            if _AVANT_NUM_EXCLU.search(t[max(0, m.start() - 30):m.start()]):
+                continue  # « montant total facturé : 12 540,00 », « référence facture : … » (citation)
+            if re.match(r"[.,]\d", t[m.end(1):m.end(1) + 2]):
+                continue  # un montant, pas un numéro
             if any(c.isdigit() for c in cand) and not re.fullmatch(r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}", cand):
                 num = norm_ref(cand)
                 break
@@ -291,27 +297,56 @@ def extraire_refs(texte: str) -> RefsPage:
     return RefsPage(mrns=tuple(mrns), numero_facture=num, page_n=pn, page_total=pt)
 
 
-def _entete(page: PageText) -> tuple[str, str]:
-    """(en-tête, titres) normalisés : lignes du haut de page (30 %) ou 12 premières lignes ; titres = lignes
-    en grand corps parmi la moitié haute."""
+@dataclass
+class _Titres:
+    """Lignes d'en-tête normalisées : ``grandes`` (grand corps, moitié haute) et ``entete`` (haut de page)."""
+
+    grandes: list[str]
+    entete: list[str]
+
+    @property
+    def texte_entete(self) -> str:
+        return "\n".join(self.entete)
+
+    def niveau(self, rx: re.Pattern[str]) -> int:
+        """2 : dans une ligne en grand corps ; 1 : en tête d'une ligne courte de l'en-tête ; 0 : absent.
+
+        « En tête de ligne » : au plus un mot avant le libellé (« COMMERCIAL INVOICE », « Facture N° … »),
+        ligne de 10 mots au plus. Une phrase (« veuillez trouver ci-joint notre facture… ») ne compte pas.
+        """
+        if any(rx.search(li) for li in self.grandes):
+            return 2
+        for li in self.entete:
+            mots = li.split()
+            if len(mots) > 10:
+                continue
+            for m in rx.finditer(li):
+                if len(li[: m.start()].split()) <= 1:
+                    return 1
+        return 0
+
+    def premiere(self) -> str | None:
+        for li in self.grandes + self.entete:
+            if li.strip():
+                return li.strip()[:80]
+        return None
+
+
+def _titres(page: PageText) -> _Titres:
     lignes: Sequence[Ligne] = page.lignes
     if not lignes:
-        brut = [li for li in page.texte.splitlines() if li.strip()]
-        return _norm("\n".join(brut[:12])), _norm("\n".join(brut[:3]))
-    a_geometrie = any(li.y1 > 0 for li in lignes) and page.source in ("natif", "ocr")
-    if a_geometrie:
-        haut = [li for li in lignes if li.y0 <= 0.30]
-        if len(haut) < 3:
-            haut = list(lignes[:8])
-        tailles = sorted(t for li in lignes if (t := li.taille))
-        mediane = tailles[len(tailles) // 2] if tailles else None
-        titres = [li for li in lignes if li.y0 <= 0.5 and mediane and li.taille and li.taille >= 1.25 * mediane]
-        if not titres:
-            titres = haut[:3]
-    else:
-        haut = list(lignes[:12])
-        titres = list(lignes[:3])
-    return _norm("\n".join(li.texte for li in haut)), _norm("\n".join(li.texte for li in titres))
+        brut = [_norm(li) for li in page.texte.splitlines() if li.strip()]
+        return _Titres(grandes=[], entete=brut[:12])
+    a_geometrie = page.source in ("natif", "ocr") and any(li.y1 > 0 for li in lignes)
+    if not a_geometrie:
+        return _Titres(grandes=[], entete=[_norm(li.texte) for li in lignes[:12]])
+    haut = [li for li in lignes if li.y0 <= 0.30]
+    if len(haut) < 3:
+        haut = list(lignes[:8])
+    tailles = sorted(t for li in lignes if (t := li.taille))
+    mediane = tailles[len(tailles) // 2] if tailles else None
+    grandes = [li for li in lignes if li.y0 <= 0.5 and mediane and li.taille and li.taille >= 1.3 * mediane]
+    return _Titres(grandes=[_norm(li.texte) for li in grandes], entete=[_norm(li.texte) for li in haut])
 
 
 def _compte(rx: re.Pattern[str], texte: str) -> int:
@@ -351,14 +386,12 @@ def classer_page(
             return ClassementPage(type=CONTINUATION, confiance=0.6, indices=["page_quasi_vide"], **base)
         return ClassementPage(type=TypeDocument.inconnu, confiance=0.2, indices=["page_quasi_vide"], **base)
 
-    entete, titres = _entete(page)
+    tt = _titres(page)
+    entete = tt.texte_entete
     indices: list[str] = []
 
-    t_facture = bool(TITRE_FACTURE.search(entete))
-    t_facture_titre = bool(TITRE_FACTURE.search(titres))
-    t_avoir = bool(TITRE_AVOIR.search(titres)) or bool(
-        re.search(r"(?:credit note|nota de credito|note de credit|facture d'avoir|creditnote)", entete)
-        or re.search(r"(?:^|\n)\s*avoir\b", entete) or re.search(r"\bavoir (?:no|n°|nº|numero)", entete))
+    n_facture = tt.niveau(TITRE_FACTURE)
+    n_avoir = tt.niveau(TITRE_AVOIR)
     t_decl = _compte(TITRE_DECLARATION, entete)
     c_decl = _compte(CORPS_DECLARATION, texte)
     n_mrn = len(refs.mrns)
@@ -369,27 +402,29 @@ def classer_page(
     lettre = _compte(LETTRE, texte)
     cg = _compte(CG_CORPS, texte)
 
-    support_titre: SousTypeSupport | None = None
+    support, n_support = None, 0
     for st, rx in SUPPORT_TITRES:
-        if rx.search(titres) or (st is not SousTypeSupport.certificat and rx.search(entete)):
-            support_titre = st
-            break
-    motif_p2: MotifNonExploitable | None = None
+        n = tt.niveau(rx)
+        if n > n_support:
+            support, n_support = st, n
+    motif_p2, n_p2 = None, 0
     for motif, rx in NON_EXPLOITABLE:
-        if rx.search(titres) or (motif not in (MotifNonExploitable.liste_reparation, MotifNonExploitable.recu)
-                                 and rx.search(entete)):
-            motif_p2 = motif
-            break
+        n = tt.niveau(rx)
+        if n > n_p2:
+            motif_p2, n_p2 = motif, n
+    if motif_p2 in (MotifNonExploitable.liste_reparation, MotifNonExploitable.recu) and n_p2 < 2 \
+            and not (n_facture or n_avoir):
+        motif_p2, n_p2 = None, 0  # « réparation », « reçu » dans une ligne ordinaire : pas un intitulé
+    n_titre_facture = max(n_facture, n_avoir)
 
     def res(type_, sous_type=None, conf=0.0, motif=None) -> ClassementPage:
         return ClassementPage(type=type_, sous_type=sous_type, confiance=_borne(conf), motif_non_exploitable=motif,
-                              titre=titres.strip().splitlines()[0][:80] if titres.strip() else None,
-                              indices=indices, **base)
+                              titre=tt.premiere(), indices=indices, **base)
 
     # 1. Déclaration : MRN + vocabulaire douanier, sans intitulé de facture (une facture de transitaire
     #    cite des MRN mais porte un intitulé de facture et des débours).
     score_decl = (0.45 if t_decl else 0.0) + (0.2 if n_mrn else 0.0) + min(0.4, 0.06 * c_decl)
-    facture_probable = (t_facture_titre or t_facture) and (f_ft or c_fc >= 3 or t_avoir)
+    facture_probable = n_titre_facture and (f_ft or c_fc >= 3 or n_avoir or n_titre_facture == 2)
     if score_decl >= 0.55 and not (facture_probable and not t_decl):
         indices.append("declaration")
         if TYPE_PREUVE.search(entete):
@@ -405,27 +440,35 @@ def classer_page(
             return res(TypeDocument.document_non_exploitable, None, 0.85, motif_p2)
         return res(TypeDocument.declaration, st.value, 0.5 + score_decl * 0.5)
 
-    titre_facture_present = t_facture or t_avoir
-
-    # 2. Non exploitables (P2) : intitulé de devis, bon de commande, pré-alerte… (même s'il cite « facture »)
-    if motif_p2 is not None and not (t_avoir and motif_p2 is MotifNonExploitable.recu):
-        if motif_p2 is MotifNonExploitable.pre_alerte and not titre_facture_present:
+    # 2. Non exploitables (P2) : intitulé de devis, bon de commande, pré-alerte… (l'emporte sur « facture »
+    #    à niveau d'intitulé égal ou supérieur).
+    if motif_p2 is not None and n_p2 >= n_titre_facture and n_p2 >= n_support:
+        if motif_p2 is MotifNonExploitable.pre_alerte and not n_titre_facture:
             indices.append("pre_alerte_support")
             return res(TypeDocument.document_support, SousTypeSupport.pre_alerte.value, 0.85)
-        if motif_p2 in (MotifNonExploitable.liste_reparation, MotifNonExploitable.recu) and not titre_facture_present \
-                and not re.search(r"\b(?:liste de reparation|repair list|receipt|recibo|recu de)\b", titres):
-            motif_p2 = None
-        else:
-            indices.append(f"p2_{motif_p2.value}")
-            return res(TypeDocument.document_non_exploitable, None, 0.88 if titre_facture_present else 0.8, motif_p2)
+        indices.append(f"p2_{motif_p2.value}")
+        return res(TypeDocument.document_non_exploitable, None, 0.88 if n_titre_facture else 0.82, motif_p2)
 
-    # 3. Avoir : intitulé, ou intitulé de facture avec total négatif.
-    if t_avoir or (t_facture and negatif):
-        indices.append("avoir_intitule" if t_avoir else "avoir_total_negatif")
-        return res(TypeDocument.avoir, None, 0.9 if t_avoir else 0.8)
+    # 3. Support titré en grand corps alors que « facture » n'apparaît que dans une ligne d'en-tête
+    #    (ex. liste de colisage citant « Invoice ref ») : document support.
+    if support is not None and n_support > n_titre_facture:
+        indices.append(f"support_{support.value}")
+        return res(TypeDocument.document_support, support.value, 0.86)
 
-    # 4. Factures : commerciale ou transitaire.
-    if t_facture:
+    # 4. Lettre d'accompagnement (formules de politesse) sans intitulé de facture en grand corps.
+    if lettre >= 2 and n_titre_facture < 2 and (n_titre_facture == 0 or lettre >= 3):
+        indices.append("lettre_accompagnement")
+        return res(TypeDocument.document_support, SousTypeSupport.lettre_accompagnement.value,
+                   0.72 + 0.04 * min(5, lettre))
+
+    # 5. Avoir : intitulé, ou intitulé de facture avec total négatif.
+    if n_avoir or (n_facture and negatif):
+        indices.append("avoir_intitule" if n_avoir else "avoir_total_negatif")
+        return res(TypeDocument.avoir, None, 0.9 if n_avoir else 0.8)
+
+    # 6. Factures : commerciale ou transitaire (un nom de transporteur ne compte pas, seuls les libellés
+    #    de débours et de prestations de dédouanement font une facture de transitaire).
+    if n_facture:
         st_fc = SousTypeFactureCommerciale.facture
         if PRO_FORMA.search(entete):
             st_fc = SousTypeFactureCommerciale.pro_forma
@@ -434,35 +477,35 @@ def classer_page(
         elif SANS_VALEUR.search(texte):
             st_fc = SousTypeFactureCommerciale.sans_valeur_commerciale
         transitaire = (f_ft >= 1 and (f_ft * 2 + c_ft) >= c_fc * 0.5) or (c_ft >= 4 and c_ft > c_fc + 1)
-        if transitaire and st_fc in (SousTypeFactureCommerciale.facture,):
+        if transitaire and st_fc is SousTypeFactureCommerciale.facture:
             indices.append("facture_transitaire")
             conf = 0.82 + 0.03 * min(5, f_ft + c_ft // 2) - (0.1 if c_fc > c_ft + f_ft else 0)
             return res(TypeDocument.facture_transitaire, None, conf)
         indices.append("facture_commerciale")
-        conf = (0.85 if t_facture_titre else 0.78) + 0.025 * min(6, c_fc) - (0.1 if f_ft else 0.0)
+        conf = (0.85 if n_facture == 2 else 0.78) + 0.025 * min(6, c_fc) - (0.1 if f_ft else 0.0)
         return res(TypeDocument.facture_commerciale, st_fc.value, conf)
 
-    # 5. Documents support.
-    if support_titre is SousTypeSupport.conditions_generales or (cg >= 4 and lettre <= 2):
+    # 7. Documents support.
+    if support is SousTypeSupport.conditions_generales or (cg >= 4 and lettre <= 2):
         indices.append("conditions_generales")
         return res(TypeDocument.document_support, SousTypeSupport.conditions_generales.value,
-                   0.88 if support_titre else 0.75)
-    if support_titre is not None:
-        indices.append(f"support_{support_titre.value}")
-        return res(TypeDocument.document_support, support_titre.value, 0.86)
+                   0.88 if support else 0.75)
+    if support is not None:
+        indices.append(f"support_{support.value}")
+        return res(TypeDocument.document_support, support.value, 0.86 if n_support == 2 else 0.8)
     if lettre >= 2:
         indices.append("lettre_accompagnement")
         return res(TypeDocument.document_support, SousTypeSupport.lettre_accompagnement.value,
                    0.72 + 0.04 * min(5, lettre))
 
-    # 6. Sans intitulé : continuation (page > 1, ou « page n/m » avec n > 1, ou « suite »).
-    if (refs.page_n and refs.page_n > 1) or (numero > 1 and (_SUITE.search(texte) or not titres.strip()
-                                                              or score_decl < 0.3)):
+    # 8. Sans intitulé : continuation (page > 1, ou « page n/m » avec n > 1, ou « suite »).
+    if (refs.page_n and refs.page_n > 1) or (numero > 1 and (_SUITE.search(texte) or score_decl < 0.3
+                                                              or not tt.grandes)):
         indices.append("continuation")
         conf = 0.85 if (refs.page_n and refs.page_n > 1) or _SUITE.search(texte) else 0.72
         return res(CONTINUATION, None, conf)
 
-    # 7. Indices de corps seulement : faible confiance (-> inconnu si < 0,70).
+    # 9. Indices de corps seulement : faible confiance (-> inconnu si < 0,70).
     candidats = [
         (score_decl, TypeDocument.declaration, SousTypeDeclaration.h1.value),
         (0.12 * (f_ft * 2 + c_ft), TypeDocument.facture_transitaire, None),

@@ -26,7 +26,10 @@ from controldone.rapport.pdf import rendre_pdf
 from controldone.rapport.vue import RapportVue, construire_vue
 from controldone.referentiel_io import ProfilClient
 
-__all__ = ["SortiesRapport", "ajouter_images", "construire_vue", "generer_rapport", "rendre_html", "rendre_pdf"]
+__all__ = [
+    "SortiesRapport", "ajouter_images", "construire_vue", "generer_rapport", "rendre_html", "rendre_pdf",
+    "verifier_textes",
+]
 
 
 @dataclass

@@ -8,7 +8,15 @@ from pathlib import Path
 
 from controldone.extract.base import CoutExtraction, ExtractionContext, ExtractionResult
 from controldone.ids import IdGenerator, Prefixe
-from controldone.model import Document, ExtracteurInfo, Page, PageRef, QualiteTexte, TypeDocument, TypeExtracteur
+from controldone.model import (
+    Document,
+    ExtracteurInfo,
+    Page,
+    PageRef,
+    QualiteTexte,
+    TypeDocument,
+    TypeExtracteur,
+)
 from controldone.pipeline import FichierSource, ResultatDecoupage
 
 
@@ -53,10 +61,13 @@ class DecoupeurDouble:
 
         doc_pdf = pdfium.PdfDocument(source.contenu)
         pages = []
-        for i in range(len(doc_pdf)):
-            texte = doc_pdf[i].get_textpage().get_text_range()
-            pages.append(Page(id=ids.nouveau(Prefixe.page), fichier_id=f.id, numero=i + 1, texte=texte,
-                              qualite_texte=QualiteTexte.natif))
+        try:
+            for i in range(len(doc_pdf)):
+                texte = doc_pdf[i].get_textpage().get_text_range()
+                pages.append(Page(id=ids.nouveau(Prefixe.page), fichier_id=f.id, numero=i + 1, texte=texte,
+                                  qualite_texte=QualiteTexte.natif))
+        finally:
+            doc_pdf.close()
         nom = f.nom_original
         type_ = TypeDocument.document_support
         for prefixe, t in (("fc", TypeDocument.facture_commerciale), ("dec", TypeDocument.declaration),

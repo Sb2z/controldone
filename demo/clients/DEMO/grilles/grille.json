@@ -1,0 +1,34 @@
+{
+  "grille_id": "GRL-DEMO-2026",
+  "transitaire_id": "TR-DEMO",
+  "reference": "DEVIS FICTIF D-2026-001",
+  "valide_du": "2026-01-01",
+  "valide_au": "2026-12-31",
+  "statut": "validee",
+  "prestations_hors_grille": "tolerees",
+  "postes": [
+    {
+      "code_poste": "DEDOUANEMENT",
+      "nature": "frais_dedouanement",
+      "mode": "forfait",
+      "prix": "65.00",
+      "libelles_reconnus": [
+        "frais de dédouanement",
+        "dédouanement"
+      ],
+      "devise": "EUR"
+    },
+    {
+      "code_poste": "FAF",
+      "nature": "frais_avance_fonds",
+      "mode": "pourcentage",
+      "pourcentage": "2.5",
+      "base_pourcentage": "debours_total",
+      "minimum": "15.00",
+      "libelles_reconnus": [
+        "avance de fonds"
+      ],
+      "devise": "EUR"
+    }
+  ]
+}

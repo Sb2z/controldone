@@ -285,12 +285,21 @@ def simulate_holdout(seed, count):
     return sims
 
 
-def determinism(seed, count, corpus, ids=("BX0002", "BX0011", "BX0024")):
-    res = {}
+def determinism(seed, count, corpus, ids=None):
+    """Génère 3 dossiers dev deux fois (répertoires temporaires supprimés ensuite) et compare les empreintes."""
+    import shutil
+    from .plan import build_plan
+    if ids is None:
+        dev = [p for p in build_plan(seed, count) if p["split"] == "dev"]
+        ids = []
+        for cond in (lambda p: p["template"] == "T7", lambda p: p["degradation"] == "d2",
+                     lambda p: p["ci_format"] == "xlsx" or p["layout"] == "L4"):
+            ids.append(next(p["id"] for p in dev if cond(p) and p["id"] not in ids))
+    res = {"dossiers": list(ids)}
     hashes = []
     for k in range(2):
         d = tempfile.mkdtemp(prefix=f"det{k}_")
-        subprocess.run([sys.executable, "-m", "bench.generator", "--out", d, "--split", "all", "--count", str(count),
+        subprocess.run([sys.executable, "-m", "bench.generator", "--out", d, "--split", "dev", "--count", str(count),
                         "--seed", str(seed), "--only", ",".join(ids), "--jobs", "1"], check=True,
                        capture_output=True, cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         h = {}
@@ -298,6 +307,7 @@ def determinism(seed, count, corpus, ids=("BX0002", "BX0011", "BX0024")):
             if os.path.isfile(p):
                 h[os.path.relpath(p, d)] = hashlib.sha256(open(p, "rb").read()).hexdigest()
         hashes.append(h)
+        shutil.rmtree(d, ignore_errors=True)
     res["fichiers"] = len(hashes[0])
     res["identiques_entre_deux_executions"] = hashes[0] == hashes[1]
     same_corpus = None
