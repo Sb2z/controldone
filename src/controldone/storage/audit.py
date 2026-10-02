@@ -19,8 +19,8 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from controldone.storage.models import AuditLog
 from controldone.storage.coltypes import maintenant
+from controldone.storage.models import AuditLog
 
 __all__ = ["GENESE", "Anomalie", "calculer_hash", "journaliser", "verifier_chaine"]
 

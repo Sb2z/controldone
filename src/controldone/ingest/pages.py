@@ -386,7 +386,9 @@ def _texte_natif(page, pdfium_page) -> tuple[list[Ligne], str, float, float]:
                                        use_text_flow=False, extra_attrs=["size"])
     mots = []
     for w in mots_bruts:
-        t = w["text"]
+        # Glyphe d'espace fine sans correspondance Unicode (police sous-ensemble) lu « \x00 » entre deux
+        # chiffres : c'est un séparateur de milliers imprimé (« 1 405,44 »), restitué en espace fine.
+        t = re.sub(r"(?<=\d)\x00(?=\d)", "\u202f", w["text"])
         if not t.strip():
             continue
         mots.append(Mot(texte=t, x0=w["x0"] / largeur, y0=w["top"] / hauteur, x1=w["x1"] / largeur,
@@ -601,7 +603,7 @@ def _pages_image(contenu: bytes, opts: OptionsPages) -> list[PageText]:
                                           largeur=float(cadre.size[0]), hauteur=float(cadre.size[1])))
             continue
         dpi = cadre.info.get("dpi", (0, 0))[0] or 0
-        if dpi and dpi < 200:  # agrandir une image basse résolution avant l'OCR
+        if dpi and dpi < 150:  # agrandir une image basse résolution avant l'OCR
             f = min(3.0, 300 / dpi)
             cadre = cadre.resize((int(cadre.size[0] * f), int(cadre.size[1] * f)))
         try:

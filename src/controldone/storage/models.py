@@ -54,8 +54,8 @@ __all__ = [
     "PageTexte",
     "Reclamation",
     "Resultat",
-    "TenantMixin",
     "Tenant",
+    "TenantMixin",
     "Transitaire",
     "User",
 ]
@@ -64,14 +64,14 @@ _ID = String(64)
 
 
 class Base(DeclarativeBase):
-    type_annotation_map = {dict[str, Any]: JSON, datetime: UTCDateTime, Decimal: DecimalTexte}
+    type_annotation_map = {dict[str, Any]: JSON, datetime: UTCDateTime, Decimal: DecimalTexte}  # noqa: RUF012
 
 
 class TenantMixin:
     """Données d'un client : ``tenant_id`` obligatoire et indexé."""
 
     @declared_attr
-    def tenant_id(cls) -> Mapped[str]:  # noqa: N805
+    def tenant_id(cls) -> Mapped[str]:
         return mapped_column(_ID, ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False)
 
 

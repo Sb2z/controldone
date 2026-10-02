@@ -121,7 +121,7 @@ def test_extraire_refs():
 def test_pdf_fusionne_decoupe():
     pages = [fab.FACTURE_COMMERCIALE, ["Page 2/2", "2  Mouse  10  12.00  120.00"], fab.CONDITIONS_GENERALES,
              fab.DECLARATION, [*fab.DECLARATION[:1], "suite des articles", "Article 2 Code marchandise 8471600000"],
-             [l.replace("26FR000000000001A1", "26FR222222222222B7") for l in fab.DECLARATION],
+             [x.replace("26FR000000000001A1", "26FR222222222222B7") for x in fab.DECLARATION],
              fab.FACTURE_TRANSITAIRE]
     titres = ["COMMERCIAL INVOICE", None, "CONDITIONS GÉNÉRALES", "DAU", None, "DAU", "FACTURE"]
     r = _decouper(fab.pdf(pages, titres=titres), "fusion.pdf")
@@ -173,9 +173,8 @@ def test_corps_de_courriel_et_structure():
     types = {}
     for fr in rec.a_traiter():
         r = decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, corps_courriel=fr.corps_courriel)
-        types[fr.fichier.nom_original] = (r.documents[0].type.value, r.documents[0].sous_type)
-    assert types == {"corps_courriel.txt": ("document_support", "courriel"),
-                     "f.xml": ("facture_commerciale", "facture")}
+        types[fr.fichier.nom_original.rsplit(".", 1)[-1]] = (r.documents[0].type.value, r.documents[0].sous_type)
+    assert types == {"eml": ("document_support", "courriel"), "xml": ("facture_commerciale", "facture")}
 
 
 def test_xml_inconnu_jamais_classe_avec_certitude():

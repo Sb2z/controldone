@@ -5,7 +5,8 @@ motif de refus). Un fichier refusé ne bloque jamais le lot (§20.6). Rien n'est
 d'assemblage stocke les objets et les octets (``FichierRecu.contenu``).
 
 Courriels (§7.1, §20.2) : les pièces jointes deviennent des fichiers d'entrée ; le corps devient un
-fichier texte marqué ``corps_courriel`` (classé ``document_support/courriel``), **jamais interprété**.
+fichier ``<message>.eml`` marqué ``corps_courriel`` (classé ``document_support/courriel`` ; ``contenu`` =
+texte décodé du corps, ``sha256`` = celui du message), **jamais interprété**.
 L'objet et le corps ne déclenchent aucune action ; seuls l'expéditeur (liste blanche du client) et les
 pièces jointes sont utilisés.
 """
@@ -37,6 +38,7 @@ from .sniff import (
     MIME_PDF,
     MIME_TEXTE,
     MIME_XLS,
+    MIME_XLSX,
     MIME_ZIP,
     MIMES_SUPPORTES,
     decoder_texte,
@@ -237,7 +239,7 @@ def _verifier_tableur(contenu: bytes, mime: str) -> tuple[int | None, MotifRefus
             noms = z.namelist()
     except (zipfile.BadZipFile, OSError, RuntimeError, ValueError):
         return None, MotifRefus.corrompu
-    if mime.endswith("sheet"):
+    if mime == MIME_XLSX:
         n = sum(1 for x in noms if re.match(r"xl/worksheets/sheet\d+\.xml$", x))
         return n or None, (MotifRefus.vide if n == 0 else None)
     return None, None
@@ -253,8 +255,9 @@ def _ajouter(
     origine: str | None = None,
     corps_courriel: bool = False,
     taille: int | None = None,
+    sha_source: str | None = None,
 ) -> FichierRecu:
-    sha = _sha(contenu) if contenu is not None else _sha(f"refuse:{chemin_relatif}".encode())
+    sha = sha_source or (_sha(contenu) if contenu is not None else _sha(f"refuse:{chemin_relatif}".encode()))
     taille = len(contenu) if contenu is not None else (taille or 0)
     if mime is None:
         mime = detecter_type(contenu, chemin_relatif) if contenu else "application/octet-stream"
@@ -481,7 +484,9 @@ def _corps_et_pieces(msg: EmailMessage) -> tuple[str, list[tuple[str, bytes]]]:
     return corps, pieces
 
 
-def _ajouter_courriel(etat: _Etat, base: str, msg: EmailMessage, *, origine: str | None):
+def _ajouter_courriel(etat: _Etat, base: str, msg: EmailMessage, *, origine: str | None, brut: bytes):
+    """Le message lui-même devient le fichier ``<base>.eml`` (sha256 du message ; contenu remis aux pages :
+    le texte du corps, décodé) ; les pièces jointes sont rangées sous ``<base>/``."""
     corps, pieces = _corps_et_pieces(msg)
     origine_c = origine or f"courriel:{etat.message_id or ''}"
     # Le corps est une donnée (document_support/courriel) : en-têtes utiles conservés comme texte.
@@ -491,8 +496,8 @@ def _ajouter_courriel(etat: _Etat, base: str, msg: EmailMessage, *, origine: str
         if v:
             entete.append(f"{h}: {v}")
     texte = "\n".join(entete) + ("\n\n" if entete else "") + corps
-    _ajouter(etat, _normaliser_chemin(base, "corps_courriel.txt"), texte.encode("utf-8"),
-             mime=MIME_TEXTE, origine=origine_c, corps_courriel=True)
+    _ajouter(etat, f"{base}.eml", texte.encode("utf-8"), mime=MIME_TEXTE, origine=origine_c,
+             corps_courriel=True, sha_source=_sha(brut))
     vus: dict[str, int] = {}
     for nom, donnees in pieces:
         nom_sur = _nom_sur(nom)
@@ -518,7 +523,7 @@ def _traiter_eml_interne(etat: _Etat, chemin_relatif: str, contenu: bytes, *, or
         _ajouter(etat, chemin_relatif, contenu, mime=MIME_EML, motif=MotifRefus.corrompu, origine=origine)
         return
     base = str(PurePosixPath(chemin_relatif).with_suffix(""))
-    _ajouter_courriel(etat, base, msg, origine=origine or chemin_relatif)
+    _ajouter_courriel(etat, base, msg, origine=origine or chemin_relatif, brut=contenu)
 
 
 # --- API publique ------------------------------------------------------------------------------------
@@ -630,7 +635,7 @@ def recevoir_courriel(
     if not expediteur_autorise(expediteur, autorises):
         return _fin(etat, quarantaine=True, motif_quarantaine="expediteur_non_autorise")
     ident = hashlib.sha256((message_id or _sha(contenu)).encode()).hexdigest()[:12]
-    _ajouter_courriel(etat, f"{dossier}/{ident}", msg, origine=f"courriel:{message_id or ident}")
+    _ajouter_courriel(etat, f"{dossier}/{ident}", msg, origine=f"courriel:{message_id or ident}", brut=contenu)
     return _fin(etat)
 
 

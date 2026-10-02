@@ -1,0 +1,151 @@
+"""Jetons de session signés (itsdangerous), avec rotation, expiration d'inactivité et durée absolue ;
+paramètres de cookie ``httponly`` ; jeton CSRF lié à la session.
+
+- Signature HMAC (itsdangerous) avec une **liste** de secrets : le dernier signe, tous vérifient
+  (rotation du secret sans déconnecter tout le monde).
+- ``rafraichir`` réémet un jeton (nouvel horodatage d'émission) au-delà de ``rotation_s`` ; l'identifiant
+  de session (``sid``) et le début de session sont conservés ; ``revoquer(sid)`` (déconnexion) est en
+  mémoire du processus (voir les points ouverts dans ``docs/SECURITY.md``).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import os
+import secrets
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from itsdangerous import BadSignature, URLSafeSerializer
+
+from controldone.auth.roles import Acteur, Role
+
+__all__ = [
+    "DonneesSession",
+    "GestionnaireSessions",
+    "SessionInvalide",
+    "jeton_csrf",
+    "parametres_cookie",
+    "secrets_session_depuis_env",
+    "verifier_csrf",
+]
+
+
+class SessionInvalide(PermissionError):
+    pass
+
+
+@dataclass(frozen=True)
+class DonneesSession:
+    sid: str
+    user_id: str
+    role: Role
+    tenant_id: str | None
+    debut: float
+    emis: float
+    deux_facteurs: bool
+
+    def acteur(self, ip: str | None = None) -> Acteur:
+        return Acteur(self.user_id, self.role, self.tenant_id, ip)
+
+
+def secrets_session_depuis_env(mode: str | None = None) -> list[str]:
+    """``CONTROLDONE_SECRET_KEY`` (plusieurs valeurs séparées par des virgules, la dernière signe).
+    Absente : refus en production ; en développement, secret dérivé de la clé maîtresse."""
+    from controldone.storage.cles import charger_cles_maitresses, mode_execution
+    from controldone.storage.erreurs import CleManquante
+
+    brut = os.environ.get("CONTROLDONE_SECRET_KEY", "").strip()
+    if brut:
+        return [s.strip() for s in brut.split(",") if s.strip()]
+    if (mode or mode_execution()) == "prod":
+        raise CleManquante("CONTROLDONE_SECRET_KEY absente : démarrage refusé en production")
+    cle = charger_cles_maitresses(mode=mode)[0]
+    return [hashlib.sha256(b"controldone/session|" + cle).hexdigest()]
+
+
+class GestionnaireSessions:
+    def __init__(self, secrets_: str | Sequence[str], *, inactivite_s: int = 30 * 60,
+                 duree_absolue_s: int = 8 * 3600, rotation_s: int = 15 * 60,
+                 horloge: Callable[[], float] = time.time) -> None:
+        cles = [secrets_] if isinstance(secrets_, str) else list(secrets_)
+        if not cles or any(len(c) < 32 for c in cles):
+            raise ValueError("secret de session trop court (32 caractères minimum)")
+        self._ser = URLSafeSerializer(cles, salt="controldone.session")
+        self.inactivite_s = inactivite_s
+        self.duree_absolue_s = duree_absolue_s
+        self.rotation_s = rotation_s
+        self.horloge = horloge
+        self._revoquees: set[str] = set()
+
+    def emettre(self, acteur: Acteur, *, deux_facteurs: bool = False, sid: str | None = None,
+                debut: float | None = None) -> str:
+        if acteur.role is Role.systeme:
+            raise ValueError("pas de session pour le système")
+        maintenant = self.horloge()
+        return self._ser.dumps({
+            "sid": sid or secrets.token_urlsafe(18), "u": acteur.id, "r": acteur.role.value,
+            "t": acteur.tenant_id, "d": debut if debut is not None else maintenant, "e": maintenant,
+            "2f": bool(deux_facteurs),
+        })
+
+    def lire(self, jeton: str) -> DonneesSession:
+        try:
+            p: dict[str, Any] = self._ser.loads(jeton)
+            d = DonneesSession(sid=p["sid"], user_id=p["u"], role=Role(p["r"]), tenant_id=p.get("t"),
+                               debut=float(p["d"]), emis=float(p["e"]), deux_facteurs=bool(p.get("2f")))
+        except (BadSignature, KeyError, ValueError, TypeError) as exc:
+            raise SessionInvalide("jeton de session invalide") from exc
+        maintenant = self.horloge()
+        if d.sid in self._revoquees:
+            raise SessionInvalide("session révoquée")
+        if maintenant - d.emis > self.inactivite_s:
+            raise SessionInvalide("session expirée (inactivité)")
+        if maintenant - d.debut > self.duree_absolue_s:
+            raise SessionInvalide("session expirée (durée maximale)")
+        if d.role is Role.fondateur and not d.deux_facteurs:
+            raise SessionInvalide("second facteur exigé pour le fondateur")
+        return d
+
+    def rafraichir(self, jeton: str) -> tuple[DonneesSession, str | None]:
+        """Valide le jeton ; renvoie un nouveau jeton si la rotation est due (sinon ``None``)."""
+        d = self.lire(jeton)
+        if self.horloge() - d.emis < self.rotation_s:
+            return d, None
+        nouveau = self.emettre(Acteur(d.user_id, d.role, d.tenant_id), deux_facteurs=d.deux_facteurs,
+                               sid=d.sid, debut=d.debut)
+        return d, nouveau
+
+    def revoquer(self, sid: str) -> None:
+        self._revoquees.add(sid)
+
+
+def parametres_cookie(*, prod: bool = True, max_age: int = 8 * 3600) -> dict[str, Any]:
+    """Paramètres du cookie de session (à passer à ``response.set_cookie``). En production, préfixe
+    ``__Host-`` (impose ``Secure``, ``Path=/``, pas de ``Domain``)."""
+    return {
+        "key": "__Host-cd_session" if prod else "cd_session",
+        "httponly": True,
+        "secure": prod,
+        "samesite": "strict" if prod else "lax",
+        "path": "/",
+        "max_age": max_age,
+    }
+
+
+def jeton_csrf(secret: str, sid: str) -> str:
+    """Jeton CSRF lié à la session : ``nonce.hmac(secret, sid|nonce)``."""
+    nonce = secrets.token_urlsafe(16)
+    mac = hmac.new(secret.encode(), f"csrf|{sid}|{nonce}".encode(), hashlib.sha256).hexdigest()
+    return f"{nonce}.{mac}"
+
+
+def verifier_csrf(secret: str, sid: str, jeton: str | None) -> bool:
+    if not jeton or "." not in jeton:
+        return False
+    nonce, _, mac = jeton.partition(".")
+    attendu = hmac.new(secret.encode(), f"csrf|{sid}|{nonce}".encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(attendu, mac)

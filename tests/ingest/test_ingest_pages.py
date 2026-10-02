@@ -154,3 +154,28 @@ def test_processus_isole_delai_depasse():
     pages = extraire_pages(contenu, type_mime="application/pdf", options=opts)
     assert pages[0].page.qualite_texte is QualiteTexte.illisible
     assert pages[0].texte.avertissements == ["timeout"]
+
+
+def test_tableur_ods():
+    import zipfile
+
+    contenu = (
+        '<?xml version="1.0" encoding="UTF-8"?><office:document-content '
+        'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:spreadsheet>'
+        '<table:table table:name="Invoice"><table:table-row><table:table-cell office:value-type="string">'
+        '<text:p>Total</text:p></table:table-cell><table:table-cell office:value-type="float" office:value="12540.5">'
+        '<text:p>12 540,50</text:p></table:table-cell><table:table-cell table:number-columns-repeated="1000"/>'
+        '</table:table-row><table:table-row table:number-rows-repeated="100000"><table:table-cell/></table:table-row>'
+        '</table:table></office:spreadsheet></office:body></office:document-content>'
+    )
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("mimetype", "application/vnd.oasis.opendocument.spreadsheet")
+        z.writestr("content.xml", contenu)
+    rec = recevoir_octets([("f.ods", b.getvalue())])
+    f = rec.fichiers[0].fichier
+    assert f.type_mime == "application/vnd.oasis.opendocument.spreadsheet" and f.statut.value == "ok"
+    pages = extraire_pages(b.getvalue(), fichier=f, options=LOCAL)
+    assert [(p.page.feuille, p.page.texte) for p in pages] == [("Invoice", "Total | 12540.5")]

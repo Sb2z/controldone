@@ -25,9 +25,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from controldone.auth.roles import ROLES_CLIENT, Action, Acteur, Ressource, Role, peut
+from controldone.auth.roles import ROLES_CLIENT, Acteur, Action, Ressource, Role, peut
 from controldone.storage import garde
 from controldone.storage.audit import journaliser
+from controldone.storage.coltypes import maintenant
 from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.models import (
     AiUsage,
@@ -55,7 +56,6 @@ from controldone.storage.models import (
     TenantMixin,
     Transitaire,
 )
-from controldone.storage.coltypes import maintenant
 
 if TYPE_CHECKING:
     from controldone.model.dossier import Dossier as DossierModele
@@ -189,7 +189,7 @@ class TenantScope:
         """Ajout générique (rôle client : tables autorisées seulement ; champs sensibles contrôlés)."""
         _modele_client(type(obj))
         self.exiger(Action.ecrire)
-        colonnes = {c: getattr(obj, c) for c in type(obj).__table__.columns.keys()}  # type: ignore[attr-defined]
+        colonnes = {c: getattr(obj, c) for c in type(obj).__table__.columns.keys()}  # type: ignore[attr-defined]  # noqa: SIM118
         self._politique_ecriture(type(obj), colonnes, creation=True)
         return self._ajouter_interne(obj)
 
@@ -212,7 +212,7 @@ class TenantScope:
         if self.actor.role not in (Role.systeme, Role.fondateur):
             raise AccesRefuse("écriture réservée au moteur et au fondateur")
 
-    def modifier(self, modele: type[M], id: Any, **champs: Any) -> M:
+    def modifier(self, modele: type[M], id: Any, /, **champs: Any) -> M:
         self.exiger(Action.ecrire)
         if issubclass(modele, AppendOnly):
             raise AccesRefuse("table append-only")
@@ -569,6 +569,14 @@ class TenantScope:
              .order_by(AuditLog.id.desc()).limit(limite))
         return list(self.session.execute(q).scalars())
 
+    def signaler_alerte(self, *, cle: str, kind: str, message: str,
+                        details: dict[str, Any] | None = None) -> bool:
+        """Alerte au fondateur concernant ce client (dédoublonnée par ``cle``), sans contenu de document."""
+        from controldone.storage.alertes import emettre_alerte
+
+        return emettre_alerte(self.session, cle=f"{self.tenant_id}:{cle}", kind=kind, message=message,
+                              tenant_id=self.tenant_id, details=details)
+
     def sorties(self) -> list[Outbox]:
         """Actions sortantes concernant ce client."""
         return self.lister(Outbox, ordre=Outbox.cree_le)
@@ -582,13 +590,21 @@ class OperatorScope:
             raise AccesRefuse("OperatorScope réservé au fondateur")
         self.db = db
         self.actor = actor if ip is None else Acteur(actor.id, actor.role, actor.tenant_id, ip)
-        self.session = db.session()
+        # Session propre en lecture (transaction différée : ne prend pas le verrou d'écriture SQLite).
+        self.session = db.session(lecture=True)
         self.session.info[garde.CLE_OPERATEUR] = True
         self._enfants: list[Session] = []
 
     def _audit_immediat(self, action: str, tenant_id: str | None, cible: str | None,
                         details: dict[str, Any] | None = None) -> None:
-        """Entrée d'audit validée tout de suite (trace de l'accès même si l'opération échoue ensuite)."""
+        """Entrée d'audit validée tout de suite (trace de l'accès même si l'opération échoue ensuite).
+
+        Les périmètres client déjà ouverts sont validés d'abord : avec SQLite (un seul écrivain), une
+        transaction d'écriture en cours bloquerait l'écriture de l'audit. Chaque nouvel accès tracé
+        valide donc les écritures précédentes de l'opérateur."""
+        for enfant in self._enfants:
+            enfant.commit()
+        self.session.rollback()  # libère l'instantané de lecture
         with self.db.transaction_systeme() as s:
             journaliser(s, actor=self.actor.id, role=self.actor.role.value, action=action,
                         tenant_id=tenant_id, target=cible, ip=self.actor.ip, details=details)
