@@ -119,7 +119,14 @@ class TenantScope:
         tenant = session.get(Tenant, tenant_id)
         if tenant is None or not tenant.actif:
             raise AccesRefuse("client introuvable ou hors périmètre")
-        if actor.role in ROLES_CLIENT:
+        if actor.role in ROLES_CLIENT and actor.id.startswith("api:"):
+            # acteur issu d'une clé d'API (``auth.cles_api``) : la clé doit être de ce client, active, même rôle
+            cle = session.execute(
+                select(CleApi).where(CleApi.tenant_id == tenant_id, CleApi.id == actor.id[4:])
+            ).scalar_one_or_none()
+            if cle is None or cle.revoquee_le is not None or cle.role != actor.role.value:
+                raise AccesRefuse("clé d'API non valable pour ce client")
+        elif actor.role in ROLES_CLIENT:
             membre = session.execute(
                 select(Membership).where(
                     Membership.tenant_id == tenant_id, Membership.user_id == actor.id

@@ -17,7 +17,8 @@ from decimal import Decimal
 
 from controldone.auth.roles import Role
 from controldone.extract.valeurs import valeur_sourcee
-from controldone.ids import Prefixe, id_stable, nouvel_id
+from controldone.ids import Prefixe, nouvel_id
+from controldone.litiges.service import id_ecart
 from controldone.model.champs import chemin_relatif
 from controldone.model.documents import Document as DocumentModele
 from controldone.model.dossier import Dossier as DossierModele
@@ -67,7 +68,7 @@ def ouvrir_ecart(scope: TenantScope, c: Constat) -> Ecart | None:
     if c.nature_montant != "recouvrable" or not c.montant_en_jeu or c.montant_en_jeu <= 0:
         return None
     if scope.lister(Ecart, constat_id=c.id):
-        return None
+        return None  # déjà ouvert (ici ou par la préparation d'un dossier de demande d'avoir)
     dossier = DossierModele.model_validate(scope.obtenir(Dossier, c.dossier_id).contenu)
     j = c.contenu or {}
     ft = None
@@ -84,7 +85,7 @@ def ouvrir_ecart(scope: TenantScope, c: Constat) -> Ecart | None:
         composante = Composante.prestation
     montant = Decimal(c.montant_en_jeu)
     ecart = EcartARecouvrer(
-        id=id_stable(Prefixe.ecart, scope.tenant_id, c.id), client_id=scope.tenant_id, constat_id=c.id,
+        id=id_ecart(scope.tenant_id, c.id), client_id=scope.tenant_id, constat_id=c.id,
         dossier_id=c.dossier_id, transitaire_id=dossier.transitaire_id, facture_transitaire_id=ft,
         mrn=(dossier.cles.mrn or [None])[0], composante=composante, montant_initial=montant, reste=montant,
     )

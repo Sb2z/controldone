@@ -171,6 +171,24 @@ class EvenementLitige(BaseModel):
     commentaire: str | None = Field(default=None, max_length=500)
 
 
+def acteur_api(request: Request) -> Acteur:
+    """Acteur de la clé d'API (rôle client rattaché au client de la clé) ; 401 sinon, 429 au-delà du débit."""
+    plateforme, securite = request.app.state.plateforme, request.app.state.securite
+    brut = request.headers.get("authorization", "")
+    cle = brut[7:].strip() if brut.lower().startswith("bearer ") else request.headers.get("x-api-key", "").strip()
+    ip = request.client.host if request.client else "?"
+    prefixe = cle.split("_")[1] if cle.count("_") >= 2 else ip
+    if not securite.limiteur_api.autoriser(f"api:{prefixe}") or not securite.limiteur_api.autoriser(f"ip:{ip}"):
+        raise _Erreur(429, "trop de requêtes")
+    acteur = verifier_cle_api(plateforme.db, cle) if cle else None
+    if acteur is None:
+        raise _Erreur(401, "clé d'API absente, invalide ou révoquée")
+    return Acteur(acteur.id, acteur.role, acteur.tenant_id, ip)
+
+
+Auth = Annotated[Acteur, Depends(acteur_api)]
+
+
 # --- application ---------------------------------------------------------------------------------------------
 
 
@@ -178,20 +196,8 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
     api = FastAPI(title="ControlDOne — API", version="1.0.0", description=DESCRIPTION, docs_url=None, redoc_url=None,
                   openapi_url="/openapi.json")
     api.state.plateforme = plateforme
+    api.state.securite = securite
 
-    def acteur_api(request: Request) -> Acteur:
-        brut = request.headers.get("authorization", "")
-        cle = brut[7:].strip() if brut.lower().startswith("bearer ") else request.headers.get("x-api-key", "").strip()
-        ip = request.client.host if request.client else "?"
-        prefixe = cle.split("_")[1] if cle.count("_") >= 2 else ip
-        if not securite.limiteur_api.autoriser(f"api:{prefixe}") or not securite.limiteur_api.autoriser(f"ip:{ip}"):
-            raise _Erreur(429, "trop de requêtes")
-        acteur = verifier_cle_api(plateforme.db, cle) if cle else None
-        if acteur is None:
-            raise _Erreur(401, "clé d'API absente, invalide ou révoquée")
-        return Acteur(acteur.id, acteur.role, acteur.tenant_id, ip)
-
-    Auth = Annotated[Acteur, Depends(acteur_api)]
 
     @api.exception_handler(_Erreur)
     async def _err(request: Request, exc: _Erreur) -> JSONResponse:
@@ -294,7 +300,7 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
     def rapports(acteur: Auth) -> Any:
         return [{"rapport_id": a.id, "type": a.kind.value, "objet": a.payload_effectif.get("objet", ""),
                  "mis_a_disposition_le": a.envoye_le.isoformat() if a.envoye_le else None,
-                 "formats": [p.get("format") for p in a.payload_effectif.get("pieces") or [] if isinstance(p, dict)]}
+                 "formats": publication.formats_disponibles(a)}
                 for a in _rapports(acteur)]
 
     @api.get("/rapports/{rapport_id}", tags=["rapports"], summary="Télécharger un rapport (PDF, HTML ou JSON)",

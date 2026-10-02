@@ -83,7 +83,9 @@ def environnement() -> Environment:
     )
     env.filters.update(montant=_montant, nombre=_nombre, date=_date, taille=_taille,
                        b64=lambda b: base64.b64encode(b).decode("ascii") if b else "")
-    env.globals.update(AVERTISSEMENT=AVERTISSEMENT, PHRASE_RENVOI=PHRASE_RENVOI)
+    from controldone.services.publication import formats_disponibles
+
+    env.globals.update(AVERTISSEMENT=AVERTISSEMENT, PHRASE_RENVOI=PHRASE_RENVOI, formats=formats_disponibles)
     return env
 
 
