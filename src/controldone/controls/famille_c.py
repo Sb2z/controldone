@@ -39,6 +39,7 @@ from controldone.controls.framework import (
 )
 from controldone.formatage import format_montant, format_pourcentage
 from controldone.model import (
+    ChampsDeclaration,
     BasePourcentage,
     CategorieTaxe,
     Composante,
@@ -255,6 +256,9 @@ class ReferenceDeclaration:
     nb_articles: int
     #: Montant imprimé au total à payer et non retrouvé dans les lignes lues (règle de complétude), ou 0.
     manquant: Decimal = ZERO
+    #: Lecture des lignes de taxation probablement incomplète (D-901) : motif, ou ``None``. Les comparaisons
+    #: par composante (et C5 fondé sur la somme des lignes) sont alors au plus ``a_verifier``.
+    lecture_incomplete: str | None = None
 
     @property
     def autoliquide(self) -> bool:
@@ -403,7 +407,69 @@ def reference_declaration(ctx: ControlContext, dec: Document) -> ReferenceDeclar
         indisponibles=indisponibles, indices=indices, tva_ecartee=tva_ecartee, total=total,
         total_utilise=total_utilise, complet_verifie=complet_verifie, liquide_total=liquide_total,
         raison_total=raison_total, nb_articles=_nb_articles(ctx, dec), manquant=manquant,
+        lecture_incomplete=_lecture_incomplete(ctx, dec, somme, montant_autoliquide),
     )
+
+
+def _lecture_incomplete(ctx: ControlContext, dec: Document, somme: Decimal, montant_autoliquide: Decimal
+                        ) -> str | None:
+    """Garde de complétude (§12.1, §8.5.1 conditions 3–4 ; D-901) : la somme des lignes de taxation lues
+    peut-elle être incomplète ?
+
+    1. Un total imprimé (``total_a_payer`` ou ``total_droits_taxes``) est lu (confiance ≥ ``C_MIN_UTILE``) et
+       aucun total lu ne concorde, à ``T_SOMME`` près, avec la somme des lignes lues, TVA autoliquidée
+       exclue ou incluse (mêmes hypothèses que B2). Une ligne non lue (ou mal lue) est l'explication la plus
+       fréquente, dans un sens comme dans l'autre.
+    2. Les lignes par article semblent incomplètes : un article attendu (articles lus, ``nombre_articles``)
+       sans aucune ligne, ou un article sans ligne d'une catégorie (droits, TVA) que portent tous les
+       autres articles.
+    """
+    c = dec.dec
+    totaux = [v for v in (_dec(ctx, c.total_a_payer), _dec(ctx, c.total_droits_taxes)) if v is not None]
+    if totaux:
+        t = ctx.tol.t_somme(max(1, len(c.taxations)))
+        hypotheses = [somme] + ([somme + montant_autoliquide] if montant_autoliquide else [])
+        if not any(abs(tot - h) <= t for tot in totaux for h in hypotheses):
+            return "total_imprime_different_de_la_somme_des_lignes_lues"
+    return _lignes_par_article_incompletes(ctx, c)
+
+
+def _lignes_par_article_incompletes(ctx: ControlContext, c: ChampsDeclaration) -> str | None:
+    par_article: dict[int, set[CategorieTaxe]] = {}
+    for t in c.taxations:
+        if not ctx.utilisable(t.article):
+            continue
+        assert t.article is not None
+        try:
+            n = t.article.entier()
+        except (ValueError, ArithmeticError):
+            continue
+        par_article.setdefault(n, set()).add(t.categorie)
+    if len(par_article) < 2:
+        return None  # taxation au niveau de la déclaration, ou un seul article : rien à comparer
+    attendus: set[int] = set()
+    for a in c.articles:
+        if ctx.utilisable(a.numero_article):
+            assert a.numero_article is not None
+            try:
+                attendus.add(a.numero_article.entier())
+            except (ValueError, ArithmeticError):
+                pass
+    if ctx.utilisable(c.nombre_articles):
+        assert c.nombre_articles is not None
+        try:
+            n_art = c.nombre_articles.entier()
+        except (ValueError, ArithmeticError):
+            n_art = 0
+        if 0 < n_art <= 999 and max(par_article) <= n_art:
+            attendus.update(range(1, n_art + 1))
+    if attendus - set(par_article):
+        return "article_sans_ligne_de_taxation"
+    for cat in (CategorieTaxe.droit, CategorieTaxe.tva):
+        avec = [n for n, cats in par_article.items() if cat in cats]
+        if len(avec) >= 2 and len(avec) < len(par_article):
+            return "article_sans_ligne_de_sa_categorie"
+    return None
 
 
 # =====================================================================================================
@@ -793,6 +859,12 @@ def _comparer_composante(
     raisons = []
     if any(cat in refs[d.id].sans_ligne and not refs[d.id].complet_verifie for d in u.declarations):
         raisons.append(RaisonCode.valeur_absente)
+    incompletes = {d.id: refs[d.id].lecture_incomplete for d in u.declarations if refs[d.id].lecture_incomplete}
+    if incompletes:
+        # D-901 : la somme des lignes lues n'est pas confirmée par le total imprimé (ou une ligne d'article
+        # semble manquer) ; une ligne non lue de cette composante peut expliquer l'écart.
+        raisons.append(RaisonCode.valeur_absente)
+        details["lecture_incomplete"] = incompletes
     classement = ctx.classify(
         cid, ecart=ecart, tolerance=tol, seuil_certitude=seuil,
         valeurs_cles=vals_lignes + sources + [c.valeur for c in credits],
@@ -1023,11 +1095,18 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
                 return None
             return r.liquide_total - (r.liquide[CategorieTaxe.forfait_petits_envois] if fs else ZERO)
 
+        # D-901 : total liquidé fondé sur la somme des lignes d'une déclaration dont la lecture semble
+        # incomplète -> au plus « à vérifier » (le total imprimé, quand il est retenu, fait foi).
+        incompletes = {x.id: refs[x.id].lecture_incomplete for x in u.declarations
+                       if refs[x.id].lecture_incomplete and not refs[x.id].total_utilise}
+        if incompletes:
+            details["lecture_incomplete"] = incompletes
         classement = ctx.classify(
             "C5", ecart=ecart, tolerance=tol, seuil_certitude=seuil,
             valeurs_cles=vals + sources + [c.valeur for c in credits],
             confusion=_confusions(vals, sources, ecart, tol), documents=docs + [c.avoir.id for c in credits],
             explication=_explication_version(ctx, u, refs, total_ref, refact, tol), montant=ecart,
+            raisons_supplementaires=[RaisonCode.valeur_absente] if incompletes else (),
         )
         composition = []
         for cat in (*CATEGORIES, None):
