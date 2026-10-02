@@ -13,6 +13,7 @@ cookie, aucun traceur, aucun formulaire. Thème clair ou sombre selon le réglag
 | `experts-comptables.html` | Proposition de partenariat aux cabinets (rémunération : **à valider**) |
 | `contact.html` | Lien `mailto:` (adresse à compléter), pas de formulaire |
 | `mentions-legales.html`, `cgv.html`, `confidentialite.html`, `dpa.html` | **Brouillons à relire par un avocat** |
+| `en/` | Version anglaise de `index`, `tarifs` (`pricing`), `demonstration` (`demo`), `methode` (`method`), `contact` ; pages juridiques en français seulement (note « French version prevails — draft to be reviewed by a lawyer ») ; sélecteur de langue EN/FR dans le menu ; tests : `tests/site/test_site_en.py` |
 
 Le registre des traitements (art. 30.2 RGPD et prospection) est un document interne :
 `docs/RGPD_registre.md`, non publié.
