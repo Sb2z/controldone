@@ -788,3 +788,81 @@ travaux de précision menés en parallèle). Rappel global 68,6 % -> 80,5 % ; pr
   seule le liquidé (quand il est connu ; sinon la complémentarité n'est pas exclue mais le signal reste à vérifier) :
   constat `a_verifier` (raisons `valeur_absente`, `controle_signal_seulement`), montant = ses débours. Jamais
   certain.
+
+# Mise au point après le premier holdout
+
+Première mesure sur le corpus tenu à l'écart (`bench/out/holdout_final_1`, holdout désormais « brûlé ») :
+précision certain 0,9565 (44 VP / 2 FP). Causes générales corrigées ci-dessous, chacune avec un test sur des données
+fictives ; aucun réglage propre à un dossier, un nom de fichier ou un nom fictif. Banc `dev` : `bench/out/dev_r2`
+(avant) -> `bench/out/dev_r3` (après) : VP/FP certain 111/0 -> 114/0, rappel 80,5 % -> 81,3 %, rappel certain
+71,5 % -> 73,6 %, bruit 1,41 -> 1,41 par dossier ; seuil bloquant passé. Un nouveau holdout sera généré pour la
+mesure finale.
+
+## D-902 — Famille C : garde de complétude de la lecture des lignes de taxation
+
+- **Constat (holdout 1)** : une ligne « autre taxe » à taux spécifique (0,12 par LTR sur 623 LTR, code X01) n'a pas
+  été extraite d'une déclaration condensée scannée ; une ligne de TVA mal lue rendait la somme lue **supérieure** au
+  total à payer imprimé, si bien que la règle de complétude de §12.1 (total > somme) ne s'appliquait pas. C2 comparait
+  1 170,71 (transitaire) à 1 095,95 (2 lignes lues) et produisait un écart certain faux de 74,76 EUR, alors que le
+  total à payer (6 124,49) était lu à 0,83.
+- **Choix** (§12.1, §8.5.1 conditions 3–4) : `reference_declaration` calcule `lecture_incomplete` :
+  1. un total imprimé (`total_a_payer` ou `total_droits_taxes`) est lu avec une confiance ≥ `C_MIN_UTILE` et
+     **aucun** total lu ne concorde, à `T_SOMME` près, avec la somme des lignes lues, TVA autoliquidée exclue ou
+     incluse (mêmes hypothèses que B2, D-710) — dans un sens comme dans l'autre ;
+  2. ou les lignes par article semblent incomplètes : un article attendu (articles lus, `nombre_articles`) sans
+     aucune ligne, ou un article sans ligne de droits (ou de TVA) alors que d'autres articles en ont une.
+  Les constats C1, C2, C4 de la déclaration sont alors au plus `a_verifier` (raison `valeur_absente`,
+  `details.lecture_incomplete` = motif) ; C5 aussi quand son total liquidé est la somme des lignes (le total imprimé,
+  quand la règle de complétude le retient, fait foi). Les règles existantes (composante `non_verifiable`, D-705)
+  sont inchangées. « Différence pleinement expliquée » = concordance sous l'une des deux hypothèses de TVA
+  autoliquidée.
+- **Limite** : le motif 2 ne voit pas une ligne de droit spécifique manquante sur un article qui porte déjà ses
+  lignes de droits et de TVA : c'est le motif 1 (total imprimé) ou l'extracteur (D-903) qui la couvre.
+
+## D-903 — Déclarations condensées : sous-lignes de droit spécifique lues par OCR
+
+- **Constat** : sur les déclarations condensées scannées (dev L2/L3 d1–d3 et holdout), l'OCR lit le code « X01 » en
+  minuscule (« x01 ») ou le tronque (« x1 ») ; la sous-ligne était ignorée sans signal. Les codes `X..` sans libellé
+  restaient de catégorie `inconnue` (toutes les composantes C indisponibles, même sur PDF natif L3).
+- **Choix** : (a) un code de taxe dont la lettre est lue en minuscule est accepté et corrigé (pénalité 0,12) s'il
+  contient au moins un chiffre lu tel quel et si la ligne porte un montant décimal (un débris « s00 » sans montant
+  n'ouvre pas de ligne) ; (b) dans un tableau condensé, une sous-ligne sans code lisible mais avec un montant décimal
+  dans la colonne des droits **et** un libellé de taxe (droit, taxe, accise, dumping, spécifique…) ou une base en
+  quantité (« 980 LTR ») donne une ligne de taxation sans code, catégorie d'après le libellé seulement, toutes ses
+  valeurs plafonnées à 0,85 (jamais valeur clé d'un écart certain ; avertissement `code_taxe_illisible`) ; (c) un
+  code `X` + 2 chiffres sans libellé imprimé est classé `autre_taxe` (accises et taxes nationales).
+- **Mesure** (`scripts/mesure_extraction.py --type declaration`, dev) : lignes de taxation absentes 649 -> 643,
+  catégories fausses 5 -> 2 ; calibration inchangée (22 880 valeurs ≥ 0,90, 100 % exactes). Effet banc : deux
+  écarts C1 certains de plus (codes X01 désormais classés), aucun constat certain nouveau faux.
+
+## D-904 — Facture commerciale : total OCR sans séparateur décimal
+
+- **Constat (holdout 1)** : `total_facture` lu « 4058121 » et « 2853745 » à 0,95 (OCR). Vérification : la devise est
+  le JPY (0 décimale) et ces valeurs sont **exactes** (recoupées par la somme des lignes) ; la confiance 0,95 était
+  donc légitime et n'a pas causé de faux certain. Sur le banc dev, aucune valeur ≥ 0,90 n'est fausse.
+- **Choix (garde-fou explicite)** : pour une devise à décimales (ou inconnue), un total OCR ≥ 1000 lu sans
+  séparateur décimal suivi du bon nombre de décimales est plafonné à 0,80, sauf recoupement arithmétique à la même
+  échelle (somme des lignes, sous-total + pieds). Les devises sans décimales (JPY, KRW…) ne sont pas concernées.
+  Le code existant plafonnait déjà ces cas (0,80 sans recoupement, 0,60 si incohérent) ; la règle est désormais
+  écrite et testée. Calibration dev inchangée (9 111 valeurs ≥ 0,90, 100 % exactes).
+
+## D-905 — Correcteur du banc : départage de l'appariement
+
+- **Constat (holdout 1)** : l'erreur BX0037-E2 (contrôle principal B4, acceptés B4/A10, attendue `ecart_certain`)
+  était appariée par la règle gloutonne à un constat A10 `a_verifier` du même document (son `finding_id` triait
+  avant) ; le constat B4 `ecart_certain` restait non apparié et comptait comme FP certain.
+- **Choix** : à écart de montant égal, on préfère (a) le constat dont le contrôle est le contrôle principal de
+  l'erreur, puis (b) le niveau `ecart_certain`, puis `error_id`, `finding_id` (SPEC §19.4 règle 3 « départage »,
+  `bench/score/README.md` §4). Règle du correcteur, valable pour tous les splits ; aucun effet sur les chiffres
+  globaux de `dev_r2` (re-score identique). Re-score informatif de `holdout_final_1` : 45 VP / 1 FP, précision
+  certain 0,9783 (l'ancien `metrics.md` est conservé en `metrics_scorer_v1.md`) ; rien d'autre n'a été réglé sur
+  ce holdout.
+
+## D-906 — A10, A11 : libellé quand les valeurs de la déclaration sont lues par article
+
+- **Constat** : `controle_en_erreur controle=A11 … exception=ValueError` (dev BX0179, BX0232) : sans total de colis
+  lu, les valeurs par article (plus nombreuses que les déclarations du couple) étaient passées à `_refs_dec`, dont
+  le `zip(strict=True)` échouait à la rédaction du libellé. A10 (masse nette, toujours par article) avait le même
+  défaut avec plusieurs déclarations.
+- **Choix** : la page citée pour chaque déclaration (ou facture) est la première valeur lue de ce document ; plus
+  d'exception. Les deux dossiers produisent désormais leur constat A11 `a_verifier`.

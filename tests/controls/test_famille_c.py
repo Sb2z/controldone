@@ -596,3 +596,77 @@ def test_c8_tva_peu_sure_a_verifier():
                                  confiance=0.7)
     r = c8_client_facture(contexte([d, f]))[0]
     assert r.outcome is Outcome.a_verifier and RaisonCode.confiance_insuffisante in r.constat.raisons
+
+
+# --- D-902 : garde de complétude (lecture des lignes de taxation incomplète) ---------------------------
+
+
+def _dec_lignes(did, lignes, *, total=None, total_conf=0.83, articles=None):
+    """``lignes`` : (article, categorie, montant)."""
+    code = {DROIT: "A00", TVA: "B00", AUTRE: "A30"}
+    tx = [taxation(did, article=a, categorie=cat, type_taxe=code[cat], montant=m) for a, cat, m in lignes]
+    champs = {"importateur": Partie(tva=vs("declaration.importateur.tva", TVA_CLIENT, document_id=did))}
+    if total is not None:
+        champs["total_a_payer"] = vs("declaration.total_a_payer", total, document_id=did, confiance=total_conf)
+    if articles is not None:
+        champs["nombre_articles"] = vs("declaration.nombre_articles", str(articles), document_id=did)
+    return declaration(id=did, mrn=MRN_A, taxations=tx, **champs)
+
+
+def _ft_debours(droits, autres, tva):
+    return ft("doc_ft1", ligne("doc_ft1", N.debours_droits, droits),
+              ligne("doc_ft1", N.debours_autres_taxes, autres), ligne("doc_ft1", N.debours_tva, tva))
+
+
+def test_total_imprime_contredit_la_somme_lue_composante_a_verifier():
+    # Une ligne « autres taxes » (droit spécifique) n'a pas été lue et une ligne de TVA est mal lue
+    # (somme lue > total) : le total à payer imprimé, lu à 0,83, ne concorde pas avec la somme des lignes.
+    lignes = [("1", DROIT, "100.00"), ("1", AUTRE, "200.00"), ("1", TVA, "200000.00")]
+    f = _ft_debours("100.00", "274.76", "2000.00")
+    sans_total = un(run([_dec_lignes("doc_dec1", lignes), f]), "C2").constat
+    assert sans_total.niveau is Niveau.ecart_certain  # aucun total imprimé lu : rien ne signale l'incomplétude
+    rs = run([_dec_lignes("doc_dec1", lignes, total="2374.76"), f])
+    c2 = un(rs, "C2")
+    assert c2.constat.niveau is Niveau.a_verifier and RaisonCode.valeur_absente in c2.constat.raisons
+    assert c2.details["lecture_incomplete"] == {"doc_dec1": "total_imprime_different_de_la_somme_des_lignes_lues"}
+    assert un(rs, "C5").constat.niveau is Niveau.a_verifier
+    textes_propres(rs)
+
+
+def test_total_imprime_concordant_ecart_reste_certain():
+    lignes = [("1", DROIT, "100.00"), ("1", AUTRE, "200.00"), ("1", TVA, "2000.00")]
+    rs = run([_dec_lignes("doc_dec1", lignes, total="2300.00", total_conf=0.83),
+              _ft_debours("100.00", "274.76", "2000.00")])
+    assert un(rs, "C2").constat.niveau is Niveau.ecart_certain
+
+
+def test_total_peu_lisible_ignore():
+    # Total sous C_MIN_UTILE : inexploitable, il ne déclenche pas la garde.
+    lignes = [("1", DROIT, "100.00"), ("1", AUTRE, "200.00"), ("1", TVA, "2000.00")]
+    rs = run([_dec_lignes("doc_dec1", lignes, total="9999.99", total_conf=0.3),
+              _ft_debours("100.00", "274.76", "2000.00")])
+    assert un(rs, "C2").constat.niveau is Niveau.ecart_certain
+
+
+def test_difference_expliquee_par_la_tva_autoliquidee():
+    d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "200.00", PaiementNormalise.autoliquide), total="300.00",
+            indices=[indice_1008("doc_dec1")])
+    assert reference_declaration(contexte([d]), d).lecture_incomplete is None
+    d2 = dec("doc_dec1", (DROIT, "100.00"), (TVA, "200.00", PaiementNormalise.autoliquide), total="100.00",
+             indices=[indice_1008("doc_dec1")])
+    assert reference_declaration(contexte([d2]), d2).lecture_incomplete is None
+
+
+def test_lignes_par_article_incompletes():
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "150.00"), ligne("doc_ft1", N.debours_tva, "440.00"))
+    complet = [("1", DROIT, "50.00"), ("1", TVA, "220.00"), ("2", DROIT, "50.00"), ("2", TVA, "220.00")]
+    assert un(run([_dec_lignes("doc_dec1", complet), f]), "C1").constat.niveau is Niveau.ecart_certain
+    # article 3 annoncé (nombre d'articles imprimé) mais sans aucune ligne lue
+    d = _dec_lignes("doc_dec1", complet, articles=3)
+    r = reference_declaration(contexte([d]), d)
+    assert r.lecture_incomplete == "article_sans_ligne_de_taxation"
+    c1 = un(run([d, f]), "C1").constat
+    assert c1.niveau is Niveau.a_verifier and RaisonCode.valeur_absente in c1.raisons
+    # article 2 sans ligne de TVA alors que les autres en ont une
+    d = _dec_lignes("doc_dec1", [*complet[:3], ("3", DROIT, "0.00"), ("3", TVA, "10.00")])
+    assert reference_declaration(contexte([d]), d).lecture_incomplete == "article_sans_ligne_de_sa_categorie"

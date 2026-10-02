@@ -39,9 +39,9 @@ from controldone.controls.framework import (
 )
 from controldone.formatage import format_montant, format_pourcentage
 from controldone.model import (
-    ChampsDeclaration,
     BasePourcentage,
     CategorieTaxe,
+    ChampsDeclaration,
     Composante,
     Document,
     GrilleTarifaire,
@@ -256,7 +256,7 @@ class ReferenceDeclaration:
     nb_articles: int
     #: Montant imprimé au total à payer et non retrouvé dans les lignes lues (règle de complétude), ou 0.
     manquant: Decimal = ZERO
-    #: Lecture des lignes de taxation probablement incomplète (D-901) : motif, ou ``None``. Les comparaisons
+    #: Lecture des lignes de taxation probablement incomplète (D-902) : motif, ou ``None``. Les comparaisons
     #: par composante (et C5 fondé sur la somme des lignes) sont alors au plus ``a_verifier``.
     lecture_incomplete: str | None = None
 
@@ -413,7 +413,7 @@ def reference_declaration(ctx: ControlContext, dec: Document) -> ReferenceDeclar
 
 def _lecture_incomplete(ctx: ControlContext, dec: Document, somme: Decimal, montant_autoliquide: Decimal
                         ) -> str | None:
-    """Garde de complétude (§12.1, §8.5.1 conditions 3–4 ; D-901) : la somme des lignes de taxation lues
+    """Garde de complétude (§12.1, §8.5.1 conditions 3–4 ; D-902) : la somme des lignes de taxation lues
     peut-elle être incomplète ?
 
     1. Un total imprimé (``total_a_payer`` ou ``total_droits_taxes``) est lu (confiance ≥ ``C_MIN_UTILE``) et
@@ -434,35 +434,28 @@ def _lecture_incomplete(ctx: ControlContext, dec: Document, somme: Decimal, mont
     return _lignes_par_article_incompletes(ctx, c)
 
 
+def _entier(ctx: ControlContext, v: ValeurSourcee | None) -> int | None:
+    if not ctx.utilisable(v):
+        return None
+    assert v is not None
+    try:
+        return v.entier()
+    except (ValueError, ArithmeticError):
+        return None
+
+
 def _lignes_par_article_incompletes(ctx: ControlContext, c: ChampsDeclaration) -> str | None:
     par_article: dict[int, set[CategorieTaxe]] = {}
     for t in c.taxations:
-        if not ctx.utilisable(t.article):
-            continue
-        assert t.article is not None
-        try:
-            n = t.article.entier()
-        except (ValueError, ArithmeticError):
-            continue
-        par_article.setdefault(n, set()).add(t.categorie)
+        n = _entier(ctx, t.article)
+        if n is not None:
+            par_article.setdefault(n, set()).add(t.categorie)
     if len(par_article) < 2:
         return None  # taxation au niveau de la déclaration, ou un seul article : rien à comparer
-    attendus: set[int] = set()
-    for a in c.articles:
-        if ctx.utilisable(a.numero_article):
-            assert a.numero_article is not None
-            try:
-                attendus.add(a.numero_article.entier())
-            except (ValueError, ArithmeticError):
-                pass
-    if ctx.utilisable(c.nombre_articles):
-        assert c.nombre_articles is not None
-        try:
-            n_art = c.nombre_articles.entier()
-        except (ValueError, ArithmeticError):
-            n_art = 0
-        if 0 < n_art <= 999 and max(par_article) <= n_art:
-            attendus.update(range(1, n_art + 1))
+    attendus = {n for a in c.articles if (n := _entier(ctx, a.numero_article)) is not None}
+    n_art = _entier(ctx, c.nombre_articles)
+    if n_art is not None and 0 < n_art <= 999 and max(par_article) <= n_art:
+        attendus.update(range(1, n_art + 1))
     if attendus - set(par_article):
         return "article_sans_ligne_de_taxation"
     for cat in (CategorieTaxe.droit, CategorieTaxe.tva):
@@ -861,7 +854,7 @@ def _comparer_composante(
         raisons.append(RaisonCode.valeur_absente)
     incompletes = {d.id: refs[d.id].lecture_incomplete for d in u.declarations if refs[d.id].lecture_incomplete}
     if incompletes:
-        # D-901 : la somme des lignes lues n'est pas confirmée par le total imprimé (ou une ligne d'article
+        # D-902 : la somme des lignes lues n'est pas confirmée par le total imprimé (ou une ligne d'article
         # semble manquer) ; une ligne non lue de cette composante peut expliquer l'écart.
         raisons.append(RaisonCode.valeur_absente)
         details["lecture_incomplete"] = incompletes
@@ -1095,7 +1088,7 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
                 return None
             return r.liquide_total - (r.liquide[CategorieTaxe.forfait_petits_envois] if fs else ZERO)
 
-        # D-901 : total liquidé fondé sur la somme des lignes d'une déclaration dont la lecture semble
+        # D-902 : total liquidé fondé sur la somme des lignes d'une déclaration dont la lecture semble
         # incomplète -> au plus « à vérifier » (le total imprimé, quand il est retenu, fait foi).
         incompletes = {x.id: refs[x.id].lecture_incomplete for x in u.declarations
                        if refs[x.id].lecture_incomplete and not refs[x.id].total_utilise}

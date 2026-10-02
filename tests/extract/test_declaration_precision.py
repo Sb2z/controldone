@@ -48,3 +48,39 @@ def test_montant_condense_virgule_lue_comme_barre_et_statut_colle():
     montants = {t.categorie.value: t.montant.valeur for t in c.taxations if t.montant is not None}
     assert montants.get("droit") == "31.87"
     assert montants.get("tva") == "381.30"
+
+
+def test_condense_droit_specifique_code_minuscule_ou_illisible():
+    # Holdout 1 (D-903) : sous-lignes de droit spécifique d'un tableau condensé lu par OCR ; « x01 » (lettre
+    # lue en minuscule) et « x1 » (code illisible). Ignorer ces lignes rendait la somme des lignes incomplète.
+    entete = [(0.06, 0.23, "N"), (0.09, 0.23, "Code"), (0.20, 0.23, "Désignation"), (0.40, 0.23, "Or"),
+              (0.52, 0.23, "Mt facturé", 8, "d"), (0.61, 0.23, "Base droits", 8, "d"), (0.66, 0.23, "Tx", 8, "d"),
+              (0.73, 0.23, "Droits", 8, "d"), (0.82, 0.23, "Base TVA", 8, "d"), (0.89, 0.23, "TVA", 8, "d"),
+              (0.92, 0.23, "St")]
+
+    def article(y, n, code, des, mt, tx, dr, btva, tva):
+        return [(0.06, y, n), (0.09, y, code), (0.20, y, des), (0.40, y, "JP"), (0.52, y, mt, 8, "d"),
+                (0.61, y, mt, 8, "d"), (0.66, y, tx, 8, "d"), (0.73, y, dr, 8, "d"), (0.82, y, btva, 8, "d"),
+                (0.89, y, tva, 8, "d"), (0.92, y, "1")]
+
+    def sous_ligne(y, code, base, taux, montant):
+        return [(0.09, y, code), (0.20, y, "Droit spécifique (fictif)"), (0.61, y, base, 8, "d"),
+                (0.66, y, taux, 8, "d"), (0.73, y, montant, 8, "d"), (0.92, y, "1")]
+
+    p1 = [
+        (0.06, 0.05, "PREUVE DE DÉDOUANEMENT", 12),
+        (0.06, 0.09, "MRN.......: 26FRK7G7KR9KVHGNG3"), (0.55, 0.18, "Nb articles: 2"),
+        *entete,
+        *article(0.245, "1", "1509200000", "HUILE FICTIVE", "1718,14", "0", "0,00", "1792,90", "358,58"),
+        *sous_ligne(0.26, "x01", "623 LTR", "0,12", "74,76"),
+        *article(0.275, "2", "2204210000", "BOISSON FICTIVE", "1000,00", "0", "0,00", "1117,60", "223,52"),
+        *sous_ligne(0.29, "x1", "980 LTR", "0,12", "117,60"),
+        (0.06, 0.39, "St (statut paiement) : 0 = comptant ; 1 = différé ; 7 = TVA autoliquidée", 7),
+    ]
+    c = _extraire_pdf(_pdf([p1]))
+    autres = [t for t in c.taxations if t.categorie.value == "autre_taxe"]
+    assert [t.montant.valeur for t in autres] == ["74.76", "117.60"]
+    x01, illisible = autres
+    assert x01.type_taxe.valeur == "X01" and x01.base_quantite.valeur == "623"
+    assert illisible.type_taxe is None and illisible.montant.confiance <= 0.85
+    assert illisible.article.valeur == "2"

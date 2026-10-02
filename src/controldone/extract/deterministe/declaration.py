@@ -1658,7 +1658,8 @@ class _Lecteur:
                     re.match(r"(?i)\s*total\b", ligne.texte):
                 break
             cells = self._cellules(ligne, cols, types)
-            if _ligne_article(cells) or (cells.get("code") and _code_taxe(cells["code"], ligne)):
+            if _ligne_article(cells) or (cells.get("code") and _code_taxe(cells["code"], ligne)) \
+                    or _sous_ligne_taxe_sans_code(cells):
                 manquees = 0
                 derniere = idx + 1
                 continue

@@ -113,7 +113,9 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   « second facteur » est refusé.
 - **Sessions** : jetons signés (itsdangerous, HMAC), expiration d'inactivité (30 min), durée absolue (8 h),
   rotation du jeton toutes les 15 min (`rafraichir`), révocation par identifiant de session ; cookie
-  `__Host-cd_session`, `HttpOnly`, `Secure`, `SameSite=Strict` en production (`parametres_cookie`).
+  `__Host-cd_session`, `HttpOnly`, `Secure`, `SameSite=Strict` en production (`parametres_cookie`). Le compte
+  est relu en base à chaque requête de l'interface (`web.securite.acteur_de`) : un compte désactivé
+  (`storage.comptes.desactiver_utilisateur`) ou qui n'est plus fondateur perd aussitôt ses sessions.
 - **CSRF** : jeton `nonce.HMAC(secret, sid|nonce)` lié à la session, comparaison à temps constant.
 - **Clés d'API par client** : `cdk_<préfixe>_<secret>` ; seul le SHA-256 du secret est stocké (secret de
   256 bits : un hachage lent est inutile) ; la clé complète n'est montrée qu'une fois ; révocable ;
@@ -132,7 +134,11 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   journalisée par son **nom de classe** seulement (son message pourrait contenir du texte de document).
 - **Coûts IA** : plafond mensuel par client (alerte à 80 %, arrêt des appels au modèle à 100 %).
 - **Fichiers temporaires** du worker : répertoire temporaire privé, chemins d'origine assainis
-  (`..`, chemins absolus, NUL), supprimé à la fin du job.
+  (`..`, chemins absolus, NUL), supprimé à la fin du job. Le processus isolé qui analyse les fichiers
+  déposés ne reçoit aucun secret dans son environnement (clés, Stripe, Anthropic, IMAP, URL de base).
+- **Cache disque des pages** (`CONTROLDONE_PAGES_CACHE_DIR`) : texte en clair, banc et développement
+  seulement ; ignoré en production (`CONTROLDONE_ENV=prod`).
+- **Images de page** rendues dans le processus web : taille bornée (`services.vignettes.MAX_PIXELS`).
 - **Sauvegardes** : archive chiffrée (clé dérivée `sauvegarde`), 0600 ; restauration refusant toute entrée
   hors de `base/` et `coffre/`, extraction avec le filtre `data` (ni chemin absolu, ni `..`, ni lien).
 
@@ -160,3 +166,5 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 3. Limiteur de débit partagé entre processus (aujourd'hui en mémoire de chaque processus).
 4. Chiffrement du volume qui porte la base (ou PostgreSQL avec chiffrement au repos de l'hébergeur).
 5. Migrations de schéma (Alembic) : aujourd'hui `Database.creer_schema()` crée les tables manquantes.
+
+Revue de sécurité indépendante (constats, preuves, correctifs, risques restants) : `docs/REVUE_SECURITE.md`.

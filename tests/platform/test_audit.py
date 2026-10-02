@@ -70,7 +70,9 @@ def test_falsification_detectee(monde, attaque):
     elif attaque == "supprimer":
         con.execute("DELETE FROM audit_log WHERE id=2")
     elif attaque == "inserer":
-        con.execute("UPDATE audit_log SET prev_hash='f'||substr(prev_hash,2) WHERE id=3")
+        # premier caractère toujours changé (« f » si ce n'était pas déjà « f » : sinon test sans effet, 1 fois sur 16)
+        con.execute("UPDATE audit_log SET prev_hash=(CASE WHEN substr(prev_hash,1,1)='f' THEN 'e' ELSE 'f' END)"
+                    "||substr(prev_hash,2) WHERE id=3")
     else:  # recalcul de l'entrée 2 sans recalculer la suite
         con.execute("UPDATE audit_log SET details='{\"x\":1}', hash='" + "a" * 64 + "' WHERE id=2")
     con.commit()

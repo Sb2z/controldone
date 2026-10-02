@@ -377,8 +377,8 @@ def test_gabarits_html_echappes():
 
     assert env_rapport().autoescape("rapport.html.j2") is True
     assert environnement().autoescape("dossier.html.j2") is True
-    assert "&lt;script&gt;" in env_rapport().from_string("{{ x }}").render(x="<script>") or \
-        env_rapport().get_template("rapport.html.j2")  # gabarit présent
+    assert env_rapport().autoescape("constat.html.j2") is True
+    assert "&lt;script&gt;" in environnement().from_string("{{ x }}").render(x="<script>")
 
 
 def test_effacement_couvre_toutes_les_tables_client():
@@ -541,3 +541,29 @@ def test_rs13_le_document_ne_peut_pas_fermer_le_bloc_non_fiable():
     _r, appels = _llm({"valeurs": []}, piege)
     contenu = json.dumps(appels[0]["messages"], ensure_ascii=False)
     assert contenu.count(BALISE_FIN) == 1 and contenu.count(BALISE_DEBUT) == 1
+
+
+# --- RS-14 : secrets transmis au processus qui analyse les fichiers hostiles ---------------------------------------
+
+
+def test_rs14_processus_d_analyse_sans_secrets(monkeypatch):
+    import subprocess
+
+    from controldone.ingest import pages
+
+    monkeypatch.setenv("CONTROLDONE_MASTER_KEY", "cle-fictive")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_fictif")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fictif")
+    monkeypatch.setenv("CONTROLDONE_IMAP_CLI_A", "mot-de-passe-fictif")
+    vus = {}
+
+    def faux_run(cmd, **kw):
+        vus.update(kw["env"])
+        raise subprocess.TimeoutExpired(cmd, 1)
+
+    monkeypatch.setattr(pages.subprocess, "run", faux_run)
+    pages._extraire_isole(b"a;b\n1;2\n", "text/csv", pages.OptionsPages(ocr=False), 1)
+    assert vus and "PATH" in vus
+    for k in ("CONTROLDONE_MASTER_KEY", "STRIPE_SECRET_KEY", "ANTHROPIC_API_KEY", "CONTROLDONE_IMAP_CLI_A",
+              "CONTROLDONE_SECRET_KEY"):
+        assert k not in vus, k
