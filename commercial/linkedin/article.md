@@ -16,7 +16,7 @@ Dans une PME de 20 ou 50 personnes, il n'y a en général pas de service douane.
 
 La personne qui valide la facture vérifie en général que le dossier existe, que le montant global paraît cohérent, et que le fournisseur est le bon. Elle ne reprend pas la déclaration en douane ligne à ligne, ni la grille tarifaire négociée deux ans plus tôt. Ce n'est pas de la négligence : c'est un arbitrage de temps.
 
-Combien de factures contiennent des écarts ? On lit beaucoup de chiffres. Des éditeurs de solutions d'audit de fret avancent par exemple « trois à cinq pour cent » des factures de fret maritime (NYSHEX, sans source citée pour cette estimation) ou « jusqu'à 10 % » des factures de transport (un autre éditeur, citant une association américaine de chargeurs). Ce sont des chiffres de vendeurs, sur des périmètres variés. À ma connaissance, il n'existe pas de mesure indépendante pour les factures de transitaires en France. Je ne vous en donnerai donc pas : le seul chiffre qui compte est celui que l'on mesure sur vos propres dossiers.
+Combien de factures contiennent des écarts ? À ma connaissance, il n'existe aucune mesure indépendante pour les factures de transitaires en France. Je ne vous donnerai donc pas de chiffre : le seul qui compte est celui que l'on mesure sur vos propres dossiers.
 
 ## Cas fictif n° 1 : la TVA refacturée alors qu'elle est autoliquidée
 
@@ -117,4 +117,3 @@ Si vous êtes concerné, ou si vous êtes expert-comptable et que vos clients im
 
 - Droit forfaitaire de 3 EUR par article, règlement (UE) 2026/382, calendrier et définition de l'article : https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-imports-which-will-apply-until-1-july-2028-2026-06-08_en et https://commission.europa.eu/news-and-media/news/ensuring-fairness-and-safety-eur3-customs-duty-low-value-parcels-2026-06-29_en
 - Calendrier de la facturation électronique : https://www.impots.gouv.fr/actualite/facturation-electronique
-- Chiffres d'éditeurs sur les erreurs de factures de fret : https://nyshex.com/knowledge-base/how-to-audit-ocean-freight-invoices ; https://intelmsagent.com/freight-invoice-audit-errors

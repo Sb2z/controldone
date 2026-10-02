@@ -18,8 +18,12 @@ python -m bench.generator --out bench/corpus --split dev --count 250 --seed 2026
 # plus tard, sans rien changer au dev :
 python -m bench.generator --out bench/corpus --split holdout --count 250 --seed 20261002
 # auto-contrôles (couverture holdout calculée par simulation si les fichiers holdout n'existent pas)
-python -m bench.generator.check --corpus bench/corpus --seed 20261002 --count 250 --determinism
+python -m bench.generator.check --corpus bench/corpus --seed 20261002 --count 250 --determinism --printed
 ```
+
+`--printed` re-rend chaque dossier en natif (d0, en mémoire) et vérifie que chaque valeur de vérité
+(numéros, MRN, LRN, TVA, références de transport et de documents, codes SH, montants de ligne et totaux)
+apparaît dans le texte du document (couche texte PDF, XML, CSV, cellules XLSX).
 
 Options : `--split dev|holdout|all`, `--count` (dossiers BX0001…), `--seed`, `--jobs N` (processus
 parallèles, résultat identique), `--only BX0001,BX0002` (sous-ensemble), `--plan-only` (affiche le plan).
