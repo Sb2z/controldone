@@ -1161,17 +1161,17 @@ class _Lecteur:
             if len(corps) < 2:
                 continue
             trouves: dict[str, tuple[PaiementNormalise, bool]] = {}
-            for item in re.split(r"[;/]", corps[1]):
+            for item in re.split(r"[;/]|\s(?=[A-Z0-9©®ÀÉ]\s*=)", corps[1]):
                 m = re.match(r"\s*([A-Z0-9©®ÀÉ])\s*(?:=|:|-)?\s+(.+)$", item.strip())
                 if not m:
                     continue
                 code = sans_accents({"©": "0", "®": "0"}.get(m.group(1), m.group(1)))
                 sens = sans_accents(m.group(2)).lower()
-                for motif, pn in _SENS_PAIEMENT:
-                    if motif.search(sens):
-                        tva_seule = pn is PaiementNormalise.autoliquide or bool(re.search(r"\btva\b|\bvat\b", sens))
-                        trouves.setdefault(code, (pn, tva_seule))
-                        break
+                touches = sorted((mm.start(), pn) for motif, pn in _SENS_PAIEMENT if (mm := motif.search(sens)))
+                if touches:
+                    pn = touches[0][1]  # premier sens cité dans l'élément de légende
+                    tva_seule = pn is PaiementNormalise.autoliquide or bool(re.search(r"\btva\b|\bvat\b", sens))
+                    trouves.setdefault(code, (pn, tva_seule))
             if len(trouves) >= 2:
                 for code, v in trouves.items():
                     self.legende.setdefault(code, v)
@@ -1377,7 +1377,7 @@ class _Lecteur:
             gx0, gx1 = g[0].x0, g[-1].x1
             recouvertes = [c for c in cols if min(gx1, c.x1) - max(gx0, c.x0) > 0]
             justes = [c for c in recouvertes if compatible(g, c)]
-            if len(justes) == 1 or (len(justes) > 1 and len(g) == 1):
+            if justes and (len(recouvertes) == 1 or len(g) == 1):
                 c = max(justes, key=lambda c: min(gx1, c.x1) - max(gx0, c.x0))
                 cells.setdefault(c.cle, []).extend(g)
                 continue
