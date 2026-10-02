@@ -120,6 +120,8 @@ class RaisonCode(StrEnum):
     couvert_par_autre_controle = "couvert_par_autre_controle"
     dossier_non_concerne = "dossier_non_concerne"
     erreur_interne = "erreur_interne"
+    # Ajout plateforme (D-505) : constat rétrogradé par le fondateur lors de la validation (§7.7)
+    retrograde_par_fondateur = "retrograde_par_fondateur"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -165,6 +167,9 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
     RaisonCode.couvert_par_autre_controle: "sujet déjà traité par un autre contrôle",
     RaisonCode.dossier_non_concerne: "dossier non concerné : l'acheteur n'est pas une entité du client",
     RaisonCode.erreur_interne: "contrôle non réalisé à la suite d'une erreur interne",
+    RaisonCode.retrograde_par_fondateur: (
+        "à vérifier : classement abaissé lors de la relecture, une valeur reste à confirmer"
+    ),
 }
 
 

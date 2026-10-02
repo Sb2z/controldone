@@ -22,11 +22,13 @@ import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from itertools import pairwise
 
 from controldone.ids import IdGenerator, Prefixe
+from controldone.ingest.texte import Ligne, Mot, PageText
+from controldone.model.champs import type_valeur_pour
 from controldone.model.documents import Page
 from controldone.model.enums import Methode, QualiteTexte, TypeDocument, TypeValeur
-from controldone.model.champs import type_valeur_pour
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, Zone
 from controldone.normalize import (
     DEVISE_INCONNUE,
@@ -37,11 +39,6 @@ from controldone.normalize import (
     parse_amount,
 )
 from controldone.normalize.text import cle_texte, normaliser_espaces
-
-try:  # texte positionné publié par l'ingestion
-    from controldone.ingest.texte import Ligne, Mot, PageText
-except Exception:  # pragma: no cover - l'ingestion fait partie du paquet
-    raise
 
 __all__ = [
     "Colonne",
@@ -148,7 +145,7 @@ class VuePage:
     def pas_ligne(self) -> float:
         """Interligne médian (hauteur relative)."""
         ys = sorted(li.y0 for li in self.lignes)
-        ecarts = sorted(b - a for a, b in zip(ys, ys[1:], strict=False) if b - a > 1e-4)
+        ecarts = sorted(b - a for a, b in pairwise(ys) if b - a > 1e-4)
         return ecarts[len(ecarts) // 2] if ecarts else 0.015
 
 
@@ -260,7 +257,7 @@ def _segmenter(mots: Sequence[Mot], *, tableur: bool, texte_ligne: str | None = 
     if tableur:
         return [g for g in (_mots_cellule(m) for m in mots) if g]
     groupes: list[list[Mot]] = [[mots[0]]]
-    for prec, m in zip(mots, mots[1:], strict=False):
+    for prec, m in pairwise(mots):
         lc = [(x.x1 - x.x0) / max(1, len(x.texte)) for x in (prec, m) if x.x1 > x.x0]
         largeur_car = sum(lc) / len(lc) if lc else 0.006
         seuil = max(2.2 * largeur_car, 0.011)
@@ -455,7 +452,7 @@ def lire_montant_mots(
 
 def _est_devise(t: str) -> bool:
     t2 = t.strip(":()")
-    return t2.upper() in ISO_4217 and t2.isupper() or (len(t2) <= 3 and bool(t2) and set(t2) <= _SYMBOLES_DEVISE)
+    return (t2.upper() in ISO_4217 and t2.isupper()) or (len(t2) <= 3 and bool(t2) and set(t2) <= _SYMBOLES_DEVISE)
 
 
 def devise_dans(texte: str) -> str | None:
@@ -723,8 +720,8 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
             meilleur = j
         while j < len(mots) and len(corps) < 15:
             u = re.sub(r"[.\-]", "", mots[j].texte.strip(":;,()"))
-            if not re.fullmatch(r"[0-9A-Z]{1,12}", u) or not re.search(r"\d", u) and u not in ("B", "MWST", "TVA",
-                                                                                                 "IVA", "MVA"):
+            if not re.fullmatch(r"[0-9A-Z]{1,12}", u) or (not re.search(r"\d", u) and u not in ("B", "MWST", "TVA",
+                                                                                                 "IVA", "MVA")):
                 break
             corps += u
             j += 1
@@ -815,7 +812,7 @@ def reconnaitre_entete(
             if k + n > len(mots):
                 continue
             seq = mots[k:k + n]
-            if any(b.x0 - a.x1 > 0.03 for a, b in zip(seq, seq[1:], strict=False)):
+            if any(b.x0 - a.x1 > 0.03 for a, b in pairwise(seq)):
                 continue
             txt = " ".join(_cle_entete(m.texte) for m in seq)
             if txt == lib or (txt.endswith(_ELLIPSE) and len(txt) > 2 and lib.startswith(txt[:-1].rstrip())):
@@ -837,7 +834,7 @@ def reconnaitre_entete(
     types = [c.type for c in cols if c.type != "inconnue"]
     if len(types) < min_colonnes or len(set(types)) < min_colonnes:
         return None
-    for a, b in zip(cols, cols[1:], strict=False):
+    for a, b in pairwise(cols):
         mid = (a.x1 + b.x0) / 2
         a.droite = mid
         b.gauche = mid
@@ -897,7 +894,7 @@ def lire_tableau(
             break
         ecart = li.y0 - prec_y
         if rangees:
-            pitchs = [b.lignes[0].y0 - a.lignes[-1].y0 for a, b in zip(rangees, rangees[1:], strict=False)]
+            pitchs = [b.lignes[0].y0 - a.lignes[-1].y0 for a, b in pairwise(rangees)]
             ref = max(pitchs) if pitchs else 2.5 * pas
             ecart_max = max(2.2 * ref, 3.0 * pas) if not page.tableur else 1.5 / max(1, len(page.lignes))
             if page.tableur:

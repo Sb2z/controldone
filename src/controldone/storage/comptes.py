@@ -22,6 +22,7 @@ from controldone.storage.models import CleApi, Membership, User
 __all__ = [
     "CleApiInfo",
     "CompteInfo",
+    "changer_mot_de_passe",
     "cle_api_par_prefixe",
     "creer_utilisateur",
     "enregistrer_totp",
@@ -151,3 +152,17 @@ def marquer_usage_cle(db: Database, cle_id: str) -> None:
         c = s.get(CleApi, cle_id)
         if c is not None:
             c.dernier_usage = maintenant()
+
+
+def changer_mot_de_passe(db: Database, user_id: str, nouveau_hash: str, *, acteur: Acteur) -> None:
+    """Nouveau mot de passe (empreinte Argon2 calculée par ``controldone.auth``) : l'utilisateur lui-même
+    ou le fondateur."""
+    if acteur.role is not Role.fondateur and acteur.id != user_id:
+        raise AccesRefuse("changement de mot de passe refusé")
+    with db.transaction_systeme() as s:
+        u = s.get(User, user_id)
+        if u is None:
+            raise AccesRefuse("introuvable")
+        u.mot_de_passe_hash = nouveau_hash
+        journaliser(s, actor=acteur.id, role=acteur.role.value, action="changer_mot_de_passe",
+                    tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip)

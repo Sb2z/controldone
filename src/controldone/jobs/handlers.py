@@ -77,6 +77,17 @@ def _profil(scope: Any) -> Any:
     )
 
 
+def _rattacher_fichiers(doc: Any, fichiers_pipeline: dict[str, Any], par_sha: dict[str, str]) -> Any:
+    """Les pages d'un document citent les fichiers du lot **enregistrés** (et non les identifiants
+    temporaires du pipeline) : vignettes de page et téléchargement retrouvent le fichier du coffre."""
+    pages = []
+    for pr in doc.pages:
+        f = fichiers_pipeline.get(pr.fichier_id)
+        notre = par_sha.get(f.sha256) if f is not None else None
+        pages.append(pr.model_copy(update={"fichier_id": notre}) if notre else pr)
+    return doc.model_copy(update={"pages": pages})
+
+
 @handler("traiter_lot")
 def traiter_lot(ctx: JobContext) -> dict[str, Any]:
     tenant_id = ctx.tenant_id
@@ -136,7 +147,9 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
                         "pag_" + hashlib.sha256(f"{tenant_id}:{cle}".encode()).hexdigest()[:32], notre,
                         p.numero, qualite_texte=str(p.qualite_texte), sha256_texte=p.sha256_texte, texte_ref=ref,
                     )
-            scope.enregistrer_dossier(rd.dossier, lot_id=lot_id, documents=rd.documents.values(),
+            scope.enregistrer_dossier(rd.dossier, lot_id=lot_id,
+                                      documents=[_rattacher_fichiers(d, rd.fichiers, par_sha)
+                                                 for d in rd.documents.values()],
                                       fichier_ids=fichier_ids)
             scope.enregistrer_resultats(rd.resultats)
             n_constats += sum(1 for r in rd.resultats if r.constat is not None)
@@ -161,3 +174,7 @@ def purger_retention(ctx: JobContext) -> dict[str, Any]:
 
     rapport = purger_expires(ctx.db, _vault(ctx), maintenant())
     return {"fichiers": sum(rapport.fichiers.values()), "textes": sum(rapport.textes.values())}
+
+
+# Handlers de la plateforme web (recontrôle après correction, §6.2.11) : enregistrés au chargement.
+from controldone.services import recontrole as _recontrole  # noqa: E402, F401

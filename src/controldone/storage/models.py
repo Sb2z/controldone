@@ -39,6 +39,7 @@ __all__ = [
     "Base",
     "CleApi",
     "Constat",
+    "CorrectionValeur",
     "Document",
     "Dossier",
     "DossierFichier",
@@ -409,6 +410,27 @@ class EvenementRecouvrement(AppendOnly, TenantMixin, Base):
     contenu: Mapped[dict[str, Any]] = mapped_column(default=dict)
 
 
+class CorrectionValeur(AppendOnly, TenantMixin, Base):
+    """Correction d'une valeur extraite (§6.2.11), append-only : la valeur remplacée reste dans
+    ``ancienne`` (instantané JSON complet) ; la nouvelle valeur ``saisie_humaine`` remplace l'ancienne
+    dans ``documents.contenu`` pour les contrôles."""
+
+    __tablename__ = "corrections"
+
+    id: Mapped[str] = mapped_column(_ID, primary_key=True)
+    dossier_id: Mapped[str] = mapped_column(_ID, index=True)
+    document_id: Mapped[str] = mapped_column(_ID, index=True)
+    cible: Mapped[str] = mapped_column(_ID)
+    chemin: Mapped[str] = mapped_column(String(300))
+    ancienne_valeur: Mapped[str | None] = mapped_column(Text, default=None)
+    nouvelle_valeur: Mapped[str | None] = mapped_column(Text, default=None)
+    auteur: Mapped[str] = mapped_column(String(100))
+    role_auteur: Mapped[str] = mapped_column(String(32))
+    motif: Mapped[str] = mapped_column(Text)
+    le: Mapped[datetime] = mapped_column(default=maintenant)
+    contenu: Mapped[dict[str, Any]] = mapped_column(default=dict)
+
+
 class AiUsage(AppendOnly, TenantMixin, Base):
     """Registre des coûts IA (§20.5)."""
 
@@ -462,6 +484,7 @@ MODELES_CLIENT: tuple[type[Base], ...] = (
     Ecart,
     Constat,
     Resultat,
+    CorrectionValeur,
     Document,
     DossierFichier,
     Dossier,

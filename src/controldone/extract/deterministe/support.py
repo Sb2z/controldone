@@ -170,15 +170,18 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
                 setattr(ch, chemin, fab.valeur(chemin, lec, confiance=_conf_ref(lec)))
                 break
     tab = _tableau(vue)
-    if ch.ref_transport_maitre is None and ch.ref_transport_maison is None:
-        lec = tab.get("ref") or _ref_titre(vue)
-        if lec is None:
-            for t in chercher(vue, LIB_TRANSPORT):
-                lec = valeur_apres(vue, t, _accepte_ref)
-                if lec is not None:
-                    break
-        if lec is not None:
-            ch.ref_transport_maitre = fab.valeur("ref_transport_maitre", lec, confiance=_conf_ref(lec))
+    if ch.ref_transport_maitre is None:
+        # référence sans précision (titre, tableau, libellé « AWB / B/L No. ») : rangée en « maître »,
+        # sauf si c'est la référence maison déjà lue
+        maison = re.sub(r"[^A-Z0-9]", "", (ch.ref_transport_maison.valeur_brute or "").upper()) \
+            if ch.ref_transport_maison else None
+        candidats = [tab.get("ref"), _ref_titre(vue)]
+        for t in chercher(vue, LIB_TRANSPORT):
+            candidats.append(valeur_apres(vue, t, _accepte_ref))
+        for lec in candidats:
+            if lec is not None and re.sub(r"[^A-Z0-9]", "", lec.texte.upper()) != maison:
+                ch.ref_transport_maitre = fab.valeur("ref_transport_maitre", lec, confiance=_conf_ref(lec))
+                break
     # masses et colis : tableau d'en-tête, sinon libellés
     for chemin, libs, acc in (("nombre_colis", LIB_COLIS, accepte_entier), ("masse_brute", LIB_BRUT, None),
                               ("masse_taxable", LIB_TAXABLE, None), ("masse_nette", LIB_NET, None)):
