@@ -38,7 +38,10 @@ from controldone.storage.models import Outbox
 __all__ = ["FileSortante", "textes_du_contenu", "verifier_textes"]
 
 #: Clés non textuelles (identifiants, adresses, références de pièces) exclues du contrôle de formulation.
-_CLES_NON_TEXTE = frozenset({"destinataires", "cc", "pieces", "attachments", "ref", "refs", "id", "url"})
+#: ``donnees_entrantes`` : texte reçu d'un tiers et cité tel quel (question d'un client, extrait de source
+#: officielle) — ce n'est pas une formulation du produit ; il n'est jamais envoyé comme notre texte.
+_CLES_NON_TEXTE = frozenset({"destinataires", "cc", "pieces", "attachments", "ref", "refs", "id", "url",
+                             "donnees_entrantes"})
 
 
 def textes_du_contenu(contenu: Any) -> list[str]:

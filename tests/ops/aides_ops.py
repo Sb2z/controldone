@@ -30,8 +30,8 @@ def constat_row(cid: str, dossier_id: str, *, controle: str = "C1", niveau: str 
                 preuves: list[dict[str, Any]] | None = None, resultat_id: str | None = None) -> Constat:
     contenu = {
         "id": cid, "controle_id": controle, "niveau": niveau, "raisons": [] if niveau == "ecart_certain" else ["autre"],
-        "libelle": libelle or (f"La facture du transitaire (page 1) indique un montant refacturé de 1 240,00 EUR ; "
-                               f"la déclaration (page 1) indique 1 000,00 EUR."),
+        "libelle": libelle or ("La facture du transitaire (page 1) indique un montant refacturé de 1 240,00 EUR ; "
+                               "la déclaration (page 1) indique 1 000,00 EUR."),
         "montant_en_jeu": montant, "nature_montant": nature, "composante": composante,
         "documents_concernes": list(docs), "preuves": preuves or [], "renvoi": nature == "renvoi",
         "statut_validation": statut, "prochaine_action": "",

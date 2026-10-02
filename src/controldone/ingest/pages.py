@@ -51,7 +51,7 @@ __all__ = [
 ]
 
 #: Version de l'algorithme de pages (entre dans la clé d'idempotence §7 étape 2 avec Tesseract).
-VERSION_PAGES = "1.0.0"
+VERSION_PAGES = "1.0.1"
 
 SEUIL_NATIF = 0.85
 SEUIL_NATIF_FAIBLE = 0.5
@@ -483,18 +483,25 @@ def _meilleure(natif: PageText, ocr: PageText, nb_natif: int) -> PageText:
 
 
 def _osd_rotation(image) -> int | None:
+    """Rotation à appliquer (0/90/180/270) d'après l'OSD de Tesseract ; ``None`` sans verdict fiable.
+
+    Réglage par défaut d'abord (plus fiable), puis avec un seuil de caractères abaissé (pages peu denses).
+    Une page en paysage (scan pivoté) accepte un verdict 90/270 de moindre confiance."""
     import pytesseract
 
-    try:
-        osd = pytesseract.image_to_osd(image, config="--psm 0 -c min_characters_to_try=10",
-                                       output_type=pytesseract.Output.DICT, timeout=60)
-    except Exception:
-        return None
-    rot = int(osd.get("rotate", 0)) % 360
-    conf = float(osd.get("orientation_conf", 0.0))
-    if rot in (90, 180, 270) and conf >= 1.0:
-        return rot
-    return 0 if conf >= 1.0 else None
+    paysage = image.size[0] > image.size[1]
+    for config in ("--psm 0", "--psm 0 -c min_characters_to_try=10"):
+        try:
+            osd = pytesseract.image_to_osd(image, config=config, output_type=pytesseract.Output.DICT, timeout=60)
+        except Exception:
+            continue
+        rot = int(osd.get("rotate", 0)) % 360
+        conf = float(osd.get("orientation_conf", 0.0))
+        if rot in (90, 180, 270) and (conf >= 1.0 or (paysage and rot in (90, 270) and conf >= 0.5)):
+            return rot
+        if conf >= 1.0:
+            return 0
+    return None
 
 
 def _angle_inclinaison(image) -> float:
@@ -550,6 +557,9 @@ def _ocr_brut(image, opts: OptionsPages) -> tuple[list[Mot], float]:
 
 def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
     from PIL import Image
+
+    # Tesseract multi-fils se dégrade fortement sous charge (plusieurs pages en parallèle) : un fil par OCR.
+    os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
     image = image.convert("L")
     rotation = _osd_rotation(image)

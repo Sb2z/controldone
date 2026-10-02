@@ -112,13 +112,31 @@ class _EnCours:
     langues: list[str] = field(default_factory=list)
 
 
+def _proches(a: str, b: str) -> bool:
+    """Références égales à une ou deux erreurs de lecture près (OCR : 5/S, 0/O…), même longueur."""
+    if a == b:
+        return True
+    if len(a) != len(b) or len(a) < 6:
+        return False
+    diff = [(x, y) for x, y in zip(a, b, strict=True) if x != y]
+    return len(diff) <= 2 and all(frozenset(d) in _CONFUSABLES for d in diff)
+
+
+#: Paires de caractères confondues par l'OCR (une référence qui ne diffère que par elles est la même).
+_CONFUSABLES = {frozenset(p) for p in ("5S", "0O", "0D", "1I", "1L", "IL", "8B", "2Z", "6G", "QO", "UV")}
+
+
+def _mrn_connu(p: str, connus: list[str]) -> bool:
+    return any(_proches(p, q) for q in connus)
+
+
 def _changement_ref(cur: _EnCours, c: ClassementPage) -> bool:
     r = c.refs
-    if r.numero_facture and cur.numero_facture and r.numero_facture != cur.numero_facture \
+    if r.numero_facture and cur.numero_facture and not _proches(r.numero_facture, cur.numero_facture) \
             and cur.type in (*_FACTURES, TypeDocument.document_non_exploitable):
         return True
     if cur.type is TypeDocument.declaration and r.mrn_prefixes and cur.mrn_prefixes:
-        return r.mrn_prefixes[0] not in cur.mrn_prefixes
+        return not _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes)
     return False
 
 
@@ -137,15 +155,16 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
     if r.page_n and r.page_n > 1 and (not cur.page_total or not r.page_total or r.page_total == cur.page_total):
         return True
     if cur.type is TypeDocument.declaration:
-        return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and r.mrn_prefixes[0] in cur.mrn_prefixes)
+        return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes))
     if cur.type in _FACTURES:
         if r.numero_facture and cur.numero_facture:
-            return r.numero_facture == cur.numero_facture
+            return _proches(r.numero_facture, cur.numero_facture)
         return False
-    # supports et non exploitables de même sous-type sans changement de référence : suite du même document
-    return cur.type in (TypeDocument.document_support, TypeDocument.document_non_exploitable) and (
-        cur.sous_type in ("conditions_generales", "liste_colisage", "titre_transport", "courriel")
-        or cur.type is TypeDocument.document_non_exploitable)
+    # supports : une page qui porte son propre intitulé (LTA, liste de colisage…) commence un document ;
+    # conditions générales, courriel et pages sans intitulé suivent le document en cours.
+    if cur.type is TypeDocument.document_support:
+        return cur.sous_type in ("conditions_generales", "courriel") or not c.intitulee
+    return cur.type is TypeDocument.document_non_exploitable and not c.intitulee
 
 
 def _nouveau(c: ClassementPage, *, type_=None, conf=None) -> _EnCours:

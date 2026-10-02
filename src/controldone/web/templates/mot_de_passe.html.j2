@@ -1,0 +1,17 @@
+{% extends "base.html.j2" %}
+{% block contenu %}
+<section class="carte carte-etroite">
+  <h1>Changer de mot de passe</h1>
+  {% if erreur is defined %}<div class="message erreur" role="alert">{{ erreur }}</div>{% endif %}
+  <form method="post" action="/compte/mot-de-passe" class="formulaire">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="actuel">Mot de passe actuel</label>
+    <input id="actuel" name="actuel" type="password" autocomplete="current-password" required>
+    <label for="nouveau">Nouveau mot de passe <span class="discret">(12 caractères au moins)</span></label>
+    <input id="nouveau" name="nouveau" type="password" autocomplete="new-password" minlength="12" required>
+    <label for="confirmation">Confirmation</label>
+    <input id="confirmation" name="confirmation" type="password" autocomplete="new-password" minlength="12" required>
+    <button type="submit" class="btn btn-principal">Enregistrer</button>
+  </form>
+</section>
+{% endblock %}

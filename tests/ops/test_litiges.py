@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from decimal import Decimal
+from itertools import pairwise
 
 import pytest
 from aides_ops import SYSTEME, T0
@@ -36,7 +37,7 @@ S = StatutReclamation
 
 def test_chemin_nominal_autorise():
     chemin = [S.brouillon, S.valide, S.envoyee, S.partiellement_credite, S.credite, S.clos]
-    for de, vers in zip(chemin, chemin[1:], strict=False):
+    for de, vers in pairwise(chemin):
         verifier_transition(de, vers)
 
 

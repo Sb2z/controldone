@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+{% block meta %}{% endblock %}
+<title>{{ titre }} — ControlDOne</title>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<a class="evitement" href="#contenu">Aller au contenu</a>
+{% if demo %}
+<div class="bandeau-demo" role="note"><strong>DONNÉES FICTIVES</strong> — client de démonstration : sociétés, documents et montants inventés.</div>
+{% endif %}
+<header class="entete">
+  <div class="entete-int">
+    <a class="marque" href="/">Control<span>DOne</span></a>
+    {% if acteur %}
+    <nav class="nav" aria-label="Navigation principale">
+      {% if acteur.role.value == "fondateur" %}
+        {% set liens = [("tableau", "/admin", "Tableau de bord"), ("validation", "/admin/validation", "File de validation"), ("clients", "/admin/clients", "Clients"), ("jobs", "/admin/jobs", "Tâches"), ("journal", "/admin/journal", "Journal"), ("alertes", "/admin/alertes", "Alertes"), ("autonomie", "/admin/autonomie", "Autonomie")] %}
+      {% else %}
+        {% set liens = [("tableau", "/espace", "Tableau de bord"), ("depot", "/espace/depot", "Déposer"), ("dossiers", "/espace/dossiers", "Dossiers"), ("rapports", "/espace/rapports", "Rapports"), ("recouvrement", "/espace/recouvrement", "Recouvrement")] %}
+      {% endif %}
+      <ul>
+      {% for cle, url, lib in liens %}
+        <li><a href="{{ url }}"{% if nav == cle %} aria-current="page"{% endif %}>{{ lib }}</a></li>
+      {% endfor %}
+      </ul>
+    </nav>
+    <div class="compte">
+      <span class="role">{{ "Fondateur" if acteur.role.value == "fondateur" else ("Administrateur client" if acteur.role.value == "client_admin" else "Lecteur") }}</span>
+      <a href="/compte/mot-de-passe">Mot de passe</a>
+      <form method="post" action="/deconnexion" class="en-ligne">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="lien">Se déconnecter</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</header>
+<main id="contenu" class="page">
+  {% if flash %}
+  <div class="message {{ 'erreur' if flash.e else 'succes' }}" role="{{ 'alert' if flash.e else 'status' }}">{{ flash.m }}</div>
+  {% endif %}
+  {% block contenu %}{% endblock %}
+</main>
+<footer class="pied">
+  <p class="avertissement"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p>
+  <p class="mentions">ControlDOne — contrôle technique de cohérence des documents d'import. Les réclamations sont préparées pour être envoyées par le client lui-même.</p>
+</footer>
+</body>
+</html>
