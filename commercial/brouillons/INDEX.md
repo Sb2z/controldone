@@ -35,3 +35,7 @@ Ordre : d'abord les adresses e-mail publiées par l'entreprise, puis les formula
 4. Noter toute réponse STOP le jour même dans `../prospects.csv` et ne plus jamais écrire à cette adresse.
 
 Prospects du fichier sans brouillon : A TEX (pas d'e-mail ni de formulaire publiés : courrier ou téléphone), LX FRANCE (preuve d'import et contact à confirmer), et les 4 cabinets d'expertise comptable (message dédié à rédiger à partir de la variante DAF, voir `../plan_actions_commerciales.md`, action 2).
+
+## Dépôt dans la boîte Gmail (2 octobre 2026)
+
+Les 13 brouillons qui ont une adresse e-mail publiée (01 à 13) ont été déposés comme **brouillons** dans la boîte Gmail du fondateur, objet préfixé « [À VALIDER] ». Aucun n'a été envoyé. Avant tout envoi : compléter la signature ([Prénom Nom], SIREN, adresse, téléphone), retirer le préfixe, vérifier la ligne « Terr'Asia » (SIREN à confirmer). Les 7 autres (14 à 20) visent un formulaire de contact : ils restent en fichiers, à coller à la main.
