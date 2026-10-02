@@ -854,6 +854,8 @@ def d8_tva_debours(ctx: ControlContext) -> list[ResultatControle]:
                 out.append(ctx.conforme("D8", unite=unite, documents=[f.id],
                                         entrees={f"tva_{k}": v for k, v in enumerate(source)}))
                 continue
+            # Toujours a_verifier : la raison point_fiscal est une raison de doute (§13 D8) ; eligible=True
+            # évite d'y ajouter « contrôle de signal », sans permettre un ecart_certain.
             classement = ctx.classify("D8", ecart=tva, tolerance=ctx.tol.t_ligne(), seuil_certitude=None,
                                       valeurs_cles=source, documents=[f.id], montant=tva, eligible=True,
                                       raisons_supplementaires=[RaisonCode.point_fiscal])

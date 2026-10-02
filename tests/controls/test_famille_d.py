@@ -363,7 +363,7 @@ def test_d8_tva_sur_debours_toujours_a_verifier():
     rs8 = par_id(rs, "D8")
     assert [r.outcome for r in rs8] == [Outcome.a_verifier, Outcome.conforme]
     c = rs8[0].constat
-    assert c.montant_en_jeu == D("20.00") and RaisonCode.point_fiscal in c.raisons
+    assert c.montant_en_jeu == D("20.00") and c.raisons == [RaisonCode.point_fiscal]
     assert c.prochaine_action == ACTION_D8 and "expert-comptable" in c.prochaine_action
     textes_propres(rs)
 
