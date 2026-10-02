@@ -226,6 +226,7 @@ def _extracteurs_disponibles() -> list[Extracteur]:
     """Extracteurs publiés (``structure``, ``deterministe``) + ``llm`` (actif seulement avec une clé)."""
     out: list[Extracteur] = []
     for module, noms in (
+        ("controldone.ingest.structure", ("extracteurs",)),
         ("controldone.extract.structure", ("extracteurs", "EXTRACTEURS", "ExtracteurStructure")),
         ("controldone.extract.deterministe", ("extracteurs", "EXTRACTEURS", "ExtracteurDeterministe")),
     ):
@@ -238,8 +239,8 @@ def _extracteurs_disponibles() -> list[Extracteur]:
             log.warning("extracteur_indisponible module=%s exception=%s", module, type(e).__name__)
             continue
         if isinstance(produits, list | tuple):
-            out.extend(p for p in produits if isinstance(p, Extracteur))
-        elif isinstance(produits, Extracteur):
+            out.extend(p for p in produits if isinstance(p, Extracteur) and p.id not in {x.id for x in out})
+        elif isinstance(produits, Extracteur) and produits.id not in {x.id for x in out}:
             out.append(produits)
     from controldone.extract.llm import LLMExtracteur
 

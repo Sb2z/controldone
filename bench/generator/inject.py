@@ -136,9 +136,10 @@ def inject_declaration(dm):
                          description=f"Montant facturé déclaré {new} au lieu de {old} {d.currency}.", key="A4")
         elif ctl == "A5":
             attendu = q2(facture * d.eur_per_unit)
-            if r.random() < 0.35 and d.rate_sens == "devise_par_eur":
+            near_one = Decimal("0.5") <= d.eur_per_unit <= Decimal("2")
+            if near_one and r.random() < 0.35 and d.rate_sens == "devise_par_eur":
                 new = q2(facture * d.rate_printed)
-            elif r.random() < 0.35 and d.rate_sens == "eur_par_devise":
+            elif near_one and r.random() < 0.35 and d.rate_sens == "eur_par_devise":
                 new = q2(facture / d.rate_printed)
             else:
                 f = D(r.choice([1, -1]) * r.uniform(0.02, 0.12)).quantize(Decimal("0.0001"))
