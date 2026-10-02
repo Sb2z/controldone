@@ -44,6 +44,7 @@ from controldone.model.champs import ChampsAvoir, ChampsFactureCommerciale, Lign
 from controldone.model.documents import Document, Page
 from controldone.model.enums import NatureLigne, TypeDocument, TypeValeur
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee
+from controldone.normalize.refs import norm_alnum
 
 __all__ = ["ExtracteurAvoir", "est_avoir_fournisseur"]
 
@@ -145,12 +146,12 @@ def convertir_fc_en_avoir(fc: ChampsFactureCommerciale, vue: VueDocument, *, doc
     av.emetteur.tva = _requalifier(fc.vendeur.tva, "emetteur.tva")
     # facture(s) d'origine
     vus: set[str] = set()
-    numero_avoir = re.sub(r"[^A-Z0-9]", "", (av.numero.valeur_brute or "").upper()) if av.numero else ""
+    numero_avoir = norm_alnum(av.numero.valeur_brute) if av.numero else ""
     for t in chercher(vue, LIB_ORIGINE):
         lec = valeur_apres(vue, t, accepte_reference, dessous=False)
         if lec is None:
             continue
-        cle = re.sub(r"[^A-Z0-9]", "", lec.texte.upper())
+        cle = norm_alnum(lec.texte)
         if cle in vus or cle == numero_avoir:
             continue
         vus.add(cle)

@@ -23,9 +23,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from controldone.auth.roles import Acteur, Action, Ressource, Role, peut
+from controldone.storage import garde
 from controldone.storage.audit import journaliser
 from controldone.storage.coltypes import maintenant
 from controldone.storage.db import Database
@@ -57,7 +58,7 @@ from controldone.storage.models import (
 )
 from controldone.storage.vault import FileVault
 
-__all__ = ["RapportPurge", "exporter_client", "purger_expires", "supprimer_client"]
+__all__ = ["RapportPurge", "cloturer_inactifs", "exporter_client", "purger_expires", "supprimer_client"]
 
 
 @dataclass
@@ -70,54 +71,122 @@ class RapportPurge:
         return sum(self.fichiers.values()) + sum(self.textes.values())
 
 
+def cloturer_inactifs(db: Database, now: datetime | None = None, *, jours: int = 60) -> dict[str, int]:
+    """Clôture automatique (point de départ de la conservation, SPEC §20.4 ; D-1301).
+
+    - **Dossier** : non clos, sans activité (``modifie_le``) depuis ``jours`` jours, sans écart à recouvrer
+      encore ouvert (statut autre que ``credite``/``abandonne``) et sans constat en attente de décision
+      (``propose``) dans sa version courante.
+    - **Lot** : ``en_erreur`` (aucun fichier exploitable) reçu depuis ``jours`` jours ; ou traité dont tous
+      les dossiers sont clos (un lot traité sans dossier est clos à la même échéance).
+
+    Une nouvelle activité sur un dossier clos (nouveau lot rattaché, recontrôle) le rouvre
+    (``TenantScope.enregistrer_dossier``). Une transaction par client ; journalisé (``cloture_auto``)."""
+    now = now or maintenant()
+    limite = now - timedelta(days=jours)
+    total = {"dossiers": 0, "lots": 0}
+    with db.transaction_systeme() as s:
+        tenants = [t for (t,) in s.execute(select(Tenant.id).order_by(Tenant.id))]
+    for tid in tenants:
+        with db.transaction_systeme() as s:
+            ouverts_constats = set(s.execute(
+                select(Constat.dossier_id).join(Ecart, (Ecart.constat_id == Constat.id)
+                                                & (Ecart.tenant_id == Constat.tenant_id))
+                .where(Constat.tenant_id == tid, Ecart.statut.not_in(("credite", "abandonne")))).scalars())
+            en_attente = set(s.execute(
+                select(Constat.dossier_id).join(Dossier, (Dossier.id == Constat.dossier_id)
+                                                & (Dossier.tenant_id == Constat.tenant_id)
+                                                & (Dossier.version == Constat.dossier_version))
+                .where(Constat.tenant_id == tid, Constat.statut_validation == "propose")).scalars())
+            n_dos = 0
+            for d in s.execute(select(Dossier).where(Dossier.tenant_id == tid, Dossier.cloture_le.is_(None),
+                                                     Dossier.modifie_le <= limite)).scalars():
+                if d.id in ouverts_constats or d.id in en_attente:
+                    continue
+                s.execute(update(Dossier).where(Dossier.tenant_id == tid, Dossier.id == d.id)
+                          .values(cloture_le=now, modifie_le=d.modifie_le)
+                          .execution_options(synchronize_session=False))
+                n_dos += 1
+            vivants = set(s.execute(select(Dossier.lot_id).where(Dossier.tenant_id == tid,
+                                                                 Dossier.cloture_le.is_(None),
+                                                                 Dossier.lot_id.is_not(None))).scalars())
+            n_lot = 0
+            for lot in s.execute(select(Lot).where(Lot.tenant_id == tid, Lot.cloture_le.is_(None),
+                                                   Lot.recu_le <= limite,
+                                                   Lot.statut.in_(("en_erreur", "traite")))).scalars():
+                if lot.statut == "traite" and lot.id in vivants:
+                    continue
+                lot.cloture_le = now
+                n_lot += 1
+            if n_dos or n_lot:
+                journaliser(s, actor="systeme:retention", role="systeme", action="cloture_auto", tenant_id=tid,
+                            details={"dossiers": n_dos, "lots": n_lot, "jours": jours})
+            total["dossiers"] += n_dos
+            total["lots"] += n_lot
+    return total
+
+
+#: Fichiers traités par transaction de purge (le verrou d'écriture SQLite reste court, D-1309).
+PURGE_PAR_TRANSACTION = 500
+
+
 def purger_expires(db: Database, vault: FileVault, now: datetime | None = None) -> RapportPurge:
+    """Purge des contenus expirés. Une transaction par client et par paquet de ``PURGE_PAR_TRANSACTION``
+    fichiers ; textes de page chargés par paquet (pas une requête par fichier)."""
     now = now or maintenant()
     rapport = RapportPurge()
     with db.transaction_systeme() as s:
-        a_effacer: list[tuple[str, str, str]] = []  # (tenant, sha, espace)
-        for t in s.execute(select(Tenant)).scalars():
-            limite = now - timedelta(days=t.retention_jours)
-            dossiers = {d.id: d for d in s.execute(select(Dossier).where(Dossier.tenant_id == t.id)).scalars()}
-            expires = {i for i, d in dossiers.items() if d.cloture_le is not None and d.cloture_le <= limite}
+        tenants = [(t.id, t.retention_jours) for t in s.execute(select(Tenant).order_by(Tenant.id)).scalars()]
+    a_effacer: list[tuple[str, str, str]] = []  # (tenant, sha, espace)
+    for tid, retention in tenants:
+        limite = now - timedelta(days=retention)
+        with db.session(lecture=True) as s:
+            s.info[garde.CLE_SYSTEME] = True
+            expires = set(s.execute(select(Dossier.id).where(Dossier.tenant_id == tid,
+                                                              Dossier.cloture_le.is_not(None),
+                                                              Dossier.cloture_le <= limite)).scalars())
             liens: dict[str, set[str]] = {}
-            for lien in s.execute(select(DossierFichier).where(DossierFichier.tenant_id == t.id)).scalars():
-                liens.setdefault(lien.fichier_id, set()).add(lien.dossier_id)
-            lots = {lot.id: lot for lot in s.execute(select(Lot).where(Lot.tenant_id == t.id)).scalars()}
-            fichiers = list(s.execute(select(Fichier).where(Fichier.tenant_id == t.id)).scalars())
-            n_fic = n_txt = 0
-            for f in fichiers:
-                if f.purge_le is not None:
-                    continue
-                if f.id in liens:
-                    expire = liens[f.id] <= expires
-                else:
-                    lot = lots.get(f.lot_id or "")
-                    expire = lot is not None and lot.cloture_le is not None and lot.cloture_le <= limite
-                if not expire:
-                    continue
-                for p in s.execute(select(PageTexte).where(PageTexte.tenant_id == t.id,
-                                                           PageTexte.fichier_id == f.id)).scalars():
+            for fid, did in s.execute(select(DossierFichier.fichier_id, DossierFichier.dossier_id)
+                                      .where(DossierFichier.tenant_id == tid)):
+                liens.setdefault(fid, set()).add(did)
+            lots_clos = set(s.execute(select(Lot.id).where(Lot.tenant_id == tid, Lot.cloture_le.is_not(None),
+                                                           Lot.cloture_le <= limite)).scalars())
+            candidats = [fid for fid, lot_id in s.execute(
+                select(Fichier.id, Fichier.lot_id).where(Fichier.tenant_id == tid, Fichier.purge_le.is_(None))
+                .order_by(Fichier.id))
+                if (liens[fid] <= expires if fid in liens else (lot_id or "") in lots_clos)]
+        n_fic = n_txt = 0
+        for i in range(0, len(candidats), PURGE_PAR_TRANSACTION):
+            paquet = candidats[i:i + PURGE_PAR_TRANSACTION]
+            with db.transaction_systeme() as s:
+                for p in s.execute(select(PageTexte).where(PageTexte.tenant_id == tid,
+                                                           PageTexte.fichier_id.in_(paquet))).scalars():
                     if p.texte_ref:
-                        a_effacer.append((t.id, p.texte_ref, "textes"))
+                        a_effacer.append((tid, p.texte_ref, "textes"))
                         n_txt += 1
                     p.texte_ref, p.purge_le = None, now
-                if f.coffre_ref:
-                    a_effacer.append((t.id, f.coffre_ref, "fichiers"))
-                f.coffre_ref, f.purge_le = None, now
-                n_fic += 1
-            if n_fic or n_txt:
-                rapport.fichiers[t.id], rapport.textes[t.id] = n_fic, n_txt
+                for f in s.execute(select(Fichier).where(Fichier.tenant_id == tid, Fichier.id.in_(paquet),
+                                                         Fichier.purge_le.is_(None))).scalars():
+                    if f.coffre_ref:
+                        a_effacer.append((tid, f.coffre_ref, "fichiers"))
+                    f.coffre_ref, f.purge_le = None, now
+                    n_fic += 1
+        if n_fic or n_txt:
+            rapport.fichiers[tid], rapport.textes[tid] = n_fic, n_txt
+            with db.transaction_systeme() as s:
                 journaliser(s, actor="systeme:retention", role="systeme", action="purge_retention",
-                            tenant_id=t.id, details={"fichiers": n_fic, "textes": n_txt,
-                                                     "retention_jours": t.retention_jours})
-        s.flush()
-        # Adressage par contenu : un contenu encore référencé par une ligne non purgée est conservé.
-        encore = {(f.tenant_id, f.coffre_ref, "fichiers") for f in s.execute(
-            select(Fichier).where(Fichier.coffre_ref.is_not(None))).scalars()}
-        encore |= {(p.tenant_id, p.texte_ref, "textes") for p in s.execute(
-            select(PageTexte).where(PageTexte.texte_ref.is_not(None))).scalars()}
-    for tenant, sha, espace in set(a_effacer) - encore:
-        vault.supprimer(tenant, sha, espace=espace)
+                            tenant_id=tid, details={"fichiers": n_fic, "textes": n_txt, "retention_jours": retention})
+    # Adressage par contenu : un contenu encore référencé par une ligne non purgée est conservé (vérifié
+    # contenu par contenu, au plus près de la suppression).
+    with db.session(lecture=True) as s:
+        s.info[garde.CLE_SYSTEME] = True
+        for tenant, sha, espace in sorted(set(a_effacer)):
+            if espace == "fichiers":
+                q = select(Fichier.id).where(Fichier.tenant_id == tenant, Fichier.coffre_ref == sha)
+            else:
+                q = select(PageTexte.id).where(PageTexte.tenant_id == tenant, PageTexte.texte_ref == sha)
+            if s.execute(q.limit(1)).first() is None:
+                vault.supprimer(tenant, sha, espace=espace)
     return rapport
 
 

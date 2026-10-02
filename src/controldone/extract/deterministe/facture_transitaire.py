@@ -72,6 +72,7 @@ from controldone.model.enums import Methode, NatureLigne, QualiteTexte, TotalOri
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, confiance_derivee, deriver_somme
 from controldone.normalize import normalize_vat, parse_amount, parse_date
 from controldone.normalize.fiscal import siren_depuis_tva, tva_fr_valide
+from controldone.normalize.natures import nature_libelle
 from controldone.normalize.refs import CONFUSION_OCR, norm_ref, norm_ref_transport
 from controldone.normalize.text import cle_texte
 
@@ -99,44 +100,10 @@ _CENT = Decimal("0.01")
 
 # --- nature des lignes (§5.3.3) -----------------------------------------------------------------------------
 
-_NATURES: list[tuple[NatureLigne, re.Pattern[str]]] = [
-    (NatureLigne.frais_avance_fonds, re.compile(
-        r"avance de fonds|av\.? (de )?fonds|frais d'avance|disbursement fee|advance fee|cash advance|"
-        r"commission d'avance|frais financiers sur debours|finance fee")),
-    (NatureLigne.frais_ligne_supplementaire, re.compile(
-        r"lignes? sup|lignes? supplementaires?|articles? supp|additional (lines?|items?)|add\.? lines?|"
-        r"extra (lines?|items?)|ligne additionnelle")),
-    (NatureLigne.debours_forfait_petits_envois, re.compile(
-        r"forfait|flat (rate )?dut|petits envois|low[- ]value|droit fixe par article|per item duty")),
-    (NatureLigne.debours_autres_taxes, re.compile(
-        r"autres? (tx|taxes?|droits)|other (taxes|duties)|accises?|excise|anti-?dumping|compensat|octroi|"
-        r"taxe (speciale|interieure|additionnelle)")),
-    (NatureLigne.debours_combines, re.compile(
-        r"droits? (et|&) taxes|duties (and|&) taxes|duty (and|&) tax|droits/taxes|taxes et droits")),
-    (NatureLigne.debours_tva, re.compile(
-        r"tva (a l'|a l |de l')?import|import vat|vat on import|tva douane|tva import|tva sur import")),
-    (NatureLigne.debours_droits, re.compile(r"droits? de douane|customs dut|\bdut(y|ies)\b|^droits?\b")),
-    (NatureLigne.magasinage, re.compile(r"magasinage|storage|entreposage|warehous|stationnement|demurrage")),
-    (NatureLigne.surcharge, re.compile(
-        r"surcharge|carburant|\bfuel\b|surete|security|haute saison|peak season|\bbaf\b|\bcaf\b")),
-    (NatureLigne.manutention, re.compile(r"manutention|handling|chargement|dechargement")),
-    (NatureLigne.transport, re.compile(
-        r"livraison|delivery|enlevement|pick-?up|collection|\btransport\b|acheminement|camionnage|trucking|"
-        r"post-?acheminement|pre-?acheminement")),
-    (NatureLigne.frais_dedouanement, re.compile(
-        r"dedouan|clearance|declaration en douane|customs (entry|declaration|formalities)|formalites douan")),
-]
-
-
 def classer_nature(libelle: str | None) -> NatureLigne | None:
-    """Nature d'une ligne d'après son libellé (fr/en) ; ``None`` si aucun mot-clé n'est reconnu."""
-    if not libelle:
-        return None
-    t = cle_texte(libelle)
-    for nature, motif in _NATURES:
-        if motif.search(t):
-            return nature
-    return None
+    """Nature d'une ligne d'après son libellé ; ``None`` si aucun mot-clé n'est reconnu (table unique
+    ``normalize.natures``, D-1213)."""
+    return nature_libelle(libelle)
 
 
 # --- vocabulaire des en-têtes de tableau -------------------------------------------------------------------

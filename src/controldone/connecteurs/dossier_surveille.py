@@ -7,21 +7,54 @@
 - Un relevé = un dépôt (arborescence relative conservée, utile au regroupement §7.5).
 - ``acquitter`` déplace les fichiers relevés vers ``<racine>/_archive/<AAAAMMJJ>/…`` (sans écraser) ;
   l'idempotence repose aussi sur le sha256 (un fichier redéposé n'est pas retraité, §7.1).
+- Mémoire bornée (F-16, D-1305) : aucun fichier n'est lu au relevé ; les octets sont lus **au moment de
+  l'intégration, un fichier à la fois** (``ElementsParesseux``). Un fichier au-delà de la limite par fichier
+  (50 Mo) est ignoré et signalé (``meta["ignores_trop_gros"]``, journal) sans être lu ; les fichiers sont
+  répartis en dépôts d'au plus ``taille_lot`` octets (500 Mo).
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import overload
 
 from .base import Depot, ResultatDepot
 
-__all__ = ["DossierSurveille"]
+__all__ = ["DossierSurveille", "ElementsParesseux"]
+
+log = logging.getLogger("controldone.connecteurs.dossier_surveille")
+_MO = 1024 * 1024
+
+
+class ElementsParesseux(Sequence[tuple[str, bytes]]):
+    """``[(chemin relatif, octets)]`` dont les octets sont lus à l'accès (un fichier à la fois)."""
+
+    def __init__(self, racine: Path, chemins: list[str]) -> None:
+        self.racine, self.chemins = racine, list(chemins)
+
+    def __len__(self) -> int:
+        return len(self.chemins)
+
+    @overload
+    def __getitem__(self, i: int) -> tuple[str, bytes]: ...
+    @overload
+    def __getitem__(self, i: slice) -> list[tuple[str, bytes]]: ...
+    def __getitem__(self, i):  # type: ignore[no-untyped-def]
+        if isinstance(i, slice):
+            return [self[j] for j in range(*i.indices(len(self)))]
+        rel = self.chemins[i]
+        return rel, (self.racine / rel).read_bytes()
+
+    def __iter__(self) -> Iterator[tuple[str, bytes]]:
+        for i in range(len(self)):
+            yield self[i]
 
 _SUFFIXES_TEMP = (".part", ".tmp", ".crdownload", ".partial")
 
@@ -31,7 +64,9 @@ class DossierSurveille:
 
     def __init__(self, tenant_id: str, racine: Path | str, *, stabilite_s: float = 10.0,
                  archive: str = "_archive", horloge: Callable[[], float] = time.time,
-                 max_fichiers: int = 2000) -> None:
+                 max_fichiers: int = 2000, taille_fichier: int = 50 * _MO, taille_lot: int = 500 * _MO) -> None:
+        self.taille_fichier = taille_fichier
+        self.taille_lot = taille_lot
         self.tenant_id = tenant_id
         self.racine = Path(racine)
         self.stabilite_s = stabilite_s
@@ -69,7 +104,8 @@ class DossierSurveille:
         maintenant = self.horloge()
         precedent = self._lire_etat()
         etat: dict[str, list[int]] = {}
-        prets: list[tuple[str, bytes]] = []
+        prets: list[tuple[str, int]] = []
+        trop_gros: list[str] = []
         for p in self._candidats():
             rel = p.relative_to(self.racine).as_posix()
             st = p.stat()
@@ -78,16 +114,33 @@ class DossierSurveille:
             if not stable:
                 etat[rel] = signature
                 continue
-            contenu = p.read_bytes()
-            if len(contenu) != st.st_size:  # modifié pendant la lecture : au prochain relevé
-                etat[rel] = [len(contenu), st.st_mtime_ns]
+            if st.st_size > self.taille_fichier:  # jamais lu en mémoire ; laissé en place, signalé
+                trop_gros.append(rel)
+                etat[rel] = signature
                 continue
-            prets.append((rel, contenu))
+            prets.append((rel, st.st_size))
         self._ecrire_etat(etat)
+        if trop_gros:
+            log.warning("dossier_surveille_fichiers_trop_gros client=%s nombre=%d", self.tenant_id, len(trop_gros))
         if not prets:
             return []
-        return [Depot(tenant_id=self.tenant_id, canal="depot", source=self.nom, elements=prets,
-                      meta={"chemins": [r for r, _ in prets]})]
+        # dépôts d'au plus ``taille_lot`` octets
+        groupes: list[list[str]] = [[]]
+        cumul = 0
+        for rel, taille in prets:
+            if groupes[-1] and cumul + taille > self.taille_lot:
+                groupes.append([])
+                cumul = 0
+            groupes[-1].append(rel)
+            cumul += taille
+        depots = []
+        for i, chemins in enumerate(groupes):
+            meta: dict[str, object] = {"chemins": chemins}
+            if i == 0 and trop_gros:
+                meta["ignores_trop_gros"] = trop_gros
+            depots.append(Depot(tenant_id=self.tenant_id, canal="depot", source=self.nom,
+                                elements=ElementsParesseux(self.racine, chemins), meta=meta))  # type: ignore[arg-type]
+        return depots
 
     def acquitter(self, depot: Depot, resultat: ResultatDepot) -> None:
         """Archive les fichiers intégrés (lot créé, déjà reçus ou vides) ; rien en cas d'erreur."""

@@ -23,7 +23,7 @@ def perimetre(db: Database, tenant_id: str, acteur: Acteur, *, motif: str = "exp
     """``TenantScope`` validé à la sortie (rollback sur exception)."""
     if acteur.role is Role.fondateur:
         with db.operateur(acteur) as op:
-            yield op.client(tenant_id, motif)
+            yield op.client(tenant_id, motif, lecture=lecture)
     else:
         with db.tenant(tenant_id, acteur, lecture=lecture) as scope:
             yield scope

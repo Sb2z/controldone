@@ -133,14 +133,8 @@ def _signe_negatif(avant: str, apres: str) -> bool:
     if m:
         # Tiret isolé entre espaces après un mot ou un nombre : séparateur (« Frais de dossier - 45,00 »,
         # « Ligne 3 - 1 234,56 »), sauf si ce mot est une devise (« EUR - 12 », D-1209).
-        tiret = a[m.start(0) + len(m.group(1)):]
-        devant = a[: m.start(0) + len(m.group(1))]
-        isole = re.match(r"[-−–]\s", tiret) is not None and devant.endswith((" ", "\t", "\u00a0", "\u202f"))
-        if isole:
-            mot = re.search(r"(\S+)\s*$", devant)
-            if mot is not None and re.search(r"[0-9A-Za-zÀ-ÿ]$", mot.group(1)) and not _est_devise(mot.group(1)):
-                return False
-        return True
+        sep = re.search(r"(\S+)\s+[-−–]\s+(?:[A-Za-z€$£¥₩]{1,4}\s*)?$", avant)
+        return sep is None or not re.search(r"[0-9A-Za-zÀ-ÿ]$", sep.group(1)) or _est_devise(sep.group(1))
     # Moins après : « 1 234,56- », « 12,00 EUR- ».
     return bool(re.match(r"^[A-Za-z€$£¥₩\s]{0,5}[-−–](?!\s*\d)", p))
 

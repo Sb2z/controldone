@@ -7,19 +7,40 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from controldone.storage.coltypes import maintenant
 from controldone.storage.models import AutonomieSortie, Outbox, Tenant
 
-__all__ = ["autonomie", "client_existe", "definir_autonomie", "inserer", "lire", "lire_par_cle", "lister"]
+__all__ = ["autonomie", "client_existe", "definir_autonomie", "inserer", "inserer_ou_lire", "lire", "lire_par_cle", "lister"]
 
 
 def inserer(s: Session, **champs: Any) -> Outbox:
-    o = Outbox(**champs)
-    s.add(o)
-    s.flush()
+    o, _cree = inserer_ou_lire(s, **champs)
     return o
+
+
+def inserer_ou_lire(s: Session, **champs: Any) -> tuple[Outbox, bool]:
+    """Insertion ; si la clé d'idempotence vient d'être prise par une transaction concurrente
+    (PostgreSQL), renvoie la ligne existante au lieu de laisser fuir ``IntegrityError`` (point de
+    sauvegarde, D-1312)."""
+    o = Outbox(**champs)
+    cle = champs.get("idempotency_key")
+    if not cle:
+        s.add(o)
+        s.flush()
+        return o, True
+    try:
+        with s.begin_nested():
+            s.add(o)
+            s.flush()
+    except IntegrityError:
+        existant = lire_par_cle(s, cle)
+        if existant is None:
+            raise
+        return existant, False
+    return o, True
 
 
 def lire(s: Session, action_id: str, *, verrou: bool = False) -> Outbox | None:
@@ -35,7 +56,9 @@ def lire_par_cle(s: Session, cle: str) -> Outbox | None:
 
 def lister(s: Session, *, statuts: list[str] | None = None, kind: str | None = None,
            tenant_id: str | None = None, plateforme: bool | None = None, limite: int = 500) -> list[Outbox]:
-    q = select(Outbox).order_by(Outbox.cree_le, Outbox.id).limit(limite)
+    """Les ``limite`` actions **les plus récentes** (tri SQL décroissant avant la limite, D-1309), renvoyées
+    en ordre chronologique."""
+    q = select(Outbox).order_by(Outbox.cree_le.desc(), Outbox.id.desc()).limit(limite)
     if statuts:
         q = q.where(Outbox.statut.in_(statuts))
     if kind:
@@ -44,7 +67,7 @@ def lister(s: Session, *, statuts: list[str] | None = None, kind: str | None = N
         q = q.where(Outbox.tenant_id == tenant_id)
     if plateforme is True:
         q = q.where(Outbox.tenant_id.is_(None))
-    return list(s.execute(q).scalars())
+    return list(reversed(list(s.execute(q).scalars())))
 
 
 def autonomie(s: Session, kind: str) -> str:

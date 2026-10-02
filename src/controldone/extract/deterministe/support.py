@@ -47,6 +47,7 @@ from controldone.model.documents import Document, Page
 from controldone.model.enums import Methode, TypeDocument, TypeValeur
 from controldone.model.valeur import ExtracteurInfo
 from controldone.normalize import parse_weight_kg, tva_fr_valide
+from controldone.normalize.refs import norm_alnum
 
 __all__ = ["ExtracteurSupport", "extraire_support"]
 
@@ -173,13 +174,13 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
     if ch.ref_transport_maitre is None:
         # référence sans précision (titre, tableau, libellé « AWB / B/L No. ») : rangée en « maître »,
         # sauf si c'est la référence maison déjà lue
-        maison = re.sub(r"[^A-Z0-9]", "", (ch.ref_transport_maison.valeur_brute or "").upper()) \
+        maison = norm_alnum(ch.ref_transport_maison.valeur_brute) \
             if ch.ref_transport_maison else None
         candidats = [tab.get("ref"), _ref_titre(vue)]
         for t in chercher(vue, LIB_TRANSPORT):
             candidats.append(valeur_apres(vue, t, _accepte_ref))
         for lec in candidats:
-            if lec is not None and re.sub(r"[^A-Z0-9]", "", lec.texte.upper()) != maison:
+            if lec is not None and norm_alnum(lec.texte) != maison:
                 ch.ref_transport_maitre = fab.valeur("ref_transport_maitre", lec, confiance=_conf_ref(lec))
                 break
     # masses et colis : tableau d'en-tête, sinon libellés
@@ -300,7 +301,7 @@ def _refs_facture(vue: VueDocument, fab: Fabrique, ch: ChampsSupport) -> None:
         # ponctuation de fin de phrase (« facture n° FAC-1. ») : hors de la référence, qui reste une
         # sous-chaîne littérale de la page
         lec.texte_force = lec.texte.strip(":;,.()")
-        cle = re.sub(r"[^A-Z0-9]", "", lec.texte.upper())
+        cle = norm_alnum(lec.texte)
         if cle in vus:
             continue
         vus.add(cle)

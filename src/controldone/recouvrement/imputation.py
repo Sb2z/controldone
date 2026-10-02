@@ -37,11 +37,12 @@ dans un avoir, lignes triées par nature (ordre de l'énumération ``NatureLigne
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from types import MappingProxyType
+from typing import Any, TypeVar
 
 from controldone.model.champs import Partie
 from controldone.model.documents import Document
@@ -49,6 +50,7 @@ from controldone.model.enums import Composante, NatureLigne, StatutEcart
 from controldone.model.recouvrement import EcartARecouvrer
 from controldone.model.referentiel import Transitaire
 from controldone.normalize.fiscal import normalize_vat
+from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import mrn_prefixe, norm_ref, ref_compatibles, ref_transport_egales
 from controldone.normalize.text import cle_texte
 
@@ -61,8 +63,10 @@ __all__ = [
     "LigneCredit",
     "Reliquat",
     "ResultatImputation",
+    "choisir_par_paliers",
     "cle_emetteur",
     "composantes_de_nature",
+    "emetteurs_compatibles",
     "imputer_avoirs",
     "lignes_credit_depuis_avoir",
 ]
@@ -98,22 +102,16 @@ def composantes_de_nature(nature: NatureLigne | None) -> tuple[Composante, ...]:
 def cle_emetteur(partie: Partie | None, transitaires: Iterable[Transitaire] = ()) -> str | None:
     """Clé d'émetteur comparable entre avoirs et écarts.
 
-    Identifiant du ``Transitaire`` reconnu (TVA, puis nom ou alias exact après normalisation) ; à défaut
+    Identifiant du ``Transitaire`` reconnu (``identifier_transitaire``, règle unique D-1211) ; à défaut
     ``"tva:<TVA normalisée>"`` ou ``"nom:<nom normalisé>"`` ; ``None`` si le pavé est vide.
     """
     if partie is None:
         return None
     tva = normalize_vat(partie.tva.valeur) if partie.tva is not None and partie.tva.valeur else None
     nom = cle_texte(partie.nom.valeur) if partie.nom is not None and partie.nom.valeur else None
-    ts = list(transitaires)
-    if tva:
-        for t in ts:
-            if t.tva and normalize_vat(t.tva) == tva:
-                return t.id
-    if nom:
-        for t in ts:
-            if nom in {cle_texte(x) for x in (t.nom, *t.alias) if x}:
-                return t.id
+    tid = identifier_transitaire(tva, nom, transitaires)
+    if tid is not None:
+        return tid
     if tva:
         return f"tva:{tva}"
     if nom:
@@ -135,6 +133,8 @@ class LigneCredit:
     factures_origine: tuple[str, ...] = ()
     mrns: tuple[str, ...] = ()
     refs_transport: tuple[str, ...] = ()
+    #: Valeur sourcée du montant (preuve des constats C et D), hors comparaison.
+    valeur: Any = field(default=None, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,26 +248,52 @@ def _cle_ligne(lc: LigneCredit) -> tuple:
     )
 
 
-def _palier(lc: LigneCredit, candidats: Sequence[EcartImputable]) -> tuple[str, list[EcartImputable]]:
+def emetteurs_compatibles(a: str | None, b: str | None) -> bool:
+    """Même émetteur (§17.2, D-304) ; un émetteur illisible d'un côté n'empêche pas le rapprochement (D-305)."""
+    return a is None or b is None or a == b
+
+
+_T = TypeVar("_T")
+
+
+def choisir_par_paliers(
+    lc: LigneCredit,
+    cibles: Sequence[_T],
+    *,
+    factures: Callable[[_T], Iterable[str | None]],
+    mrns: Callable[[_T], Iterable[str | None]],
+    transports: Callable[[_T], Iterable[str | None]] | None = None,
+) -> tuple[str, list[_T]]:
+    """Rattachement par paliers d'une ligne d'avoir (§17.2, étape 1), règle unique des familles C, D et E :
+    cibles de même facture d'origine (``ref_compatibles``) ; à défaut (aucune cible à ce palier), de même MRN
+    (préfixe) ; à défaut, de même référence de transport. Retourne (palier, cibles retenues)."""
     if lc.factures_origine:
         par_facture = [
-            e for e in candidats if e.facture_ref and any(ref_compatibles(f, e.facture_ref) for f in lc.factures_origine)
+            c for c in cibles
+            if any(f and ref_compatibles(o, f) for f in factures(c) for o in lc.factures_origine)
         ]
         if par_facture:
             return "facture", par_facture
     prefixes = {mrn_prefixe(m) for m in lc.mrns if len(mrn_prefixe(m)) == 15}
     if prefixes:
-        par_mrn = [e for e in candidats if e.mrn and mrn_prefixe(e.mrn) in prefixes]
+        par_mrn = [c for c in cibles if any(m and mrn_prefixe(m) in prefixes for m in mrns(c))]
         if par_mrn:
             return "mrn", par_mrn
-    if lc.refs_transport:
+    if lc.refs_transport and transports is not None:
         par_transport = [
-            e for e in candidats
-            if e.ref_transport and any(ref_transport_egales(r, e.ref_transport) for r in lc.refs_transport)
+            c for c in cibles
+            if any(t and ref_transport_egales(r, t) for t in transports(c) for r in lc.refs_transport)
         ]
         if par_transport:
             return "transport", par_transport
     return "", []
+
+
+def _palier(lc: LigneCredit, candidats: Sequence[EcartImputable]) -> tuple[str, list[EcartImputable]]:
+    return choisir_par_paliers(
+        lc, candidats, factures=lambda e: (e.facture_ref,), mrns=lambda e: (e.mrn,),
+        transports=lambda e: (e.ref_transport,),
+    )
 
 
 def imputer_avoirs(
@@ -308,7 +334,7 @@ def imputer_avoirs(
             candidats = [
                 e for e in liste_ecarts
                 if e.composante in comps
-                and e.emetteur == lc.emetteur
+                and emetteurs_compatibles(e.emetteur, lc.emetteur)
                 and etats[e.id].statut in STATUTS_IMPUTABLES
                 and etats[e.id].reste > 0
             ]
@@ -338,17 +364,23 @@ def imputer_avoirs(
     )
 
 
-def _valeurs_texte(vals: Iterable) -> tuple[str, ...]:
-    return tuple(v.valeur for v in vals if v is not None and v.valeur)
-
-
-def lignes_credit_depuis_avoir(doc: Document, *, emetteur: str | None = None) -> list[LigneCredit]:
+def lignes_credit_depuis_avoir(
+    doc: Document, *, emetteur: str | None = None, utilisable: Callable[[Any], bool] | None = None
+) -> list[LigneCredit]:
     """Lignes d'imputation d'un document ``avoir`` (montants HT des lignes, positifs).
 
     MRN et référence de transport : ceux de la ligne, à défaut ceux de l'en-tête de l'avoir. Un avoir sans
     ligne lisible donne une seule ligne sans nature, de montant ``total_credite_ht`` (à défaut TTC) :
     elle n'est jamais imputée (reliquat entier, signalé par E5).
+
+    ``utilisable`` (contrôles : ``ctx.utilisable``, seuil ``C_MIN_UTILE``) écarte les montants et références
+    trop douteux pour être exploités (D-1210).
     """
+    ok: Callable[[Any], bool] = utilisable if utilisable is not None else (lambda v: True)
+
+    def _valeurs_texte(vals: Iterable) -> tuple[str, ...]:
+        return tuple(v.valeur for v in vals if v is not None and v.valeur and ok(v))
+
     av = doc.av
     d_avoir = None
     if av.date is not None and av.date.valeur:
@@ -363,29 +395,27 @@ def lignes_credit_depuis_avoir(doc: Document, *, emetteur: str | None = None) ->
     out: list[LigneCredit] = []
     for i, ligne in enumerate(av.lignes):
         m = ligne.montant_ht if ligne.montant_ht is not None else ligne.montant_ttc
-        montant = m.decimal_ou_none() if m is not None else None
+        montant = m.decimal_ou_none() if m is not None and ok(m) else None
         if montant is None:
             continue
+        mrn_ligne = _valeurs_texte([ligne.mrn])
+        transport_ligne = _valeurs_texte([ligne.ref_transport])
         out.append(
             LigneCredit(
                 avoir_id=doc.id, ligne=i, nature=ligne.nature, montant=abs(montant), emetteur=emetteur,
                 date_avoir=d_avoir, numero_avoir=numero, factures_origine=origine,
-                mrns=(ligne.mrn.valeur,) if ligne.mrn is not None and ligne.mrn.valeur else mrn_tete,
-                refs_transport=(
-                    (ligne.ref_transport.valeur,) if ligne.ref_transport is not None and ligne.ref_transport.valeur
-                    else transport_tete
-                ),
+                mrns=mrn_ligne or mrn_tete, refs_transport=transport_ligne or transport_tete, valeur=m,
             )
         )
     if not out:
         total = av.total_credite_ht if av.total_credite_ht is not None else av.total_credite_ttc
-        montant = total.decimal_ou_none() if total is not None else None
+        montant = total.decimal_ou_none() if total is not None and ok(total) else None
         if montant is not None:
             out.append(
                 LigneCredit(
                     avoir_id=doc.id, ligne=None, nature=None, montant=abs(montant), emetteur=emetteur,
                     date_avoir=d_avoir, numero_avoir=numero, factures_origine=origine, mrns=mrn_tete,
-                    refs_transport=transport_tete,
+                    refs_transport=transport_tete, valeur=total,
                 )
             )
     return out

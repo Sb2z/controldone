@@ -162,10 +162,19 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
 
 
 def _worker(plateforme: Plateforme) -> Any:
-    """Worker de démonstration dans un fil d'exécution (production : ``python -m controldone.jobs.worker``)."""
-    import controldone.connecteurs.jobs  # controle_avant_paiement : factures reçues par l'API
-    import controldone.jobs.handlers  # noqa: F401  (handlers intégrés + recontrôle)
+    """Worker de démonstration dans un fil d'exécution (production : ``python -m controldone.jobs.worker``).
+
+    Même registre que le worker de production (``charger_handlers``, D-1302) ; il ne prend que les kinds
+    qu'il sait traiter (un kind inconnu reste ``pending`` pour un autre worker) ; identifiant unique par
+    processus (deux ``serve`` qui se chevauchent ne partagent pas un bail)."""
+    import os
+    import socket
+
+    from controldone.config import get_settings
+    from controldone.jobs.registre import charger_handlers
     from controldone.jobs.worker import Worker
 
-    return Worker(plateforme.db, worker_id="web-integre", lease_s=120, poll_s=1.0,
+    handlers = charger_handlers()
+    return Worker(plateforme.db, worker_id=f"web-integre:{socket.gethostname()}:{os.getpid()}",
+                  lease_s=get_settings().job_lease_s, poll_s=1.0, kinds=sorted(handlers),
                   services={"vault": plateforme.vault})

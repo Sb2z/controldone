@@ -140,6 +140,23 @@ async def formulaire(request: Request, *, fichiers: bool = False) -> FormData:
     return form
 
 
+def depuis_boucle(fn: Any, /, *args: Any, **kwargs: Any) -> Any:
+    """Depuis une route **synchrone** (exécutée hors de la boucle, dans le réservoir de fils de FastAPI),
+    attend une coroutine de la requête sur la boucle d'événements (``request.form``, ``request.body``).
+    Les routes font ainsi leur travail bloquant (base, Argon2, chiffrement, PDF) **hors** de la boucle :
+    une requête lente ne gèle plus les autres (F-03, D-1304)."""
+    import functools
+
+    import anyio.from_thread
+
+    return anyio.from_thread.run(functools.partial(fn, *args, **kwargs))
+
+
+def formulaire_sync(request: Request, *, fichiers: bool = False) -> FormData:
+    """``formulaire`` appelé depuis une route synchrone."""
+    return depuis_boucle(formulaire, request, fichiers=fichiers)
+
+
 def acteur_de(request: Request) -> Acteur:
     """Acteur de la session. Le compte est relu en base à chaque requête : un compte désactivé, supprimé ou
     dont le rôle fondateur a changé perd aussitôt ses sessions (le jeton signé seul ne suffit pas, RS-09).

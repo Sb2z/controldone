@@ -1,6 +1,10 @@
 """Calcul du référentiel anonymisé (pur, déterministe) : agrégats de prix et de taux d'écart par
 transitaire × flux (groupe de pays d'origine, régime, famille d'Incoterm, mois).
 
+Transitaire **nommé** (alias public, accord écrit) : **statistiques de prix seulement** — jamais de taux
+d'écart ou d'erreur attribué à un transitaire identifiable (brief juridique §5.4, D-1318) ;
+``taux_dossiers_avec_ecart`` vaut alors ``None`` (vide à l'export).
+
 Seuils de publication (k-anonymat) : un agrégat n'est publié que s'il réunit au moins ``k_clients``
 clients distincts (défaut 5) **et** ``k_dossiers`` dossiers (défaut 10) ; une statistique de prix d'une
 prestation n'est publiée que si elle-même réunit ces deux seuils. Les agrégats supprimés ne sont que
@@ -59,8 +63,9 @@ class Agregat:
     famille_incoterm: str
     mois: str
     dossiers: str  # tranche
-    taux_dossiers_avec_ecart: Decimal  # arrondi au pas de 5 points
+    taux_dossiers_avec_ecart: Decimal | None  # arrondi au pas de 5 points ; None pour un transitaire nommé
     prix: dict[str, dict[str, Decimal]] = field(default_factory=dict)  # nature -> {p25, mediane, p75}
+    nomme: bool = False  # alias public (accord écrit) : prix seulement
 
     def cle(self) -> tuple[str, ...]:
         return (self.transitaire, self.groupe_origine, self.regime, self.famille_incoterm, self.mois)
@@ -101,6 +106,7 @@ def agreger(enregistrements: Iterable[EnregistrementFlux], *, sel: bytes, alias_
             prix[nature] = {"p25": arrondir_montant(percentile(valeurs, 25)),
                             "mediane": arrondir_montant(percentile(valeurs, 50)),
                             "p75": arrondir_montant(percentile(valeurs, 75))}
-        publies.append(Agregat(*cle, dossiers=tranche_effectif(len(lot)), taux_dossiers_avec_ecart=arrondir_taux(taux),
-                               prix=prix))
+        nomme = cle[0] in (alias_publics or {})
+        publies.append(Agregat(*cle, dossiers=tranche_effectif(len(lot)),
+                               taux_dossiers_avec_ecart=None if nomme else arrondir_taux(taux), prix=prix, nomme=nomme))
     return ResultatReferentiel(publies, supprimes, seuils)

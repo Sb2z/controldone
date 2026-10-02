@@ -1,6 +1,6 @@
 {% extends "base.html.j2" %}
 {% block contenu %}
-<div class="titre-page"><h1>Rapports et dossiers de réclamation</h1></div>
+<div class="titre-page"><h1>Rapports et relevés d'écarts</h1></div>
 <div class="grille-2">
 <section class="carte">
   <h2>Rapports de diagnostic</h2>
@@ -10,12 +10,12 @@
   {% else %}<p class="vide">Aucun rapport publié pour l'instant.</p>{% endif %}
 </section>
 <section class="carte">
-  <h2>Dossiers de réclamation</h2>
-  <p class="discret">Rédigés à votre nom, à relire et compléter (signature) avant de les envoyer vous-même à votre transitaire. Après l'envoi, déclarez-le dans le <a href="/espace/recouvrement">registre de recouvrement</a>.</p>
+  <h2>Relevés d'écarts</h2>
+  <p class="discret">Chaque relevé présente les différences chiffrées entre vos documents ; il est suivi d'un « modèle à adapter par le client » que vous complétez et utilisez vous-même si vous le décidez. Si vous envoyez un courrier, vous pouvez le noter dans le <a href="/espace/recouvrement">suivi des avoirs reçus</a>.</p>
   {% if reclamations %}
   <ul class="liste-simple">{% for r in reclamations %}<li><strong>{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">— {{ r.envoye_le|date }}</span><br>
     <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/txt">Texte à coller dans un courriel</a></li>{% endfor %}</ul>
-  {% else %}<p class="vide">Aucun dossier de réclamation pour l'instant.</p>{% endif %}
+  {% else %}<p class="vide">Aucun relevé d'écarts pour l'instant.</p>{% endif %}
 </section>
 </div>
 {% endblock %}

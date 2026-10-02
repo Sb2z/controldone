@@ -46,11 +46,10 @@ coupons:
     une_fois_par_client: true
     # La remise ne dépend d'aucune contrepartie (brief juridique §4.4 : pas de troc). L'accord de publication
     # des résultats anonymisés est distinct, facultatif et révocable jusqu'à la publication.
-    consentement_publication: optionnel   # cible (descriptif, non lu par le code)
-    # Lu par le code. Cible : false (la remise s'applique sans accord de publication). Reste à true tant que
-    # facturation/service.py (proposer_diagnostic) suppose un consentement présent : avec false et sans
-    # consentement, il lève AttributeError. À basculer avec la correction du code et de ses tests.
-    consentement_requis: true
+    consentement_publication: optionnel   # descriptif : accord de publication distinct, facultatif, révocable
+    # Lu par le code : false = la remise s'applique sans aucun accord de publication (D-1313). L'accord,
+    # s'il est signé, est cité dans le brouillon à titre d'information et reste révocable.
+    consentement_requis: false
 
 tva:
   # Au démarrage : micro-entreprise en franchise en base (art. 293 B du CGI) -> tva_applicable: false ;

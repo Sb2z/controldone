@@ -238,3 +238,30 @@ def test_codes_marchandise():
     assert code_marchandise("847130000") is None  # 9 chiffres : jamais complété ici
     assert code_marchandise("84 71 30") == "847130"
     assert code_sh6("8471.30.00") == "847130"
+
+
+def test_identifier_transitaire_regle_unique():
+    # D-1211 : une seule règle pour le regroupement, l'imputation des avoirs et le choix de la grille.
+    from controldone.model.referentiel import Transitaire
+    from controldone.normalize.parties import identifier_transitaire
+
+    ts = [Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550", alias=["TF Logistique"]),
+          Transitaire(id="tra_2", nom="Douane Express FICTIF", tva=None)]
+    assert identifier_transitaire("FR 11 000555550", None, ts) == "tra_1"
+    assert identifier_transitaire(None, "transit fictif", ts) == "tra_1"
+    assert identifier_transitaire(None, "TF LOGISTIQUE", ts) == "tra_1"
+    assert identifier_transitaire(None, "TRANSIT FICTIF SAS", ts) == "tra_1"  # mots entiers
+    assert identifier_transitaire(None, "TRANSIT FICTIFS SAS", ts) is None  # pas une sous-chaîne
+    assert identifier_transitaire(None, "TRANSIT FICTIF / DOUANE EXPRESS FICTIF", ts) is None  # ambigu
+    assert identifier_transitaire(None, None, ts) is None
+
+
+def test_cle_emetteur_reconnait_le_nom_complet():
+    from controldone.model.champs import Partie
+    from controldone.model.referentiel import Transitaire
+    from controldone.recouvrement.imputation import cle_emetteur
+    from controldone.testing import vs
+
+    ts = [Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550")]
+    p = Partie(nom=vs("avoir.emetteur.nom", "TRANSIT FICTIF SAS", document_id="d"))
+    assert cle_emetteur(p, ts) == "tra_1"

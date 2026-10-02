@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import tempfile
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Any
 
 from controldone.auth.roles import Acteur, Role
+from controldone.calendrier import aujourdhui_paris
 from controldone.findings_io import construire_findings, statut_global_depuis_resultats
 from controldone.guardrails import AVERTISSEMENT
 from controldone.model.documents import Fichier as FichierModele
@@ -148,7 +148,7 @@ def _generer(scope: TenantScope, vault: Any) -> tuple[dict[str, str], int, int, 
         if not resultats:
             raise RequeteInvalide("aucun dossier à publier pour ce client")
         profil = resultats[0].profil
-        sorties = generer_rapport(resultats, profil, racine / "rapport", date_rapport=date.today())
+        sorties = generer_rapport(resultats, profil, racine / "rapport", date_rapport=aujourdhui_paris())
         refs = {}
         for fmt, chemin in (("pdf", sorties.pdf), ("html", sorties.html), ("json", sorties.json)):
             refs[fmt] = vault.deposer(scope.tenant_id, chemin.read_bytes())
@@ -162,9 +162,9 @@ def publier_rapport(plateforme: Plateforme, fondateur: Acteur, tenant_id: str) -
     if fondateur.role is not Role.fondateur:
         raise Interdit("publication réservée au fondateur")
     with plateforme.db.operateur(fondateur) as op:
-        scope = op.client(tenant_id, "publication du rapport de diagnostic")
+        scope = op.client(tenant_id, "publication du rapport de diagnostic", lecture=True)
         refs, nb_dossiers, nb_constats, figes, client = _generer(scope, plateforme.vault)
-    jour = date.today().isoformat()
+    jour = aujourdhui_paris().isoformat()
     payload = {
         "objet": f"Rapport de diagnostic — {client}",
         "corps": (f"Votre rapport de diagnostic ({nb_dossiers} dossier{'s' if nb_dossiers > 1 else ''}, "
@@ -183,7 +183,7 @@ def publier_rapport(plateforme: Plateforme, fondateur: Acteur, tenant_id: str) -
 
 def mettre_a_disposition(plateforme: Plateforme, action_id: str, acteur: Acteur) -> None:
     """Après approbation : « envoi » = mise à disposition du client dans son espace (l'expéditeur fichier
-    écrit la trace ``var/outbox_envoyee/``). Seuls les rapports et dossiers de réclamation sont concernés :
+    écrit la trace ``var/outbox_envoyee/``). Seuls les rapports et relevés d'écarts sont concernés :
     rien n'est jamais envoyé à un transitaire."""
     fs = FileSortante(plateforme.db)
     a = fs.obtenir(action_id, acteur)
@@ -216,15 +216,15 @@ def piece(plateforme: Plateforme, acteur: Acteur, action_id: str, fmt: str,
             return contenu, FORMATS[fmt][0], p.get("nom") or FORMATS[fmt][1]
         # pièces du service des litiges : « coffre:<sha256> » (PDF du dossier de demande d'avoir)
         if isinstance(p, str) and p.startswith("coffre:") and fmt == "pdf":
-            return plateforme.vault.lire(a.tenant_id, p[len("coffre:"):]), FORMATS["pdf"][0], "demande_avoir.pdf"
+            return plateforme.vault.lire(a.tenant_id, p[len("coffre:"):]), FORMATS["pdf"][0], "releve_ecarts.pdf"
     if fmt == "txt" and a.kind is TypeAction.reclamation_dossier and payload.get("corps"):
         texte = str(payload["corps"]) + "\n\n" + AVERTISSEMENT + "\n"
-        return texte.encode("utf-8"), FORMATS["txt"][0], "demande_avoir.txt"
+        return texte.encode("utf-8"), FORMATS["txt"][0], "releve_ecarts.txt"
     raise AccesRefuse("introuvable ou hors périmètre")
 
 
 def formats_disponibles(action: Any) -> list[str]:
-    """Formats téléchargeables d'une action (rapport : pdf/html/json ; dossier de réclamation : pdf/txt)."""
+    """Formats téléchargeables d'une action (rapport : pdf/html/json ; relevé d'écarts : pdf/txt)."""
     out = []
     for p in action.payload_effectif.get("pieces") or []:
         if isinstance(p, dict) and p.get("format"):

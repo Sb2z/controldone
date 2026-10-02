@@ -15,11 +15,16 @@ Unités : ``cle_unite(ft=<facture>, ligne=<index>)`` par ligne, ``cle_unite(ft=<
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from controldone.controls import _aides_befg as aides
+from controldone.controls._aides_befg import ZERO
+from controldone.controls._aides_befg import entre_parentheses as _par
+from controldone.controls._aides_befg import num_utilisable as _dec
+from controldone.controls._aides_befg import somme as _somme
 from controldone.controls.famille_c import (
     assiette_debours,
     borner,
@@ -58,8 +63,14 @@ from controldone.model import (
     RolePreuve,
     ValeurSourcee,
 )
-from controldone.normalize.refs import mrn_prefixe, norm_ref, norm_ref_transport, ref_compatibles
+from controldone.normalize.refs import (
+    cle_confusion_ocr,
+    mrn_prefixe,
+    norm_ref,
+    norm_ref_transport,
+)
 from controldone.normalize.text import cle_texte
+from controldone.recouvrement.imputation import choisir_par_paliers
 
 __all__ = [
     "ACTION_D",
@@ -78,7 +89,6 @@ __all__ = [
     "rapprocher_poste",
 ]
 
-ZERO = Decimal(0)
 _CENT = Decimal(100)
 
 ACTION_D = (
@@ -116,25 +126,6 @@ _ROUTE_SPECIALE = {
 # =====================================================================================================
 # Outils
 # =====================================================================================================
-
-
-def _dec(ctx: ControlContext, v: ValeurSourcee | None) -> Decimal | None:
-    if not ctx.utilisable(v):
-        return None
-    assert v is not None
-    try:
-        return v.decimal_signe()
-    except ValueError:
-        return None
-
-
-def _somme(xs: Iterable[Decimal]) -> Decimal:
-    return sum(xs, ZERO)
-
-
-def _par(*m: str) -> str:
-    x = [s for s in m if s]
-    return f" ({', '.join(x)})" if x else ""
 
 
 def _libelle_ligne(ligne: LigneFactureTransitaire) -> str:
@@ -274,47 +265,34 @@ def _ambigu(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControle:
 
 def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document, ValeurSourcee, Decimal]]:
     """Lignes d'avoirs déjà reçus qui créditent cette ligne de prestation (§8.6 : montant net des avoirs
-    déjà imputés ; §17.2) : avoir du dossier citant la facture (``ref_compatibles``), à défaut un MRN de la
-    ligne ; ligne d'avoir de même nature (et même MRN si elle en cite un). Une ligne d'avoir n'est imputée
-    qu'à une ligne de facture : la première ligne de même nature (et MRN) de la facture (D-703)."""
+    déjà imputés), selon la règle unique de §17.2 (D-1210) : lignes d'avoir du dossier (E3, ``C_MIN_UTILE``),
+    même émetteur, même nature, rattachement par paliers (facture d'origine, à défaut MRN de la ligne).
+    Une ligne d'avoir n'est imputée qu'à une ligne de facture : parmi les lignes de même nature, celle dont
+    le MRN correspond (à une confusion OCR près) s'il y en a plusieurs, sinon la première (D-703)."""
     f = lr.facture
     num = f.ft.numero.valeur if f.ft.numero is not None and f.ft.numero.valeur else None
     mrn_ligne = mrn_prefixe(lr.ligne.mrn.valeur) if ctx.utilisable(lr.ligne.mrn) and lr.ligne.mrn else None
+    emetteur = aides.emetteur_de(ctx, f)
     out: list[tuple[Document, ValeurSourcee, Decimal]] = []
-    vus: set[str] = set()
-    for a in ctx.avoirs():
-        cle_av = norm_ref(a.av.numero.valeur) if a.av.numero is not None and a.av.numero.valeur else a.id
-        if cle_av in vus:  # même avoir reçu deux fois : imputé une fois
+    for lc in aides.lignes_credit_du_dossier(ctx):
+        if lc.nature is not lr.ligne.nature or not aides.memes_emetteurs(lc.emetteur, emetteur):
             continue
-        vus.add(cle_av)
-        refs = [v.valeur for v in a.av.refs_facture_origine if ctx.utilisable(v) and v.valeur]
-        if refs:
-            if num is None or not any(ref_compatibles(r, num) for r in refs):
-                continue
-        else:
-            mrns = {mrn_prefixe(v.valeur) for v in a.av.refs_mrn if ctx.utilisable(v)}
-            if mrn_ligne is None or mrn_ligne not in mrns:
-                continue
-        for la in a.av.lignes:
-            if la.nature is not lr.ligne.nature:
-                continue
-            p_av = mrn_prefixe(la.mrn.valeur) if ctx.utilisable(la.mrn) and la.mrn else None
-            if p_av is not None and mrn_ligne is not None and p_av != mrn_ligne:
-                continue
-            # première ligne de la facture compatible avec cette ligne d'avoir
-            premiere = next(
-                (i for i, lg in enumerate(f.ft.lignes) if lg.nature is la.nature and (
-                    p_av is None or (ctx.utilisable(lg.mrn) and lg.mrn is not None
-                                     and mrn_prefixe(lg.mrn.valeur) == p_av))),
-                None,
-            )
-            if premiere != lr.index:
-                continue
-            v = la.montant_ht if ctx.utilisable(la.montant_ht) else None
-            m = _dec(ctx, v)
-            if v is None or m is None:
-                continue
-            out.append((a, v, abs(m)))
+        palier, _ = choisir_par_paliers(lc, [lr], factures=lambda _x: (num,), mrns=lambda _x: (mrn_ligne,))
+        if not palier:
+            continue
+        memes = [i for i, lg in enumerate(f.ft.lignes) if lg.nature is lc.nature]
+        if len(memes) > 1 and lc.mrns:
+            cles = {cle_confusion_ocr(mrn_prefixe(m)) for m in lc.mrns}
+            par_mrn = [
+                i for i in memes
+                if ctx.utilisable(f.ft.lignes[i].mrn) and f.ft.lignes[i].mrn is not None
+                and cle_confusion_ocr(mrn_prefixe(f.ft.lignes[i].mrn.valeur)) in cles
+            ]
+            memes = par_mrn or memes
+        avoir = ctx.document(lc.avoir_id)
+        if not memes or memes[0] != lr.index or avoir is None or lc.valeur is None:
+            continue
+        out.append((avoir, lc.valeur, lc.montant))
     return out
 
 

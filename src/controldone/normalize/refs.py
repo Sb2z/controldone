@@ -92,6 +92,12 @@ def mrn_prefixe(x: str | None) -> str:
     return norm_ref(x)[:15]
 
 
+def norm_alnum(x: str | None) -> str:
+    """Majuscules, seulement ``A-Z`` et ``0-9`` (accents **non** retirés : « É » disparaît). Forme brute des
+    extracteurs pour rapprocher deux lectures d'une même référence ; ``norm_ref`` retire aussi les accents."""
+    return _NON_ALNUM.sub("", (x or "").upper())
+
+
 #: Classes de confusion OCR (caractères souvent pris l'un pour l'autre) : 0/O/Q/D, 1/I/L, 4/A, 5/S, 8/B, 2/Z, 6/G.
 CONFUSION_OCR = str.maketrans({"0": "O", "Q": "O", "D": "O", "1": "I", "L": "I", "4": "A", "5": "S", "8": "B",
                                "2": "Z", "6": "G"})

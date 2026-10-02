@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -34,7 +34,10 @@ SEUIL_ALERTE = Decimal("0.80")
 
 
 def mois_courant(now: datetime | None = None) -> str:
-    return (now or datetime.now(UTC)).astimezone(UTC).strftime("%Y-%m")
+    """Mois du plafond IA : frontière de mois d'Europe/Paris, comme la facturation (D-1308)."""
+    from controldone.calendrier import mois_paris
+
+    return mois_paris(now)
 
 
 @dataclass(frozen=True)

@@ -55,7 +55,11 @@ AliasPublics = Mapping[str, Mapping[str, Sequence[str]]]
 
 
 def charger_alias_publics(chemin: Path | str | None = None) -> dict[str, dict[str, list[str]]]:
-    """``{alias_public: {"tva": [...], "noms": [...]}}`` depuis le YAML du fondateur (absent = vide)."""
+    """``{alias_public: {"tva": [...], "noms": [...]}}`` depuis le YAML du fondateur (absent = vide).
+
+    Un transitaire n'est **nommé** qu'avec son accord écrit (brief juridique §5.4, D-1318) : une entrée sans
+    champ ``accord_ecrit`` (référence et date de l'accord) est ignorée — le transitaire reste sous empreinte
+    salée."""
     import yaml
 
     if chemin is None:
@@ -67,8 +71,16 @@ def charger_alias_publics(chemin: Path | str | None = None) -> dict[str, dict[st
         return {}
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     alias = data.get("alias") or {}
-    return {str(k): {"tva": [str(x) for x in (v or {}).get("tva", [])],
-                     "noms": [str(x) for x in (v or {}).get("noms", [])]} for k, v in alias.items()}
+    sortie: dict[str, dict[str, list[str]]] = {}
+    for k, v in alias.items():
+        v = v or {}
+        if not str(v.get("accord_ecrit") or "").strip():
+            import logging
+
+            logging.getLogger("controldone.referentiel").warning("alias_sans_accord_ecrit_ignore")
+            continue
+        sortie[str(k)] = {"tva": [str(x) for x in v.get("tva", [])], "noms": [str(x) for x in v.get("noms", [])]}
+    return sortie
 
 
 def cle_transitaire(nom: str | None, tva: str | None, *, sel: bytes, alias_publics: AliasPublics | None = None

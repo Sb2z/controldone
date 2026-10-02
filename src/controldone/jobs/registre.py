@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session
+    from typing import Any as Session  # session SQLAlchemy (type seulement)
 
     from controldone.storage.db import Database
     from controldone.storage.file_jobs import JobInfo
@@ -39,7 +39,7 @@ class ErreurDefinitive(Exception):
     """Échec non réessayable : le job passe ``dead`` immédiatement (avec alerte)."""
 
 
-class BailPerdu(Exception):  # noqa: N818 (nom métier)
+class BailPerdu(Exception):
     """Le bail du job n'est plus détenu par ce worker (expiré, repris par un autre) : le handler s'arrête
     **sans rien écrire** ; l'autre détenteur termine le job (jeton de clôture, D-1303)."""
 

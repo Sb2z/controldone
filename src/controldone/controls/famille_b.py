@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import Decimal
 
+from controldone.controls._aides_befg import num as _num
 from controldone.controls.framework import (
     Classement,
     Confusion,
@@ -208,15 +209,6 @@ def _ref_declaration(dec: Document, v: ValeurSourcee | None = None) -> str:
     page = v.page if v is not None else None
     ref = ", ".join(x for x in (f"MRN {mrn}" if mrn else None, f"page {page}" if page else None) if x)
     return f"la déclaration ({ref})" if ref else "la déclaration"
-
-
-def _num(v: ValeurSourcee | None) -> Decimal | None:
-    if v is None or not v.est_lisible:
-        return None
-    try:
-        return v.decimal_signe()
-    except ValueError:
-        return None
 
 
 def _articles_tous_lus(dec: Document) -> bool:

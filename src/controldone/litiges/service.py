@@ -52,7 +52,13 @@ from controldone.storage.models import (
 from controldone.storage.models import Transitaire as TransitaireRow
 from controldone.storage.scope import TenantScope
 
-from .commission import base_commission, montant_commission, taux_commission
+from .commission import (
+    ORIGINES_COMMISSIONNABLES,
+    ORIGINES_CREDIT,
+    base_commission,
+    montant_commission,
+    taux_commission,
+)
 from .etats import (
     STATUTS_ACTIFS,
     STATUTS_TERMINAUX,
@@ -101,12 +107,17 @@ class AvoirRecu:
     lignes: tuple[LigneCredit, ...]
     numero: str | None = None
     date_avoir: date | None = None
+    #: ``transitaire`` | ``administration`` (remboursement de la douane ou d'une autorité : pas de commission).
+    origine: str = "transitaire"
+    #: TVA portée par l'avoir (information) : les montants des lignes sont **hors taxes**, seule base.
+    montant_tva: Decimal | None = None
 
     @classmethod
     def declare(cls, avoir_id: str, transitaire_id: str, montants: dict[NatureLigne, Decimal], *,
                 numero: str | None = None, date_avoir: date | None = None,
                 factures_origine: Sequence[str] = (), mrns: Sequence[str] = (),
-                refs_transport: Sequence[str] = ()) -> AvoirRecu:
+                refs_transport: Sequence[str] = (), origine: str = "transitaire",
+                montant_tva: Decimal | None = None) -> AvoirRecu:
         """Avoir saisi : une ligne par nature (ex. ``{NatureLigne.debours_droits: Decimal("240.00")}``)."""
         lignes = tuple(
             LigneCredit(avoir_id=avoir_id, ligne=i, nature=nature, montant=Decimal(m), emetteur=transitaire_id,
@@ -114,7 +125,10 @@ class AvoirRecu:
                         mrns=tuple(mrns), refs_transport=tuple(refs_transport))
             for i, (nature, m) in enumerate(sorted(montants.items()))
         )
-        return cls(avoir_id, transitaire_id, lignes, numero, date_avoir)
+        if origine not in ORIGINES_CREDIT:
+            raise ValueError("origine d'avoir inconnue")
+        return cls(avoir_id, transitaire_id, lignes, numero, date_avoir, origine,
+                   Decimal(montant_tva) if montant_tva is not None else None)
 
     @property
     def montant_total(self) -> Decimal:
@@ -353,6 +367,7 @@ class ServiceLitiges:
             montant_reference=format_montant(attendu, "EUR") if attendu is not None else ref_lu,
             source_reference=ref_src,
             ecart=Decimal(c.montant_en_jeu), constat=cj.get("libelle") or "", pieces=pieces,
+            tolerance=str(cj["tolerance_appliquee"]) if cj.get("tolerance_appliquee") not in (None, "") else None,
         )
 
     @staticmethod
@@ -377,11 +392,12 @@ class ServiceLitiges:
             d.valide_par_fondateur, d.valide_le = True, self.horloge()
             sc.enregistrer_reclamation(d)
         action = self.sorties.proposer("reclamation_dossier", {
-            "objet": f"Votre dossier de demande d'avoir est prêt — {d.objet}",
+            "objet": f"Votre relevé d'écarts est prêt — {d.objet}",
             "corps": (
-                "Bonjour,\n\nLe dossier de demande d'avoir ci-dessous est prêt. Vous pouvez le modifier, puis "
-                "l'envoyer vous-même à votre transitaire. Pensez à nous indiquer la date d'envoi, puis à nous "
-                "transmettre l'avoir dès sa réception.\n\n" + d.texte
+                "Bonjour,\n\nLe relevé d'écarts ci-dessous présente les différences chiffrées entre vos documents. "
+                "Il est suivi d'un modèle de courrier neutre que vous pouvez adapter et utiliser vous-même si vous "
+                "le décidez. Si vous recevez un avoir, vous pouvez le déposer pour qu'il soit rapproché des "
+                "écarts.\n\n" + d.texte
             ),
             "destinataires": destinataires_client(reglages, tenant_id),
             "destinataire_role": "client",
@@ -451,15 +467,14 @@ class ServiceLitiges:
         nom = d.transitaire.get("nom") or "votre transitaire"
         factures = ", ".join(d.factures) or "(non lues)"
         corps = (
-            f"Bonjour,\n\nVotre demande d'avoir adressée à {nom} le {envoi} (factures n° {factures}) n'a pas encore "
-            f"donné lieu à un avoir enregistré pour {format_montant(reste, 'EUR')} sur "
-            f"{format_montant(d.total_demande + d.total_a_confirmer, 'EUR')} d'écarts constatés entre documents "
-            f"(J+{rel.jours}).\n\nNous vous suggérons de relancer votre transitaire, puis de nous transmettre l'avoir "
-            "dès sa réception pour que nous le rapprochions des écarts. Si un avoir a déjà été reçu, il suffit de "
-            "le déposer.\n\nCe message vous est adressé à vous seulement : nous n'écrivons jamais à votre "
-            f"transitaire.\n\n{AVERTISSEMENT}"
+            f"Bonjour,\n\nRappel de votre échéance interne (J+{rel.jours}) : depuis l'envoi déclaré le {envoi} "
+            f"de votre courrier à {nom} (factures n° {factures}), aucun avoir n'a été enregistré pour "
+            f"{format_montant(reste, 'EUR')} sur {format_montant(d.total_demande + d.total_a_confirmer, 'EUR')} "
+            "de différences constatées entre documents.\n\nSi vous avez reçu un avoir, vous pouvez le déposer "
+            "pour qu'il soit rapproché des écarts. La suite à donner vous appartient.\n\nCe message vous est "
+            f"adressé à vous seulement : nous n'écrivons jamais à votre transitaire.\n\n{AVERTISSEMENT}"
         )
-        return {"objet": f"Suivi de votre demande d'avoir — factures n° {factures} (J+{rel.jours})", "corps": corps,
+        return {"objet": f"Suivi des avoirs reçus — factures n° {factures} (J+{rel.jours})", "corps": corps,
                 "destinataires": destinataires_client(reglages, tenant_id), "destinataire_role": "client",
                 "reclamation_id": d.id, "jours": rel.jours}
 
@@ -490,9 +505,11 @@ class ServiceLitiges:
                 if credit <= 0:
                     continue
                 res.imputations[eid] = credit
+                origine = "" if avoir.origine == "transitaire" else " (remboursement d'une administration)"
                 sc.transitionner_ecart(eid, imp.ecarts[eid].statut, montant=credit,
-                                       piece=PieceRecouvrement(avoir_id=avoir.avoir_id),
-                                       commentaire=f"avoir {avoir.numero or avoir.avoir_id}")
+                                       piece=PieceRecouvrement(avoir_id=avoir.avoir_id,
+                                                               autre=f"origine:{avoir.origine}"),
+                                       commentaire=f"avoir {avoir.numero or avoir.avoir_id}{origine}")
             res.reliquat = imp.reliquat_avoir(avoir.avoir_id)
             # Base de commission (§17.4) : crédits imputés sur des écarts dont le constat est validé.
             eligibles = set()
@@ -503,6 +520,11 @@ class ServiceLitiges:
                 except AccesRefuse:
                     continue
             res.taux = taux_commission(reglages)
+            # Assiette (CGV art. 5, D-1314) : montants HT des avoirs émis par un transitaire ; un remboursement
+            # accordé par une administration n'entre jamais dans l'assiette.
+            hors_assiette = avoir.origine not in ORIGINES_COMMISSIONNABLES
+            if hors_assiette:
+                eligibles = set()
             res.base_commission = base_commission(res.imputations, eligibles)
             res.commission = montant_commission(res.base_commission, res.taux)
             now = self.horloge()
@@ -512,7 +534,9 @@ class ServiceLitiges:
                     continue
                 d.avoirs = [*d.avoirs, AvoirImpute(avoir_id=avoir.avoir_id, numero=avoir.numero, date_avoir=avoir.date_avoir,
                                                    montant_total=avoir.montant_total, impute=sum(part.values(), _ZERO),
-                                                   reliquat=res.reliquat, imputations=part, le=now)]
+                                                   reliquat=res.reliquat, imputations=part, le=now,
+                                                   origine=avoir.origine, hors_assiette=hors_assiette,
+                                                   montant_tva=avoir.montant_tva)]
                 base_rec = base_commission(part, eligibles)
                 if base_rec > 0:
                     d.commissions = [*d.commissions, Commission(avoir_id=avoir.avoir_id, base=base_rec, taux=res.taux,

@@ -11,9 +11,6 @@ SQLite : ``journal_mode=WAL``, ``foreign_keys=ON``, ``busy_timeout``. Les transa
 
 from __future__ import annotations
 
-from controldone.config import env
-
-import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,6 +20,7 @@ from sqlalchemy import DDL, Engine, create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+from controldone.config import env
 from controldone.storage import garde
 from controldone.storage.models import AuditLog, Base
 

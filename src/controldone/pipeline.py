@@ -22,7 +22,6 @@ extraction) ou injectés (tests : doubles).
 from __future__ import annotations
 
 import hashlib
-import importlib
 import logging
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -189,7 +188,7 @@ Reception = Callable[..., Any]
 
 @dataclass
 class Composants:
-    """Composants du pipeline. ``None`` : découverte automatique (``composants_par_defaut``)."""
+    """Composants du pipeline. ``None`` : composants par défaut (``composants_par_defaut``)."""
 
     decoupeur: Decoupeur | None = None
     extracteurs: list[Extracteur] = field(default_factory=list)
@@ -197,76 +196,24 @@ class Composants:
     normaliseur: Callable[[list[Document]], list[Document]] | None = None
 
 
-def _tenter(module: str, *noms: str) -> Any:
-    try:
-        m = importlib.import_module(module)
-    except Exception:
-        return None
-    for nom in noms:
-        obj = getattr(m, nom, None)
-        if obj is not None:
-            return obj
-    return None
+def _decoupeur_ingestion() -> Decoupeur:
+    """Découpeur de l'équipe ingestion (import explicite, D-1214 : une erreur d'import n'est jamais avalée)."""
+    from controldone.ingest import Decoupeur as DecoupeurIngestion
 
-
-class _DecoupeurFonction:
-    """Adaptateur : fonction ``fn(source|fichier, contenu, ...)`` de l'équipe ingestion -> ``Decoupeur``."""
-
-    def __init__(self, fn: Callable[..., Any], version: str = "?") -> None:
-        self.fn = fn
-        self.version = version
-
-    def decouper(self, source: FichierSource, *, ids: IdGenerator, client_id: str | None) -> ResultatDecoupage:
-        r = self.fn(source.fichier, source.contenu, ids=ids)
-        if isinstance(r, ResultatDecoupage):
-            return r
-        if isinstance(r, tuple) and len(r) >= 2:
-            return ResultatDecoupage(pages=list(r[0]), documents=list(r[1]))
-        pages = list(getattr(r, "pages", []) or [])
-        docs = list(getattr(r, "documents", []) or [])
-        return ResultatDecoupage(pages=pages, documents=docs, avertissements=list(getattr(r, "avertissements", []) or []))
-
-
-def _decoupeur_ingestion() -> Decoupeur | None:
-    """Découpeur publié par l'équipe ingestion, s'il existe (plusieurs noms acceptés)."""
-    for module in ("controldone.ingest", "controldone.ingest.decoupage", "controldone.ingest.pipeline",
-                   "controldone.ingest.documents", "controldone.ingest.classement"):
-        cls = _tenter(module, "Decoupeur", "DecoupeurDocuments", "Ingestion")
-        if cls is not None and isinstance(cls, type):
-            try:
-                obj = cls()
-            except Exception:
-                continue
-            if hasattr(obj, "decouper"):
-                return obj  # type: ignore[return-value]
-        fn = _tenter(module, "decouper_fichier", "decouper", "ingerer_fichier")
-        if fn is not None and callable(fn):
-            return _DecoupeurFonction(fn, str(_tenter(module, "VERSION_CLASSIFIEUR", "VERSION") or "?"))
-    return None
+    return DecoupeurIngestion()
 
 
 def _extracteurs_disponibles() -> list[Extracteur]:
-    """Extracteurs publiés (``structure``, ``deterministe``) + ``llm`` (actif seulement avec une clé)."""
-    out: list[Extracteur] = []
-    for module, noms in (
-        ("controldone.ingest.structure", ("extracteurs",)),
-        ("controldone.extract.structure", ("extracteurs", "EXTRACTEURS", "ExtracteurStructure")),
-        ("controldone.extract.deterministe", ("extracteurs", "EXTRACTEURS", "ExtracteurDeterministe")),
-    ):
-        obj = _tenter(module, *noms)
-        if obj is None:
-            continue
-        try:
-            produits = obj() if callable(obj) else obj
-        except Exception as e:
-            log.warning("extracteur_indisponible module=%s exception=%s", module, type(e).__name__)
-            continue
-        if isinstance(produits, list | tuple):
-            out.extend(p for p in produits if isinstance(p, Extracteur) and p.id not in {x.id for x in out})
-        elif isinstance(produits, Extracteur) and produits.id not in {x.id for x in out}:
-            out.append(produits)
+    """Extracteurs des exports structurés et déterministes (imports explicites, D-1214) + ``llm`` (actif
+    seulement avec une clé)."""
+    from controldone.extract.deterministe import extracteurs as extracteurs_deterministes
     from controldone.extract.llm import LLMExtracteur
+    from controldone.ingest.structure import extracteurs as extracteurs_structure
 
+    out: list[Extracteur] = []
+    for e in [*extracteurs_structure(), *extracteurs_deterministes()]:
+        if e.id not in {x.id for x in out}:
+            out.append(e)
     llm = LLMExtracteur()
     if llm.disponible():
         out.append(llm)

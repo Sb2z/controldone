@@ -6,6 +6,9 @@
 # Les entrées ci-dessous sont des exemples FICTIFS.
 version: 1
 alias: {}
-#  "Transitaire national FICTIF":       # accord écrit : [référence de l'accord, date]
+# Champ obligatoire « accord_ecrit » (référence et date de l'accord) : sans lui, l'entrée est ignorée et le
+# transitaire reste sous empreinte salée. Un transitaire nommé n'a que des statistiques de prix (aucun taux).
+#  "Transitaire national FICTIF":
+#    accord_ecrit: "accord-FICTIF-2026-01, 2026-10-01"
 #    tva: ["FR00000000000"]
 #    noms: ["TRANSITAIRE NATIONAL FICTIF SAS"]

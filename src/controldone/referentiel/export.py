@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from controldone.config import env
-
 import csv
 import hashlib
 import hmac
 import io
 import json
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from controldone.config import env
 from controldone.storage.db import Database
 
 from .anonymisation import charger_alias_publics
@@ -47,7 +45,8 @@ def en_json(res: ResultatReferentiel, *, genere_le: datetime | None = None) -> d
         "agregats": [
             {"transitaire": a.transitaire, "groupe_origine": a.groupe_origine, "regime": a.regime,
              "famille_incoterm": a.famille_incoterm, "mois": a.mois, "dossiers": a.dossiers,
-             "taux_dossiers_avec_ecart": str(a.taux_dossiers_avec_ecart),
+             "taux_dossiers_avec_ecart": None if a.taux_dossiers_avec_ecart is None else str(a.taux_dossiers_avec_ecart),
+             "transitaire_nomme": a.nomme,
              "prix": {n: {k: str(v) for k, v in s.items()} for n, s in a.prix.items()}}
             for a in res.agregats
         ],
@@ -64,7 +63,7 @@ def en_csv(res: ResultatReferentiel) -> str:
     w.writerow(entetes)
     for a in res.agregats:
         ligne = [a.transitaire, a.groupe_origine, a.regime, a.famille_incoterm, a.mois, a.dossiers,
-                 str(a.taux_dossiers_avec_ecart)]
+                 "" if a.taux_dossiers_avec_ecart is None else str(a.taux_dossiers_avec_ecart)]
         for n in NATURES_PRIX:
             s = a.prix.get(n) or {}
             ligne += [str(s.get("p25", "")), str(s.get("mediane", "")), str(s.get("p75", ""))]

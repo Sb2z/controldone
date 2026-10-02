@@ -11,8 +11,6 @@
 
 from __future__ import annotations
 
-from controldone.config import env
-
 import base64
 import logging
 import os
@@ -24,6 +22,7 @@ from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from controldone.config import env
 from controldone.storage.erreurs import CleManquante, ErreurIntegrite
 
 __all__ = [

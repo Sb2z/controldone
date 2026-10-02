@@ -480,6 +480,21 @@ def test_avoir_deja_recu_deduit_montant_brut_conserve():
     assert un(run([d, f, a]), "C1").outcome is Outcome.conforme
 
 
+def test_avoir_d_un_autre_emetteur_non_deduit():
+    # D-1210 (§17.2, D-304) : même émetteur exigé, comme en famille E.
+    d = dec("doc_dec1", (DROIT, "100.00"))
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "150.00"),
+           emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", "FR11000555550", document_id="doc_ft1")))
+    a = document(TypeDocument.avoir, ChampsAvoir(
+        numero=vs("avoir.numero", "AV-FICTIF-1", document_id="doc_av1"),
+        emetteur=Partie(tva=vs("avoir.emetteur.tva", TVA_AUTRE, document_id="doc_av1")),
+        refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-FICTIF-001", document_id="doc_av1")],
+        lignes=[ligne("doc_av1", N.debours_droits, "30.00")],
+    ), id="doc_av1")
+    c = un(run([d, f, a]), "C1").constat
+    assert c.montant_en_jeu == D("50.00") and "doc_av1" not in c.documents_concernes
+
+
 # --- à vérifier : chaque raison --------------------------------------------------------------------
 
 
@@ -564,6 +579,15 @@ def test_c6_faf_sur_excedent_seulement():
     assert c.niveau is Niveau.ecart_certain and c.montant_en_jeu == D("25.00")
     assert c.composante.value == "prestation" and "2,5 %" in lib(c)
     textes_propres(rs)
+
+
+def test_c6_faf_corrige_arrondi_avant_la_difference():
+    # D-1212 : 2,5 % × 3 444,20 = 86,105 -> 86,11 (facturé) ; 2,5 % × 3 382,02 = 84,5505 -> 84,55 ;
+    # excédent = 86,11 − 84,55 = 1,56 (et non 1,5545 arrondi à 1,55).
+    d = dec("doc_dec1", (DROIT, "3382.02"))
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "3444.20"),
+           ligne("doc_ft1", N.frais_avance_fonds, "86.11", pourcentage="2.5", libelle="Avance de fonds"))
+    assert un(run([d, f]), "C6").constat.montant_en_jeu == D("1.56")
 
 
 def test_c6_faf_au_minimum_sans_excedent():

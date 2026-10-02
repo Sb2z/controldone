@@ -59,13 +59,19 @@ def recontroler_dossier(ctx: JobContext) -> dict[str, Any]:
         if ligne.version != ctx.payload.get("version", ligne.version):
             return {"ignore": "version depassee", "version": ligne.version}
 
+        # une seule requête pour tous les documents du client (au lieu d'une par document, F-15) ;
+        # validation pydantic paresseuse, une fois par document
+        contenus = {d.id: d.contenu for d in scope.lister(Document)}
+        valides: dict[str, DocumentModele] = {}
+
         def docs_de(d: DossierModele) -> dict[str, DocumentModele]:
             out = {}
             for i in d.document_ids():
-                try:
-                    out[i] = DocumentModele.model_validate(scope.obtenir(Document, i).contenu)
-                except AccesRefuse:
+                if i not in contenus:
                     continue
+                if i not in valides:
+                    valides[i] = DocumentModele.model_validate(contenus[i])
+                out[i] = valides[i]
             return out
 
         documents = docs_de(dossier)

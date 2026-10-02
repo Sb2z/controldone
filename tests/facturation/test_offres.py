@@ -47,11 +47,26 @@ def test_commission_vingt_pour_cent_au_centime():
         c.commission(Decimal("-1"))
 
 
-def test_coupon_exige_un_consentement_signe():
+def test_coupon_sans_accord_de_publication():
+    """D-1313 : la remise de lancement ne dépend d'aucun accord de publication (acte distinct, facultatif)."""
     c = charger_offres(CONFIG, env={})
     code = "LANCEMENT-3-DIAGNOSTICS"
-    cp = c.verifier_coupon(code, offre="diagnostic", consentement=SIGNE, utilisations=0, deja_utilise_par_client=False)
-    assert cp.remise(Decimal("390.00")) == Decimal("390.00")  # 100 %
+    assert c.coupon(code).consentement_requis is False
+    for consentement in (None, SIGNE, Consentement(signe=False, signe_par="X", signe_le="2026-10-01")):
+        cp = c.verifier_coupon(code, offre="diagnostic", consentement=consentement, utilisations=0,
+                               deja_utilise_par_client=False)
+        assert cp.remise(Decimal("390.00")) == Decimal("390.00")  # 100 %
+
+
+def test_coupon_ancien_reglage_consentement_requis():
+    """Un coupon configuré avec ``consentement_requis: true`` exige toujours un accord signé."""
+    from dataclasses import replace
+
+    c = charger_offres(CONFIG, env={})
+    code = "LANCEMENT-3-DIAGNOSTICS"
+    c = replace(c, coupons={code: replace(c.coupon(code), consentement_requis=True)})
+    assert c.verifier_coupon(code, offre="diagnostic", consentement=SIGNE, utilisations=0,
+                             deja_utilise_par_client=False)
     for consentement in (None, Consentement(signe=False, signe_par="X", signe_le="2026-10-01"),
                          Consentement(signe=True, signe_par="", signe_le="2026-10-01")):
         with pytest.raises(CouponRefuse, match="accord"):

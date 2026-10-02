@@ -4,7 +4,7 @@ chaque ouverture d'un client passe par ``OperatorScope.client`` (journal d'audit
 from __future__ import annotations
 
 from collections import defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter
@@ -27,19 +27,20 @@ from controldone.services.lecture import (
     vue_constat,
 )
 from controldone.services.plateforme import Plateforme, RequeteInvalide
+from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.file_jobs import JobStore
 from controldone.storage.models import Document, Dossier, Fichier
 from controldone.web.rendu import page, redirection, retour_sur
 from controldone.web.reponses import fichier_attache, png
-from controldone.web.securite import acteur_de, formulaire
+from controldone.web.securite import acteur_de, depuis_boucle, formulaire_sync
 from controldone.web.vues import image_page, images_dossier, images_preuves
 
 routeur = APIRouter(prefix="/admin")
 
 LIBELLES_SORTIE = {
     "email_client": "Courriel au client", "rapport_publication": "Publication d'un rapport",
-    "reclamation_dossier": "Dossier de réclamation (mise à disposition du client)", "relance": "Relance",
+    "reclamation_dossier": "Relevé d'écarts (mise à disposition du client)", "relance": "Rappel au client",
     "facture_emise": "Facture émise", "post_linkedin": "Publication LinkedIn",
     "email_prospection": "Courriel de prospection", "statut_litige_pa": "Statut de litige",
 }
@@ -83,9 +84,9 @@ def clients(request: Request) -> Response:
 
 
 @routeur.post("/clients")
-async def creer_client(request: Request) -> Response:
+def creer_client(request: Request) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         tid = svc_admin.creer_client(_pf(request), f, _s(form, "raison_sociale", 300), offre=_s(form, "offre", 20),
                                      plafond=_s(form, "plafond", 20) or None, demo=form.get("demo") == "1")
@@ -109,9 +110,9 @@ def fiche_client(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/utilisateurs")
-async def ajouter_utilisateur(request: Request, tenant_id: str) -> Response:
+def ajouter_utilisateur(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         mdp = svc_admin.creer_utilisateur_client(_pf(request), f, tenant_id, _s(form, "email", 320),
                                                  _s(form, "role", 30), nom=_s(form, "nom", 200))
@@ -125,9 +126,9 @@ async def ajouter_utilisateur(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/entites")
-async def ajouter_entite(request: Request, tenant_id: str) -> Response:
+def ajouter_entite(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         with _pf(request).db.operateur(f) as op:
             svc_admin.ajouter_entite(op.client(tenant_id, "ajout d'une entité"), _s(form, "raison_sociale", 300),
@@ -139,9 +140,9 @@ async def ajouter_entite(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/transitaires")
-async def ajouter_transitaire(request: Request, tenant_id: str) -> Response:
+def ajouter_transitaire(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         with _pf(request).db.operateur(f) as op:
             svc_admin.ajouter_transitaire(op.client(tenant_id, "ajout d'un transitaire"), _s(form, "nom", 300),
@@ -153,14 +154,14 @@ async def ajouter_transitaire(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/grilles")
-async def importer_grille(request: Request, tenant_id: str) -> Response:
+def importer_grille(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await request.form(max_files=1, max_fields=20, max_part_size=64 * 1024)
+    form = depuis_boucle(request.form, max_files=1, max_fields=20, max_part_size=64 * 1024)
     request.app.state.securite.verifier(request, form.get("csrf") if isinstance(form.get("csrf"), str) else None)
     fichier = form.get("fichier")
     if not isinstance(fichier, UploadFile):
         return redirection(request, f"/admin/clients/{tenant_id}#grilles", erreur="Fichier de grille manquant.")
-    contenu = await fichier.read(2 * 1024 * 1024 + 1)
+    contenu = fichier.file.read(2 * 1024 * 1024 + 1)
     try:
         with _pf(request).db.operateur(f) as op:
             g = svc_admin.importer_grille(
@@ -175,9 +176,9 @@ async def importer_grille(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/grilles/valider")
-async def valider_grille(request: Request, tenant_id: str) -> Response:
+def valider_grille(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         version = int(_s(form, "version", 6))
     except ValueError:
@@ -189,9 +190,9 @@ async def valider_grille(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/cles-api")
-async def creer_cle(request: Request, tenant_id: str) -> Response:
+def creer_cle(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         with _pf(request).db.operateur(f) as op:
             cle = svc_admin.creer_cle(op.client(tenant_id, "création d'une clé d'API"), _s(form, "nom", 200),
@@ -203,23 +204,21 @@ async def creer_cle(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/cles-api/{cle_id}/revoquer")
-async def revoquer_cle(request: Request, tenant_id: str, cle_id: str) -> Response:
+def revoquer_cle(request: Request, tenant_id: str, cle_id: str) -> Response:
     f = _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     with _pf(request).db.operateur(f) as op:
         op.client(tenant_id, "révocation d'une clé d'API").revoquer_cle_api(cle_id)
     return redirection(request, f"/admin/clients/{tenant_id}#cles", message="Clé révoquée.")
 
 
 @routeur.post("/clients/{tenant_id}/plafond")
-async def plafond(request: Request, tenant_id: str) -> Response:
+def plafond(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
-        montant = Decimal(_s(form, "plafond", 20).replace(",", "."))
-        if montant < 0 or montant > 10000:
-            raise InvalidOperation
-    except InvalidOperation:
+        montant = montant_saisi(_s(form, "plafond", 40), nom="plafond", maximum=Decimal("10000"), zero=True)
+    except RequeteInvalide:
         return redirection(request, f"/admin/clients/{tenant_id}", erreur="Plafond invalide.")
     with _pf(request).db.operateur(f) as op:
         reglages = next((dict(t.reglages or {}) for t in op.lister_clients() if t.id == tenant_id), None)
@@ -231,9 +230,9 @@ async def plafond(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/publier")
-async def publier(request: Request, tenant_id: str) -> Response:
+def publier(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     try:
         r = publication.publier_rapport(_pf(request), f, tenant_id)
     except RequeteInvalide as exc:
@@ -251,15 +250,15 @@ async def publier(request: Request, tenant_id: str) -> Response:
 
 
 @routeur.post("/clients/{tenant_id}/reclamations")
-async def preparer_reclamation(request: Request, tenant_id: str) -> Response:
+def preparer_reclamation(request: Request, tenant_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         reclamations.preparer_dossier(_pf(request), f, tenant_id, _s(form, "transitaire_id", 64))
     except RequeteInvalide as exc:
         return redirection(request, f"/admin/clients/{tenant_id}", erreur=str(exc))
     return redirection(request, "/admin/validation#sorties",
-                       message="Dossier de réclamation préparé : à approuver dans la file de validation.")
+                       message="Relevé d'écarts préparé : à approuver dans la file de validation.")
 
 
 # --- dossier --------------------------------------------------------------------------------------------------
@@ -270,7 +269,7 @@ def dossier(request: Request, tenant_id: str, dossier_id: str) -> Response:
     f = _fondateur(request)
     pf = _pf(request)
     with pf.db.operateur(f) as op:
-        scope = op.client(tenant_id, "consultation d'un dossier")
+        scope = op.client(tenant_id, "consultation d'un dossier", lecture=True)
         info = client_info(scope)
         lu = detail_dossier(scope, dossier_id)
         images = images_dossier(pf.vault, scope, lu)
@@ -284,7 +283,7 @@ def page_document(request: Request, tenant_id: str, document_id: str, numero: in
     f = _fondateur(request)
     pf = _pf(request)
     with pf.db.operateur(f) as op:
-        img = image_page(pf.vault, op.client(tenant_id, "affichage d'une page de document"), document_id, numero)
+        img = image_page(pf.vault, op.client(tenant_id, "affichage d'une page de document", lecture=True), document_id, numero)
     if img is None:
         raise AccesRefuse("introuvable ou hors périmètre")
     return png(img)
@@ -295,7 +294,7 @@ def telecharger_fichier(request: Request, tenant_id: str, fichier_id: str) -> Re
     f = _fondateur(request)
     pf = _pf(request)
     with pf.db.operateur(f) as op:
-        fic = op.client(tenant_id, "téléchargement d'un fichier déposé").obtenir(Fichier, fichier_id)
+        fic = op.client(tenant_id, "téléchargement d'un fichier déposé", lecture=True).obtenir(Fichier, fichier_id)
         if not fic.coffre_ref:
             raise AccesRefuse("introuvable ou hors périmètre")
         contenu = pf.vault.lire(tenant_id, fic.coffre_ref)
@@ -303,9 +302,9 @@ def telecharger_fichier(request: Request, tenant_id: str, fichier_id: str) -> Re
     return fichier_attache(contenu, nom)
 
 
-async def _decision(request: Request, tenant_id: str, constat_id: str, quoi: str) -> Response:
+def _decision(request: Request, tenant_id: str, constat_id: str, quoi: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     retour = retour_sur(form.get("retour"), "/admin/validation")
     motif = _s(form, "motif", 1000)
     try:
@@ -326,24 +325,24 @@ async def _decision(request: Request, tenant_id: str, constat_id: str, quoi: str
 
 
 @routeur.post("/clients/{tenant_id}/constats/{constat_id}/valider")
-async def valider(request: Request, tenant_id: str, constat_id: str) -> Response:
-    return await _decision(request, tenant_id, constat_id, "valider")
+def valider(request: Request, tenant_id: str, constat_id: str) -> Response:
+    return _decision(request, tenant_id, constat_id, "valider")
 
 
 @routeur.post("/clients/{tenant_id}/constats/{constat_id}/rejeter")
-async def rejeter(request: Request, tenant_id: str, constat_id: str) -> Response:
-    return await _decision(request, tenant_id, constat_id, "rejeter")
+def rejeter(request: Request, tenant_id: str, constat_id: str) -> Response:
+    return _decision(request, tenant_id, constat_id, "rejeter")
 
 
 @routeur.post("/clients/{tenant_id}/constats/{constat_id}/retrograder")
-async def retrograder(request: Request, tenant_id: str, constat_id: str) -> Response:
-    return await _decision(request, tenant_id, constat_id, "retrograder")
+def retrograder(request: Request, tenant_id: str, constat_id: str) -> Response:
+    return _decision(request, tenant_id, constat_id, "retrograder")
 
 
 @routeur.post("/clients/{tenant_id}/dossiers/{dossier_id}/corriger")
-async def corriger(request: Request, tenant_id: str, dossier_id: str) -> Response:
+def corriger(request: Request, tenant_id: str, dossier_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     pf = _pf(request)
     retour = retour_sur(form.get("retour"), f"/admin/clients/{tenant_id}/dossiers/{dossier_id}")
     try:
@@ -353,7 +352,7 @@ async def corriger(request: Request, tenant_id: str, dossier_id: str) -> Respons
                 _s(form, "valeur_id", 64), _s(form, "valeur", 300), _s(form, "motif", 1000))
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
-    validation.mettre_en_file_recontrole(pf, tenant_id, dossier_id, version)
+    # le recontrôle a été mis en file dans la transaction de la correction (D-1306)
     return redirection(request, retour, message=f"Valeur corrigée (version {version} du dossier) : les contrôles "
                                                 "sont relancés.")
 
@@ -378,7 +377,7 @@ def file_validation(request: Request) -> Response:
             t = clients.get(tenant_id)
             if t is None:
                 continue
-            scope = op.client(tenant_id, "file de validation")
+            scope = op.client(tenant_id, "file de validation", lecture=True)
             demo = demo or t["demo"]
             courants = {c.id for c in constats_courants(scope)} if par_client.get(tenant_id) else set()
             libelles: dict[str, str] = {}
@@ -416,9 +415,9 @@ def file_validation(request: Request) -> Response:
                 retour="/admin/validation")
 
 
-async def _sortie(request: Request, action_id: str, quoi: str) -> Response:
+def _sortie(request: Request, action_id: str, quoi: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     pf = _pf(request)
     fs = FileSortante(pf.db)
     retour = retour_sur(form.get("retour"), "/admin/validation#sorties")
@@ -449,18 +448,18 @@ async def _sortie(request: Request, action_id: str, quoi: str) -> Response:
 
 
 @routeur.post("/sorties/{action_id}/approuver")
-async def approuver_sortie(request: Request, action_id: str) -> Response:
-    return await _sortie(request, action_id, "approuver")
+def approuver_sortie(request: Request, action_id: str) -> Response:
+    return _sortie(request, action_id, "approuver")
 
 
 @routeur.post("/sorties/{action_id}/corriger")
-async def corriger_sortie(request: Request, action_id: str) -> Response:
-    return await _sortie(request, action_id, "corriger")
+def corriger_sortie(request: Request, action_id: str) -> Response:
+    return _sortie(request, action_id, "corriger")
 
 
 @routeur.post("/sorties/{action_id}/refuser")
-async def refuser_sortie(request: Request, action_id: str) -> Response:
-    return await _sortie(request, action_id, "refuser")
+def refuser_sortie(request: Request, action_id: str) -> Response:
+    return _sortie(request, action_id, "refuser")
 
 
 @routeur.get("/sorties/{action_id}/{fmt}")
@@ -483,9 +482,9 @@ def autonomie(request: Request) -> Response:
 
 
 @routeur.post("/autonomie")
-async def definir_autonomie(request: Request) -> Response:
+def definir_autonomie(request: Request) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         kind, mode = TypeAction(_s(form, "kind", 64)), ModeAutonomie(_s(form, "mode", 16))
     except ValueError:
@@ -498,15 +497,15 @@ async def definir_autonomie(request: Request) -> Response:
 def jobs(request: Request) -> Response:
     _fondateur(request)
     store = JobStore(_pf(request).db)
-    tous = store.lister(limite=5000)
-    return page(request, "admin/jobs.html.j2", titre="Tâches", nav="jobs", jobs=list(reversed(tous))[:200],
+    recents = store.lister(limite=200, recents=True)  # tri SQL décroissant avant la limite
+    return page(request, "admin/jobs.html.j2", titre="Tâches", nav="jobs", jobs=list(reversed(recents)),
                 compte=store.compter_par_statut())
 
 
 @routeur.post("/jobs/{job_id}/relancer")
-async def relancer(request: Request, job_id: str) -> Response:
+def relancer(request: Request, job_id: str) -> Response:
     f = _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     ok = JobStore(_pf(request).db).relancer(job_id, acteur_id=f.id)
     return redirection(request, "/admin/jobs", message="Tâche remise en file." if ok else None,
                        erreur=None if ok else "Seule une tâche morte peut être relancée.")
@@ -536,9 +535,9 @@ def alertes(request: Request) -> Response:
 
 
 @routeur.post("/alertes/{alerte_id}/lue")
-async def alerte_lue(request: Request, alerte_id: int) -> Response:
+def alerte_lue(request: Request, alerte_id: int) -> Response:
     f = _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     with _pf(request).db.operateur(f) as op:
         op.marquer_alerte_lue(alerte_id)
     return redirection(request, "/admin/alertes", message="Alerte marquée comme lue.")

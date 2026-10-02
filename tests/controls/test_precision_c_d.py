@@ -316,3 +316,59 @@ def test_c5_forfait_non_lu_sur_la_declaration_n_est_pas_retire_de_la_seule_factu
 
 def test_raisons_utilisees_existent():
     assert RaisonCode.couvert_par_autre_controle and RaisonCode.valeur_absente
+
+
+# --- D-1210 : imputation unique des avoirs (§17.2) pour C, D et E ------------------------------------------
+
+
+def _avoir(aid, *lignes, numero="AV-FICTIF-7", origine="FA-FICTIF-7", emetteur_tva=None):
+    from controldone.model import Partie
+
+    em = Partie(tva=vs("avoir.emetteur.tva", emetteur_tva, document_id=aid)) if emetteur_tva else Partie()
+    return document(TypeDocument.avoir, ChampsAvoir(
+        numero=vs("avoir.numero", numero, document_id=aid), emetteur=em,
+        refs_facture_origine=[vs("avoir.refs_facture_origine[]", origine, document_id=aid)] if origine else [],
+        lignes=list(lignes),
+    ), id=aid)
+
+
+def test_d3_avoir_citant_la_facture_impute_malgre_un_mrn_de_ligne_mal_lu():
+    # F7 : MRN de la ligne de facture lu « …O… » et celui de l'avoir « …0… » : l'avoir cite la facture,
+    # il est imputé (comme en E6).
+    f = ft(ligne(N.frais_dedouanement, "83.34", libelle="Frais de dédouanement", mrn="26FRBIOXUODIVBQIS3"),
+           numero="FA-FICTIF-7")
+    av = _avoir("doc_av", ligne(N.frais_dedouanement, "11.30", fid="doc_av", mrn="26FRBI0XUODIVBQIS3"))
+    r = un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3")
+    assert r.constat.montant_en_jeu == D("12.04") and r.constat.montant_brut == D("23.34")
+
+
+def test_d3_avoir_d_un_autre_transitaire_non_impute():
+    # D-304 : même émetteur exigé (C, D et E appliquent la même règle).
+    f = ft(ligne(N.frais_dedouanement, "83.34", libelle="Frais de dédouanement"), numero="FA-FICTIF-7")
+    av = _avoir("doc_av", ligne(N.frais_dedouanement, "11.30", fid="doc_av"), emetteur_tva="FR61000999990")
+    r = un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3")
+    assert r.constat.montant_en_jeu == D("23.34") and "doc_av" not in r.constat.documents_concernes
+
+
+def test_d3_meme_numero_d_avoir_sans_meme_emetteur_n_est_pas_un_doublon():
+    # Avant : C et D ne gardaient qu'un avoir par numéro ; désormais la règle E3 (même émetteur et même
+    # numéro) vaut partout : l'avoir dont l'émetteur est illisible n'est pas tenu pour un doublon (D-305).
+    f = ft(ligne(N.frais_dedouanement, "83.34", libelle="Frais de dédouanement"), numero="FA-FICTIF-7")
+    a1 = _avoir("doc_av1", ligne(N.frais_dedouanement, "5.00", fid="doc_av1"), numero="AV-001",
+                emetteur_tva=TVA_TRANSITAIRE)
+    a2 = _avoir("doc_av2", ligne(N.frais_dedouanement, "6.30", fid="doc_av2"), numero="AV-001")
+    r = un(run_controls(ctx_de([f, a1, a2]), controles=["D3"]), "D3")
+    assert r.constat.montant_en_jeu == D("12.04")
+
+
+def test_avoir_peu_lisible_non_impute():
+    # C_MIN_UTILE appliqué aux lignes d'avoir pour C, D et E (D-1210).
+    from controldone.controls import _aides_befg as aides
+
+    peu_lisible = LigneFactureTransitaire(
+        nature=N.frais_dedouanement,
+        montant_ht=vs("avoir.lignes[].montant_ht", "11.30", document_id="doc_av", confiance=0.3),
+    )
+    av = _avoir("doc_av", peu_lisible)
+    ctx = ctx_de([ft(ligne(N.frais_dedouanement, "83.34")), av])
+    assert aides.lignes_credit_du_dossier(ctx) == []

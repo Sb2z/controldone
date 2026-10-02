@@ -16,13 +16,12 @@ dans ``var/demo/``.
 
 from __future__ import annotations
 
-from controldone.config import env
-
 import argparse
 import logging
-import os
 import sys
 from pathlib import Path
+
+from controldone.config import env
 
 __all__ = ["main"]
 
@@ -67,9 +66,13 @@ def _demo(args: argparse.Namespace) -> int:
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    from controldone.config import get_settings
     from controldone.services.plateforme import Plateforme
     from controldone.web import ParametresWeb, create_app
 
+    # Téléversements multipart (Starlette) et fichiers temporaires sur le volume de données, pas sur un
+    # tmpfs /tmp en mémoire (D-1305) : ``CONTROLDONE_TMP_DIR``, défaut ``<data_dir>/tmp``.
+    get_settings().appliquer_repertoire_temporaire()
     plateforme = Plateforme.depuis_env()
     if args.init_schema:
         plateforme.db.creer_schema()

@@ -98,8 +98,8 @@ def ouvrir_ecart(scope: TenantScope, c: Constat) -> Ecart | None:
 def corriger_valeur(scope: TenantScope, dossier_id: str, document_id: str, valeur_id: str, nouvelle: str,
                     motif: str) -> int:
     """Corrige (ou confirme, même valeur) une valeur extraite ; renvoie la nouvelle version du dossier.
-    L'appelant met ensuite le recontrôle en file (``mettre_en_file_recontrole``) après validation de la
-    transaction."""
+    Le job ``recontroler_dossier`` est mis en file **dans la même transaction** (D-1306) : la nouvelle
+    version et son recontrôle sont validés ensemble, ou annulés ensemble (plus de version sans recontrôle)."""
     if not (motif and motif.strip()):
         raise RequeteInvalide("la correction exige un motif")
     nouvelle = (nouvelle or "").strip()
@@ -129,11 +129,18 @@ def corriger_valeur(scope: TenantScope, dossier_id: str, document_id: str, valeu
         cible=ancienne.id, chemin=ancienne.chemin, ancienne=ancienne.model_dump(mode="json"),
         nouvelle=nv.model_dump(mode="json"), contenu_document=doc.model_dump(mode="json"), motif=motif,
         role_auteur=role)
+    scope.mettre_en_file("recontroler_dossier", {"dossier_id": dossier_id, "version": ligne.version},
+                         cle_recontrole(scope.tenant_id, dossier_id, ligne.version))
     return ligne.version
 
 
+def cle_recontrole(tenant_id: str, dossier_id: str, version: int) -> str:
+    return f"recontroler_dossier:{tenant_id}:{dossier_id}:v{version}"
+
+
 def mettre_en_file_recontrole(plateforme: Plateforme, tenant_id: str, dossier_id: str, version: int) -> str:
+    """Compatibilité : le recontrôle est déjà en file depuis ``corriger_valeur`` (même clé, idempotent)."""
     job, _ = JobStore(plateforme.db).enqueue(
         "recontroler_dossier", {"dossier_id": dossier_id, "version": version},
-        f"recontroler_dossier:{tenant_id}:{dossier_id}:v{version}", tenant_id)
+        cle_recontrole(tenant_id, dossier_id, version), tenant_id)
     return job.id

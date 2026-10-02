@@ -25,7 +25,12 @@ from controldone.model import (
 from controldone.model.champs import LigneFactureTransitaire
 from controldone.normalize.refs import mrn_prefixe, norm_ref, ref_compatibles
 from controldone.normalize.text import cle_texte
-from controldone.recouvrement.imputation import cle_emetteur
+from controldone.recouvrement.imputation import (
+    LigneCredit,
+    cle_emetteur,
+    emetteurs_compatibles,
+    lignes_credit_depuis_avoir,
+)
 
 ZERO = Decimal(0)
 
@@ -41,6 +46,28 @@ def num(v: ValeurSourcee | None) -> Decimal | None:
         return v.decimal_signe()
     except ValueError:
         return None
+
+
+def num_utilisable(ctx: ControlContext, v: ValeurSourcee | None) -> Decimal | None:
+    """Montant signé d'une valeur utilisable (``None`` si absente, illisible ou trop douteuse : ``C_MIN_UTILE``)."""
+    if not ctx.utilisable(v):
+        return None
+    assert v is not None
+    try:
+        return v.decimal_signe()
+    except ValueError:
+        return None
+
+
+def somme(xs: Iterable[Decimal]) -> Decimal:
+    """Somme exacte (``Decimal``), 0 pour une suite vide."""
+    return sum(xs, ZERO)
+
+
+def entre_parentheses(*morceaux: str) -> str:
+    """`` (a, b)`` à partir des morceaux non vides ; chaîne vide s'il n'y en a aucun."""
+    m = [x for x in morceaux if x]
+    return f" ({', '.join(m)})" if m else ""
 
 
 def entier(v: ValeurSourcee | None) -> int | None:
@@ -117,9 +144,8 @@ def emetteur_de(ctx: ControlContext, doc: Document) -> str | None:
     return cle_emetteur(doc.champs.emetteur, ctx.transitaires)  # type: ignore[union-attr]
 
 
-def memes_emetteurs(a: str | None, b: str | None) -> bool:
-    """Émetteurs égaux ; un émetteur illisible d'un côté n'empêche pas le rapprochement (D-305)."""
-    return a is None or b is None or a == b
+#: Émetteurs égaux ; un émetteur illisible d'un côté n'empêche pas le rapprochement (D-305).
+memes_emetteurs = emetteurs_compatibles
 
 
 def date_document(doc: Document) -> date | None:
@@ -379,3 +405,12 @@ def avoirs_imputables(ctx: ControlContext) -> list[Document]:
     """Avoirs du dossier à imputer : la seconde réception d'un même avoir n'est pas imputée (E3)."""
     doubles = avoirs_doubles(ctx)
     return [d for d in ctx.avoirs() if d.id not in doubles]
+
+
+def lignes_credit_du_dossier(ctx: ControlContext) -> list[LigneCredit]:
+    """Lignes d'avoir à imputer du dossier (§17.2), source unique des familles C, D et E (D-1210) : seconde
+    réception d'un même avoir exclue (E3), émetteur identifié, montants et références ``≥ C_MIN_UTILE``."""
+    return [
+        lc for a in avoirs_imputables(ctx)
+        for lc in lignes_credit_depuis_avoir(a, emetteur=emetteur_de(ctx, a), utilisable=ctx.utilisable)
+    ]

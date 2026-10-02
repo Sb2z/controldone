@@ -505,8 +505,7 @@ def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | 
 
 def imputation_du_dossier(ctx: ControlContext) -> tuple[ResultatImputation, list[tuple[EcartImputable, str | None]]]:
     """Imputation §17.2 des avoirs du dossier (hors secondes réceptions, E3) sur les écarts candidats."""
-    avoirs = aides.avoirs_imputables(ctx)
-    lignes = [lc for a in avoirs for lc in lignes_credit_depuis_avoir(a, emetteur=aides.emetteur_de(ctx, a))]
+    lignes = aides.lignes_credit_du_dossier(ctx)
     ecarts = _ecarts_du_dossier(ctx)
     return imputer_avoirs(lignes, [e for e, _ in ecarts], t_debours=ctx.tol.t_debours(0)), ecarts
 

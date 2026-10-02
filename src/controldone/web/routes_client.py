@@ -3,7 +3,7 @@ route ne reçoit d'identifiant de client. Un rôle client ne voit que les consta
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter
@@ -18,16 +18,17 @@ from controldone.services.lecture import (
     client_info,
     constats_courants,
     detail_dossier,
-    jobs_du_client,
+    job_du_lot,
     lire_lot,
     lister_dossiers,
     lister_lots,
 )
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
+from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.rendu import page, redirection, retour_sur
 from controldone.web.reponses import fichier_attache, png
-from controldone.web.securite import acteur_de
+from controldone.web.securite import acteur_de, depuis_boucle
 from controldone.web.vues import image_page, images_dossier
 
 routeur = APIRouter(prefix="/espace")
@@ -87,19 +88,20 @@ def depot_form(request: Request) -> Response:
 
 
 @routeur.post("/depot")
-async def deposer(request: Request) -> Response:
+def deposer(request: Request) -> Response:
     a = _client(request)
     pf = _pf(request)
     if not peut(a, Action.deposer, a):
         raise Interdit("dépôt non autorisé")
-    form = await request.form(max_files=2000, max_fields=10, max_part_size=64 * 1024)
+    form = depuis_boucle(request.form, max_files=2000, max_fields=10, max_part_size=64 * 1024)
     request.app.state.securite.verifier(request, form.get("csrf") if isinstance(form.get("csrf"), str) else None)
     transmis = []
     for item in form.getlist("fichiers"):
         if not isinstance(item, UploadFile) or not (item.filename or "").strip():
             continue
-        contenu, taille = depot.lire_borne(item.file, pf.limites.taille_fichier)
-        transmis.append(depot.FichierTransmis(nom=item.filename or "fichier", contenu=contenu, taille=taille))
+        # le téléversement est déjà sur disque (fichier temporaire du serveur) : lu fichier par fichier
+        # au moment de la réception, jamais tout le lot en mémoire (F-14)
+        transmis.append(depot.FichierTransmis.depuis_flux(item.filename or "fichier", item.file, item.size))
     try:
         r = depot.deposer(pf, a, transmis)
     except RequeteInvalide as exc:
@@ -116,10 +118,10 @@ async def deposer(request: Request) -> Response:
 def lot(request: Request, lot_id: str) -> Response:
     a = _client(request)
     pf = _pf(request)
-    jobs = jobs_du_client(pf.db, a.tenant_id)
+    job = job_du_lot(pf.db, a.tenant_id, lot_id)
     with pf.db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
-        donnees = lire_lot(scope, lot_id, jobs=jobs)
+        donnees = lire_lot(scope, lot_id, job=job)
     return page(request, "client/lot.html.j2", titre="Dépôt", nav="depot", lot=donnees, info=info, demo=info["demo"],
                 rafraichir=donnees["statut"] == "recu", **_contexte(a))
 
@@ -180,7 +182,7 @@ def rapports(request: Request) -> Response:
         info = client_info(scope)
     liste = list(reversed(publication.actions_client(pf, a, TypeAction.rapport_publication)))
     dossiers_rec = list(reversed(publication.actions_client(pf, a, TypeAction.reclamation_dossier)))
-    return page(request, "client/rapports.html.j2", titre="Rapports et dossiers de réclamation", nav="rapports",
+    return page(request, "client/rapports.html.j2", titre="Rapports et relevés d'écarts", nav="rapports",
                 rapports=liste, reclamations=dossiers_rec, info=info, demo=info["demo"], **_contexte(a))
 
 
@@ -203,41 +205,40 @@ def recouvrement(request: Request) -> Response:
         "credite": sum((x.montant_credite for x in lignes), Decimal(0)),
         "reste": sum((x.reste for x in lignes if x.statut_code not in ("credite", "abandonne")), Decimal(0)),
     }
-    return page(request, "client/recouvrement.html.j2", titre="Registre de recouvrement", nav="recouvrement",
+    return page(request, "client/recouvrement.html.j2", titre="Suivi des avoirs reçus", nav="recouvrement",
                 lignes=lignes, totaux=totaux, info=info, demo=info["demo"], **_contexte(a))
 
 
-async def _formulaire_client(request: Request) -> Any:
-    from controldone.web.securite import formulaire
+def _formulaire_client(request: Request) -> Any:
+    from controldone.web.securite import formulaire_sync
 
-    return await formulaire(request)
+    return formulaire_sync(request)
 
 
 @routeur.post("/recouvrement/{ecart_id}/reclame")
-async def declarer_envoi(request: Request, ecart_id: str) -> Response:
+def declarer_envoi(request: Request, ecart_id: str) -> Response:
     a = _client(request)
-    form = await _formulaire_client(request)
+    form = _formulaire_client(request)
     try:
-        with _pf(request).db.tenant(a.tenant_id, a) as scope:
-            reclamations.declarer_envoi(scope, ecart_id, str(form.get("commentaire") or "")[:500])
+        reclamations.declarer_envoi_releve(_pf(request), a, ecart_id, str(form.get("commentaire") or "")[:500])
     except RequeteInvalide as exc:
         return redirection(request, "/espace/recouvrement", erreur=str(exc))
     return redirection(request, retour_sur(form.get("retour"), "/espace/recouvrement"),
-                       message="Envoi de la réclamation enregistré.")
+                       message="Envoi de votre courrier enregistré.")
 
 
 @routeur.post("/recouvrement/{ecart_id}/avoir")
-async def avoir(request: Request, ecart_id: str) -> Response:
+def avoir(request: Request, ecart_id: str) -> Response:
     a = _client(request)
-    form = await _formulaire_client(request)
+    form = _formulaire_client(request)
     try:
-        montant = Decimal(str(form.get("montant") or "").strip().replace(" ", "").replace(",", "."))
-    except InvalidOperation:
-        return redirection(request, "/espace/recouvrement", erreur="Montant invalide.")
-    try:
-        with _pf(request).db.tenant(a.tenant_id, a) as scope:
-            reclamations.enregistrer_avoir(scope, ecart_id, montant, str(form.get("reference") or "")[:200],
-                                           str(form.get("commentaire") or "")[:500])
+        montant = montant_saisi(form.get("montant"), nom="montant HT de l'avoir")
+        tva = form.get("montant_tva")
+        montant_tva = montant_saisi(tva, nom="TVA de l'avoir", zero=True) if isinstance(tva, str) and tva.strip() else None
+        origine = "administration" if form.get("origine") == "administration" else "transitaire"
+        reclamations.enregistrer_avoir_recu(_pf(request), a, ecart_id, montant, str(form.get("reference") or "")[:200],
+                                            str(form.get("commentaire") or "")[:500], origine=origine,
+                                            montant_tva=montant_tva)
     except RequeteInvalide as exc:
         return redirection(request, "/espace/recouvrement", erreur=str(exc))
     return redirection(request, "/espace/recouvrement", message="Avoir enregistré.")

@@ -131,9 +131,11 @@ class FileSortante:
                     return _instantane(existant)
             if tenant_id is not None and not sorties.client_existe(s, tenant_id):
                 raise AccesRefuse("client introuvable")
-            o = sorties.inserer(s, id=nouvel_id("out"), tenant_id=tenant_id, kind=kind.value, statut="brouillon",
+            o, cree = sorties.inserer_ou_lire(s, id=nouvel_id("out"), tenant_id=tenant_id, kind=kind.value, statut="brouillon",
                                 payload=payload, idempotency_key=idempotency_key, cree_par=acteur.id,
                                 cree_le=maintenant())
+            if not cree:  # course rattrapée : action créée entre-temps par une transaction concurrente
+                return _instantane(o)
             self._audit(s, acteur, o, "proposer")
             motifs = verifier_textes(payload)
             o.motif_blocage = "; ".join(motifs) or None
@@ -227,6 +229,32 @@ class FileSortante:
 
     def envoyer_approuves(self, expediteur: Expediteur, acteur: Acteur) -> list[ActionSortante]:
         return [self.envoyer(a.id, expediteur, acteur) for a in self.lister(acteur, statuts=["approuve", "corrige"])]
+
+    def par_cle(self, idempotency_key: str, acteur: Acteur) -> ActionSortante | None:
+        """Action d'une clé d'idempotence (fondateur et système)."""
+        if Role(acteur.role) not in (Role.fondateur, Role.systeme):
+            raise AccesRefuse("réservé au fondateur et au système")
+        with self.db.transaction_systeme() as s:
+            o = sorties.lire_par_cle(s, idempotency_key)
+            return _instantane(o) if o is not None else None
+
+    def remplacer_brouillon(self, action_id: str, payload: dict[str, Any], acteur: Acteur, *, motif: str) -> ActionSortante:
+        """Remplace le contenu d'un **brouillon** par une source qui fait foi (ex. paiement Stripe reçu pour
+        une échéance déjà proposée par un agent, F-08). Refusé hors ``brouillon`` ; garde-fous revérifiés ;
+        journalisé (``outbox_remplacer``)."""
+        self._exiger(acteur, Action.proposer_sortie, None)
+        with self.db.transaction_systeme() as s:
+            o = sorties.lire(s, action_id, verrou=True)
+            if o is None:
+                raise AccesRefuse("action introuvable")
+            if o.statut != StatutAction.brouillon.value:
+                raise TransitionInterdite("seul un brouillon peut être remplacé")
+            o.payload = payload
+            motifs = verifier_textes(payload)
+            o.motif_blocage = "; ".join(motifs) or None
+            self._audit(s, acteur, o, "remplacer", {"motif": motif[:200]})
+            s.flush()
+            return _instantane(o)
 
     # --- lecture ---
     def obtenir(self, action_id: str, acteur: Acteur) -> ActionSortante:

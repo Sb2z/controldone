@@ -56,6 +56,7 @@ from controldone.model.enums import (
 )
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, deriver_somme
 from controldone.normalize import normalize_unit
+from controldone.normalize.natures import nature_libelle
 
 from .sniff import MIME_CSV, MIME_PDF, MIME_XML, decoder_texte, detecter_type
 
@@ -142,40 +143,6 @@ def _schema_valide(racine: etree._Element, flavor: str) -> bool:
 
 # --- natures de lignes, catégories de taxes, paiement ----------------------------------------------------
 
-_NATURES: list[tuple[NatureLigne, re.Pattern[str]]] = [
-    (NatureLigne.frais_avance_fonds, re.compile(
-        r"avance de fonds|frais d'avance|advance (?:fee|of funds)|disbursement fee|commission (?:sur|de) debours|"
-        r"frais financiers|anticipo de fondos|frais de debours")),
-    (NatureLigne.debours_combines, re.compile(
-        r"droits? (?:et|&) taxes|duties (?:and|&) taxes|duty (?:and|&) tax|derechos e impuestos|"
-        r"droits et tva|taxes et droits")),
-    (NatureLigne.debours_forfait_petits_envois, re.compile(
-        r"droit forfaitaire|forfait (?:petits? envois|par article)|flat[- ]rate duty|flat duty|"
-        r"low[- ]value (?:consignment )?duty|derecho (?:a tanto alzado|fijo)")),
-    (NatureLigne.debours_tva, re.compile(
-        r"tva (?:a l')?import|import vat|vat on import|tva (?:douane|import|sur importation|debours)|"
-        r"iva (?:de )?importacion|^tva\b|\btva avancee")),
-    (NatureLigne.debours_autres_taxes, re.compile(
-        r"accises?|excise|anti-?dumping|compensat|autres? taxes?|other (?:taxes|duties)|octroi de mer|"
-        r"taxe (?:speciale|additionnelle|interieure)|impuestos especiales")),
-    (NatureLigne.debours_droits, re.compile(
-        r"droits? de douane|customs dut(?:y|ies)|\bduty\b|\bduties\b|\bdroits?\b|aranceles?|derechos de aduana")),
-    (NatureLigne.frais_ligne_supplementaire, re.compile(
-        r"lignes? supplementaires?|articles? supplementaires?|additional (?:lines?|items?|articles?)|"
-        r"ligne(?:s)? (?:de )?(?:declaration )?sup|extra (?:lines?|items?)|partida adicional")),
-    (NatureLigne.frais_dedouanement, re.compile(
-        r"dedouanement|customs clearance|clearance|formalites? (?:de )?douan|declaration en douane|"
-        r"despacho (?:de )?aduan|customs (?:formalities|entry|declaration)|representation en douane")),
-    (NatureLigne.magasinage, re.compile(r"magasinage|storage|entreposage|almacenaje|stockage|demurrage")),
-    (NatureLigne.manutention, re.compile(r"manutention|handling|manipulacion")),
-    (NatureLigne.surcharge, re.compile(
-        r"surcharge|carburant|\bfuel\b|surete|security|haute saison|peak season|recargo")),
-    (NatureLigne.transport, re.compile(
-        r"transport|livraison|enlevement|delivery|pick-? ?up|acheminement|\bfret\b|freight|camionnage|"
-        r"\bentrega\b|recogida")),
-]
-
-
 def _norm(t: str) -> str:
     from controldone.normalize.text import sans_accents
 
@@ -183,14 +150,9 @@ def _norm(t: str) -> str:
 
 
 def nature_ligne(libelle: str | None) -> NatureLigne:
-    """Nature d'une ligne de facture transitaire d'après son libellé (§5.3.3) ; ``autre_prestation`` sinon."""
-    if not libelle:
-        return NatureLigne.autre_prestation
-    t = _norm(libelle)
-    for nature, rx in _NATURES:
-        if rx.search(t):
-            return nature
-    return NatureLigne.autre_prestation
+    """Nature d'une ligne de facture transitaire d'après son libellé (§5.3.3) ; ``autre_prestation`` sinon
+    (table unique ``normalize.natures``, D-1213)."""
+    return nature_libelle(libelle) or NatureLigne.autre_prestation
 
 
 def categorie_taxe(code: str | None, table: dict[str, str] | None = None) -> CategorieTaxe:

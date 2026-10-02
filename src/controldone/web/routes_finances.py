@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -17,16 +16,18 @@ from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from controldone.calendrier import aujourdhui_paris, mois_paris
 from controldone.facturation import Consentement, CouponRefuse, SignatureInvalide, service_pour
 from controldone.facturation.finances import export_csv, synthese
 from controldone.facturation.paiements import PaiementBouchon
 from controldone.outbox import FileSortante, TypeAction
+from controldone.services.saisie import montant_saisi
 from controldone.storage import facturation as stock
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.rendu import page, redirection
 from controldone.web.reponses import fichier_attache
 from controldone.web.routes_admin import _fondateur, _pf, _s
-from controldone.web.securite import formulaire
+from controldone.web.securite import depuis_boucle, formulaire_sync
 
 __all__ = ["routeur", "routeur_webhooks"]
 
@@ -46,7 +47,7 @@ def finances(request: Request) -> Response:
     pf = _pf(request)
     svc = service_pour(pf)
     s = synthese(pf.db, acteur_id=f.id, acteur_role=f.role.value)
-    mois = date.today().strftime("%Y-%m")
+    mois = mois_paris()
     du_mois = next((x for x in s.par_mois if x.mois == mois), None)
     clients = stock.clients_facturation(pf.db)
     fs = FileSortante(pf.db)
@@ -66,7 +67,7 @@ def export(request: Request) -> Response:
     f = _fondateur(request)
     pf = _pf(request)
     s = synthese(pf.db, acteur_id=f.id, acteur_role=f.role.value)
-    return fichier_attache(export_csv(s.lignes), f"finances-{date.today():%Y-%m-%d}.csv", "text/plain; charset=utf-8")
+    return fichier_attache(export_csv(s.lignes), f"finances-{aujourdhui_paris():%Y-%m-%d}.csv", "text/plain; charset=utf-8")
 
 
 @routeur.get("/factures/{facture_id}.{fmt}")
@@ -86,9 +87,9 @@ def _erreur(request: Request, exc: Exception) -> Response:
 
 
 @routeur.post("/diagnostic")
-async def proposer_diagnostic(request: Request) -> Response:
+def proposer_diagnostic(request: Request) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     svc = service_pour(_pf(request))
     coupon = _s(form, "coupon", 64) or None
     consentement = None
@@ -104,9 +105,9 @@ async def proposer_diagnostic(request: Request) -> Response:
 
 
 @routeur.post("/abonnement")
-async def proposer_abonnement(request: Request) -> Response:
+def proposer_abonnement(request: Request) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         service_pour(_pf(request)).proposer_abonnement(_s(form, "client_id", 64), f, palier=_s(form, "palier", 32),
                                                        mois=_s(form, "mois", 7))
@@ -116,22 +117,23 @@ async def proposer_abonnement(request: Request) -> Response:
 
 
 @routeur.post("/commission")
-async def proposer_commission(request: Request) -> Response:
+def proposer_commission(request: Request) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
-        base = Decimal(_s(form, "base", 20).replace(",", "."))
-        service_pour(_pf(request)).proposer_commission(_s(form, "client_id", 64), f, base=base,
-                                                       avoir_id=_s(form, "avoir_id", 100))
+        base = montant_saisi(_s(form, "base", 40), nom="base HT")
+        service_pour(_pf(request)).proposer_commission(
+            _s(form, "client_id", 64), f, base=base, avoir_id=_s(form, "avoir_id", 100),
+            origine="administration" if _s(form, "origine", 20) == "administration" else "transitaire")
     except (InvalidOperation, ValueError) as exc:
         return _erreur(request, exc)
     return redirection(request, "/admin/validation#sorties", message="Brouillon de facture de commission créé.")
 
 
 @routeur.post("/emettre/{action_id}")
-async def emettre(request: Request, action_id: str) -> Response:
+def emettre(request: Request, action_id: str) -> Response:
     f = _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     try:
         fac = service_pour(_pf(request)).emettre_et_deposer(action_id, f)
     except ValueError as exc:
@@ -140,22 +142,22 @@ async def emettre(request: Request, action_id: str) -> Response:
 
 
 @routeur.post("/factures/{facture_id}/avoir")
-async def avoir(request: Request, facture_id: str) -> Response:
+def avoir(request: Request, facture_id: str) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
-        brut = _s(form, "montant_ht", 20).replace(",", ".")
+        brut = _s(form, "montant_ht", 40)
         service_pour(_pf(request)).proposer_avoir(facture_id, f, motif=_s(form, "motif", 500),
-                                                  montant_ht=Decimal(brut) if brut else None)
+                                                  montant_ht=montant_saisi(brut, nom="montant HT") if brut else None)
     except (InvalidOperation, ValueError) as exc:
         return _erreur(request, exc)
     return redirection(request, "/admin/validation#sorties", message="Brouillon d'avoir créé : à approuver.")
 
 
 @routeur.post("/factures/{facture_id}/paiement")
-async def lien_paiement(request: Request, facture_id: str) -> Response:
+def lien_paiement(request: Request, facture_id: str) -> Response:
     f = _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     try:
         session = service_pour(_pf(request)).lien_paiement(facture_id, f, url_base=_url_base(request))
     except ValueError as exc:
@@ -164,9 +166,9 @@ async def lien_paiement(request: Request, facture_id: str) -> Response:
 
 
 @routeur.post("/abonnement/lien")
-async def lien_abonnement(request: Request) -> Response:
+def lien_abonnement(request: Request) -> Response:
     f = _fondateur(request)
-    form = await formulaire(request)
+    form = formulaire_sync(request)
     try:
         session = service_pour(_pf(request)).lien_abonnement(_s(form, "client_id", 64), _s(form, "palier", 32), f,
                                                              url_base=_url_base(request))
@@ -176,9 +178,9 @@ async def lien_abonnement(request: Request) -> Response:
 
 
 @routeur.post("/pa/synchroniser")
-async def synchroniser_pa(request: Request) -> Response:
+def synchroniser_pa(request: Request) -> Response:
     _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     n = service_pour(_pf(request)).synchroniser_statuts_pa()
     return redirection(request, _RETOUR, message=f"{n} statut(s) de cycle de vie reçu(s) de la plateforme agréée.")
 
@@ -205,9 +207,9 @@ def page_bouchon(request: Request, session_id: str) -> Response:
 
 
 @routeur.post("/bouchon/{session_id}/payer")
-async def payer_bouchon(request: Request, session_id: str) -> Response:
+def payer_bouchon(request: Request, session_id: str) -> Response:
     _fondateur(request)
-    await formulaire(request)
+    formulaire_sync(request)
     bouchon = _bouchon(request)
     svc = service_pour(_pf(request))
     try:
@@ -223,8 +225,8 @@ async def payer_bouchon(request: Request, session_id: str) -> Response:
 
 
 @routeur_webhooks.post("/webhooks/stripe", include_in_schema=False)
-async def webhook_stripe(request: Request) -> Response:
-    charge = await request.body()
+def webhook_stripe(request: Request) -> Response:
+    charge = depuis_boucle(request.body)
     try:
         res: dict[str, Any] = service_pour(request.app.state.plateforme).traiter_webhook(
             charge, request.headers.get("stripe-signature"))

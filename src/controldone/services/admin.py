@@ -15,7 +15,6 @@ import json
 import re
 import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -52,7 +51,9 @@ _ID_CLIENT_RE = re.compile(r"[^a-z0-9]+")
 
 
 def mois_courant() -> str:
-    return datetime.now(UTC).strftime("%Y-%m")
+    from controldone.calendrier import mois_paris
+
+    return mois_paris()
 
 
 def _fondateur(acteur: Acteur) -> None:
@@ -80,7 +81,11 @@ def creer_client(plateforme: Plateforme, fondateur: Acteur, raison_sociale: str,
         raise RequeteInvalide("raison sociale obligatoire (300 caractères au plus)")
     if offre not in ("diagnostic", "continu"):
         raise RequeteInvalide("offre inconnue")
-    p = _dec(plafond, "plafond") or (Decimal("20.00") if offre == "diagnostic" else Decimal("8.00"))
+    from controldone.config import get_settings
+    from controldone.services.saisie import montant_saisi
+
+    p = (montant_saisi(plafond, nom="plafond", maximum=Decimal("10000"), zero=True)
+         if plafond is not None and str(plafond).strip() else get_settings().plafond_mensuel_defaut(offre))
     tid = tenant_id or ("cli_" + (_ID_CLIENT_RE.sub("_", raison_sociale.lower()).strip("_")[:24] or "client")
                         + "_" + secrets.token_hex(3))
     with plateforme.db.operateur(fondateur) as op:
@@ -271,11 +276,11 @@ def tableau_de_bord(plateforme: Plateforme, fondateur: Acteur) -> dict[str, Any]
     _fondateur(fondateur)
     mois = mois_courant()
     with plateforme.db.operateur(fondateur) as op:
-        stats = op.statistiques()
-        clients = op.lister_clients()
-        couts = op.couts_ia(mois)
-        alertes = op.alertes()
-        file_constats = op.file_validation()
+        stats = op.statistiques()  # une seule entrée d'audit par affichage (« lire_tableau_de_bord »)
+        clients = op.lister_clients(auditer=False)
+        couts = op.couts_ia(mois, auditer=False)
+        alertes = op.alertes(limite=200)
+        nb_proposes = op.compter_proposes()
         lignes = []
         for t in clients:
             plafond = Decimal(str((t.reglages or {}).get("plafond_cout_ia_mensuel_eur") or t.plafond_cout_ia_mensuel_eur))
@@ -285,10 +290,9 @@ def tableau_de_bord(plateforme: Plateforme, fondateur: Acteur) -> dict[str, Any]
                                       plafond=plafond))
         alertes_l = [{"id": a.id, "kind": a.kind, "tenant_id": a.tenant_id, "message": a.message,
                       "cree_le": a.cree_le} for a in alertes]
-        nb_proposes = len(file_constats)
     store = JobStore(plateforme.db)
     jobs = store.compter_par_statut()
-    en_echec = [j for j in store.lister(statut="pending", limite=1000) if j.attempts > 0 and j.last_error]
+    n_echec = store.compter(statut="pending", avec_erreur=True)
     sorties = FileSortante(plateforme.db).lister(fondateur, statuts=["brouillon"])
     totaux = {
         "dossiers": sum(x.stats.get("nb_dossiers", 0) for x in lignes),
@@ -298,7 +302,7 @@ def tableau_de_bord(plateforme: Plateforme, fondateur: Acteur) -> dict[str, Any]
         "reste_a_recouvrer": sum((x.stats.get("reste_a_recouvrer", Decimal(0)) for x in lignes), Decimal(0)),
         "proposes": nb_proposes,
         "sorties": len(sorties),
-        "jobs_echec": len(en_echec),
+        "jobs_echec": n_echec,
         "jobs_morts": jobs.get("dead", 0),
         "jobs": jobs,
     }
@@ -311,7 +315,7 @@ def tableau_de_bord(plateforme: Plateforme, fondateur: Acteur) -> dict[str, Any]
 def fiche_client(plateforme: Plateforme, fondateur: Acteur, tenant_id: str) -> dict[str, Any]:
     _fondateur(fondateur)
     with plateforme.db.operateur(fondateur) as op:
-        scope = op.client(tenant_id, "consultation de la fiche client")
+        scope = op.client(tenant_id, "consultation de la fiche client", lecture=True)
         info = client_info(scope)
         membres = [(m.user_id, m.role) for m in scope.membres()]
         entites = scope.lister(Entite, ordre=Entite.raison_sociale)

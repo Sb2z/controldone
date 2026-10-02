@@ -10,11 +10,8 @@ paramètres de cookie ``httponly`` ; jeton CSRF lié à la session.
 
 from __future__ import annotations
 
-from controldone.config import env
-
 import hashlib
 import hmac
-import os
 import secrets
 import time
 from collections.abc import Callable, Sequence
@@ -24,6 +21,7 @@ from typing import Any
 from itsdangerous import BadSignature, URLSafeSerializer
 
 from controldone.auth.roles import Acteur, Role
+from controldone.config import env
 
 __all__ = [
     "DonneesSession",

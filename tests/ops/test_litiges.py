@@ -103,16 +103,20 @@ def test_preparer_dossier_redige_pour_le_client(monde, service):
     assert sorted(x.constat_id for x in d.lignes) == ["f_a1", "f_a2"]
     assert d.total_demande == Decimal("300.00")
     t = d.texte
-    assert "Nous vous remercions" in t and "nous avons constaté" in t
-    assert "Demande d'avoir — factures n° FT-a-001" in t
-    assert "écart constaté entre documents" in t
+    # relevé factuel puis modèle neutre à adapter par le client (brief juridique §1.3, §9 ; D-1315)
+    assert t.startswith("RELEVÉ D'ÉCARTS ENTRE DOCUMENTS") and "MODÈLE À ADAPTER PAR LE CLIENT" in t
+    assert t.index("RELEVÉ D'ÉCARTS") < t.index("MODÈLE À ADAPTER")
+    assert "Relevé d'écarts entre documents — factures n° FT-a-001" == d.objet
+    assert "Différence calculée" in t and "Valeur facturée" in t and "Valeur de comparaison" in t
+    assert "vérifier ces montants et nous indiquer si vous émettrez un avoir" in t
     assert "page 1" in t and "1 240,00" in t and "1 000,00" in t and "MRN 26FR00000000000001" in t
     assert "controldone" not in t.casefold()  # jamais au nom du prestataire
     assert "[Nom, fonction — à compléter]" in t
     assert check_text(t) == []
     assert AVERTISSEMENT in t
-    for mot in ("illégal", "dû", "fraude", "délai légal", "mise en demeure"):
-        assert mot not in t
+    for mot in ("illégal", "dû", "fraude", "délai légal", "mise en demeure", "réclamons", "pénalit", "délai",
+                "conformément", "article L", "code des douanes", "Demande d'avoir", "recouvrement"):
+        assert mot.casefold() not in t.casefold(), mot
     assert d.pdf_sha256 and monde.vault.lire("cli_a", d.pdf_sha256).startswith(b"%PDF")
     # rejouer : aucun écart déjà demandé n'est repris
     with pytest.raises(ValueError):

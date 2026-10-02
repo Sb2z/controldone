@@ -25,6 +25,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from controldone.auth.roles import Acteur, Role
+from controldone.calendrier import mois_paris
 from controldone.facturation.facturx_cii import controles_reforme, generer_xml, valider_xsd
 from controldone.facturation.modele import (
     TYPE_AVOIR,
@@ -66,7 +67,9 @@ class EmissionRefusee(ValueError):
 
 
 def aujourdhui_paris() -> date:
-    return datetime.now(UTC).astimezone(_PARIS).date()
+    from controldone.calendrier import aujourdhui_paris as _aujourdhui
+
+    return _aujourdhui()
 
 
 def _exiger_fondateur(acteur: Acteur) -> None:
@@ -186,9 +189,13 @@ class ServiceFacturation:
                                    deja_utilise_par_client=any(u.client_id == client_id for u in utilisations))
             remises.append(Remise(f"{cp.libelle} (coupon {cp.code}, remise {cp.remise_pourcentage.normalize():f} %)",
                                   cp.remise(ligne.montant_ht)))
-            fx["coupon"] = {"code": cp.code, "consentement": {
-                "signe": True, "signe_par": consentement.signe_par, "signe_le": consentement.signe_le,  # type: ignore[union-attr]
-                "reference_document": consentement.reference_document}}  # type: ignore[union-attr]
+            # L'accord de publication est un acte **distinct**, facultatif et révocable : il n'est pas la
+            # condition de la remise (brief juridique §4.4, D-1313). Il est seulement cité s'il existe.
+            fx["coupon"] = {"code": cp.code, "accord_publication_condition": False}
+            if consentement is not None and consentement.signe and consentement.signe_par.strip():
+                fx["coupon"]["consentement"] = {
+                    "signe": True, "signe_par": consentement.signe_par, "signe_le": consentement.signe_le,
+                    "reference_document": consentement.reference_document, "revocable": True}
             cle += ":coupon"
         payload = self._payload(client_id, "diagnostic", [ligne], remises=remises, references=references, facturation=fx)
         return self._proposer(client_id, payload, acteur, cle)
@@ -204,15 +211,48 @@ class ServiceFacturation:
             fx["deja_paye"] = str(deja_paye)
             fx["reference_paiement"] = reference_paiement
         payload = self._payload(client_id, "abonnement", [ligne], references={"mois": mois}, facturation=fx)
-        return self._proposer(client_id, payload, acteur, f"facture:abonnement:{client_id}:{mois}")
+        cle = f"facture:abonnement:{client_id}:{mois}"
+        a = self._proposer(client_id, payload, acteur, cle)
+        if deja_paye is not None and (a.payload.get("facturation") or {}).get("deja_paye") is None:
+            # Échéance déjà proposée (agent, saisie) sans le paiement Stripe : le paiement fait foi (F-08).
+            fs = FileSortante(self.db)
+            if a.statut is StatutAction.brouillon:
+                a = fs.remplacer_brouillon(a.id, payload, Acteur.systeme("facturation"),
+                                           motif="paiement d'abonnement reçu (palier et montant payé)")
+            else:
+                stock.alerte_fondateur(self.db, cle=f"abonnement_conflit:{client_id}:{mois}", kind="facture_conflit",
+                                       tenant_id=client_id,
+                                       message=f"Abonnement {mois} payé ({deja_paye} EUR) alors qu'un brouillon sans "
+                                               "paiement a déjà été approuvé : vérifier avant émission.")
+        return a
+
+    def taux_commission(self, client_id: str) -> Decimal:
+        """Source unique du taux (F-10, D-1307) : ``reglages["commission_taux"]`` du client, sinon le taux du
+        catalogue (``offres.yaml``) — la même fonction que le service des litiges."""
+        from controldone.litiges.commission import taux_commission
+
+        _acheteur, reglages = self.acheteur(client_id)
+        return taux_commission(reglages, defaut=self.catalogue.taux_commission)
 
     def proposer_commission(self, client_id: str, acteur: Acteur, *, base: Decimal, avoir_id: str,
-                            reclamation_id: str = "") -> ActionSortante:
-        montant = self.catalogue.commission(base)
-        pct = f"{(self.catalogue.taux_commission * 100).normalize():f}"
-        ligne = Ligne(f"Commission de {pct} % sur avoir obtenu ({avoir_id}, base {format_montant(base, 'EUR')})", montant)
+                            reclamation_id: str = "", origine: str = "transitaire") -> ActionSortante:
+        """Base = montant **hors taxes** des avoirs émis par un **transitaire** (CGV art. 5, D-1314) ; un
+        remboursement ou une remise accordés par une administration (douane, fisc) n'ouvrent aucune
+        commission."""
+        from controldone.litiges.commission import ORIGINES_COMMISSIONNABLES, montant_commission
+
+        if origine not in ORIGINES_COMMISSIONNABLES:
+            raise ValueError("pas de commission sur un remboursement accordé par une administration")
+        if Decimal(base) < 0:
+            raise ValueError("base de commission négative")
+        taux = self.taux_commission(client_id)
+        montant = montant_commission(Decimal(base), taux)
+        pct = f"{(taux * 100).normalize():f}"
+        ligne = Ligne(f"Commission de {pct} % sur avoir obtenu ({avoir_id}, base HT {format_montant(base, 'EUR')})",
+                      montant)
         payload = self._payload(client_id, "commission", [ligne],
-                                references={"avoir_id": avoir_id, "reclamation_id": reclamation_id, "base": str(base)},
+                                references={"avoir_id": avoir_id, "reclamation_id": reclamation_id, "base": str(base),
+                                            "assiette": "HT", "taux": str(taux)},
                                 facturation={"offre": "commission"})
         return self._proposer(client_id, payload, acteur, commission_cle(client_id, avoir_id))
 
@@ -237,7 +277,17 @@ class ServiceFacturation:
                                 facturation={"facture_origine_id": f.id, "motif": motif.strip()[:500]},
                                 objet=f"Brouillon d'avoir — facture n° {f.numero}")
         n = len([a for a in stock.factures(self.db, client_id=f.client_id) if a.facture_origine_id == f.id])
-        return self._proposer(f.client_id, payload, acteur, f"avoir:{f.id}:{n + 1}")
+        cle = f"avoir:{f.id}:{n + 1}"
+        # Un avoir déjà proposé et non encore émis porte cette clé : le renvoyer en silence ferait croire au
+        # fondateur qu'un nouvel avoir (d'un autre montant) est créé (F-09).
+        existant = FileSortante(self.db).par_cle(cle, acteur)
+        if existant is not None and stock.facture_par_outbox(self.db, existant.id) is None:
+            if existant.statut is StatutAction.refuse:
+                cle = f"{cle}:{nouvel_id('rep')}"
+            else:
+                raise EmissionRefusee("un avoir non émis existe déjà pour cette facture : l'émettre ou le refuser "
+                                      "avant d'en proposer un autre")
+        return self._proposer(f.client_id, payload, acteur, cle)
 
     # --- émission ------------------------------------------------------------------------------------------
     def _origine(self, a: ActionSortante) -> FactureEmise | None:
@@ -336,15 +386,23 @@ class ServiceFacturation:
         if fx_payload.get("coupon"):
             cp = self.catalogue.coupon(fx_payload["coupon"]["code"])
             consent = fx_payload["coupon"].get("consentement") or {}
-            if cp.consentement_requis and not consent.get("signe"):
+            if cp.consentement_requis and not consent.get("signe"):  # ancien réglage (offres.yaml)
                 raise CouponRefuse("accord de publication non signé")
             coupon = {"code": cp.code, "client_id": a.tenant_id, "utilisations_max": cp.utilisations_max,
                       "une_fois_par_client": cp.une_fois_par_client, "consentement": consent}
+        verifier = None
+        if origine is not None:
+            montant_avoir = sum((Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1"))
+                                 .montant_ht for x in a.payload_effectif.get("lignes") or []), Decimal("0.00"))
+
+            def verifier(s: Any) -> None:  # même transaction que la numérotation (sûr sous PostgreSQL)
+                if stock.cumul_avoirs(s, origine.id) + montant_avoir > origine.total_ht:
+                    raise EmissionRefusee("cumul des avoirs supérieur à la facture d'origine")
         try:
             return stock.emettre_numerotee(self.db, emetteur=vendeur.identifiant, serie=serie, date_emission=d,
                                            chiffres=self.catalogue.chiffres, construire=construire,
                                            acteur_id=acteur.id, acteur_role=acteur.role.value, outbox_id=a.id,
-                                           coupon=coupon)
+                                           coupon=coupon, verifier=verifier)
         except stock.CouponIndisponible as exc:
             raise CouponRefuse(str(exc)) from exc
 
@@ -451,8 +509,7 @@ class ServiceFacturation:
             if client:
                 compte = stock.compte_paiement(self.db, client)
                 palier = meta_sub.get("palier") or (compte.palier if compte else None)
-                mois = str(meta.get("mois") or datetime.fromtimestamp(int(evt.get("created") or 0), UTC)
-                           .astimezone(_PARIS).strftime("%Y-%m"))
+                mois = str(meta.get("mois") or mois_paris(datetime.fromtimestamp(int(evt.get("created") or 0), UTC)))
                 if palier:
                     a = self.proposer_abonnement(client, systeme, palier=palier, mois=mois, deja_paye=montant,
                                                  reference_paiement=str(obj.get("id", ""))[:140])

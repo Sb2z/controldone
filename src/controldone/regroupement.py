@@ -66,6 +66,7 @@ from controldone.model.enums import (
 from controldone.model.referentiel import ProfilTolerances, Transitaire
 from controldone.model.valeur import ValeurSourcee
 from controldone.normalize.fiscal import normalize_vat
+from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import (
     mrn_egaux,
     mrn_prefixe,
@@ -74,7 +75,6 @@ from controldone.normalize.refs import (
     ref_compatibles,
     ref_transport_compatibles,
 )
-from controldone.normalize.text import cle_texte
 
 __all__ = [
     "POIDS_SIGNAL",
@@ -441,20 +441,6 @@ class _Regroupeur:
         return sum(POIDS_FORCE[poids[s]] for s in set(signaux) if s in poids)
 
     # -- signaux par type --
-
-    def _refs_transport_groupe(self, g: _Groupe) -> list[str]:
-        refs: list[str] = []
-        for mid in g.membres:
-            d = self.par_id[mid]
-            if not _exploitable(d):
-                continue
-            if d.type is TypeDocument.facture_commerciale and _txt(d.fc.ref_transport):
-                refs.append(_txt(d.fc.ref_transport))  # type: ignore[arg-type]
-            elif d.type is TypeDocument.document_support:
-                refs.extend(_transports_support(d))
-            elif d.type is TypeDocument.facture_transitaire:
-                refs.extend(_transports_ft(d))
-        return refs
 
     def _supports_citant(self, fc: Document) -> list[str]:
         """Références de transport des documents support qui citent la facture (chaîne BL -> facture)."""
@@ -872,16 +858,9 @@ class _Regroupeur:
             if d.type is not TypeDocument.facture_transitaire or not _exploitable(d):
                 continue
             em = d.ft.emetteur
-            tva = normalize_vat(_txt(em.tva))
-            nom = cle_texte(_txt(em.nom) or "")
-            for t in self.transitaires:
-                if tva and t.tva and normalize_vat(t.tva) == tva:
-                    return t.id
-            if nom:
-                for t in self.transitaires:
-                    noms = [cle_texte(x) for x in [t.nom, *t.alias] if x]
-                    if any(x and (x == nom or (len(x) >= 4 and x in nom)) for x in noms):
-                        return t.id
+            tid = identifier_transitaire(_txt(em.tva), _txt(em.nom), self.transitaires)
+            if tid is not None:
+                return tid
         return None
 
     def _allocations(self, docs: Sequence[Document], cle: str) -> list[Allocation]:

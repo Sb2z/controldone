@@ -21,7 +21,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from sqlalchemy import func, select
+from sqlalchemy import Numeric, case, cast, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -181,7 +181,14 @@ class TenantScope:
         return list(self.session.execute(q).scalars())
 
     def compter(self, modele: type[M], **egalites: Any) -> int:
-        return len(self.lister(modele, **egalites))
+        """``COUNT(*)`` en SQL (mêmes filtres et même cloisonnement que ``lister``)."""
+        self.exiger(Action.lire)
+        q = self._requete(modele)
+        for champ, valeur in egalites.items():
+            if champ == "tenant_id":
+                raise AccesRefuse("filtre tenant_id interdit")
+            q = q.where(getattr(modele, champ) == valeur)
+        return int(self.session.execute(select(func.count()).select_from(q.subquery())).scalar() or 0)
 
     def _politique_ecriture(self, modele: type, champs: dict[str, Any], *, creation: bool) -> None:
         if self.actor.role in ROLES_CLIENT and modele not in _ECRITURE_CLIENT:
@@ -349,6 +356,23 @@ class TenantScope:
             nombre_pages=fichier.nombre_pages, doublon_de=fichier.doublon_de, coffre_ref=coffre_ref,
         ))
 
+    def empreintes_fichiers(self) -> dict[str, str]:
+        """``{sha256: fichier_id}`` des fichiers reçus et conservés (deux colonnes, pas les lignes entières)."""
+        self.exiger(Action.lire)
+        q = (select(Fichier.sha256, Fichier.id)
+             .where(Fichier.tenant_id == self.tenant_id, Fichier.statut == "ok", Fichier.coffre_ref.is_not(None))
+             .order_by(Fichier.recu_le))
+        return {sha: fid for sha, fid in self.session.execute(q)}
+
+    def contenus_references(self, shas: Iterable[str]) -> set[str]:
+        """Parmi ``shas``, ceux qu'une ligne ``Fichier`` de ce client référence encore (coffre)."""
+        self.exiger(Action.lire)
+        liste = sorted(set(shas))
+        if not liste:
+            return set()
+        return set(self.session.execute(select(Fichier.coffre_ref).where(
+            Fichier.tenant_id == self.tenant_id, Fichier.coffre_ref.in_(liste))).scalars())
+
     def fichier_par_sha(self, sha256: str) -> Fichier | None:
         lignes = self.lister(Fichier, sha256=sha256, ordre=Fichier.recu_le, limite=1)
         return lignes[0] if lignes else None
@@ -379,6 +403,7 @@ class TenantScope:
                 raise ValueError("version de dossier antérieure à la version enregistrée")
             ligne.version, ligne.statut_global, ligne.contenu = dossier.version, statut, contenu
             ligne.reference = dossier.reference
+            ligne.cloture_le = None  # nouvelle activité : le dossier est rouvert (conservation, D-1301)
         for doc in documents:
             self.enregistrer_document(doc, dossier_id=dossier.id, lot_id=lot_id)
         for fid in fichier_ids:
@@ -658,6 +683,16 @@ class TenantScope:
         """Actions sortantes concernant ce client."""
         return self.lister(Outbox, ordre=Outbox.cree_le)
 
+    # --- file de tâches (même transaction, D-1306) ----------------------------------------------------------
+    def mettre_en_file(self, kind: str, payload: dict[str, Any], cle: str) -> str:
+        """Met un job de ce client en file **dans la transaction du périmètre** : il est validé avec les
+        écritures qui le motivent (dépôt, correction) ou annulé avec elles. Idempotent par ``cle``."""
+        from controldone.storage.file_jobs import JobStore
+
+        self.exiger(Action.lire)
+        job, _cree = JobStore.enqueue_dans(self.session, kind, payload, cle, self.tenant_id)
+        return job.id
+
 
 class OperatorScope:
     """Accès transversal du fondateur. Chaque accès est journalisé (``acces_admin`` …)."""
@@ -686,18 +721,26 @@ class OperatorScope:
             journaliser(s, actor=self.actor.id, role=self.actor.role.value, action=action,
                         tenant_id=tenant_id, target=cible, ip=self.actor.ip, details=details)
 
-    def client(self, tenant_id: str, motif: str) -> TenantScope:
-        """Ouvre le périmètre d'un client (session dédiée, validée par ``commit``)."""
+    def client(self, tenant_id: str, motif: str, *, lecture: bool = False) -> TenantScope:
+        """Ouvre le périmètre d'un client (session dédiée, validée par ``commit``).
+
+        ``lecture=True`` (consultation, vignettes, rapport) : transaction **différée**, sans le verrou
+        d'écriture SQLite (``BEGIN IMMEDIATE``) — une lecture du fondateur ne bloque plus le worker ni les
+        dépôts (F-06, D-1304). L'accès reste journalisé (``acces_admin``)."""
         if not (motif and motif.strip()):
             raise AccesRefuse("motif d'accès obligatoire")
         self._audit_immediat("acces_admin", tenant_id, f"tenants:{tenant_id}", {"motif": motif[:200]})
-        s = self.db.session()
+        s = self.db.session(lecture=lecture)
         self._enfants.append(s)
         return TenantScope(s, tenant_id, self.actor, _jeton=_JETON_OPERATEUR)
 
     def creer_client(self, tenant_id: str, raison_sociale: str, *, offre: str = "diagnostic",
-                     plafond_cout_ia_mensuel_eur: Decimal = Decimal("8.00"), retention_jours: int = 180,
+                     plafond_cout_ia_mensuel_eur: Decimal | None = None, retention_jours: int = 180,
                      reglages: dict[str, Any] | None = None) -> Tenant:
+        if plafond_cout_ia_mensuel_eur is None:  # défaut unique : ``Settings`` (CONTROLDONE_LLM_PLAFOND_*)
+            from controldone.config import get_settings
+
+            plafond_cout_ia_mensuel_eur = get_settings().llm_plafond_client_mensuel_eur
         with self.db.transaction_systeme() as s:
             t = Tenant(id=tenant_id, raison_sociale=raison_sociale, offre=offre,
                        plafond_cout_ia_mensuel_eur=Decimal(plafond_cout_ia_mensuel_eur),
@@ -723,34 +766,53 @@ class OperatorScope:
                         tenant_id=tenant_id, target=f"tenants:{tenant_id}", ip=self.actor.ip,
                         details={"champs": sorted(champs)})
 
-    def lister_clients(self) -> list[Tenant]:
-        self._audit_immediat("lister_clients", None, "tenants")
+    def lister_clients(self, *, auditer: bool = True) -> list[Tenant]:
+        if auditer:
+            self._audit_immediat("lister_clients", None, "tenants")
         return list(self.session.execute(select(Tenant).order_by(Tenant.id)).scalars())
 
-    def file_validation(self, limite: int = 500) -> list[Constat]:
-        """Constats ``propose`` de tous les clients (§7.7), lecture transversale journalisée."""
-        self._audit_immediat("lire_file_validation", None, "constats")
-        q = select(Constat).where(Constat.statut_validation == "propose").limit(limite)
+    def _proposes_courants(self) -> Any:
+        """Constats ``propose`` de la **version courante** de leur dossier (jointure SQL)."""
+        return (select(Constat).join(Dossier, (Dossier.id == Constat.dossier_id)
+                                     & (Dossier.tenant_id == Constat.tenant_id)
+                                     & (Dossier.version == Constat.dossier_version))
+                .where(Constat.statut_validation == "propose"))
+
+    def file_validation(self, limite: int = 500, *, auditer: bool = True) -> list[Constat]:
+        """Constats ``propose`` de tous les clients (§7.7), lecture transversale journalisée. Le tri par
+        priorité (écart certain d'abord, puis montant décroissant) est fait **en SQL avant la limite** : au-delà
+        de ``limite`` constats, ce sont les moins prioritaires qui manquent (F-15, D-1309)."""
+        if auditer:
+            self._audit_immediat("lire_file_validation", None, "constats")
+        rang = case((Constat.niveau == "ecart_certain", 0), else_=1)
+        montant = cast(func.coalesce(Constat.montant_en_jeu, "0"), Numeric)
+        q = self._proposes_courants().order_by(rang, montant.desc(), Constat.id).limit(limite)
         constats = list(self.session.execute(q).scalars())
 
         def priorite(c: Constat) -> tuple[int, Decimal]:
-            rang = 0 if c.niveau == "ecart_certain" else 1
-            return (rang, -(c.montant_en_jeu or Decimal(0)))
+            return (0 if c.niveau == "ecart_certain" else 1, -(c.montant_en_jeu or Decimal(0)))
 
-        return sorted(constats, key=priorite)
+        return sorted(constats, key=priorite)  # tri exact en Decimal (stable)
 
-    def couts_ia(self, mois: str) -> dict[str, Decimal]:
-        self._audit_immediat("lire_couts_ia", None, "ai_usage", {"mois": mois})
+    def compter_proposes(self) -> int:
+        q = self._proposes_courants().with_only_columns(func.count()).order_by(None)
+        return int(self.session.execute(q).scalar() or 0)
+
+    def couts_ia(self, mois: str, *, auditer: bool = True) -> dict[str, Decimal]:
+        if auditer:
+            self._audit_immediat("lire_couts_ia", None, "ai_usage", {"mois": mois})
         totaux: dict[str, Decimal] = {}
         for u in self.session.execute(select(AiUsage).where(AiUsage.mois == mois)).scalars():
             totaux[u.tenant_id] = totaux.get(u.tenant_id, Decimal(0)) + u.cout_eur
         return totaux
 
-    def statistiques(self) -> dict[str, dict[str, Any]]:
+    def statistiques(self, *, auditer: bool = True) -> dict[str, dict[str, Any]]:
         """Indicateurs agrégés par client pour le tableau de bord (lecture transversale journalisée) :
         dossiers par statut, constats proposés, montants recouvrables (validés certains / à vérifier),
-        écarts ouverts. Identifiants et compteurs seulement."""
-        self._audit_immediat("lire_tableau_de_bord", None, "tenants")
+        écarts ouverts. Identifiants et compteurs seulement. Constats lus **colonne par colonne** (jamais le
+        JSON ``contenu``), filtrés en SQL sur la version courante (F-15)."""
+        if auditer:
+            self._audit_immediat("lire_tableau_de_bord", None, "tenants")
         stats: dict[str, dict[str, Any]] = {}
 
         def bloc(t: str) -> dict[str, Any]:
@@ -764,23 +826,25 @@ class OperatorScope:
             b = bloc(t)
             b["dossiers"][st or "inconnu"] = n
             b["nb_dossiers"] += n
-        versions = {d: v for d, v in self.session.execute(select(Dossier.id, Dossier.version))}
-        for c in self.session.execute(select(Constat)).scalars():
-            if versions.get(c.dossier_id) != c.dossier_version:
-                continue  # constat d'une version antérieure du dossier
-            b = bloc(c.tenant_id)
-            if c.statut_validation == "propose":
+        courants = (select(Constat.tenant_id, Constat.statut_validation, Constat.niveau, Constat.nature_montant,
+                           Constat.montant_en_jeu)
+                    .join(Dossier, (Dossier.id == Constat.dossier_id) & (Dossier.tenant_id == Constat.tenant_id)
+                          & (Dossier.version == Constat.dossier_version))
+                    .where((Constat.statut_validation == "propose") | (Constat.nature_montant == "recouvrable")))
+        for tenant, statut, niveau, nature, montant in self.session.execute(courants):
+            b = bloc(tenant)
+            if statut == "propose":
                 b["proposes"] += 1
-            if c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0:
-                if c.niveau == "ecart_certain" and c.statut_validation == "valide":
-                    b["recouvrable_certain"] += c.montant_en_jeu
-                elif c.niveau == "a_verifier" and c.statut_validation != "rejete":
-                    b["recouvrable_a_verifier"] += c.montant_en_jeu
-        for e in self.session.execute(select(Ecart)).scalars():
-            if e.statut not in ("credite", "abandonne"):
-                b = bloc(e.tenant_id)
-                b["ecarts_ouverts"] += 1
-                b["reste_a_recouvrer"] += e.reste
+            if nature == "recouvrable" and montant and montant > 0:
+                if niveau == "ecart_certain" and statut == "valide":
+                    b["recouvrable_certain"] += montant
+                elif niveau == "a_verifier" and statut != "rejete":
+                    b["recouvrable_a_verifier"] += montant
+        for tenant, reste in self.session.execute(
+                select(Ecart.tenant_id, Ecart.reste).where(Ecart.statut.not_in(("credite", "abandonne")))):
+            b = bloc(tenant)
+            b["ecarts_ouverts"] += 1
+            b["reste_a_recouvrer"] += reste
         return stats
 
     def marquer_alerte_lue(self, alerte_id: int) -> None:
@@ -791,11 +855,12 @@ class OperatorScope:
             journaliser(s, actor=self.actor.id, role=self.actor.role.value, action="alerte_lue",
                         target=f"alertes:{alerte_id}", ip=self.actor.ip)
 
-    def alertes(self, *, non_lues: bool = True) -> list[Alerte]:
-        q = select(Alerte).order_by(Alerte.id)
+    def alertes(self, *, non_lues: bool = True, limite: int = 500) -> list[Alerte]:
+        """Les ``limite`` alertes les plus récentes, en ordre chronologique."""
+        q = select(Alerte).order_by(Alerte.id.desc()).limit(limite)
         if non_lues:
             q = q.where(Alerte.lue_le.is_(None))
-        return list(self.session.execute(q).scalars())
+        return list(reversed(list(self.session.execute(q).scalars())))
 
     def journal(self, limite: int = 500) -> list[AuditLog]:
         return list(self.session.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(limite)).scalars())

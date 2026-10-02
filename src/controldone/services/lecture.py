@@ -59,9 +59,11 @@ __all__ = [
     "client_info",
     "constats_courants",
     "detail_dossier",
+    "job_du_lot",
     "lire_lot",
     "lister_dossiers",
     "lister_lots",
+    "resume_lot",
     "vue_constat",
 ]
 
@@ -453,9 +455,15 @@ def lister_lots(scope: TenantScope, limite: int = 50) -> list[dict[str, Any]]:
              lot.statut), "recu_le": lot.recu_le, "resume": resume_visible(scope, lot.resume)} for lot in lots]
 
 
-def jobs_du_client(db: Any, tenant_id: str) -> list[Any]:
-    """Jobs du client (à appeler **hors** d'un périmètre ouvert en écriture : transaction système)."""
-    return JobStore(db).lister(tenant_id=tenant_id, limite=2000)
+def jobs_du_client(db: Any, tenant_id: str, limite: int = 200) -> list[Any]:
+    """Jobs **les plus récents** du client (compatibilité ; préférer ``job_du_lot``)."""
+    return JobStore(db).lister(tenant_id=tenant_id, limite=limite, recents=True)
+
+
+def job_du_lot(db: Any, tenant_id: str, lot_id: str) -> Any:
+    """Job ``traiter_lot`` d'un lot, par sa clé d'idempotence (index unique) : indépendant du nombre de jobs
+    du client (F-11, D-1309)."""
+    return JobStore(db).par_cle(f"traiter_lot:{tenant_id}:{lot_id}")
 
 
 #: Clés du résumé d'un lot montrées à un rôle client. Le résumé du moteur compte aussi les constats **non
@@ -472,10 +480,11 @@ def resume_visible(scope: TenantScope, resume: dict[str, Any] | None) -> dict[st
     return resume
 
 
-def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None) -> dict[str, Any]:
+def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None, job: Any = None) -> dict[str, Any]:
     lot = scope.obtenir(Lot, lot_id)
     fichiers = scope.lister(Fichier, lot_id=lot_id, ordre=Fichier.chemin_relatif)
-    job = None
+    if job is not None and (job.tenant_id != scope.tenant_id or job.payload.get("lot_id") != lot_id):
+        job = None
     for j in jobs or []:
         if j.kind == "traiter_lot" and j.payload.get("lot_id") == lot_id and j.tenant_id == scope.tenant_id:
             job = j
@@ -489,6 +498,19 @@ def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None) 
         "job": {"id": job.id, "statut": job.statut, "essais": job.attempts} if job else None,
         "dossiers": [{"id": d.id, "reference": d.reference or d.id} for d in dossiers],
     }
+
+
+def resume_lot(plateforme: Any, acteur: Any, lot_id: str) -> dict[str, Any]:
+    """Projection publique d'un lot (API et MCP, une seule définition) : état, tâche, résumé, dossiers,
+    fichiers."""
+    job = job_du_lot(plateforme.db, acteur.tenant_id, lot_id)
+    with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
+        d = lire_lot(scope, lot_id, job=job)
+    return {"lot_id": d["id"], "statut": d["statut"], "traitement": d["job"]["statut"] if d["job"] else None,
+            "resume": d["resume"], "dossiers": [{"dossier_id": x["id"], "reference": x["reference"]}
+                                                 for x in d["dossiers"]],
+            "fichiers": [{"fichier": f["chemin"], "statut": f["statut"], "motif": f["motif"], "taille": f["taille"]}
+                         for f in d["fichiers"]]}
 
 
 def pages_du_fichier(scope: TenantScope, fichier_id: str) -> list[PageTexte]:
