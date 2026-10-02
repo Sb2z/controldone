@@ -9,6 +9,7 @@ bail expire et un autre worker reprend le job (les handlers sont idempotents).
 from __future__ import annotations
 
 import argparse
+import importlib
 import logging
 import os
 import signal
@@ -176,6 +177,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     configurer_journaux(os.environ.get("CONTROLDONE_LOG_LEVEL", "INFO"))
 
     import controldone.jobs.handlers  # noqa: F401  (enregistre les handlers intégrés)
+
+    # Handlers de l'exploitation (agents, litiges, connecteurs), s'ils sont installés.
+    for module in ("controldone.agents.jobs", "controldone.litiges.jobs", "controldone.connecteurs.jobs",
+                   "controldone.referentiel.jobs"):
+        try:
+            importlib.import_module(module)
+        except ImportError:  # pragma: no cover
+            log.warning("handlers indisponibles : %s", module)
     from controldone.storage.vault import FileVault
 
     db = Database()

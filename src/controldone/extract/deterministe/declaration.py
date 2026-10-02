@@ -183,7 +183,10 @@ COLONNES: dict[str, tuple[str, ...]] = {
 
 #: Nombre imprimé : milliers séparés par une espace (normale, insécable, fine) ou sans séparateur ; décimales
 #: après « , » ou « . » (une espace parasite d'OCR après la virgule est tolérée).
-_NUM = r"(?:\d{1,3}(?:[    ]\d{3})+(?:[.,]\d{1,6})?|\d+(?:[.,] ?\d{1,6})?)"
+_NUM = (r"(?:\d{1,3}(?:[ \u00a0\u202f\u2009'’]\d{3})+(?:[.,]\d{1,6})?"  # 1 234,56 ; 1'234.56
+        r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,6})?"  # 1,234,567.89 ; 1,250,000
+        r"|\d{1,3}(?:\.\d{3})+(?:,\d{1,6})?"  # 1.234.567,89
+        r"|\d+(?:[.,] ?\d{1,6})?)")  # 1234,56 ; 4,7 ; « 4946, 06 » (OCR)
 _NUM_RE = re.compile(rf"(?<![\w.,]){_NUM}(?![\d])")
 _DATE_RE = re.compile(r"(?<!\d)(\d{1,2})\s?[/.\-]\s?(\d{1,2})\s?[/.\-]\s?(\d{4}|\d{2})(?!\d)")
 _DATE_ISO_RE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
@@ -402,6 +405,7 @@ class _Colonne:
 def _decimal(brut: str, sep: str) -> tuple[Decimal | None, bool]:
     """Nombre imprimé -> Decimal ; second élément : lecture ambiguë (séparateur incertain)."""
     s = re.sub(r"[\s   ]", "", brut)
+    s = s.replace("'", "").replace("’", "")
     if not s or not re.fullmatch(r"[\d.,]+", s) or not s[0].isdigit():
         return None, False
     ambigu = False
@@ -1659,11 +1663,15 @@ class _Lecteur:
                 reference = None
         if reference is None:
             for a in c.articles:
-                mf, vst = a.montant_facture_article, a.valeur_statistique
-                if mf and vst and mf.est_lisible and vst.est_lisible and mf.unite and mf.unite != "EUR" \
-                        and vst.decimal() > 0:
-                    reference = mf.decimal() / vst.decimal()
-                    sources += [mf, vst]
+                mf = a.montant_facture_article
+                bases = [a.valeur_statistique] + [
+                    t.base_montant for t in c.taxations if t.categorie is CategorieTaxe.droit
+                    and t.article is not None and a.numero_article is not None
+                    and t.article.valeur == a.numero_article.valeur]
+                eur = next((v for v in bases if v is not None and v.est_lisible and v.decimal() > 0), None)
+                if mf and eur and mf.est_lisible and mf.unite and mf.unite != "EUR":
+                    reference = mf.decimal() / eur.decimal()  # unités de devise pour 1 EUR
+                    sources += [mf, eur]
                     break
         if reference is None or reference <= 0 or taux <= 0:
             return

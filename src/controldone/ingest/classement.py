@@ -85,7 +85,8 @@ TITRE_DECLARATION = _rx(
     r"declaration (?:en )?douane", r"declaration d'importation", r"declaration (?:import|simplifiee)",
     r"customs declaration", r"import declaration", r"declaracion (?:de importacion|aduanera|en aduana)",
     r"document administratif unique", r"\bdau\b", r"\bh7\b", r"\bh1\b", r"avis de mainlevee",
-    r"bon a enlever", r"preuve de dedouanement", r"proof of (?:customs )?clearance",
+    r"bon a enlever", r"preuve de ded\w*", r"proof of (?:customs )?clearance", r"dedouanement import",
+    r"envoi de faible valeur",
     r"declaration de mise en libre pratique", r"liquidation des droits",
 )
 CORPS_DECLARATION = _rx(
@@ -95,10 +96,17 @@ CORPS_DECLARATION = _rx(
     r"\bvaleur statistique\b", r"\bdate d'acceptation\b", r"\bbureau de douane\b", r"\bcode marchandise\b",
     r"\bimportateur\b", r"\btaux de change\b", r"\bmontant total facture\b", r"\bpays d'origine\b",
     r"\bcustoms office\b", r"\bacceptance date\b", r"\bcommodity code\b", r"\bdeclarant\b",
-    r"\bnombre d'articles\b", r"\bdroits et taxes\b",
+    r"\bnombre d'articles\b", r"\bdroits et taxes\b", r"\baccepte le\b", r"\bref\. int", r"\bimportat\.",
+    r"\bmise en libre pratique\b", r"\bcalcul des impositions\b", r"\bquotite\b",
 )
+TYPE_DAU = _rx(r"document administratif unique", r"\b(?:22 monnaie|33 code des marchandises|47 calcul|"
+               r"8 destinataire|14 declarant|31 colis)")
+CORPS_TRANSPORT = _rx(r"\bshipper\b", r"\bconsignee\b", r"\bnotify party\b", r"port of (?:loading|discharge)",
+                      r"\bvessel\b", r"\bbill of lading\b", r"\bwaybill\b", r"airport of (?:departure|destination)",
+                      r"\bchargeable weight\b", r"issuing carrier", r"\bfreight (?:prepaid|collect)\b",
+                      r"\bplace of (?:receipt|delivery)\b", r"\bbill\b", r"\blading\b")
 TYPE_H7 = _rx(r"\bh7\b", r"faible valeur", r"low value")
-TYPE_PREUVE = _rx(r"preuve de dedouanement", r"avis de mainlevee", r"bon a enlever", r"proof of (?:customs )?clearance",
+TYPE_PREUVE = _rx(r"preuve de ded\w*", r"dedouanement import", r"avis de mainlevee", r"bon a enlever", r"proof of (?:customs )?clearance",
                   r"release note")
 
 # Facture de transitaire : libellés de débours et de prestations (jamais un nom de transporteur).
@@ -170,6 +178,7 @@ NON_EXPLOITABLE: list[tuple[MotifNonExploitable, re.Pattern[str]]] = [
     (MotifNonExploitable.pre_alerte, _rx(r"\bpre-? ?alert", r"\bprealerte\b", r"\bpre-alerte\b",
                                          r"shipment notification", r"advance shipping notice")),
     (MotifNonExploitable.liste_expedition, _rx(r"liste d'expedition", r"shipping list", r"liste de chargement",
+                                               r"packing details", r"shipping details", r"details d'expedition",
                                                r"loading list", r"lista de envio", r"shipping manifest")),
     (MotifNonExploitable.bon_livraison_sans_valeur, _rx(r"bon de livraison", r"delivery note", r"\balbaran\b",
                                                         r"nota de entrega", r"delivery slip",
@@ -187,18 +196,27 @@ NON_EXPLOITABLE: list[tuple[MotifNonExploitable, re.Pattern[str]]] = [
                                    r"recu de paiement")),
 ]
 
+#: Mentions explicites « ce document n'est pas la facture » (P2), cherchées dans tout le texte.
+P2_CORPS = _rx(r"commercial invoice (?:sent separately|to follow|will follow)", r"not a payable document",
+               r"shipping details only", r"facture commerciale (?:suivra|envoyee separement)",
+               r"document sans valeur commerciale", r"ceci n'est pas une facture", r"this is not an invoice")
+
 _TOTAL_NEGATIF = re.compile(
     r"(?<!sous-)(?<!sous )(?<!sub-)(?<!sub )(?<!sub)\b(?:total|net a payer|amount due|montant (?:total|du)|"
-    r"importe total|total general|grand total|balance due|a payer|to pay)\b[^\n]{0,60}?"
+    r"importe total|total general|grand total|balance due|a payer|to pay)\b[a-z :€$£.]{0,25}?"
     r"(?:(?<![\w.,/])-\s?\d|\(\s?\d[\d .,']*\)|\d[\d.,']*-[ \t]*$)",
     re.MULTILINE,
 )
 
-_PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|p\.)\s*(\d{1,3})\s*(?:/|of|sur|de|von)\s*(\d{1,3})\b")
+#: Après un libellé de titre : étiquette de champ (« Connaissement n° : X ») ou début de phrase (« Invoice. »).
+_SUITE_CHAMP = re.compile(r"\s*(?:n°|nº|no\b|nr\b|number|numero|#|:|ref)")
+_SUITE_PHRASE = re.compile(r"\.\s+\w")
+
+_PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|p\.)\s*[:.]?\s*(\d{1,3})\s*(?:/|of|sur|de|von)\s*(\d{1,3})\b")
 _SUITE = re.compile(r"\b(?:suite|continued|continuation|a reporter|report|carried forward|(?:\(|-)\s?cont)\b")
 _NUM_FACTURE = re.compile(
     r"(?:invoice|facture|factura|avoir|credit note|nota de credito|note de credit|inv)\.?[ \t]*"
-    r"(?:(?:no|n°|nº|n o|nr|num(?:ero|ber)?|#|ref)\.?[ \t]*(?:de facture)?[ \t]*[:#]?|[:#])[ \t]*"
+    r"(?:(?:no|n\.?\s?°|n\.?\s?º|n o|nr|num(?:ero|ber)?|#|ref)\.?[ \t]*(?:de facture)?[ \t]*[:#]?|[:#])[ \t]*"
     r"([a-z0-9][a-z0-9\-/_.]{2,30})"
 )
 _NUM_FACTURE2 = re.compile(
@@ -247,6 +265,8 @@ class ClassementPage:
     langue: str | None = None
     #: Indices retenus (identifiants de règles, sans texte du document).
     indices: list[str] = field(default_factory=list)
+    #: La page porte un intitulé propre (et non des indices de corps seulement).
+    intitulee: bool = False
 
     @property
     def est_continuation(self) -> bool:
@@ -308,21 +328,29 @@ class _Titres:
     def texte_entete(self) -> str:
         return "\n".join(self.entete)
 
-    def niveau(self, rx: re.Pattern[str]) -> int:
-        """2 : dans une ligne en grand corps ; 1 : en tête d'une ligne courte de l'en-tête ; 0 : absent.
+    def niveau(self, rx: re.Pattern[str], *, exclure_suite: re.Pattern[str] | None = None) -> int:
+        """2 : intitulé en grand corps ; 1 : en tête d'un segment court de l'en-tête ; 0 : absent.
 
-        « En tête de ligne » : au plus un mot avant le libellé (« COMMERCIAL INVOICE », « Facture N° … »),
-        ligne de 10 mots au plus. Une phrase (« veuillez trouver ci-joint notre facture… ») ne compte pas.
+        Le libellé doit ouvrir le segment (au plus un mot avant : « COMMERCIAL INVOICE », « Facture N° … »)
+        ou le segment doit être très court (≤ 4 mots) ; segment de 10 mots au plus. Une phrase (« veuillez
+        trouver ci-joint notre facture… ») ne compte pas. ``exclure_suite`` : texte qui, juste après le
+        libellé, en fait une étiquette de champ (« Connaissement n° : … ») et non un intitulé.
         """
-        if any(rx.search(li) for li in self.grandes):
-            return 2
-        for li in self.entete:
+        def ok(li: str) -> bool:
             mots = li.split()
             if len(mots) > 10:
-                continue
+                return False
             for m in rx.finditer(li):
-                if len(li[: m.start()].split()) <= 1:
-                    return 1
+                if exclure_suite is not None and exclure_suite.match(li, m.end()):
+                    continue
+                if len(li[: m.start()].split()) <= 1 or len(mots) <= 4:
+                    return True
+            return False
+
+        if any(ok(li) for li in self.grandes):
+            return 2
+        if any(ok(li) for li in self.entete):
+            return 1
         return 0
 
     def premiere(self) -> str | None:
@@ -428,8 +456,8 @@ def classer_page(
     entete = tt.texte_entete
     indices: list[str] = []
 
-    n_facture = tt.niveau(TITRE_FACTURE)
-    n_avoir = tt.niveau(TITRE_AVOIR)
+    n_facture = tt.niveau(TITRE_FACTURE, exclure_suite=_SUITE_PHRASE)
+    n_avoir = tt.niveau(TITRE_AVOIR, exclure_suite=_SUITE_PHRASE)
     t_decl = _compte(TITRE_DECLARATION, entete)
     c_decl = _compte(CORPS_DECLARATION, texte)
     n_mrn = len(refs.mrns)
@@ -442,12 +470,12 @@ def classer_page(
 
     support, n_support = None, 0
     for st, rx in SUPPORT_TITRES:
-        n = tt.niveau(rx)
+        n = tt.niveau(rx, exclure_suite=_SUITE_CHAMP)
         if n > n_support:
             support, n_support = st, n
     motif_p2, n_p2 = None, 0
     for motif, rx in NON_EXPLOITABLE:
-        n = tt.niveau(rx)
+        n = tt.niveau(rx, exclure_suite=_SUITE_CHAMP)
         if n > n_p2:
             motif_p2, n_p2 = motif, n
     if motif_p2 in (MotifNonExploitable.liste_reparation, MotifNonExploitable.recu) and n_p2 < 2 \
@@ -457,7 +485,8 @@ def classer_page(
 
     def res(type_, sous_type=None, conf=0.0, motif=None) -> ClassementPage:
         return ClassementPage(type=type_, sous_type=sous_type, confiance=_borne(conf), motif_non_exploitable=motif,
-                              titre=tt.premiere(), indices=indices, **base)
+                              titre=tt.premiere(), indices=indices,
+                              intitulee=bool(n_titre_facture or n_support or n_p2 or t_decl), **base)
 
     # 1. Déclaration : MRN + vocabulaire douanier, sans intitulé de facture (une facture de transitaire
     #    cite des MRN mais porte un intitulé de facture et des débours).
@@ -469,7 +498,8 @@ def classer_page(
             st = SousTypeDeclaration.preuve_dedouanement
         elif TYPE_H7.search(entete):
             st = SousTypeDeclaration.h7
-        elif re.search(r"\bcase \d+|\bbox \d+", texte) and c_decl >= 3:
+        elif TYPE_DAU.search(entete) or _compte(TYPE_DAU, texte) >= 3 or (
+                re.search(r"\bcase \d+|\bbox \d+", texte) and c_decl >= 3):
             st = SousTypeDeclaration.dau_cases
         else:
             st = SousTypeDeclaration.h1
@@ -478,6 +508,12 @@ def classer_page(
             return res(TypeDocument.document_non_exploitable, None, 0.85, motif_p2)
         return res(TypeDocument.declaration, st.value, 0.5 + score_decl * 0.5)
 
+    if motif_p2 is None and n_titre_facture and P2_CORPS.search(texte):
+        motif_p2, n_p2 = MotifNonExploitable.liste_expedition, n_titre_facture
+        for motif, rx in NON_EXPLOITABLE:  # le motif nommé dans le texte l'emporte
+            if rx.search(texte):
+                motif_p2 = motif
+                break
     # 2. Non exploitables (P2) : intitulé de devis, bon de commande, pré-alerte… (l'emporte sur « facture »
     #    à niveau d'intitulé égal ou supérieur).
     if motif_p2 is not None and n_p2 >= n_titre_facture and n_p2 >= n_support:
@@ -494,7 +530,8 @@ def classer_page(
         return res(TypeDocument.document_support, support.value, 0.86)
 
     # 4. Lettre d'accompagnement (formules de politesse) sans intitulé de facture en grand corps.
-    if lettre >= 2 and n_titre_facture < 2 and (n_titre_facture == 0 or lettre >= 3):
+    if (lettre >= 2 and n_titre_facture < 2 and (n_titre_facture == 0 or lettre >= 3)) or (
+            lettre >= 3 and not (n_titre_facture == 2 and c_fc >= 3)):
         indices.append("lettre_accompagnement")
         return res(TypeDocument.document_support, SousTypeSupport.lettre_accompagnement.value,
                    0.72 + 0.04 * min(5, lettre))
@@ -535,6 +572,10 @@ def classer_page(
         indices.append("lettre_accompagnement")
         return res(TypeDocument.document_support, SousTypeSupport.lettre_accompagnement.value,
                    0.72 + 0.04 * min(5, lettre))
+
+    if _compte(CORPS_TRANSPORT, texte) >= 4 and c_fc < 4:
+        indices.append("support_titre_transport_corps")
+        return res(TypeDocument.document_support, SousTypeSupport.titre_transport.value, 0.74)
 
     # 8. Sans intitulé : continuation (page > 1, ou « page n/m » avec n > 1, ou « suite »).
     if (refs.page_n and refs.page_n > 1) or (numero > 1 and (_SUITE.search(texte) or score_decl < 0.3

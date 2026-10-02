@@ -453,14 +453,18 @@ def lister_lots(scope: TenantScope, limite: int = 50) -> list[dict[str, Any]]:
              lot.statut), "recu_le": lot.recu_le, "resume": lot.resume or {}} for lot in lots]
 
 
-def lire_lot(scope: TenantScope, lot_id: str, *, db: Any = None) -> dict[str, Any]:
+def jobs_du_client(db: Any, tenant_id: str) -> list[Any]:
+    """Jobs du client (à appeler **hors** d'un périmètre ouvert en écriture : transaction système)."""
+    return JobStore(db).lister(tenant_id=tenant_id, limite=2000)
+
+
+def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None) -> dict[str, Any]:
     lot = scope.obtenir(Lot, lot_id)
     fichiers = scope.lister(Fichier, lot_id=lot_id, ordre=Fichier.chemin_relatif)
     job = None
-    if db is not None:
-        for j in JobStore(db).lister(tenant_id=scope.tenant_id, limite=2000):
-            if j.kind == "traiter_lot" and j.payload.get("lot_id") == lot_id:
-                job = j
+    for j in jobs or []:
+        if j.kind == "traiter_lot" and j.payload.get("lot_id") == lot_id and j.tenant_id == scope.tenant_id:
+            job = j
     dossiers = [d for d in scope.lister(Dossier, lot_id=lot_id, ordre=Dossier.reference)]
     return {
         "id": lot.id, "canal": lot.canal, "statut": lot.statut, "statut_libelle": LIBELLES_LOT.get(lot.statut, lot.statut),

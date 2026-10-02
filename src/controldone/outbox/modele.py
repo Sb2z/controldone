@@ -27,7 +27,8 @@ class TypeAction(StrEnum):
     facture_emise = "facture_emise"
     post_linkedin = "post_linkedin"
     email_prospection = "email_prospection"
-    statut_litige_pa = "statut_litige_pa"
+    statut_litige_pa = "statut_litige_pa"  # proposé au client, qui décide seul (le produit n'est pas une PA)
+    note_veille = "note_veille"  # note interne au fondateur, jamais publiée
 
 
 class StatutAction(StrEnum):

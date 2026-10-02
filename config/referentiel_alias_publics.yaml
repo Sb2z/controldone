@@ -1,0 +1,9 @@
+# Liste des transitaires publiés sous un alias public dans le référentiel anonymisé
+# (docs/REFERENTIEL.md). Tenue par le fondateur. Un transitaire absent de cette liste est publié sous
+# une empreinte salée (T-xxxxxxxxxxxx). Ne lister qu'un transitaire dont le nom peut être rendu public
+# (accord écrit ou acteur notoire) ; les entrées ci-dessous sont des exemples FICTIFS.
+version: 1
+alias: {}
+#  "Transitaire national FICTIF":
+#    tva: ["FR00000000000"]
+#    noms: ["TRANSITAIRE NATIONAL FICTIF SAS"]

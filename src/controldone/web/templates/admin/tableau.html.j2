@@ -1,0 +1,77 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import kpi, badge_niveau %}
+{% set libs = {"ecart_certain": "Écart certain", "a_verifier": "À vérifier", "conforme": "Conforme", "document_manquant": "Document manquant", "non_concerne": "Non concerné", "inconnu": "En cours"} %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>Tableau de bord</h1>
+  <p class="discret">Tous clients — coûts IA du mois {{ d.mois }}.</p>
+</div>
+<section class="kpis" aria-label="Indicateurs">
+  {{ kpi("Constats à valider", d.totaux.proposes, "file de validation", "accent" if d.totaux.proposes else None, "/admin/validation") }}
+  {{ kpi("Actions sortantes à approuver", d.totaux.sorties, "rapports, dossiers de réclamation", None, "/admin/validation#sorties") }}
+  {{ kpi("Montant recouvrable certain", d.totaux.recouvrable_certain|montant, "écarts certains validés") }}
+  {{ kpi("Montant recouvrable à vérifier", d.totaux.recouvrable_a_verifier|montant, "affiché à part, jamais additionné") }}
+  {{ kpi("Reste à recouvrer", d.totaux.reste_a_recouvrer|montant, "registre des écarts ouverts") }}
+  {{ kpi("Tâches en échec / mortes", d.totaux.jobs_echec ~ " / " ~ d.totaux.jobs_morts, "réessais automatiques ; mortes = action requise", "alerte" if d.totaux.jobs_morts else None, "/admin/jobs") }}
+</section>
+
+<div class="grille-2">
+<section class="carte">
+  <h2>Dossiers par statut</h2>
+  {% if d.totaux.dossiers %}
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">Statut</th><th scope="col" class="num">Dossiers</th><th scope="col" class="barre-col"><span class="vh">Proportion</span></th></tr></thead>
+    <tbody>
+    {% for code, n in d.totaux.par_statut|dictsort(by="value", reverse=true) %}
+      <tr><td>{{ badge_niveau(code, libs.get(code, code)) }}</td><td class="num">{{ n }}</td>
+      <td class="barre-col"><span class="barre"><span class="w-{{ ((n * 20 / d.totaux.dossiers)|round|int) * 5 }}"></span></span></td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th scope="row">Total</th><td class="num">{{ d.totaux.dossiers }}</td><td></td></tr></tfoot>
+  </table>
+  {% else %}<p class="vide">Aucun dossier traité pour l'instant.</p>{% endif %}
+</section>
+
+<section class="carte">
+  <h2>Alertes <a class="petit-lien" href="/admin/alertes">tout voir</a></h2>
+  {% if d.alertes %}
+  <ul class="liste-alertes">
+  {% for a in d.alertes[:6] %}
+    <li><span class="badge b-alerte">{{ {"job_mort": "Tâche morte", "cout_ia_alerte": "Coût IA 80 %", "cout_ia_plafond": "Plafond IA atteint"}.get(a.kind, a.kind) }}</span> {{ a.message }} <span class="discret">— {{ a.cree_le|date }}</span></li>
+  {% endfor %}
+  </ul>
+  {% else %}<p class="vide">Aucune alerte non lue.</p>{% endif %}
+</section>
+</div>
+
+<section class="carte">
+  <h2>Clients</h2>
+  <div class="defilement">
+  <table class="donnees">
+    <thead><tr>
+      <th scope="col">Client</th><th scope="col">Offre</th><th scope="col" class="num">Dossiers</th>
+      <th scope="col" class="num">À valider</th><th scope="col" class="num">Recouvrable certain</th>
+      <th scope="col" class="num">À vérifier</th><th scope="col" class="num">Écarts ouverts</th>
+      <th scope="col">Coût IA du mois / plafond</th>
+    </tr></thead>
+    <tbody>
+    {% for c in d.clients %}
+      <tr>
+        <th scope="row"><a href="/admin/clients/{{ c.id }}">{{ c.raison_sociale }}</a>{% if c.demo %} <span class="badge b-demo">Fictif</span>{% endif %}</th>
+        <td>{{ "Diagnostic" if c.offre == "diagnostic" else "Contrôle continu" }}</td>
+        <td class="num">{{ c.stats.get("nb_dossiers", 0) }}</td>
+        <td class="num">{% if c.stats.get("proposes", 0) %}<a href="/admin/validation">{{ c.stats.get("proposes") }}</a>{% else %}0{% endif %}</td>
+        <td class="num">{{ c.stats.get("recouvrable_certain", 0)|montant }}</td>
+        <td class="num">{{ c.stats.get("recouvrable_a_verifier", 0)|montant }}</td>
+        <td class="num">{{ c.stats.get("ecarts_ouverts", 0) }}</td>
+        <td><span class="jauge{% if c.ratio_ia >= 100 %} jauge-stop{% elif c.ratio_ia >= 80 %} jauge-alerte{% endif %}" role="img" aria-label="{{ c.ratio_ia }} % du plafond"><span class="w-{{ (([c.ratio_ia, 100]|min) / 5)|round|int * 5 }}"></span></span>
+          <span class="num">{{ c.cout_ia|montant }} / {{ c.plafond|montant }}</span></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" class="vide">Aucun client. <a href="/admin/clients">Créer un client</a>.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
