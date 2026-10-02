@@ -99,9 +99,12 @@ _DEFAUT: dict[str, TableTauxReference | None] = {}
 def table_par_defaut() -> TableTauxReference | None:
     """Table ``<ref_dir>/taux_bce.csv`` (réglage ``CONTROLDONE_REF_DIR``), chargée une fois ; ``None`` si le
     fichier est absent ou ne contient aucun taux."""
-    from controldone.config import get_settings
+    import os
 
-    chemin = Path(get_settings().ref_dir) / "taux_bce.csv"
+    from controldone.config import RACINE_DEPOT
+
+    # lecture directe de l'environnement : ne pas figer le cache des réglages (``get_settings``) ici
+    chemin = Path(os.environ.get("CONTROLDONE_REF_DIR") or RACINE_DEPOT / "ref") / "taux_bce.csv"
     cle = str(chemin)
     if cle not in _DEFAUT:
         table = None
