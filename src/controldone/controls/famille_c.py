@@ -77,13 +77,19 @@ __all__ = [
     "c7_references",
     "c8_client_facture",
     "declarations_couvertes",
+    "declarations_de_ligne",
+    "dossier_principal",
+    "dossiers_freres",
     "excedent_debours",
     "grille_pour_facture",
     "libelle_facture",
+    "ligne_evaluee_ici",
+    "ligne_hors_dossier",
     "page_txt",
     "reference_declaration",
     "unites_c",
     "unites_pour_facture",
+    "unites_pour_ligne",
 ]
 
 ZERO = Decimal(0)
@@ -241,6 +247,8 @@ class ReferenceDeclaration:
     liquide_total: Decimal | None
     raison_total: RaisonCode | None
     nb_articles: int
+    #: Montant imprimé au total à payer et non retrouvé dans les lignes lues (règle de complétude), ou 0.
+    manquant: Decimal = ZERO
 
     @property
     def autoliquide(self) -> bool:
@@ -355,12 +363,14 @@ def reference_declaration(ctx: ControlContext, dec: Document) -> ReferenceDeclar
     total = c.total_a_payer if _dec(ctx, c.total_a_payer) is not None else None
     total_utilise = False
     complet_verifie = False
+    manquant = ZERO
     liquide_total: Decimal | None = somme
     raison_total: RaisonCode | None = None
 
     if inutilisables:
         if total is not None:
             total_utilise, liquide_total = True, total.decimal_signe()
+            manquant = max(ZERO, liquide_total - somme)
         else:
             liquide_total, raison_total = None, inutilisables[0]
     elif not c.taxations and total is None:
@@ -373,7 +383,7 @@ def reference_declaration(ctx: ControlContext, dec: Document) -> ReferenceDeclar
         diff = tot - somme
         if diff > t_somme and not (montant_autoliquide and abs(diff - montant_autoliquide) <= t_somme):
             # Règle de complétude (§12.1) : une composante n'a pas été extraite.
-            total_utilise, liquide_total = True, tot
+            total_utilise, liquide_total, manquant = True, tot, diff
             candidates = [k for k in (CategorieTaxe.droit, CategorieTaxe.autre_taxe) if k in sans_ligne]
             if not autoliquide and CategorieTaxe.tva in sans_ligne:
                 candidates.append(CategorieTaxe.tva)
@@ -386,7 +396,7 @@ def reference_declaration(ctx: ControlContext, dec: Document) -> ReferenceDeclar
         dec=dec, liquide=liquide, sources=sources, autres_sources=autres, sans_ligne=sans_ligne,
         indisponibles=indisponibles, indices=indices, tva_ecartee=tva_ecartee, total=total,
         total_utilise=total_utilise, complet_verifie=complet_verifie, liquide_total=liquide_total,
-        raison_total=raison_total, nb_articles=_nb_articles(ctx, dec),
+        raison_total=raison_total, nb_articles=_nb_articles(ctx, dec), manquant=manquant,
     )
 
 
@@ -768,6 +778,11 @@ def _comparer_composante(
     )
     if abs(ecart) <= tol:
         return ctx.conforme(cid, **commun)
+    manquant = _somme(refs[d.id].manquant for d in u.declarations)
+    if manquant > 0 and tol < ecart <= manquant + tol:
+        # Le total à payer imprimé contient des montants non retrouvés dans les lignes lues : une ligne de
+        # cette composante non extraite expliquerait l'excédent (§12.1, « comparaisons concernées » ; D-705).
+        return nv(RaisonCode.valeur_absente, "ecart_explicable_par_une_ligne_de_taxation_non_lue")
 
     raisons = []
     if any(cat in refs[d.id].sans_ligne and not refs[d.id].complet_verifie for d in u.declarations):
@@ -1078,9 +1093,28 @@ def excedent_debours(u: UniteC, refs: dict[str, ReferenceDeclaration], base: Bas
         for d in u.declarations:
             r = refs[d.id]
             if any(k in r.indisponibles for k in cats if k is not None):
-                return None
+                return _excedent_hors_tva_autoliquidee(u, refs, cats)
             liq += _somme(r.liquide[k] for k in cats if k is not None)
     return max(ZERO, refact - liq)
+
+
+def _excedent_hors_tva_autoliquidee(
+    u: UniteC, refs: dict[str, ReferenceDeclaration], cats: set[CategorieTaxe | None]
+) -> Decimal | None:
+    """Assiette « débours hors TVA » quand une composante de la déclaration n'est pas ventilée (ligne de
+    catégorie inconnue) : si la TVA de chaque déclaration est autoliquidée (référence TVA nulle, §12.1) et
+    qu'aucune TVA n'est refacturée, l'excédent hors TVA est l'excédent total (D-702). Sinon ``None``."""
+    if {*CATEGORIES} - {k for k in cats if k is not None} != {CategorieTaxe.tva}:
+        return None
+    if u.lignes_categorie(CategorieTaxe.tva) or u.inutilisables():
+        return None
+    totals = []
+    for d in u.declarations:
+        r = refs[d.id]
+        if not r.autoliquide or r.liquide_total is None:
+            return None
+        totals.append(r.liquide_total)
+    return max(ZERO, u.refacture_total() - _somme(totals))
 
 
 def unites_pour_facture(ctx: ControlContext, f: Document, unites: Sequence[UniteC]) -> list[UniteC]:
@@ -1092,6 +1126,91 @@ def unites_pour_facture(ctx: ControlContext, f: Document, unites: Sequence[Unite
         return propres
     couvertes = {d.id for d in declarations_couvertes(ctx, f)}
     return [u for u in unites if any(d.id in couvertes for d in u.declarations)]
+
+
+def _est_declaration(d: Document) -> bool:
+    return d.champs is not None and getattr(d.champs, "type_document", None) == "declaration"
+
+
+def dossiers_freres(ctx: ControlContext, document_id: str) -> list[str]:
+    """Identifiants des autres dossiers qui contiennent le même document (relevé ou facture mensuelle
+    rattaché à plusieurs dossiers, §7.5 ; D-202)."""
+    return sorted(a.dossier.id for a in ctx.autres_dossiers if document_id in a.documents)
+
+
+def dossier_principal(ctx: ControlContext, document_id: str) -> bool:
+    """Vrai si ce dossier est celui (premier identifiant) qui porte les contrôles **de niveau document** d'un
+    document partagé entre plusieurs dossiers : un même fait n'est signalé qu'une fois (D-701)."""
+    return all(ctx.dossier.id < x for x in dossiers_freres(ctx, document_id))
+
+
+def ligne_hors_dossier(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire) -> bool:
+    """La ligne cite le MRN d'une déclaration absente de ce dossier mais présente dans un autre dossier qui
+    contient la même facture : elle relève de cet autre dossier (relevé réparti, D-202, D-701)."""
+    if not ctx.utilisable(ligne.mrn):
+        return False
+    assert ligne.mrn is not None
+    p = mrn_prefixe(ligne.mrn.valeur)
+    if not p or any(d.dec.mrn_prefixe == p for d in ctx.declarations(dernieres_versions=False)):
+        return False
+    return any(
+        f.id in a.documents and any(_est_declaration(d) and d.dec.mrn_prefixe == p for d in a.documents.values())
+        for a in ctx.autres_dossiers
+    )
+
+
+def ligne_evaluee_ici(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire) -> bool:
+    """Une ligne d'une facture partagée entre dossiers est évaluée une seule fois : dans le dossier de la
+    déclaration dont elle cite le MRN ; à défaut (aucun MRN du dossier cité), dans le dossier principal."""
+    if ligne_hors_dossier(ctx, f, ligne):
+        return False
+    if ctx.utilisable(ligne.mrn):
+        assert ligne.mrn is not None
+        p = mrn_prefixe(ligne.mrn.valeur)
+        if any(d.dec.mrn_prefixe == p for d in ctx.declarations(dernieres_versions=False)):
+            return True
+    return dossier_principal(ctx, f.id)
+
+
+def declarations_de_ligne(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire) -> list[Document]:
+    """Déclarations auxquelles se rapporte une ligne de prestation (assiette d'un FAF, nombre d'articles) :
+    la déclaration dont la ligne cite le MRN ; à défaut, les déclarations couvertes par la facture
+    (§12.2 : une facture qui ne ventile pas couvre la somme de ses déclarations). Liste vide si la ligne
+    relève d'un autre dossier."""
+    if ligne_hors_dossier(ctx, f, ligne):
+        return []
+    if ctx.utilisable(ligne.mrn):
+        assert ligne.mrn is not None
+        p = mrn_prefixe(ligne.mrn.valeur)
+        cites = [d for d in ctx.declarations() if d.dec.mrn_prefixe == p]
+        if cites:
+            return cites
+        # MRN de la ligne sans déclaration dans le dossier : sur une facture qui cite plusieurs MRN, la ligne
+        # se rapporte à un autre envoi (déclaration absente ou mal lue) ; on ne la rapporte pas aux autres.
+        if len({mrn_prefixe(v.valeur) for v in _mrn_cites(ctx, f)}) > 1:
+            return []
+        return declarations_couvertes(ctx, f)
+    # Ligne non ventilée d'une facture qui cite aussi des MRN absents du dossier : elle couvre des envois
+    # d'autres dossiers ; aucune déclaration du dossier n'en représente seule l'assiette.
+    ici = {d.dec.mrn_prefixe for d in ctx.declarations(dernieres_versions=False) if d.dec.mrn_prefixe}
+    if {mrn_prefixe(v.valeur) for v in _mrn_cites(ctx, f)} - ici:
+        return []
+    return declarations_couvertes(ctx, f)
+
+
+def unites_pour_ligne(
+    ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, unites: Sequence[UniteC]
+) -> list[UniteC]:
+    """Unités de débours d'une ligne de prestation (FAF) : celles de ``unites_pour_facture`` restreintes aux
+    déclarations de la ligne (``declarations_de_ligne``). Sur un relevé ventilé par MRN, le FAF de chaque
+    envoi est calculé sur les débours de son seul MRN (D-701)."""
+    decs = {d.id for d in declarations_de_ligne(ctx, f, ligne)}
+    if not decs:
+        return []
+    propres = [u for u in unites_pour_facture(ctx, f, unites) if any(d.id in decs for d in u.declarations)]
+    if propres:
+        return propres
+    return [u for u in unites if any(d.id in decs for d in u.declarations)]
 
 
 def grille_pour_facture(ctx: ControlContext, f: Document) -> GrilleTarifaire | None:
@@ -1181,7 +1300,11 @@ def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
         return [ctx.non_applicable("C6", RaisonCode.valeur_absente, details={"motif": "aucune_ligne_faf"})]
     for f, i, lg in lignes_faf:
         unite = cle_unite(ft=f.id, ligne=i)
-        concernees = unites_pour_facture(ctx, f, unites)
+        if not ligne_evaluee_ici(ctx, f, lg):
+            out.append(ctx.non_applicable("C6", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[f.id],
+                                          details={"motif": "ligne_evaluee_dans_un_autre_dossier"}))
+            continue
+        concernees = unites_pour_ligne(ctx, f, lg, unites)
         docs = [f.id] + [x for u in concernees for x in u.document_ids if x != f.id]
         details: dict = {"unites_debours": [u.cle for u in concernees]}
         v_faf = _montant_ligne(ctx, lg)

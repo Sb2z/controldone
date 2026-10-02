@@ -1,0 +1,87 @@
+# Offres commerciales et paramètres de facturation de ControlDOne (fondateur).
+# Lu par controldone.facturation.offres.charger_offres(). Montants en EUR HT, chaînes décimales exactes.
+# Les valeurs marquées « valeur de départ » sont des hypothèses commerciales à ajuster par le fondateur.
+version: 1
+
+offres:
+  diagnostic:
+    libelle: "Diagnostic de cohérence documentaire (lot de dossiers passés)"
+    type: forfait
+    prix_ht: "390.00"
+  commission:
+    libelle: "Commission sur avoirs obtenus"
+    type: commission
+    # Fraction de la base §17.4 (crédits imputés sur des écarts issus de constats validés).
+    taux: "0.20"
+  continu:
+    libelle: "Contrôle continu (abonnement mensuel)"
+    type: abonnement
+    # Paliers par nombre de dossiers contrôlés par mois. VALEURS DE DÉPART À AJUSTER (hypothèse commerciale,
+    # non testée sur le marché) : prix et quotas seront revus après les premiers clients.
+    paliers:
+      - code: essentiel
+        libelle: "Contrôle continu — Essentiel"
+        prix_mensuel_ht: "99.00"
+        dossiers_par_mois: 20
+      - code: pro
+        libelle: "Contrôle continu — Pro"
+        prix_mensuel_ht: "199.00"
+        dossiers_par_mois: 60
+      - code: intensif
+        libelle: "Contrôle continu — Intensif"
+        prix_mensuel_ht: "349.00"
+        dossiers_par_mois: 150
+
+coupons:
+  LANCEMENT-3-DIAGNOSTICS:
+    libelle: "Offre de lancement : diagnostic gratuit contre le droit de publier les résultats anonymisés"
+    offre: diagnostic
+    remise_pourcentage: "100"
+    utilisations_max: 3          # trois diagnostics au total, tous clients confondus
+    une_fois_par_client: true
+    consentement_requis: true    # accord signé de publication des résultats anonymisés (drapeau + référence)
+
+tva:
+  # Hypothèse : le fondateur est assujetti à la TVA (régime réel). Alternative : franchise en base
+  # (art. 293 B du CGI) -> tva_applicable: false ; la mention ci-dessous est alors imprimée et la
+  # catégorie de TVA du XML est « E » (exonération) au taux 0.
+  tva_applicable: true
+  taux: "20.00"
+  mention_franchise: "TVA non applicable, art. 293 B du CGI"
+  # Option pour le paiement de la TVA d'après les débits (prestations de services) : false par défaut
+  # (TVA exigible à l'encaissement). Si true : mention imprimée et code BT-8 = 5 (date de facture).
+  option_debits: false
+
+numerotation:
+  # Une série continue par entité légale, par préfixe et par année : F-2026-0001, AV-2026-0001.
+  facture: "F"
+  avoir: "AV"
+  chiffres: 4
+
+paiement:
+  delai_jours: 30
+  moyen: "Virement SEPA ou carte bancaire (lien de paiement sécurisé)"
+  # L441-10 C. com. : au minimum le taux de refinancement de la BCE majoré de 10 points (ou 3 × taux légal).
+  penalites: "Pénalités de retard exigibles dès le lendemain de la date d'échéance : taux de refinancement de la BCE en vigueur majoré de 10 points (art. L441-10 du Code de commerce)."
+  indemnite: "Indemnité forfaitaire pour frais de recouvrement en cas de retard de paiement : 40 EUR (art. L441-10 et D441-5 du Code de commerce)."
+  escompte: "Pas d'escompte pour paiement anticipé."
+
+# Vendeur (le fondateur). Chaque valeur peut être remplacée par une variable d'environnement
+# CONTROLDONE_VENDEUR_<CLE EN MAJUSCULES> (ex. CONTROLDONE_VENDEUR_SIREN). Tant qu'un champ vaut
+# « À COMPLÉTER », la facture porte un bandeau « NON VALABLE » et l'émission est refusée en production.
+vendeur:
+  identifiant: "fondateur"            # entité légale : clé de la série de numérotation
+  raison_sociale: "À COMPLÉTER"
+  forme_juridique: "À COMPLÉTER"      # ex. « EI », « SASU au capital de … EUR »
+  siren: "À COMPLÉTER"
+  rcs: "À COMPLÉTER"                  # ex. « RCS Paris 123 456 789 » ou « Dispensé d'immatriculation »
+  tva_intracom: "À COMPLÉTER"
+  adresse_ligne: "À COMPLÉTER"
+  code_postal: "À COMPLÉTER"
+  ville: "À COMPLÉTER"
+  pays: "FR"
+  email: "À COMPLÉTER"
+  iban: "À COMPLÉTER"
+  bic: "À COMPLÉTER"
+  # Adresse électronique de facturation (annuaire de la réforme, schéma 0225) : par défaut le SIREN.
+  adresse_electronique: ""

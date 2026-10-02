@@ -335,8 +335,15 @@ class ResultatDossier:
 # --- étapes -----------------------------------------------------------------------------------------
 
 
-def _recevoir(source: Any, client_id: str | None, ids: IdGenerator, racine: Path | None) -> tuple[Lot, list[FichierSource], list[NonLu]]:
-    """Étape 1 : réception (dossier, fichier, liste de chemins)."""
+def _recevoir(
+    source: Any, client_id: str | None, ids: IdGenerator, racine: Path | None,
+    doublons: list[tuple[Fichier, str | None]] | None = None,
+) -> tuple[Lot, list[FichierSource], list[NonLu]]:
+    """Étape 1 : réception (dossier, fichier, liste de chemins).
+
+    Un fichier identique (sha256) déjà reçu n'est pas retraité (§7.1) : il est mentionné « doublon de
+    fichier » dans ``non_lus`` et, si ``doublons`` est fourni, ajouté à cette liste (avec son chemin local)
+    pour être rattaché au lot comme copie de l'original (D-802)."""
     from controldone.ingest.reception import recevoir_chemin
 
     chemins = [Path(s) for s in source] if isinstance(source, list | tuple) else [Path(source)]
@@ -352,15 +359,17 @@ def _recevoir(source: Any, client_id: str | None, ids: IdGenerator, racine: Path
             if f.statut is StatutFichier.refuse:
                 non_lus.append(NonLu(fichier=f.chemin_relatif, motif=f"refuse:{f.motif_refus or 'inconnu'}"))
                 continue
-            if f.doublon_de:
-                non_lus.append(NonLu(fichier=f.chemin_relatif, motif="doublon_de_fichier"))
-                continue
             local = None
             if base is not None and "!" not in f.chemin_relatif and (fr.origine is None):
                 cand = Path(base) / f.chemin_relatif
                 local = cand if cand.exists() else None
             elif ch.is_file() and fr.origine is None:
                 local = ch
+            if f.doublon_de:
+                non_lus.append(NonLu(fichier=f.chemin_relatif, motif="doublon_de_fichier"))
+                if doublons is not None:
+                    doublons.append((f, str(local) if local is not None else None))
+                continue
             sources.append(FichierSource(fichier=f, contenu=fr.contenu, chemin_local=local,
                                          courriel=(fr.origine if (fr.origine or "").startswith("courriel:") else None),
                                          corps_courriel=fr.corps_courriel))
@@ -476,8 +485,9 @@ def preparer_lot(
 
     # 1. réception
     non_lus: list[NonLu] = []
+    doublons_fichiers: list[tuple[Fichier, str | None]] = []
     try:
-        lot, sources, nl = _recevoir(source, profil.client_id, ids, options.racine)
+        lot, sources, nl = _recevoir(source, profil.client_id, ids, options.racine, doublons_fichiers)
         non_lus.extend(nl)
     except Exception as e:
         log.error("reception_en_erreur exception=%s", type(e).__name__)
@@ -556,6 +566,7 @@ def preparer_lot(
         except Exception as e:
             log.warning("normalisation_en_erreur exception=%s", type(e).__name__)
             avertissements.append("normalisation_en_erreur")
+    documents += _copies_fichiers_doublons(doublons_fichiers, documents, fichiers, chemins, pages, ids)
     documents = _marquer_doublons(documents)
 
     # documents non reconnus (§7.2) : listés même s'ils sont rattachés
@@ -593,6 +604,37 @@ def preparer_lot(
         versions_extracteurs=versions, duree_s=time.perf_counter() - debut, cles=cles,
         extraction_partielle=partielle, avertissements=avertissements,
     )
+
+
+def _copies_fichiers_doublons(
+    doublons: Sequence[tuple[Fichier, str | None]], documents: Sequence[Document], fichiers: dict[str, Fichier],
+    chemins: dict[str, str], pages: dict[str, list[Page]], ids: IdGenerator,
+) -> list[Document]:
+    """Fichier identique déjà reçu (§7.1) : il n'est pas retraité, mais il est rattaché au lot comme copie.
+
+    Pour chaque document de l'original, une copie (mêmes type, champs et identité) pointe vers les pages du
+    fichier en double et porte ``doublon_de`` = document original : le regroupement la place avec son
+    original, les contrôles l'excluent de leurs sommes (``documents_par_role``), et F1/E3 peuvent la
+    signaler (D-802). ``fichiers``, ``chemins`` et ``pages`` sont complétés sur place.
+    """
+    copies: list[Document] = []
+    for f, local in doublons:
+        originaux = [d for d in documents if d.pages and d.pages[0].fichier_id == f.doublon_de
+                     and not d.doublon_de]
+        if not originaux:
+            continue
+        fichiers[f.id] = f
+        if local is not None:
+            chemins[f.id] = local
+        pages[f.id] = [p.model_copy(update={"id": ids.nouveau(Prefixe.page), "fichier_id": f.id})
+                       for p in pages.get(f.doublon_de or "", [])]
+        for d in originaux:
+            copies.append(d.model_copy(update={
+                "id": ids.nouveau(Prefixe.document),
+                "pages": [pr.model_copy(update={"fichier_id": f.id}) for pr in d.pages],
+                "doublon_de": d.id,
+            }))
+    return copies
 
 
 def _marquer_doublons(documents: list[Document]) -> list[Document]:

@@ -199,6 +199,16 @@ _MOTS_NON_TAXE = frozenset({"EUR", "TVA", "VAT", "MRN", "LRN", "USD", "TOT", "DE
 _CODE_DOC_RE = re.compile(r"^([NCYU][0-9O]{3})(?::(.*))?$")
 _BOITE_RE = re.compile(r"^(?:\d{1,2}[a-z]?|[A-Z])$")
 _SEPARATEURS = frozenset({"|", "¦", ";"})
+#: Section « Documents produits / références » (clé sans espaces ni accents) et fin de section.
+_SECTION_DOCS_RE = re.compile(r"^(?:documents?produits|documentsreferences|producedocuments|documentsproduced)")
+_FIN_SECTION_DOCS_RE = re.compile(r"^(?:article|art\d|item|designation|recapitulatif|total)")
+#: Libellé imprimé du type de document -> code (clé sans espaces ni accents, en début de reste de ligne).
+_LIBELLES_DOCS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^(?:facturecommerciale|commercialinvoice|facturacomercial)"), "N380"),
+    (re.compile(r"^(?:facture)?proforma"), "N325"),
+    (re.compile(r"^(?:connaissement|billoflading|conocimiento)"), "N705"),
+    (re.compile(r"^(?:lta|lettredetransportaerien|airwaybill|awb)$|^lettredetransportaerien"), "N740"),
+)
 
 #: Confusions lettre -> chiffre et chiffre -> lettre (corrections imposées par la forme, §8.5.4).
 _VERS_CHIFFRE = str.maketrans({"O": "0", "D": "0", "Q": "0", "I": "1", "L": "1", "|": "1", "S": "5", "B": "8",
@@ -231,6 +241,13 @@ _SENS_PAIEMENT: tuple[tuple[re.Pattern[str], PaiementNormalise], ...] = (
     (re.compile(r"garant|guarantee|caution"), PaiementNormalise.garanti),
     (re.compile(r"comptant|cash|immediat|especes"), PaiementNormalise.comptant),
 )
+
+
+def _apres_separateurs(toks: Sequence[_Tok], i: int) -> int | None:
+    """Indice du premier mot à partir de ``i`` qui n'est pas un séparateur de colonne (``None`` si aucun)."""
+    while i < len(toks) and toks[i].t in _SEPARATEURS:
+        i += 1
+    return i if i < len(toks) else None
 
 
 def _cle(s: str) -> str:
@@ -1109,10 +1126,18 @@ class _Lecteur:
         vus: set[tuple[str, str]] = set()
         k = 0
         exclues = self.lignes_blocs | self.lignes_tableaux
+        dans_section = False
         for ligne in self.lignes:
             if ligne.idx in exclues:
                 continue
             toks = ligne.toks
+            cle_ligne = _cle(" ".join(t.t for t in toks))
+            if _SECTION_DOCS_RE.search(cle_ligne):
+                dans_section = True
+                continue
+            if dans_section and (_FIN_SECTION_DOCS_RE.match(cle_ligne) or not cle_ligne):
+                dans_section = False
+            libelle_lu = self._document_par_libelle(toks) if dans_section else None
             for i, t in enumerate(toks):
                 net = t.t.strip(".,;")
                 code = ref_toks = None
@@ -1124,16 +1149,22 @@ class _Lecteur:
                         code, pen = code.replace("O", "0"), 0.15
                     if m.group(2):
                         ref_toks = [t]
-                    elif i + 1 < len(toks):
-                        ref_toks = [toks[i + 1]]
-                elif net in ("1008", "FR7") and i + 1 < len(toks) and _tva(toks[i + 1]) is not None:
-                    code, ref_toks = net, [toks[i + 1]]
+                    elif (j := _apres_separateurs(toks, i + 1)) is not None:
+                        # « N380 | FAC/2026/0129-0 » : un séparateur de colonne lu entre le code et la référence
+                        ref_toks = [toks[j]]
+                elif i == 0 and libelle_lu is not None:
+                    # « FAC/2026/0060-0   Facture commerciale » (colonne des codes perdue) : code déduit du
+                    # libellé imprimé du type de document, dans la section « Documents produits » (D-804).
+                    code, ref_toks, pen = libelle_lu[0], [t], 0.10
+                elif net in ("1008", "FR7") and (j := _apres_separateurs(toks, i + 1)) is not None \
+                        and _tva(toks[j]) is not None:
+                    code, ref_toks = net, [toks[j]]
                 elif re.match(r"^(1008|FR7):", net) and _tva(_Tok(net.split(":", 1)[1], "", 0, 0, 0, 0, None, 0)):
                     code, ref_toks = net.split(":", 1)[0], [t]
                 if not code or not ref_toks:
                     continue
                 rt = ref_toks[0]
-                ref_brut = rt.t.split(":", 1)[1] if rt is t else rt.t
+                ref_brut = rt.t.split(":", 1)[1] if rt is t and ":" in rt.t else rt.t
                 ref_brut = ref_brut.strip(";,")
                 if not re.search(r"[A-Za-z0-9]{2}", ref_brut) or _CODE_DOC_RE.match(ref_brut):
                     continue
@@ -1152,11 +1183,26 @@ class _Lecteur:
                     tv = _tva(_Tok(ref_brut, "", 0, 0, 0, 0, None, 0))
                     if tv is not None:
                         ref_lu = _Lu(ref_lu.span, tv[0], tv[1], tv[2])
+                if libelle_lu is not None and not m and code == libelle_lu[0]:
+                    code_lu = _Lu(libelle_lu[1], libelle_lu[1].texte, code, pen)
                 self._definir(f"documents_references[{k}].type_code",
                               self._vs(f"documents_references[{k}].type_code", code_lu))
                 self._definir(f"documents_references[{k}].reference",
                               self._vs(f"documents_references[{k}].reference", ref_lu))
                 k += 1
+
+    @staticmethod
+    def _document_par_libelle(toks: Sequence[_Tok]) -> tuple[str, _Span] | None:
+        """Ligne « <référence> <libellé du type de document> » : (code déduit du libellé, mots du libellé).
+        La référence (premier mot) doit contenir un chiffre ; le libellé suit immédiatement."""
+        if len(toks) < 2 or not re.search(r"\d", toks[0].t) or _CODE_DOC_RE.match(toks[0].t.strip(".,;")):
+            return None
+        reste = [t for t in toks[1:] if t.t not in _SEPARATEURS]
+        cle = _cle(" ".join(t.t for t in reste))
+        for rx, code in _LIBELLES_DOCS:
+            if rx.match(cle):
+                return code, _Span(reste)
+        return None
 
     # --- légende des modes de paiement, libellés des codes de taxe ---------------------------------------------
 
