@@ -18,6 +18,7 @@ Le contenu des champs libres (notes, motifs, descriptions) est stocké comme **d
 from __future__ import annotations
 
 import csv
+import hashlib
 import logging
 import re
 from collections.abc import Iterable, Sequence
@@ -991,7 +992,9 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
         for col in entete:
             if col and col not in connues:
                 avert.append(f"colonne_ignoree:{col}")
-                log.info("colonne_inconnue format=%s colonne=%s", fiche.format_id, col)
+                # nom de colonne lu dans le document : jamais en clair dans les journaux (RS-12)
+                log.info("colonne_inconnue format=%s longueur=%d empreinte=%s", fiche.format_id, len(col),
+                         hashlib.sha256(col.encode("utf-8")).hexdigest()[:12])
         col_type = "__type__" if fiche.csv.get("multi_enregistrements") else fiche.csv.get("colonne_type")
 
         def lire(base, src: str):

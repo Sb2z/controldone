@@ -244,7 +244,7 @@ def test_configuration_par_reglages(monde, tmp_path):
     with monde.db.operateur(FONDATEUR) as op:
         op.modifier_client("cli_b", reglages={"connecteurs": {
             "dossier_surveille": {"chemin": str(tmp_path / "b")},
-            "imap": {"hote": "imap.exemple-fictif.test", "utilisateur": "u", "secret_env": "X"},
+            "imap": {"hote": "imap.exemple-fictif.test", "utilisateur": "u", "secret_env": "CONTROLDONE_IMAP_CLI_B"},
             "plateforme_agreee": {"fournisseur": "fictif", "dossier": str(tmp_path)}}})
     noms = sorted((c.tenant_id, c.nom) for c in connecteurs_configures(monde.db))
     assert noms == [("cli_b", "boite_imap"), ("cli_b", "dossier_surveille"), ("cli_b", "plateforme_agreee")]

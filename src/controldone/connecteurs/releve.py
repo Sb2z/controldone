@@ -47,7 +47,10 @@ def connecteurs_configures(db: Database) -> list[ConnecteurEntrant]:
             d = conf["dossier_surveille"]
             sortie.append(DossierSurveille(tenant, d["chemin"], stabilite_s=float(d.get("stabilite_s", 10))))
         if conf.get("imap"):
-            sortie.append(BoiteImap(tenant, ConfigImap.depuis_reglages(conf["imap"])))
+            try:
+                sortie.append(BoiteImap(tenant, ConfigImap.depuis_reglages(conf["imap"])))
+            except (KeyError, TypeError, ValueError) as exc:  # configuration refusée : les autres clients continuent
+                log.warning("connecteur_imap_config_refusee tenant=%s exception=%s", tenant, type(exc).__name__)
         pa = conf.get("plateforme_agreee") or {}
         if pa.get("fournisseur") in FABRIQUES_PA:
             sortie.append(PlateformeAgreeeEntrante(tenant, FABRIQUES_PA[pa["fournisseur"]](pa)))
