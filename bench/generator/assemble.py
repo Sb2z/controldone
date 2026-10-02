@@ -473,3 +473,44 @@ def simulate_dossier(seed, plan, reg, plans_by_id):
             "expected_outcome": outcome, "expected_totals": totals, "warnings": dm.warnings,
             "template": plan["template"], "layout": plan["layout"], "degradation": plan["degradation"],
             "tags": sorted(set(dm.tags))}
+
+
+def native_texts(seed, plan, reg, plans_by_id):
+    """Texte de chaque document dans un rendu NATIF (sans dégradation) : sert au contrôle
+    « toute valeur de vérité est imprimée ». N'écrit aucun fichier."""
+    import io
+    import pypdfium2 as pdfium
+    dm = build_core(seed, plan, reg, plans_by_id)
+    files = plan_files(dm)
+    out = {}
+    for f in files:
+        f.degrade = None
+        render_file(dm, f)
+        if f.kind in ("pdf", "facturx"):
+            pdf = pdfium.PdfDocument(f.data)
+            pages = [pdf[i].get_textpage().get_text_range() for i in range(len(pdf))]
+            extra = ""
+            if f.kind == "facturx":
+                from facturx import get_facturx_xml_from_pdf
+                extra = get_facturx_xml_from_pdf(f.data, check_xsd=False)[1].decode("utf-8")
+            for _, o in f.parts:
+                out[o.doc_id] = "\n".join(pages[p - 1] for p in f.doc_pages[o.doc_id]) + extra
+            pdf.close()
+        elif f.kind == "xlsx":
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(f.data))
+            cells = []
+            for ws in wb.worksheets:
+                for row in ws.iter_rows():
+                    for cell in row:
+                        v = cell.value
+                        if isinstance(v, (int, float)) and not isinstance(v, bool):
+                            fmt = cell.number_format or ""
+                            dec = 3 if fmt.endswith(".000") else (2 if fmt.endswith(".00") else None)
+                            cells.append(f"{v:.{dec}f}" if dec is not None else str(v))
+                        elif v is not None:
+                            cells.append(str(v))
+            out[f.parts[0][1].doc_id] = " ".join(cells)
+        else:
+            out[f.parts[0][1].doc_id] = f.data.decode("utf-8")
+    return out

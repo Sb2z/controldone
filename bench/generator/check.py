@@ -190,6 +190,80 @@ def check_cross(t, rep):
     _ = traps
 
 
+def _norm(s):
+    return "".join(ch for ch in str(s).upper() if ch.isalnum())
+
+
+def _printed_values(doc_type, tv):
+    """(chemin, valeur) des valeurs de vérité qui doivent être lisibles sur le document."""
+    out = []
+
+    def add(path, v):
+        if v not in (None, "", []):
+            out.append((path, str(v)))
+    if doc_type == "facture_commerciale":
+        for k in ("numero", "acheteur.tva", "ref_transport"):
+            add(k, tv.get(k))
+        if tv.get("total_imprime"):
+            add("total_facture", tv["total_facture"])
+        for i, l in enumerate(tv["lignes"]):
+            add(f"lignes[{i}].montant_ligne", l["montant_ligne"])
+            add(f"lignes[{i}].code_marchandise_imprime", l["code_marchandise_imprime"])
+    elif doc_type == "declaration":
+        for k in ("mrn", "lrn", "importateur.tva", "montant_total_facture", "taux_change", "total_a_payer"):
+            add(k, tv.get(k))
+        for i, r in enumerate(tv["documents_references"]):
+            add(f"documents_references[{i}]", r["reference"])
+        for i, a in enumerate(tv["articles"]):
+            add(f"articles[{i}].code_marchandise", a["code_marchandise"])
+        for i, x in enumerate(tv["taxations"]):
+            add(f"taxations[{i}].montant", x["montant"])
+    elif doc_type == "facture_transitaire":
+        for k in ("numero", "emetteur.tva", "client_facture.tva", "total_ttc"):
+            add(k, tv.get(k))
+        for k in ("refs_mrn", "refs_transport"):
+            for i, v in enumerate(tv[k]):
+                add(f"{k}[{i}]", v)
+        for i, l in enumerate(tv["lignes"]):
+            add(f"lignes[{i}].montant_ht", l["montant_ht"])
+            add(f"lignes[{i}].mrn", l["mrn"])
+    elif doc_type == "avoir":
+        for k in ("numero", "total_credite_ttc"):
+            add(k, tv.get(k))
+        for k in ("refs_facture_origine", "refs_mrn"):
+            for i, v in enumerate(tv[k]):
+                add(f"{k}[{i}]", v)
+        for i, l in enumerate(tv["lignes"]):
+            add(f"lignes[{i}].montant_ht", l["montant_ht"])
+    return out
+
+
+def check_printed(corpus, seed, count, rep, split="dev"):
+    """Chaque valeur de vérité (références, numéros, montants clés) apparaît dans le texte d'un rendu
+    natif d0 du document (PDF : couche texte ; XML/CSV/XLSX : contenu)."""
+    from .assemble import native_texts
+    from .clients import build_registry
+    from .plan import build_plan
+    plans = build_plan(seed, count)
+    byid = {p["id"]: p for p in plans}
+    reg = build_registry(seed)
+    bad_dossiers = set()
+    for t in _truths(corpus, split):
+        texts = native_texts(seed, byid[t["dossier_id"]], reg, byid)
+        types = {d["doc_id"]: d["type"] for d in t["documents"]}
+        for doc_id, tv in t["truth_values"].items():
+            src = doc_id[:-len("_copie")] if doc_id.endswith("_copie") else doc_id
+            if doc_id == "av1b":
+                src = "av1"
+            txt = _norm(texts.get(src, ""))
+            for path, v in _printed_values(types[doc_id], tv):
+                rep.ok("imprime")
+                if _norm(v) not in txt:
+                    bad_dossiers.add(t["dossier_id"])
+                    rep.fail(t["dossier_id"], f"{doc_id}.{path} = {v} absent du rendu natif")
+    return bad_dossiers
+
+
 def check_identifiers(corpus, rep):
     for p in sorted(glob.glob(os.path.join(corpus, "clients", "*", "profil.json"))):
         prof = json.load(open(p, encoding="utf-8"))
@@ -349,6 +423,7 @@ def main(argv=None):
     ap.add_argument("--count", type=int, default=250)
     ap.add_argument("--determinism", action="store_true")
     ap.add_argument("--json", default="")
+    ap.add_argument("--printed", action="store_true", help="vérifie que les valeurs de vérité sont imprimées")
     args = ap.parse_args(argv)
     rep = Report()
     truths = _truths(args.corpus)
@@ -357,6 +432,9 @@ def main(argv=None):
         check_cross(t, rep)
     check_identifiers(args.corpus, rep)
     check_marker(args.corpus, rep)
+    if args.printed:
+        bad = check_printed(args.corpus, args.seed, args.count, rep)
+        print(f"valeurs imprimées : {rep.checked['imprime']} vérifiées, dossiers en défaut : {len(bad)}")
     entries = {"dev": [e for t in truths if t["split"] == "dev" for e in t["injected_errors"]]}
     holdout_files = [t for t in truths if t["split"] == "holdout"]
     if holdout_files:
