@@ -313,7 +313,7 @@ def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, v
         f"<ram:GrandTotalAmount>{total + tva_total:.2f}</ram:GrandTotalAmount><ram:DuePayableAmount>"
         f"{total + tva_total:.2f}</ram:DuePayableAmount></ram:SpecifiedTradeSettlementHeaderMonetarySummation>"
         f"{origine}</ram:ApplicableHeaderTradeSettlement></rsm:SupplyChainTradeTransaction></rsm:CrossIndustryInvoice>"
-    ).encode("utf-8")
+    ).encode()
 
 
 def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None, ref_origine: str | None = None,
@@ -367,7 +367,7 @@ def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None
         f"<cbc:TaxInclusiveAmount currencyID=\"{devise}\">{total:.2f}</cbc:TaxInclusiveAmount>"
         f"<cbc:PayableAmount currencyID=\"{devise}\">{total:.2f}</cbc:PayableAmount></cac:LegalMonetaryTotal>"
         f"{''.join(xl)}</{racine}>"
-    ).encode("utf-8")
+    ).encode()
 
 
 def facturx_pdf(xml: bytes, lignes_visuelles: Sequence[str] = FACTURE_COMMERCIALE) -> bytes:

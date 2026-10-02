@@ -10,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from controldone.storage.coltypes import maintenant
-from controldone.storage.models import AutonomieSortie, Outbox
+from controldone.storage.models import AutonomieSortie, Outbox, Tenant
 
-__all__ = ["autonomie", "definir_autonomie", "inserer", "lire", "lire_par_cle", "lister"]
+__all__ = ["autonomie", "client_existe", "definir_autonomie", "inserer", "lire", "lire_par_cle", "lister"]
 
 
 def inserer(s: Session, **champs: Any) -> Outbox:
@@ -59,3 +59,8 @@ def definir_autonomie(s: Session, kind: str, mode: str, par: str) -> None:
     else:
         a.mode, a.modifie_par, a.modifie_le = mode, par, maintenant()
     s.flush()
+
+
+def client_existe(s: Session, tenant_id: str) -> bool:
+    t = s.get(Tenant, tenant_id)
+    return t is not None and t.actif

@@ -208,7 +208,7 @@ X2 = (
     "TAXE;1;A00;7692,31;;;8;ad_valorem;615,38;615,38;A\r\n"
     "TAXE;1;X01;;20;pa;5,00;specifique;100,00;100,00;A\r\n"
     "#TOTAL;type;montant\r\nTOTAL;A00;615,38\r\n#COMMENTAIRE;texte\r\nCOMMENTAIRE;DONNÉES FICTIVES\r\n"
-).encode("utf-8")
+).encode()
 
 
 def test_fiches_du_depot_chargees():

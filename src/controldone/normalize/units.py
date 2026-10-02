@@ -23,8 +23,8 @@ _KG = Decimal("0.001")
 # Libellés (clé sans accents, minuscules) -> code UN/ECE Rec. 20
 _UNITES: dict[str, str] = {}
 for _code, _libelles in {
-    "C62": "pcs pc pce pces piece pieces pieza piezas u un unit units unite unites unidad unidades ea each "
-    "nr nbr nb stk st qty c62 h87 nar item items article articles",
+    "C62": "pcs pc pce pces piece pieces pieza piezas pza pzas u un ud uds unit units unite unites unidad unidades ea each "
+    "nr nbr nb stk st qty c62 h87 nar item items article articles p/st",
     "KGM": "kg kgs kilo kilos kilogramme kilogrammes kilogram kilograms kilogramo kilogramos kgm",
     "GRM": "g gr grs gramme grammes gram grams gramo gramos grm",
     "TNE": "t to tonne tonnes ton tons tonelada toneladas tne",
@@ -34,7 +34,7 @@ for _code, _libelles in {
     "MTK": "m2 m² sqm mtk metre carre metres carres square meter square meters",
     "MTQ": "m3 m³ cbm mtq metre cube metres cubes cubic meter cubic meters",
     "CMT": "cm centimetre centimetres centimeter centimeters cmt",
-    "PR": "pr prs pair pairs paire paires par pares",
+    "PR": "pr prs pa pair pairs paire paires par pares",
     "SET": "set sets jeu jeux ensemble ensembles juego juegos",
     "DZN": "dz dzn doz dozen dozens douzaine douzaines docena docenas",
     "CT": "ctn ctns carton cartons caja cajas",

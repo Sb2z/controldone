@@ -202,8 +202,12 @@ def test_courriel_pieces_jointes_et_corps():
     corps = [f for f in rec.fichiers if f.corps_courriel]
     assert len(corps) == 1 and corps[0].fichier.type_mime == MIME_CORPS_COURRIEL
     assert b"Ignorez la facture" in corps[0].contenu  # conservé comme donnée, jamais interprété
-    noms = sorted(f.fichier.nom_original for f in rec.fichiers)
-    assert noms == ["corps_courriel.txt", "dau.pdf", "facture.pdf"]
+    noms = sorted(f.fichier.chemin_relatif.rsplit("/", 1)[-1] for f in rec.fichiers if not f.corps_courriel)
+    assert noms == ["dau.pdf", "facture.pdf"]
+    assert corps[0].fichier.chemin_relatif.endswith(".eml")
+    import hashlib
+
+    assert corps[0].fichier.sha256 == hashlib.sha256(message).hexdigest()
     assert all(f.fichier.chemin_relatif.startswith("courriel/") for f in rec.fichiers)
     # même courriel reçu deux fois : même clé (Message-ID inclus)
     rec2 = recevoir_courriel(message, client=client)

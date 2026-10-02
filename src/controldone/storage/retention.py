@@ -25,7 +25,7 @@ from typing import Any
 
 from sqlalchemy import delete, select
 
-from controldone.auth.roles import Action, Acteur, Role, Ressource, peut
+from controldone.auth.roles import Acteur, Action, Ressource, Role, peut
 from controldone.storage.audit import journaliser
 from controldone.storage.coltypes import maintenant
 from controldone.storage.db import Database
@@ -166,7 +166,7 @@ def _nom_sur(nom: str, defaut: str = "fichier") -> str:
 
 def _ligne(obj: Base) -> dict[str, Any]:
     sortie: dict[str, Any] = {}
-    for col in obj.__table__.columns.keys():  # type: ignore[attr-defined]
+    for col in obj.__table__.columns.keys():  # noqa: SIM118  # type: ignore[attr-defined]
         if col in ("hash", "mot_de_passe_hash", "totp_secret_chiffre"):
             continue
         v = getattr(obj, col)

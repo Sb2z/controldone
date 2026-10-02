@@ -332,6 +332,31 @@ class _Titres:
         return None
 
 
+def _segments(ligne: Ligne, ecart: float = 0.02) -> list[tuple[str, float | None, float]]:
+    """Segments d'une ligne séparés par un blanc de colonne : (texte, taille médiane des mots, y0).
+
+    Un intitulé aligné à droite sur la ligne du nom de société (« SOCIÉTÉ X      PACKING LIST ») forme son
+    propre segment."""
+    sortie: list[tuple[str, float | None, float]] = []
+    courant: list = []
+
+    def fermer() -> None:
+        if courant:
+            tailles = sorted(m.taille for m in courant if m.taille)
+            taille = tailles[len(tailles) // 2] if tailles else None
+            sortie.append((" ".join(m.texte for m in courant), taille, min(m.y0 for m in courant)))
+
+    prec = None
+    for m in ligne.mots:
+        if prec is not None and m.x0 - prec.x1 > ecart:
+            fermer()
+            courant = []
+        courant.append(m)
+        prec = m
+    fermer()
+    return sortie
+
+
 def _titres(page: PageText) -> _Titres:
     lignes: Sequence[Ligne] = page.lignes
     if not lignes:
@@ -339,14 +364,27 @@ def _titres(page: PageText) -> _Titres:
         return _Titres(grandes=[], entete=brut[:12])
     a_geometrie = page.source in ("natif", "ocr") and any(li.y1 > 0 for li in lignes)
     if not a_geometrie:
-        return _Titres(grandes=[], entete=[_norm(li.texte) for li in lignes[:12]])
+        segs = []
+        for li in lignes[:12]:
+            segs.extend(re.split(r"\s{3,}| \| ", li.texte))
+        return _Titres(grandes=[], entete=[_norm(x) for x in segs if x.strip()])
     haut = [li for li in lignes if li.y0 <= 0.30]
     if len(haut) < 3:
         haut = list(lignes[:8])
-    tailles = sorted(t for li in lignes if (t := li.taille))
+    tailles = sorted(m.taille for li in lignes for m in li.mots if m.taille)
     mediane = tailles[len(tailles) // 2] if tailles else None
-    grandes = [li for li in lignes if li.y0 <= 0.5 and mediane and li.taille and li.taille >= 1.3 * mediane]
-    return _Titres(grandes=[_norm(li.texte) for li in grandes], entete=[_norm(li.texte) for li in haut])
+    entete: list[str] = []
+    grandes: list[str] = []
+    for li in haut:
+        for texte, _taille, _y0 in _segments(li):
+            entete.append(_norm(texte))
+    for li in lignes:
+        if li.y0 > 0.5:
+            continue
+        for texte, taille, _y0 in _segments(li):
+            if mediane and taille and taille >= 1.3 * mediane and len(texte.split()) <= 8:
+                grandes.append(_norm(texte))
+    return _Titres(grandes=grandes, entete=entete)
 
 
 def _compte(rx: re.Pattern[str], texte: str) -> int:
