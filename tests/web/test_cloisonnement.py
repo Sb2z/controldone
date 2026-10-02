@@ -90,7 +90,7 @@ def test_client_ne_peut_pas_valider(monde):
     c = monde.client()
     connecter_client(c, monde, ADMIN_A)
     t = jeton(c.get("/espace").text)
-    cid = monde.ids[A]["constat_propose"][0]
+    cid = (monde.ids[A]["constat_propose"] or monde.ids[A]["constat"])[0]
     r = c.post(f"/admin/clients/{A}/constats/{cid}/valider", data={"csrf": t}, follow_redirects=False)
     assert r.status_code == 404
     r = c.post(f"/admin/clients/{A}/publier", data={"csrf": t}, follow_redirects=False)

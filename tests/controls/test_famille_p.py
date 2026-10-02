@@ -238,3 +238,34 @@ def test_p_jamais_certain_ni_montant():
         assert c.niveau.value == "a_verifier" and c.montant_en_jeu is None and c.motif_blocage is None
     for gabarit in (fp.ACTION_P1, fp.ACTION_P2, fp.ACTION_P4):
         assert check_text(gabarit) == []
+
+
+# --- Mise au point du rappel (D-801, D-802) -------------------------------------------------------------
+
+
+def test_p1_cite_les_documents_presents():
+    """Le constat P1 cite le document resté sans contrepartie (et le non exploitable qui tient lieu de facture)."""
+    r = un(fp.p1_completude, contexte([facture()]))
+    assert r.constat.documents_concernes == [FC]
+    r = un(fp.p1_completude, contexte([declaration()]))
+    assert r.constat.documents_concernes == [DEC]
+    r = un(fp.p1_completude, contexte([non_exploitable(), declaration()]))
+    assert set(r.constat.documents_concernes) == {DEC, "doc_ne"}
+
+
+def test_p4_copie_doublon_sans_constat():
+    """La copie d'un fichier déjà reçu (doublon_de) suit le lien de l'original : pas de second P4."""
+    copie = facture(id="doc_fc_copie").model_copy(update={"doublon_de": FC})
+    docs = [facture(), copie, declaration()]
+    dossier = Dossier(id="dos_test", liens=[
+        LienDocument(document_id=FC, role=RoleLien.facture_commerciale, force=ForceLien.faible,
+                     signaux=[SignalLien.meme_dossier_source]),
+        LienDocument(document_id="doc_fc_copie", role=RoleLien.facture_commerciale, force=ForceLien.faible,
+                     signaux=[SignalLien.meme_dossier_source]),
+        LienDocument(document_id=DEC, role=RoleLien.declaration, force=ForceLien.forte, signaux=[SignalLien.graine]),
+    ])
+    ctx = ControlContext.construire(dossier, docs, ProfilTolerances(id="tol_test"))
+    par = {r.documents_concernes[0]: r for r in fp.p4_rattachement_faible(ctx)}
+    assert par[FC].outcome is Outcome.a_verifier
+    assert par["doc_fc_copie"].outcome is Outcome.non_applicable
+    assert par["doc_fc_copie"].raison_code is RaisonCode.couvert_par_autre_controle

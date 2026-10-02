@@ -274,3 +274,24 @@ def test_moteur_famille_f():
     rs = run_controls(contexte([nouveau], autres_dossiers=[autre(ancien)]), controles=["F1", "F2", "F3", "F4", "F5"])
     f3 = [r for r in rs if r.controle_id == "F3"]
     assert f3[0].outcome is Outcome.ecart_certain and f3[0].constat.motif_blocage is None
+
+
+def test_f3_autre_facture_illisible_signal():
+    """D-812 : l'autre facture cite le MRN en en-tête mais aucune ligne n'a été lue : signal à vérifier, porté
+    par la facture la plus récente ; jamais certain."""
+    ancien = ft("doc_0001", "FT-001", "2026-08-01", refs_mrn=(MRN,))
+    nouveau = ft("doc_0002", "FT-002", "2026-09-01", ("50.00",))
+    r = un(f3_declaration_refacturee_deux_fois(contexte([nouveau], autres_dossiers=[autre(ancien)])))
+    assert r.outcome is Outcome.a_verifier and r.constat.montant_en_jeu == D("50.00")
+    assert {RaisonCode.valeur_absente, RaisonCode.controle_signal_seulement} <= set(r.constat.raisons)
+    assert "n'ont pas pu être lues" in r.constat.libelle
+    propre(r)
+    # la facture illisible est la plus récente : pas de constat ici
+    ancien_lu = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
+    recent_illisible = ft("doc_0002", "FT-002", "2026-09-01", refs_mrn=(MRN,))
+    r = un(f3_declaration_refacturee_deux_fois(contexte([ancien_lu], autres_dossiers=[autre(recent_illisible)])))
+    assert r.outcome is Outcome.conforme
+    # facture couvrant seulement une partie du liquidé : complémentarité possible, pas de signal
+    dec = declaration(id="doc_dec", mrn=MRN, taxations=[taxation("doc_dec", base="1000", taux="10", montant="100.00")])
+    r = un(f3_declaration_refacturee_deux_fois(contexte([dec, nouveau], autres_dossiers=[autre(ancien)])))
+    assert r.outcome is Outcome.conforme

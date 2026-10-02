@@ -222,9 +222,27 @@ def test_a2_constat_signal():
 
 
 def test_a2_aucune_reference_facture():
+    """D-803 : liste des documents produits lue (ici une LTA) sans référence de facture -> constat (§10 A2)."""
     d = declaration(documents_references=_refs("99911112222", code="N740"))
     r = un(fa.a2_reference_facture, ctx_de([facture(), d]))
+    assert r.outcome is Outcome.a_verifier
+    c = texte_propre(r)
+    assert "INV-2026-00042" in c.libelle and "N740 99911112222" in c.libelle and c.montant_en_jeu is None
+    assert set(c.documents_concernes) == {FC, DEC}
+
+
+def test_a2_aucune_reference_lue():
+    """Aucune référence lue sur une déclaration imprimée : la section a pu échapper à la lecture."""
+    r = un(fa.a2_reference_facture, ctx_de([facture(), declaration()]))
     assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.valeur_absente
+
+
+def test_a2_export_structure_sans_reference():
+    """Export structuré (XML/CSV) sans référence de facture : l'absence est fiable -> constat."""
+    d = declaration(mrn=None, documents_references=[])
+    d.dec.mrn = dv("mrn", "26FR00000000000001", methode="xml_structure")
+    r = un(fa.a2_reference_facture, ctx_de([facture(), d]))
+    assert r.outcome is Outcome.a_verifier and "aucune référence de facture" in texte_propre(r).libelle
 
 
 # --- A3 --------------------------------------------------------------------------------------------------
@@ -498,6 +516,16 @@ def test_a6_moteur_neutralise_a5():
     assert par["A3"].outcome is Outcome.non_applicable and par["A4"].outcome is Outcome.non_applicable
 
 
+def test_a6_petit_montant_non_discriminant():
+    """D-807 : 2,28 USD déclarés 2,04 EUR : la conversion (≈ 2,10) reste à moins d'une unité, « même nombre »
+    ne permet pas de conclure à une absence de conversion."""
+    d = declaration(devise="EUR", montant="2.04")
+    r = un(fa.a6_montant_sans_conversion, ctx_de([facture(total="2.28"), d], taux_ref=REF_USD))
+    assert r.outcome is Outcome.conforme
+    r = un(fa.a6_montant_sans_conversion, ctx_de([facture(total="2.28"), _eur("2.28")]))
+    assert r.outcome is Outcome.conforme
+
+
 # --- A7 --------------------------------------------------------------------------------------------------
 
 
@@ -692,6 +720,24 @@ def test_a15_references():
     assert r.outcome is Outcome.non_applicable
     r = un(fa.a15_references_produit, ctx_de([facture(), d]))
     assert r.outcome is Outcome.non_applicable
+
+
+def test_a15_reference_remplacee_par_une_autre():
+    """D-810 : une désignation citant une référence de même forme (« LA-1012-Z ») reprend bien une référence
+    d'article ; celle de la facture (« LA-1012-M ») est introuvable -> constat."""
+    f = facture(lignes=[_ligne(ref="LA-1012-M"), _ligne(ref="LA-5118-X")])
+    d = declaration(articles=[_article("1", desc="MONITEUR REF LA-1012-Z"), _article("2", desc="CASSEROLE REF LA-5118-X")])
+    r = un(fa.a15_references_produit, ctx_de([f, d]))
+    assert r.outcome is Outcome.a_verifier and "LA-1012-M" in texte_propre(r).libelle
+    assert "LA-5118-X" not in r.details["absentes"][0]
+
+
+def test_a15_reference_tronquee_et_designation_illisible():
+    f = facture(lignes=[_ligne(ref="OS-2191-B"), _ligne(ref="OS-4240-BK")])
+    d = declaration(articles=[_article("1", desc="COUTEAU REF OS-2191-"), _article("2", desc="VIS REF OS-4240-BK")])
+    assert un(fa.a15_references_produit, ctx_de([f, d])).outcome is Outcome.conforme  # troncature (§8.4)
+    d = declaration(articles=[_article("1", desc="COUTEAU REF OS-2191-B"), _article("2", desc=None)])
+    assert un(fa.a15_references_produit, ctx_de([f, d])).outcome is Outcome.non_verifiable
 
 
 # --- garde-fous sur l'ensemble de la famille ----------------------------------------------------------------

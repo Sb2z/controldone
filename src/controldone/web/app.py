@@ -104,9 +104,11 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     app.state.securite = etat
 
     from controldone.api import creer_api
-    from controldone.web import routes_admin, routes_auth, routes_client
+    from controldone.web import routes_admin, routes_auth, routes_client, routes_finances
 
     app.include_router(routes_auth.routeur)
+    app.include_router(routes_finances.routeur)
+    app.include_router(routes_finances.routeur_webhooks)
     app.include_router(routes_admin.routeur)
     app.include_router(routes_client.routeur)
     app.mount("/api/v1", creer_api(plateforme, etat))
@@ -161,6 +163,7 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
 
 def _worker(plateforme: Plateforme) -> Any:
     """Worker de démonstration dans un fil d'exécution (production : ``python -m controldone.jobs.worker``)."""
+    import controldone.connecteurs.jobs  # controle_avant_paiement : factures reçues par l'API
     import controldone.jobs.handlers  # noqa: F401  (handlers intégrés + recontrôle)
     from controldone.jobs.worker import Worker
 

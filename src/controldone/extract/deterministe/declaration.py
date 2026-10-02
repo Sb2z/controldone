@@ -202,6 +202,10 @@ _SEPARATEURS = frozenset({"|", "¦", ";"})
 #: Section « Documents produits / références » (clé sans espaces ni accents) et fin de section.
 _SECTION_DOCS_RE = re.compile(r"^(?:documents?produits|documentsreferences|producedocuments|documentsproduced)")
 _FIN_SECTION_DOCS_RE = re.compile(r"^(?:article|art\d|item|designation|recapitulatif|total)")
+#: Ligne de forfait « petits envois » lue hors tableau (D-811).
+_FORFAIT_LIBELLE_RE = re.compile(r"forfait\w*\s+petits?\s+envois?|flat.?rate|low.?value.*dut")
+_ARTICLES_RE = re.compile(r"(?i)^(?:articles?|article\(s\)|art\.?|items?|item\(s\))$")
+_DECIMAL_RE = re.compile(r"\d{1,6}[,.]\d{2}")
 #: Libellé imprimé du type de document -> code (clé sans espaces ni accents, en début de reste de ligne).
 _LIBELLES_DOCS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^(?:facturecommerciale|commercialinvoice|facturacomercial)"), "N380"),
@@ -616,6 +620,13 @@ class _Lecteur:
         fin = suivants[0].i if suivants else len(toks)
         if suivants and self._boite_avant(suivants[0]) is not None:
             fin -= 1
+        elif suivants and fin > h.j:
+            # Seul mot entre deux libellés de cases : un numéro de case collé au libellé suivant (« 35 Masse
+            # brute (kg) 38 Masse nette (kg) » lu par OCR), pas une valeur (D-712).
+            entre = [t for t in toks[h.j:fin] if _cle(t.t) not in ("", "kg", "kgs")]
+            nxt = suivants[0].toks[0]
+            if len(entre) == 1 and re.fullmatch(r"\d{1,2}", entre[0].t) and nxt.x0 - entre[0].x1 < 1.5 * nxt.hx:
+                fin = toks.index(entre[0])
         sel = list(toks[h.j:max(h.j, fin)])
         while sel and not _cle(sel[0].t) and sel[0].t not in _SEPARATEURS:
             sel = sel[1:]  # « : », « … »
@@ -866,6 +877,13 @@ class _Lecteur:
         return None
 
     def v_masse(self, span: _Span) -> _Lu | None:
+        # « 38 Masse nette (kg) » à droite de « 35 Masse brute (kg) » : numéro de la case voisine dont le
+        # libellé n'a pas été reconnu (lecture OCR), pas une masse (D-712).
+        toks = list(span.toks)
+        while toks and _cle(toks[0].t) in ("", "kg", "kgs"):
+            toks = toks[1:]  # « (kg) » resté après le libellé
+        if len(toks) > 1 and re.fullmatch(r"\d{1,2}", toks[0].t) and re.match(r"[^\W\d_]{3,}", toks[1].t):
+            return None
         for m in _nombres(span):
             lu = self._lu_nombre(span, m)
             if lu is None or lu.valeur is None:
@@ -1001,6 +1019,7 @@ class _Lecteur:
             self._article_bloc(numero_vs, debut, fin)
         for tab in tableaux_articles:
             self._article_tableau(*tab)
+        self._forfait_sans_entete()
         self._totaux()
         self._indices()
         self._sens_taux_derive()
@@ -1537,7 +1556,20 @@ class _Lecteur:
             tx.taux_nature = TauxNature.specifique
         if tx.taux is None and tx.taux_nature is None and cat is CategorieTaxe.tva and tx.base_montant is not None:
             tx.taux_nature = TauxNature.ad_valorem  # colonne TVA sans taux imprimé : la TVA est ad valorem
-        if montant is not None and not montant.vide:
+        repare = None
+        if montant is not None and not montant.vide and self.sep == ",":
+            # Lectures OCR d'un montant de colonne (D-712) : virgule lue « / » ou « | » (« 31/87 ») ; chiffre
+            # de la colonne de statut collé au montant (« 929,527 » quand la colonne St est vide).
+            txt = montant.texte.strip()
+            m_rep = re.fullmatch(r"(\d{1,3}(?:[ .]?\d{3})*) ?[/|] ?(\d{2})", txt)
+            m_col = re.fullmatch(r"(\d{1,3}(?:[ .]?\d{3})*),(\d{2})\d", txt) if mp is None or mp.vide else None
+            m_ok = m_rep or m_col
+            if m_ok:
+                valeur = Decimal(re.sub(r"[ .]", "", m_ok.group(1)) + "." + m_ok.group(2))
+                repare = _Lu(montant, txt, str(valeur), 0.15)
+        if repare is not None:
+            tx.montant = self._vs(f"{p}.montant", repare, unite="EUR", type_valeur=TypeValeur.montant)
+        elif montant is not None and not montant.vide:
             ms = [m for m in _nombres(montant) if _a_decimales(m)] or _nombres(montant)
             if ms:
                 tx.montant = self._vs(f"{p}.montant", self._lu_nombre(montant, ms[-1]), unite="EUR",
@@ -1561,6 +1593,34 @@ class _Lecteur:
             if cols:
                 self.lignes_tableaux.add(ligne.idx)
                 self._lignes_taxes(cols, ligne.idx, len(self.lignes), None)
+
+    def _forfait_sans_entete(self) -> None:
+        """Ligne de droit forfaitaire « petits envois » lue hors tableau (en-tête des colonnes illisible, OCR) :
+        « <libellé> N article(s) T EUR/art. M [MP] » : présence, base et taux seulement (pas le montant). Seulement
+        si aucune ligne de forfait n'a été lue (D-811)."""
+        if any(t.categorie is CategorieTaxe.forfait_petits_envois for t in self.champs.taxations):
+            return
+        for ligne in self.lignes:
+            toks = ligne.toks
+            if not _FORFAIT_LIBELLE_RE.search(sans_accents(" ".join(t.t for t in toks)).lower()):
+                continue
+            i = next((k for k in range(1, len(toks) - 1) if re.fullmatch(r"\d{1,4}", toks[k].t)
+                      and _ARTICLES_RE.match(toks[k + 1].t)), None)
+            # taux : nombre décimal suivi de « EUR/art. » (obligatoire : c'est lui qui fait la ligne de forfait)
+            j = next((k for k in range((i + 2) if i is not None else 1, len(toks) - 1)
+                      if _DECIMAL_RE.fullmatch(toks[k].t) and re.match(r"[A-Z]{3}\s*/", toks[k + 1].t)), None)
+            if j is None:
+                continue
+            fin_taux = min(j + (3 if toks[j + 1].t.endswith("/") else 2), len(toks))  # « EUR/ art. » coupé
+            libelle = " ".join(t.t for t in toks[: i if i is not None else j])
+            base = _Span(toks[i:i + 2]) if i is not None else None
+            # Le montant n'est pas repris : le tableau des taxes n'a pas été lu (en-tête illisible), d'autres
+            # lignes ont pu échapper à la lecture ; un montant isolé fausserait les sommes (B2) et les
+            # comparaisons de débours (G4). La ligne sert à sa présence, sa base et son taux (G2, G3, G6).
+            self._taxation(None, None, libelle, base, _Span(toks[j:fin_taux]), None, None,
+                           categorie=CategorieTaxe.forfait_petits_envois, taux_nature=TauxNature.specifique)
+            self.avertissements.append("forfait_lu_hors_tableau")
+            return
 
     def _tableaux_articles(self, blocs: list) -> list[tuple[list[_Colonne], int, int]]:
         out = []

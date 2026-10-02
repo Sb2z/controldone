@@ -1655,6 +1655,19 @@ def a14_chronologie(ctx: ControlContext) -> list[ResultatControle]:
 # =====================================================================================================
 
 
+_JETON_REF = re.compile(r"[A-Za-z0-9]+(?:[-/.][A-Za-z0-9]+)*[-/.]?")
+
+
+def _jetons_reference(texte: str | None) -> list[str]:
+    """Mots d'une désignation pouvant être une référence d'article : au moins 4 caractères, un chiffre."""
+    return [j for j in _JETON_REF.findall(texte or "") if len(j) >= 4 and re.search(r"\d", j)]
+
+
+def _forme_reference(ref: str | None) -> str:
+    """Forme d'une référence : lettres -> A, chiffres -> 9, séparateurs conservés (« LA-1012-M » -> « AA-9999-A »)."""
+    return re.sub(r"\d", "9", re.sub(r"[^\W\d_]", "A", (ref or "").strip().upper()))
+
+
 def _a15(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     cid = "A15"
     commun: dict = dict(unite=c.unite, documents=c.doc_ids)
@@ -1667,19 +1680,30 @@ def _a15(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
                 cle = norm_ref(v.valeur)
                 if len(cle) >= 4:
                     refs.setdefault(cle, v)
-    designations = [v for dec in c.decs for a in dec.dec.articles if (v := a.description) is not None
-                    and ctx.utilisable(v)]
-    if not designations:
+    articles = [a for dec in c.decs for a in dec.dec.articles]
+    designations = [v for a in articles if (v := a.description) is not None and ctx.utilisable(v)]
+    if not designations or len(designations) < len(articles):
+        # Une désignation illisible peut contenir la référence cherchée : on ne conclut pas (D-810).
         return [ctx.non_verifiable(cid, RaisonCode.valeur_absente, **commun)]
     if not refs:
         return [ctx.non_applicable(cid, RaisonCode.valeur_absente, details={"motif": "aucune_reference_article"},
                                    **commun)]
     cles_d = [norm_ref(v.valeur) for v in designations]
-    if not all(any(r in d for r in refs) for d in cles_d):
+    jetons_d = [_jetons_reference(v.valeur) for v in designations]
+    formes = {_forme_reference(v.valeur) for v in refs.values()}
+
+    def citee(r: str, i: int) -> bool:
+        # présence normalisée, ou référence tronquée dans la désignation (§8.4, ``ref_compatibles``)
+        return r in cles_d[i] or any(ref_compatibles(j, refs[r].valeur) for j in jetons_d[i])
+
+    # Une désignation « contient une référence d'article » si elle cite une référence de la facture ou un mot
+    # de même forme (lettres, chiffres, séparateurs) qu'une référence de la facture (D-810).
+    if not all(any(citee(r, i) for r in refs) or any(_forme_reference(j) in formes for j in jetons_d[i])
+               for i in range(len(designations))):
         # Le déclarant ne reprend manifestement pas les références : contrôle sans objet.
         return [ctx.non_applicable(cid, RaisonCode.controle_signal_seulement,
                                    details={"motif": "references_non_reprises"}, **commun)]
-    absentes = [v for r, v in refs.items() if not any(r in d for d in cles_d)]
+    absentes = [v for r, v in refs.items() if not any(citee(r, i) for i in range(len(designations)))]
     commun.update(details={"references": sorted(refs), "absentes": [norm_ref(v.valeur) for v in absentes]})
     if not absentes:
         return [ctx.conforme(cid, **commun)]

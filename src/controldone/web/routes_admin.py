@@ -443,6 +443,8 @@ async def _sortie(request: Request, action_id: str, quoi: str) -> Response:
         return redirection(request, retour, erreur="Bloqué par les garde-fous : " + "; ".join(exc.motifs)[:300])
     except TransitionInterdite:
         return redirection(request, retour, erreur="Cette action a déjà fait l'objet d'une décision.")
+    except ValueError as exc:  # facture approuvée mais non émise (vendeur incomplet, coupon épuisé…)
+        return redirection(request, retour, erreur=f"Action approuvée, suite impossible : {exc}"[:300])
     return redirection(request, retour, message=msg)
 
 

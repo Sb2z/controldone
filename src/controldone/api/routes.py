@@ -264,6 +264,11 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
         r = depot.deposer(plateforme, acteur, [depot.FichierTransmis(nom=nom, contenu=contenu, taille=taille)],
                           canal=CanalLot.api, resume={"avant_paiement": True, "source": "facture_electronique",
                                                       "format": fmt})
+        if r.acceptes:
+            # contrôle avant paiement : proposition « en litige » au client si des écarts sont constatés
+            from controldone.facturation.avant_paiement import mettre_en_file_controle
+
+            mettre_en_file_controle(plateforme.db, acteur.tenant_id, r.lot_id, contenu)
         return r.en_dict()
 
     # --- dossiers et constats ---

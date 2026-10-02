@@ -34,7 +34,7 @@ from controldone.model import (
     TypeDocument,
     ValeurSourcee,
 )
-from controldone.normalize.refs import ref_compatibles, ref_transport_compatibles
+from controldone.normalize.refs import mrn_prefixe, ref_compatibles, ref_transport_compatibles
 from controldone.recouvrement.imputation import (
     EcartImputable,
     ResultatImputation,
@@ -202,14 +202,41 @@ def _sommes_par_groupe(docs: Iterable[Document], fusion: bool) -> tuple[dict[str
     return out, n, ok
 
 
+def _sommes_par_mrn(docs: Iterable[Document], fusion: bool) -> dict[tuple[str, str], Decimal]:
+    """Σ montants HT par (groupe de nature, préfixe MRN cité sur la ligne) ; lignes sans MRN ignorées."""
+    out: dict[tuple[str, str], Decimal] = {}
+    for d in docs:
+        for ln in aides.lignes_ft(d):
+            v = num(aides.montant_ht(ln))
+            p = mrn_prefixe(ln.mrn.valeur) if ln.mrn is not None else ""
+            if v is None or len(p) != 15:
+                continue
+            k = (_groupe(ln.nature, fusion), p)
+            out[k] = out.get(k, ZERO) + abs(v)
+    return out
+
+
 def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatControle:
     unite = _u(av)
     origines = factures_origine(ctx, av)
+    raisons: list[RaisonCode] = []
     if not origines:
-        return ctx.non_verifiable("E2", RaisonCode.document_manquant, unite=unite, documents=[av.id],
-                                  details={"motif": "facture d'origine non retrouvée"})
+        # Repli (D-809) : l'avoir cite une facture d'origine, et l'unique facture du transitaire du dossier, du
+        # même émetteur, a un numéro illisible (on ne peut ni confirmer ni exclure la référence) : comparaison
+        # faite sur elle, au plus à vérifier avec la raison « rattachement faible ».
+        e_av = aides.emetteur_de(ctx, av)
+        cands = [ft for ft in ctx.factures_transitaires()
+                 if aides.memes_emetteurs(e_av, aides.emetteur_de(ctx, ft)) and not ctx.utilisable(ft.ft.numero)]
+        if not (any(r.valeur for r in av.av.refs_facture_origine) and len(cands) == 1
+                and len(ctx.factures_transitaires()) == 1):
+            return ctx.non_verifiable("E2", RaisonCode.document_manquant, unite=unite, documents=[av.id],
+                                      details={"motif": "facture d'origine non retrouvée"})
+        origines = [(cands[0], None, None)]
+        raisons.append(RaisonCode.rattachement_faible)
     ids_origine = {ft.id for ft, _, _ in origines}
     numeros = [aides.texte(ft.ft.numero) for ft, _, _ in origines]
+    if raisons:  # repli : numéro de la facture illisible, on retient la référence citée par l'avoir
+        numeros = [r.valeur for r in av.av.refs_facture_origine if r.valeur]
     # Tous les avoirs (ici et ailleurs, hors secondes réceptions) qui citent l'une de ces factures.
     pool = [d for d in ctx.avoirs() if d.id not in doubles]
     pool += [x.doc for x in aides.documents_autres(ctx, TypeDocument.avoir)]
@@ -229,11 +256,19 @@ def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatC
         if not tot_av or not tot_ft:
             return ctx.non_verifiable("E2", RaisonCode.valeur_absente, unite=unite, documents=[av.id], details=details)
         credite, facture, n_av, n_ft = {"total": tot_av}, {"total": tot_ft}, len(avoirs), len(fts)
-    elif not (ok_av and ok_ft):
+    elif not (ok_av and ok_ft) or not facture:
+        # facture d'origine sans ligne lue : rien à comparer (pas « 0 facturé »)
         return ctx.non_verifiable("E2", RaisonCode.valeur_absente, unite=unite, documents=[av.id], details=details)
     t = ctx.tol.t_somme(n_av + n_ft)
-    depassements = {g: credite[g] - facture.get(g, ZERO) for g in sorted(credite)
-                    if credite[g] > facture.get(g, ZERO) + t}
+    comparaisons: dict[str, tuple[Decimal, Decimal]] = {g: (credite[g], facture.get(g, ZERO)) for g in sorted(credite)}
+    if "total" not in credite:
+        # Ligne d'avoir citant un MRN que la facture d'origine cite aussi pour la même nature : le montant
+        # facturé d'origine de ce qui est crédité est celui de ce MRN (D-809).
+        c_mrn, f_mrn = _sommes_par_mrn(avoirs, fusion), _sommes_par_mrn(fts, fusion)
+        for (g, mrn), x in sorted(c_mrn.items()):
+            if (g, mrn) in f_mrn and credite[g] <= facture.get(g, ZERO) + t:
+                comparaisons[f"{g}|{mrn}"] = (x, f_mrn[(g, mrn)])
+    depassements = {k: c - f for k, (c, f) in comparaisons.items() if c > f + t}
     ecart = max(depassements.values(), default=ZERO)
     commun = dict(unite=unite, attendu=None, constate=None, ecart=arrondi_centime(ecart), tolerance=t,
                   documents=[av.id], details={**details, "groupes": {g: str(arrondi_centime(x))
@@ -242,13 +277,14 @@ def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatC
         return ctx.conforme("E2", **commun)
     vals = [aides.montant_ht(ln) for d in avoirs for ln in aides.lignes_ft(d)]
     classement = ctx.classify("E2", ecart=ecart, tolerance=t, seuil_certitude=None,
-                              valeurs_cles=[v for v in vals if v is not None])
-    morceaux = [
-        f"{_LIBELLE_GROUPE.get(g, 'total HT' if g == 'total' else 'lignes « ' + g.replace('_', ' ') + ' »')} : "
-        f"{format_montant(arrondi_centime(credite[g]), 'EUR')} crédités pour "
-        f"{format_montant(arrondi_centime(facture.get(g, ZERO)), 'EUR')} facturés"
-        for g in depassements
-    ]
+                              valeurs_cles=[v for v in vals if v is not None], raisons_supplementaires=raisons)
+    morceaux = []
+    for k in depassements:
+        g, _, mrn = k.partition("|")
+        quoi = _LIBELLE_GROUPE.get(g, "total HT" if g == "total" else "lignes « " + g.replace("_", " ") + " »")
+        c, f = comparaisons[k]
+        morceaux.append(f"{quoi}{f' du MRN {mrn}' if mrn else ''} : {format_montant(arrondi_centime(c), 'EUR')} "
+                        f"crédités pour {format_montant(arrondi_centime(f), 'EUR')} facturés")
     libelle = (
         f"Les avoirs reçus sur la facture d'origine {', '.join(n for n in numeros if n)} dépassent le montant "
         f"facturé ({' ; '.join(morceaux)})."

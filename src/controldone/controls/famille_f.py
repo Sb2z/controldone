@@ -281,6 +281,9 @@ def _f3_unite(ctx: ControlContext, ft: Document, prefixe: str, pool: list[_Occ])
             autres.append(deb)
     details: dict = {"facture_transitaire_id": ft.id, "mrn_prefixe": prefixe}
     if not autres:
+        illisible = _f3_autre_illisible(ctx, ft, prefixe, pool, ici, unite, details)
+        if illisible is not None:
+            return illisible
         return ctx.conforme("F3", unite=unite, documents=[ft.id], details=details)
     if all(a.occ.dossier_id is None for a in autres):
         return ctx.non_applicable("F3", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[ft.id],
@@ -330,6 +333,50 @@ def _f3_unite(ctx: ControlContext, ft: Document, prefixe: str, pool: list[_Occ])
                  *(preuve(v, RolePreuve.valeur_a) for v in autre.valeurs),
                  *(preuve(v, RolePreuve.contexte) for v in mrn_vals)],
         autres_dossiers=[autre.occ.dossier_id] if autre.occ.dossier_id else [], **commun,
+    )
+
+
+def _f3_autre_illisible(ctx: ControlContext, ft: Document, prefixe: str, pool: list[_Occ], ici: _Debours,
+                        unite: str, details: dict) -> ResultatControle | None:
+    """Autre facture du client (autre dossier, numéro différent, fenêtre) qui cite ce MRN mais dont aucune
+    ligne n'a pu être lue : ses débours ne sont pas comparables. Si la facture ``ft`` est la plus récente et
+    n'est pas complémentaire (ses débours couvrent seuls le montant liquidé, quand il est connu), signal
+    ``a_verifier`` (raisons ``valeur_absente``, ``controle_signal_seulement``) — D-812."""
+    n_ft = norm_ref(aides.texte(ft.ft.numero))
+    cands = [o for o in pool if o.dossier_id is not None and o.doc.id != ft.id and not o.doc.ft.lignes
+             and not (n_ft and norm_ref(aides.texte(o.doc.ft.numero)) == n_ft)
+             and prefixe in aides.mrn_cites(o.doc) and _fenetre(ctx, o.doc, ft)]
+    if not cands:
+        return None
+    autre = max(cands, key=lambda o: aides.cle_chrono(o.doc))
+    if aides.cle_chrono(autre.doc) > aides.cle_chrono(ft):
+        return None  # porté, le cas échéant, par le dossier de la facture la plus récente
+    t_deb = ctx.tol.t_debours(0)
+    if _annulee(ctx, ft, ici.montant, t_deb):
+        return None
+    liq = _liquide_mrn(ctx, prefixe)
+    if liq is not None and abs(ici.montant - liq) > t_deb:
+        return None  # la facture ne couvre qu'une partie du liquidé : complémentarité possible
+    mrn_autre = aides.mrn_cites(autre.doc)[prefixe]
+    raisons = [*_raisons_ailleurs([autre]), RaisonCode.valeur_absente, RaisonCode.controle_signal_seulement]
+    classement = ctx.classify("F3", ecart=ici.montant, tolerance=None, seuil_certitude=ctx.tol.s_debours(),
+                              valeurs_cles=[*ici.mrn, mrn_autre, *ici.valeurs], montant=ici.montant,
+                              raisons_supplementaires=raisons)
+    libelle = (
+        f"{aides.maj(aides.ref_document(ft, ici.valeurs[0]))} refacture {format_montant(arrondi_centime(ici.montant), 'EUR')} "
+        f"de débours pour le MRN {aides.texte(ici.mrn[0]) if ici.mrn else prefixe} ; "
+        f"{aides.ref_document(autre.doc, mrn_autre)}, {_ou(autre)}, cite aussi ce MRN, mais ses lignes n'ont pas pu "
+        f"être lues : une double refacturation est possible."
+    )
+    return ctx.constat(
+        "F3", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_F, montant=ici.montant,
+        composante=None, attendu=None, constate=arrondi_centime(ici.montant), ecart=arrondi_centime(ici.montant),
+        tolerance=t_deb, seuil_certitude=ctx.tol.s_debours(), documents=[ft.id],
+        preuves=[*(preuve(v, RolePreuve.valeur_b) for v in ici.valeurs), preuve(mrn_autre, RolePreuve.contexte),
+                 *(preuve(v, RolePreuve.contexte) for v in ici.mrn)],
+        autres_dossiers=[autre.dossier_id] if autre.dossier_id else [],
+        details={**details, "autre_facture": autre.doc.id, "autre_dossier": autre.dossier_id,
+                 "autre_illisible": True},
     )
 
 

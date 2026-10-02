@@ -283,3 +283,54 @@ def test_moteur_famille_e():
         assert r.outcome is not Outcome.ecart_certain
         if r.constat is not None:
             assert r.constat.motif_blocage is None
+
+
+# --- Mise au point du rappel (D-808, D-809) --------------------------------------------------------------
+
+
+def _ligne_ft(nature, montant, mrn, doc=FT):
+    return LigneFactureTransitaire(nature=nature, montant_ht=vs("facture_transitaire.lignes[].montant_ht", montant,
+                                                                 document_id=doc),
+                                   mrn=vs("facture_transitaire.lignes[].mrn", mrn, document_id=doc))
+
+
+def test_e2_par_mrn_cite_sur_la_ligne():
+    """L'avoir crédite 145,73 de dédouanement sur le MRN A, facturé 85 sur ce MRN (85 aussi sur le MRN B)."""
+    mrn_b = "26FR99999999999992"
+    ft = ft_e(_ligne_ft(NatureLigne.frais_dedouanement, "85.00", MRN),
+              _ligne_ft(NatureLigne.frais_dedouanement, "85.00", mrn_b))
+    la = ligne_av("doc_av1", "145.73", NatureLigne.frais_dedouanement)
+    la.mrn = vs("avoir.lignes[].mrn", MRN, document_id="doc_av1")
+    r = un(e2_avoir_superieur_origine(contexte([ft, avoir("doc_av1", la)])))
+    assert r.outcome is Outcome.a_verifier and "du MRN 26FR00000000000" in esp(r.constat.libelle)
+    assert "145,73 EUR crédités pour 85,00 EUR facturés" in esp(r.constat.libelle)
+    propre(r)
+    la.mrn = None  # sans MRN sur la ligne : comparaison sur la nature (170 facturés)
+    assert un(e2_avoir_superieur_origine(contexte([ft, avoir("doc_av1", la)]))).outcome is Outcome.conforme
+
+
+def test_e2_facture_sans_ligne_lue_et_numero_illisible():
+    ft_vide = facture_transitaire(id=FT, numero=vs("facture_transitaire.numero", "FT-001", document_id=FT),
+                                  emetteur=Partie(nom=vs("facture_transitaire.emetteur.nom", EMETTEUR, document_id=FT)))
+    r = un(e2_avoir_superieur_origine(contexte([ft_vide, avoir("doc_av1", montant="60.00")])))
+    assert r.outcome is Outcome.non_verifiable  # jamais « 0 facturé »
+    ft = ft_e()
+    ft.ft.numero = None  # numéro illisible sur l'unique facture du dossier, même émetteur
+    r = un(e2_avoir_superieur_origine(contexte([ft, avoir("doc_av1", montant="60.00")])))
+    assert r.outcome is Outcome.a_verifier and RaisonCode.rattachement_faible in r.constat.raisons
+
+
+def test_e6_ecart_releve_dans_le_dossier():
+    """D-808 : un écart C1 relevé dans ce dossier (40 EUR) crédité à 30 EUR par un avoir du dossier -> E6."""
+    from controldone.testing import taxation
+
+    dec = declaration(id=DEC, mrn=MRN, taxations=[taxation(DEC, base="100.00", taux="10", montant="10.00")])
+    ft = ft_e()  # refacture 50,00 de droits pour ce MRN
+    rs = run_controls(contexte([dec, ft, avoir("doc_av1", montant="30.00")]), controles=["C1", "E6"])
+    c1 = next(r for r in rs if r.controle_id == "C1")
+    assert c1.constat is not None
+    e6 = [r for r in rs if r.controle_id == "E6"]
+    assert len(e6) == 1 and e6[0].outcome is Outcome.a_verifier
+    assert e6[0].constat.montant_en_jeu == D("10.00") and e6[0].details["remplace_constat_id"] == c1.constat.id
+    assert "écart relevé" in esp(e6[0].constat.libelle)
+    propre(e6[0])

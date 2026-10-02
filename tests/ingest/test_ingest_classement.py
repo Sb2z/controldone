@@ -184,3 +184,15 @@ def test_xml_inconnu_jamais_classe_avec_certitude():
 
 def test_cle_classement_stable():
     assert cle_classement(["a", "b"]) == cle_classement(["a", "b"]) != cle_classement(["b", "a"])
+
+
+def test_intitule_facture_avec_mention_explicite_non_exploitable():
+    """D-801 : « FACTURE - BON DE LIVRAISON » + « document sans valeur commerciale » : la mention explicite
+    l'emporte sur l'intitulé « facture » (motif lu conservé)."""
+    lignes = ["Ref. PRE-EXP-26-0001   May 15, 2026", "Bon de livraison - document sans valeur commerciale.",
+              "1  AB-1234  Pompe  10", "Packages: 3"]
+    c = _classer(lignes, "FACTURE - BON DE LIVRAISON")
+    assert c.type is TypeDocument.document_non_exploitable
+    assert c.motif_non_exploitable is MotifNonExploitable.bon_livraison_sans_valeur
+    # une facture ordinaire qui ne porte pas la mention reste une facture
+    assert _classer(fab.FACTURE_COMMERCIALE, "COMMERCIAL INVOICE").type is TypeDocument.facture_commerciale

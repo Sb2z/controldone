@@ -28,8 +28,8 @@ from controldone.storage.coltypes import DecimalTexte, maintenant
 from controldone.storage.models import AppendOnly, Base
 
 __all__ = [
-    "CompteurFacture",
     "ComptePaiement",
+    "CompteurFacture",
     "CouponUtilisation",
     "EvenementPaiement",
     "FactureEmise",

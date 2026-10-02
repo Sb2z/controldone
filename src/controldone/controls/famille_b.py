@@ -376,10 +376,16 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
                 unite=unite, sous_controle="total", documents=[dec.id], details=details,
             )
     tout = [(v, _num(v) or _ZERO) for _, v in lignes if v is not None]
-    hors_autoliq = [
-        (v, _num(v) or _ZERO) for i, v in lignes
-        if v is not None and c.taxations[i].paiement_normalise is not PaiementNormalise.autoliquide
-    ]
+    # TVA autoliquidée : mode de paiement de la ligne, ou, pour une ligne de TVA dont le mode n'est pas lu,
+    # indice d'autoliquidation de la déclaration (code 1008 + TVA, FR7 : §12.1) — D-710.
+    indice = any(ctx.utilisable(ind.valeur) or ctx.utilisable(ind.tva) for ind in c.indices_autoliquidation)
+
+    def autoliquidee(t: TaxationDeclaration) -> bool:
+        if t.paiement_normalise is PaiementNormalise.autoliquide:
+            return True
+        return indice and t.categorie is CategorieTaxe.tva and t.paiement_normalise is PaiementNormalise.inconnu
+
+    hors_autoliq = [(v, _num(v) or _ZERO) for i, v in lignes if v is not None and not autoliquidee(c.taxations[i])]
     hypotheses = {"tva_autoliquidee_incluse": tout, "tva_autoliquidee_exclue": hors_autoliq}
     # Conforme si l'un des totaux imprimés concorde avec l'une des deux hypothèses (§11 B2).
     for nom_total, v_tot in totaux:
