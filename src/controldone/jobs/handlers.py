@@ -256,7 +256,8 @@ def purger_retention(ctx: JobContext) -> dict[str, Any]:
     rapport = purger_expires(ctx.db, _vault(ctx), now)
     jobs = JobStore(ctx.db).purger_termines(jours=reglages.jobs_conservation_jours, now=now)
     return {"fichiers": sum(rapport.fichiers.values()), "textes": sum(rapport.textes.values()),
-            "dossiers_clos": clotures["dossiers"], "lots_clos": clotures["lots"], "jobs_purges": jobs}
+            "contenus_epargnes": rapport.epargnes, "dossiers_clos": clotures["dossiers"], "lots_clos": clotures["lots"],
+            "jobs_purges": jobs}
 
 
 # Handlers de la plateforme web (recontrôle après correction, §6.2.11) : enregistrés au chargement.

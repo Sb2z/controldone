@@ -76,6 +76,13 @@ def _serve(args: argparse.Namespace) -> int:
     plateforme = Plateforme.depuis_env()
     if args.init_schema:
         plateforme.db.creer_schema()
+    from controldone.storage import SchemaPerime
+
+    try:  # colonnes ajoutées par une version plus récente sans migration : arrêt explicite (D-1322)
+        plateforme.db.exiger_schema_a_jour()
+    except SchemaPerime as exc:
+        print(f"ControlDOne : {exc}", file=sys.stderr)
+        return 3
     app = create_app(ParametresWeb(plateforme=plateforme, worker_integre=not args.sans_worker,
                                    https=True if args.https else None))
     print(f"ControlDOne — http://{args.host}:{args.port}/ (worker intégré : {'non' if args.sans_worker else 'oui'})")

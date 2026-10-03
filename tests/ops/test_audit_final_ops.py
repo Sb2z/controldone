@@ -81,3 +81,71 @@ def test_f16_dossier_surveille_ne_lit_pas_les_gros_fichiers(tmp_path, monkeypatc
     assert len(depots) == 2 and depots[0].meta["ignores_trop_gros"] == ["gros.pdf"]  # 260 o par fichier, 600 o max
     assert [r for d in depots for r, _ in d.elements] == ["petit0.xml", "petit1.xml", "petit2.xml"]
     assert "gros.pdf" not in lus
+
+
+# --- planificateur : rattrapage sans doublon (audit B, suspicion 7) ------------------------------------------------
+
+DEPLOY = __import__("pathlib").Path(__file__).resolve().parents[2] / "deploy"
+
+
+def _copie_executable(source, cible):
+    import shutil
+    import stat
+
+    cible.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(source, cible)
+    cible.chmod(cible.stat().st_mode | stat.S_IXUSR)
+    return cible
+
+
+def test_sauvegarde_du_jour_pas_refaite_au_redemarrage(tmp_path):
+    import subprocess
+    from datetime import UTC, datetime
+
+    script = _copie_executable(DEPLOY / "backup-cron.sh", tmp_path / "deploy" / "backup-cron.sh")
+    appels = tmp_path / "appels.txt"
+    faux = tmp_path / "scripts" / "backup.sh"
+    faux.parent.mkdir()
+    faux.write_text(f'#!/usr/bin/env bash\necho "$@" >> {appels}\n', encoding="utf-8")
+    faux.chmod(0o700)
+    dest = tmp_path / "sauvegardes"
+    env = {**os.environ, "BACKUP_DIR": str(dest)}
+    subprocess.run([str(script), "--si-absente"], check=True, env=env, capture_output=True)
+    assert appels.read_text().split() == ["--destination", str(dest)]
+    (dest / f"controldone-{datetime.now(UTC):%Y%m%d}T021500Z.tar.gz.enc").write_bytes(b"x")
+    subprocess.run([str(script), "--si-absente"], check=True, env=env, capture_output=True)
+    assert len(appels.read_text().splitlines()) == 1  # avant : sauvegarde refaite à chaque redémarrage
+
+
+def test_planificateur_rattrape_le_referentiel_du_mois(tmp_path):
+    import signal
+    import subprocess
+    import time
+    from datetime import UTC, datetime
+
+    script = _copie_executable(DEPLOY / "scheduler.sh", tmp_path / "deploy" / "scheduler.sh")
+    journal = tmp_path / "appels.txt"
+    for nom in ("faux_python", "backup-cron.sh"):
+        f = tmp_path / "deploy" / nom
+        f.write_text(f'#!/usr/bin/env bash\necho "{nom} $*" >> {journal}\n', encoding="utf-8")
+        f.chmod(0o700)
+    env = {**os.environ, "CONTROLDONE_PYTHON": str(tmp_path / "deploy" / "faux_python"), "SCHED_TICK_S": "3600",
+           "SCHED_BACKUP_HHMM": "0000"}
+    p = subprocess.Popen([str(script)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        fin = time.monotonic() + 20
+        while time.monotonic() < fin and (not journal.exists() or "backup-cron.sh" not in journal.read_text()):
+            time.sleep(0.1)
+        time.sleep(0.5)
+    finally:
+        p.send_signal(signal.SIGTERM)
+        p.wait(10)
+    lignes = journal.read_text().splitlines()
+    assert "backup-cron.sh --si-absente" in lignes
+    now = datetime.now(UTC)
+    ref = [x for x in lignes if "referentiel_recalculer" in x]
+    if now.day > 2 or (now.day == 2 and now.strftime("%H%M") >= "0300"):
+        # avant : seulement le 2 du mois (un arrêt ce jour-là sautait le mois), clé quotidienne
+        assert len(ref) == 1 and f"referentiel:{now:%Y-%m}'" in ref[0]
+    else:
+        assert ref == []

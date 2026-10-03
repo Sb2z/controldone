@@ -206,22 +206,29 @@ def annuler_blobs(plateforme: Plateforme, tenant_id: str, prep: DepotPrepare) ->
     ligne ``Fichier`` référence entre-temps (adressage par contenu)."""
     if not prep.nouveaux_blobs:
         return
-    try:
-        with plateforme.db.tenant(tenant_id, _ACTEUR_NETTOYAGE, lecture=True) as scope:
+    try:  # vérification et suppression sous le verrou d'écriture (un dépôt concurrent du même contenu)
+        with plateforme.db.tenant(tenant_id, _ACTEUR_NETTOYAGE) as scope:
             references = scope.contenus_references(prep.nouveaux_blobs)
+            for sha in prep.nouveaux_blobs:
+                if sha not in references:
+                    plateforme.vault.supprimer(tenant_id, sha)
     except Exception:  # pragma: no cover - base indisponible : on ne supprime rien (prudence)
         return
-    for sha in prep.nouveaux_blobs:
-        if sha not in references:
-            plateforme.vault.supprimer(tenant_id, sha)
 
 
 def enregistrer_prepare(scope: TenantScope, prep: DepotPrepare, *, canal: CanalLot = CanalLot.depot,
-                        resume: dict[str, Any] | None = None, mettre_en_file_job: bool = False) -> ResultatDepot:
+                        resume: dict[str, Any] | None = None, mettre_en_file_job: bool = False,
+                        vault: Any = None) -> ResultatDepot:
     """Courte transaction d'écriture : lot, métadonnées des fichiers et (``mettre_en_file_job``) job
-    ``traiter_lot`` dans **la même** transaction (D-1306)."""
+    ``traiter_lot`` dans **la même** transaction (D-1306). Avec ``vault`` : chaque contenu référencé est
+    revérifié dans la transaction (une purge concurrente l'a peut-être retiré, D-1324) ; sinon le dépôt est
+    refusé proprement (à refaire), jamais enregistré avec un contenu absent."""
     tenant_id = scope.tenant_id
     lot_id = prep.lot_id
+    if vault is not None:
+        absents = sorted({ref for _fm, ref in prep.fichiers if ref and not vault.existe(tenant_id, ref)})
+        if absents:
+            raise RequeteInvalide("un contenu a été retiré du coffre pendant le dépôt : déposer à nouveau")
     scope.creer_lot(lot_id, canal=canal.value)
     for fm, ref in prep.fichiers:
         scope.enregistrer_fichier(fm, lot_id=lot_id, coffre_ref=ref)
@@ -283,7 +290,8 @@ def deposer(plateforme: Plateforme, acteur: Acteur, fichiers: list[FichierTransm
         prep = preparer_depot(plateforme, tenant_id, fichiers, deja, canal=canal)
         try:
             with plateforme.db.tenant(tenant_id, acteur) as scope:
-                return enregistrer_prepare(scope, prep, canal=canal, resume=resume, mettre_en_file_job=True)
+                return enregistrer_prepare(scope, prep, canal=canal, resume=resume, mettre_en_file_job=True,
+                                           vault=plateforme.vault)
         except BaseException:
             annuler_blobs(plateforme, tenant_id, prep)
             raise

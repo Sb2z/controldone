@@ -193,7 +193,11 @@ class FileVault:
         sha = hashlib.sha256(contenu).hexdigest()
         chemin = self._chemin(tenant_id, sha, espace)
         if chemin.exists():
-            return sha
+            try:  # contenu déjà présent : sa date marque le dépôt récent (la purge l'épargne, D-1324)
+                os.utime(chemin)
+                return sha
+            except FileNotFoundError:
+                pass  # retiré entre-temps par une purge : réécrit ci-dessous
         self._chiffrer_vers(chemin, tenant_id, bytes(contenu) if isinstance(contenu, bytearray) else contenu)
         return sha
 
@@ -228,6 +232,14 @@ class FileVault:
 
     def existe(self, tenant_id: str, sha: str, *, espace: str = "fichiers") -> bool:
         return self._chemin(tenant_id, sha, espace).is_file()
+
+    def depose_depuis(self, tenant_id: str, sha: str, *, espace: str = "fichiers") -> float | None:
+        """Horodatage (epoch) du dernier dépôt de ce contenu (écriture ou redépôt à l'identique), ``None`` si
+        absent."""
+        try:
+            return self._chemin(tenant_id, sha, espace).stat().st_mtime
+        except FileNotFoundError:
+            return None
 
     def supprimer(self, tenant_id: str, sha: str, *, espace: str = "fichiers") -> bool:
         chemin = self._chemin(tenant_id, sha, espace)

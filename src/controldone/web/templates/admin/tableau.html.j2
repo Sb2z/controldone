@@ -8,7 +8,7 @@
 </div>
 <section class="kpis" aria-label="Indicateurs">
   {{ kpi("Constats à valider", d.totaux.proposes, "file de validation", "accent" if d.totaux.proposes else None, "/admin/validation") }}
-  {{ kpi("Actions sortantes à approuver", d.totaux.sorties, "rapports, dossiers de réclamation", None, "/admin/validation#sorties") }}
+  {{ kpi("Actions sortantes à approuver", d.totaux.sorties, "rapports, relevés d'écarts", None, "/admin/validation#sorties") }}
   {{ kpi("Montant recouvrable certain", d.totaux.recouvrable_certain|montant, "écarts certains validés") }}
   {{ kpi("Montant recouvrable à vérifier", d.totaux.recouvrable_a_verifier|montant, "affiché à part, jamais additionné") }}
   {{ kpi("Reste à recouvrer", d.totaux.reste_a_recouvrer|montant, "registre des écarts ouverts") }}

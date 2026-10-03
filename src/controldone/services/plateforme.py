@@ -33,7 +33,7 @@ class Plateforme:
     vault: FileVault
     cles_maitresses: list[bytes]
     limites: Limites = field(default_factory=Limites)
-    #: Dossier de l'expéditeur fichier (mise à disposition des rapports et dossiers de réclamation).
+    #: Dossier de l'expéditeur fichier (mise à disposition des rapports et relevés d'écarts).
     dossier_sorties: Path | None = None
 
     @classmethod

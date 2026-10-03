@@ -80,6 +80,13 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   est revérifiée à la lecture (substitution ou altération détectées).
 - Traversée de chemin impossible : identifiant de client et empreinte validés par expression régulière,
   chemin résolu puis vérifié sous la racine ; écriture atomique, droits 0600 (répertoires 0700).
+- Contenus d'au moins 256 Kio (D-1305) : format `CDV2` chiffré **par segments** d'1 Mio, AES-256-GCM, clé par
+  client dérivée HKDF (`vault-gcm:<client>`) ; nonce = préfixe aléatoire || numéro de segment ; données
+  associées = en-tête || numéro || drapeau final : réordonner, tronquer ou substituer un segment est détecté.
+  Écriture et lecture segment par segment (mémoire bornée). Les objets Fernet existants restent lisibles.
+- Purge et dépôt concurrents (D-1324) : un contenu n'est retiré qu'après vérification, sous le verrou
+  d'écriture, qu'aucune ligne ne le référence et qu'il n'a pas été redéposé à l'identique depuis moins d'une
+  heure ; un dépôt revérifie la présence de ses contenus dans la transaction qui l'enregistre.
 - Les métadonnées (nom d'origine, empreinte, taille) restent en base en clair ; la base est chiffrée
   dans les sauvegardes.
 
@@ -90,6 +97,11 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 | Clé maîtresse (Fernet, 32 octets base64) | `CONTROLDONE_MASTER_KEY` (plusieurs valeurs séparées par des virgules : la première chiffre, toutes déchiffrent) | Dérive : clés du coffre par client, clé des sauvegardes (`sauvegarde`), clé des secrets TOTP (`secrets`) |
 | Secret de signature des sessions | `CONTROLDONE_SECRET_KEY` (liste ; la dernière signe) | Jetons de session, CSRF |
 | Mode | `CONTROLDONE_ENV` = `dev` \| `test` \| `prod` (valeur inconnue = `prod`) | |
+
+- **Fichier `.env`** (D-1310) : chargé une fois dans l'environnement du processus (sans écraser une variable
+  déjà définie) **avant toute lecture** : `CONTROLDONE_ENV=prod`, la clé maîtresse et le secret de session
+  placés dans `.env` sont donc bien appliqués (avant : seul `Settings` le lisait ; un `.env` de production
+  laissait le service en mode `dev`, clé de développement générée et cookie sans `Secure`).
 
 - **Production** : sans clé maîtresse (ou sans secret de session), le service **refuse de démarrer**
   (`CleManquante`).
@@ -139,8 +151,18 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 - **Cache disque des pages** (`CONTROLDONE_PAGES_CACHE_DIR`) : texte en clair, banc et développement
   seulement ; ignoré en production (`CONTROLDONE_ENV=prod`).
 - **Images de page** rendues dans le processus web : taille bornée (`services.vignettes.MAX_PIXELS`).
-- **Sauvegardes** : archive chiffrée (clé dérivée `sauvegarde`), 0600 ; restauration refusant toute entrée
-  hors de `base/` et `coffre/`, extraction avec le filtre `data` (ni chemin absolu, ni `..`, ni lien).
+- **Sauvegardes** : archive chiffrée (clé dérivée `sauvegarde`), 0600, format `CDSAV2` par segments
+  authentifiés (numéro et drapeau final : troncature, réordonnancement et duplication détectés, D-1320) ;
+  restauration en flux refusant toute entrée hors de `base/` et `coffre/`, extraction avec le filtre `data`
+  (ni chemin absolu, ni `..`, ni lien). Un échec émet l'alerte `sauvegarde_echec`.
+- **Montants saisis** (web, API, MCP, import de grille) : un seul analyseur strict
+  (`services.saisie.montant_saisi`, D-1316) — `NaN`, `Infinity`, notation scientifique, négatifs et valeurs
+  démesurées refusés avec un message lisible (jamais une erreur 500).
+- **Disponibilité** : routes web et API synchrones (groupe de fils), dépôts reçus hors transaction et en
+  mémoire bornée, verrou d'écriture SQLite tenu le temps des seuls `INSERT` (D-1304), expéditeurs sortants
+  appelés hors transaction (D-1323), fichiers temporaires sur le volume de données (D-1305).
+- **Relevé d'écarts** : le modèle de courrier remis au client est vérifié (`litiges.redaction.verifier_modele`)
+  — aucune formulation d'acte juridique pour autrui (brief juridique §9).
 
 ---
 
@@ -165,6 +187,8 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 2. Révocation des sessions persistante (table) et liste des sessions actives.
 3. Limiteur de débit partagé entre processus (aujourd'hui en mémoire de chaque processus).
 4. Chiffrement du volume qui porte la base (ou PostgreSQL avec chiffrement au repos de l'hébergeur).
-5. Migrations de schéma (Alembic) : aujourd'hui `Database.creer_schema()` crée les tables manquantes.
+5. Migrations de schéma (Alembic) : aujourd'hui `Database.creer_schema()` crée les tables manquantes ; une
+   colonne manquante est détectée au démarrage du web et du worker, qui refusent de démarrer (D-1322), mais la
+   migration reste manuelle.
 
 Revue de sécurité indépendante (constats, preuves, correctifs, risques restants) : `docs/REVUE_SECURITE.md`.

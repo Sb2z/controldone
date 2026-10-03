@@ -9,10 +9,17 @@ Cycle : ``brouillon -> approuve | corrige | refuse``, puis ``approuve | corrige 
 - Approuver, corriger, refuser, envoyer : réservés au fondateur (l'envoi aussi au système, pour une action
   déjà approuvée). Chaque transition écrit une entrée d'audit dans la même transaction.
 - Envoi : par un ``Expediteur`` enfichable ; seul ``ExpediteurFichier`` est livré (aucun envoi réel).
+  L'appel à l'expéditeur (dépôt sur une plateforme agréée, réseau) se fait **hors** de toute transaction
+  (D-1323) : l'action est d'abord réservée (``reference_envoi = "envoi_en_cours:…"``, transaction courte),
+  puis l'expéditeur est appelé, puis l'envoi est enregistré (transaction courte). Un second envoi pendant
+  la réservation est refusé ; une réservation abandonnée (processus tué) expire après
+  ``RESERVATION_ENVOI_S``.
 """
 
 from __future__ import annotations
 
+import secrets
+from datetime import timedelta
 from typing import Any
 
 from controldone.auth.roles import Acteur, Action, Ressource, Role, peut
@@ -35,7 +42,11 @@ from controldone.storage.db import Database
 from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.models import Outbox
 
-__all__ = ["FileSortante", "textes_du_contenu", "verifier_textes"]
+__all__ = ["RESERVATION_ENVOI_S", "FileSortante", "textes_du_contenu", "verifier_textes"]
+
+#: Durée d'une réservation d'envoi : au-delà, elle est considérée comme abandonnée (processus tué).
+RESERVATION_ENVOI_S = 900
+_RESERVATION = "envoi_en_cours:"
 
 #: Clés non textuelles (identifiants, adresses, références de pièces) exclues du contrôle de formulation.
 #: ``donnees_entrantes`` : texte reçu d'un tiers et cité tel quel (question d'un client, extrait de source
@@ -210,6 +221,7 @@ class FileSortante:
 
     def envoyer(self, action_id: str, expediteur: Expediteur, acteur: Acteur) -> ActionSortante:
         """Envoie une action approuvée ou corrigée (garde-fous revérifiés juste avant l'envoi)."""
+        # 1. réservation (transaction courte) : contrôles, garde-fous, marque « envoi en cours »
         with self.db.transaction_systeme() as s:
             o = sorties.lire(s, action_id, verrou=True)
             if o is None:
@@ -217,11 +229,31 @@ class FileSortante:
             self._exiger(acteur, Action.envoyer_sortie, o.tenant_id)
             if StatutAction(o.statut) not in (StatutAction.approuve, StatutAction.corrige):
                 raise TransitionInterdite(f"envoi interdit depuis le statut {o.statut}")
+            if _reservation_active(o.reference_envoi):
+                raise TransitionInterdite("envoi déjà en cours pour cette action")
             instant = _instantane(o)
             motifs = verifier_textes(instant.payload_effectif)
             if motifs:
                 raise ActionBloquee(motifs)
+            marque = f"{_RESERVATION}{secrets.token_hex(8)}:{maintenant().isoformat()}"
+            o.reference_envoi = marque
+        # 2. appel de l'expéditeur **hors transaction** : aucun verrou d'écriture tenu pendant un appel réseau
+        try:
             reference = expediteur.envoyer(instant)
+        except BaseException:
+            with self.db.transaction_systeme() as s:
+                o = sorties.lire(s, action_id, verrou=True)
+                if o is not None and o.reference_envoi == marque:
+                    o.reference_envoi = None  # réservation levée : l'envoi pourra être retenté
+            raise
+        # 3. enregistrement (transaction courte)
+        with self.db.transaction_systeme() as s:
+            o = sorties.lire(s, action_id, verrou=True)
+            if o is None:
+                raise AccesRefuse("action introuvable")
+            if StatutAction(o.statut) is StatutAction.envoye:  # réservation expirée et reprise ailleurs
+                self._audit(s, acteur, o, "envoyer_doublon", {"reference": reference[:200]})
+                return _instantane(o)
             self._transition(o, StatutAction.envoye)
             o.envoye_le, o.reference_envoi = maintenant(), reference[:500]
             self._audit(s, acteur, o, "envoyer", {"expediteur": getattr(expediteur, "nom", "?")})
@@ -281,3 +313,16 @@ class FileSortante:
             return [_instantane(o) for o in lignes
                     if peut(acteur, Action.lire, Ressource("outbox", o.tenant_id))
                     and not (client and o.statut != StatutAction.envoye.value)]
+
+
+def _reservation_active(reference: str | None) -> bool:
+    """Vrai si ``reference`` est une réservation d'envoi de moins de ``RESERVATION_ENVOI_S`` secondes."""
+    if not reference or not reference.startswith(_RESERVATION):
+        return False
+    from datetime import datetime
+
+    try:  # « envoi_en_cours:<jeton>:<horodatage ISO> »
+        depuis = datetime.fromisoformat(reference[len(_RESERVATION):].split(":", 1)[1])
+    except (IndexError, ValueError):
+        return False
+    return maintenant() - depuis < timedelta(seconds=RESERVATION_ENVOI_S)

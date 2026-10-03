@@ -33,6 +33,7 @@ from controldone.jobs.registre import (
     ErreurDefinitive,
     Handler,
     JobContext,
+    Reporter,
     charger_handlers,
 )
 from controldone.storage.coltypes import maintenant
@@ -157,6 +158,11 @@ class Worker:
             resultat = fn(ctx)
         except BailPerdu:
             statut, erreur = "perdu", "bail_perdu"
+        except Reporter as exc:  # rien d'anormal : le job repasse en file sans consommer d'essai (D-1321)
+            erreur = f"reporte: {str(exc)[:120]}"
+            statut = self.store.reporter(job.id, self.worker_id, str(exc), delai_s=exc.delai_s, now=self.horloge(),
+                                         tentative=tentative) or "perdu"
+            statut = "reporte" if statut == "pending" else statut
         except ErreurDefinitive as exc:
             statut = self.store.echouer(job.id, self.worker_id, _code_erreur(exc), definitif=True,
                                         now=self.horloge(), tentative=tentative) or "perdu"
@@ -178,9 +184,11 @@ class Worker:
             fil.join(timeout=5)
         duree = time.perf_counter() - debut
         METRIQUES.duree(job.kind, duree)
-        nom = {"done": "jobs_ok", "pending": "jobs_echec", "dead": "jobs_mort"}.get(statut, "jobs_bail_perdu")
+        nom = {"done": "jobs_ok", "pending": "jobs_echec", "dead": "jobs_mort",
+               "reporte": "jobs_reportes"}.get(statut, "jobs_bail_perdu")
         METRIQUES.incrementer(nom, job.kind)
-        niveau = logging.INFO if statut == "done" else logging.ERROR if statut == "dead" else logging.WARNING
+        niveau = (logging.INFO if statut in ("done", "reporte") else logging.ERROR if statut == "dead"
+                  else logging.WARNING)
         evenement(log, "job_fin", niveau, statut=statut, duree_ms=round(duree * 1000), erreur=erreur, **champs)
         return statut
 
@@ -220,6 +228,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     db = Database()
     if args.init_schema:
         db.creer_schema()
+    from controldone.storage.db import SchemaPerime
+
+    try:  # D-1322 : jamais d'erreur « no such column » en cours de job
+        db.exiger_schema_a_jour()
+    except SchemaPerime as exc:
+        evenement(log, "schema_perime", logging.CRITICAL, detail=str(exc)[:500])
+        db.fermer()
+        return 3
     worker = Worker(db, worker_id=args.worker_id, lease_s=args.lease, poll_s=args.poll,
                     kinds=args.kinds.split(",") if args.kinds else None,
                     services={"vault": FileVault.depuis_env()})

@@ -83,6 +83,25 @@ def test_p0_1_suivi_par_l_api_passe_par_le_service_des_litiges(monde):
     assert len(factures) == 1
 
 
+def test_p0_1_suivi_par_l_espace_client_jusqu_a_la_commission(monde):
+    from aides_web import connecter_client, poster
+
+    from controldone.litiges import DossierReclamation
+    from controldone.storage.models import Reclamation
+
+    rec = _ecart_releve(monde)
+    eid = rec.lignes[0].ecart_id
+    w = monde.client()
+    connecter_client(w, monde)
+    assert poster(w, "/espace/recouvrement", f"/espace/recouvrement/{eid}/reclame", {}).status_code == 303
+    r = poster(w, "/espace/recouvrement", f"/espace/recouvrement/{eid}/avoir",
+               {"montant": "1,00", "reference": "AV-FICTIF-WEB"})
+    assert r.status_code == 303 and "Avoir enregistré" in w.get(r.headers["location"]).text
+    with monde.pf.db.tenant(A, Acteur.systeme("tests"), lecture=True) as sc:
+        d = DossierReclamation.model_validate(sc.obtenir(Reclamation, rec.id).contenu)
+    assert d.statut.value != "valide" and d.relances and d.avoirs and d.commissions  # même chemin que l'API
+
+
 def test_remboursement_d_une_administration_sans_commission(monde):
     from controldone.litiges import DossierReclamation
     from controldone.storage.models import Reclamation
@@ -149,6 +168,16 @@ def test_montant_saisi_formats_admis():
     assert montant_saisi("0", zero=True) == Decimal("0.00")
 
 
+@pytest.mark.parametrize("prix", ["NaN", "Infinity", "1e3", "-5"])
+def test_grille_csv_prix_invalide_refuse(prix):
+    from controldone.services.admin import _postes_csv
+
+    # avant : Decimal("NaN") / Decimal("1e3") / négatif acceptés dans la grille importée (P1-7)
+    with pytest.raises(RequeteInvalide):
+        _postes_csv(f"code_poste;prix\nDEDOUANEMENT;{prix}\n")
+    assert _postes_csv("code_poste;prix\nDEDOUANEMENT;1 234,5678\n")[0]["prix"] == "1234.5678"
+
+
 def test_formulaire_avoir_client_refuse_nan(monde):
     from aides_web import connecter_client, poster
 
@@ -175,6 +204,12 @@ def test_vocabulaire_et_alias_api(monde):
     page = w.get("/espace/recouvrement").text
     assert "Suivi des avoirs reçus" in page and "Registre de recouvrement" not in page
     assert "dossier de réclamation" not in w.get("/espace/rapports").text.lower()
+    from aides_web import connecter_fondateur
+
+    f = monde.client()
+    connecter_fondateur(f, monde)
+    tableau = f.get("/admin").text.lower()
+    assert "relevés d'écarts" in tableau.replace("&#39;", "'") and "dossiers de réclamation" not in tableau
 
 
 def test_api_dossiers_pagines(monde):

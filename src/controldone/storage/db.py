@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from controldone.auth.roles import Acteur
     from controldone.storage.scope import OperatorScope, TenantScope
 
-__all__ = ["Database", "creer_moteur", "url_par_defaut"]
+__all__ = ["Database", "SchemaPerime", "creer_moteur", "url_par_defaut"]
 
 _TRIGGERS_SQLITE = [
     "CREATE TRIGGER IF NOT EXISTS audit_log_sans_update BEFORE UPDATE ON audit_log "
@@ -82,6 +82,12 @@ def creer_moteur(url: str, *, immediat: bool = True, echo: bool = False) -> Engi
     return moteur
 
 
+class SchemaPerime(RuntimeError):
+    """La base existante n'a pas toutes les colonnes du code (version plus récente sans migration) : arrêt
+    au démarrage avec la liste des colonnes manquantes, plutôt qu'une erreur « no such column » en cours
+    d'exécution (audit B, suspicion 8 ; D-1322)."""
+
+
 class Database:
     """Base de données de la plateforme."""
 
@@ -97,6 +103,30 @@ class Database:
     # --- schéma ---
     def creer_schema(self) -> None:
         Base.metadata.create_all(self.engine)
+
+    def colonnes_manquantes(self) -> list[str]:
+        """``table.colonne`` déclarées par le code mais absentes d'une table **existante** (``create_all``
+        crée les tables manquantes, jamais les colonnes : il faut une migration)."""
+        from sqlalchemy import inspect
+
+        insp = inspect(self.engine)
+        existantes = set(insp.get_table_names())
+        manquantes = []
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existantes:
+                continue
+            en_base = {c["name"] for c in insp.get_columns(table.name)}
+            manquantes += [f"{table.name}.{c.name}" for c in table.columns if c.name not in en_base]
+        return manquantes
+
+    def exiger_schema_a_jour(self) -> None:
+        """Lève ``SchemaPerime`` si une table existante n'a pas toutes les colonnes du code (démarrage du web
+        et du worker)."""
+        manquantes = self.colonnes_manquantes()
+        if manquantes:
+            raise SchemaPerime("schéma de la base périmé : colonnes manquantes " + ", ".join(manquantes[:20])
+                               + (" …" if len(manquantes) > 20 else "")
+                               + " — appliquer la migration de la version (docs/EXPLOITATION.md, schéma)")
 
     def chemin_sqlite(self) -> Path | None:
         u = make_url(self.url)

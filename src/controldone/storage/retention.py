@@ -65,6 +65,8 @@ __all__ = ["RapportPurge", "cloturer_inactifs", "exporter_client", "purger_expir
 class RapportPurge:
     fichiers: dict[str, int] = field(default_factory=dict)
     textes: dict[str, int] = field(default_factory=dict)
+    #: Contenus non référencés mais redéposés récemment (dépôt en cours) : gardés (D-1324).
+    epargnes: int = 0
 
     @property
     def total(self) -> int:
@@ -128,6 +130,8 @@ def cloturer_inactifs(db: Database, now: datetime | None = None, *, jours: int =
 
 #: Fichiers traités par transaction de purge (le verrou d'écriture SQLite reste court, D-1309).
 PURGE_PAR_TRANSACTION = 500
+#: Un contenu redéposé à l'identique depuis moins de ce délai n'est pas retiré du coffre par la purge.
+GARDE_REDEPOT_S = 3600
 
 
 def purger_expires(db: Database, vault: FileVault, now: datetime | None = None) -> RapportPurge:
@@ -176,16 +180,25 @@ def purger_expires(db: Database, vault: FileVault, now: datetime | None = None) 
             with db.transaction_systeme() as s:
                 journaliser(s, actor="systeme:retention", role="systeme", action="purge_retention",
                             tenant_id=tid, details={"fichiers": n_fic, "textes": n_txt, "retention_jours": retention})
-    # Adressage par contenu : un contenu encore référencé par une ligne non purgée est conservé (vérifié
-    # contenu par contenu, au plus près de la suppression).
-    with db.session(lecture=True) as s:
-        s.info[garde.CLE_SYSTEME] = True
-        for tenant, sha, espace in sorted(set(a_effacer)):
-            if espace == "fichiers":
-                q = select(Fichier.id).where(Fichier.tenant_id == tenant, Fichier.coffre_ref == sha)
-            else:
-                q = select(PageTexte.id).where(PageTexte.tenant_id == tenant, PageTexte.texte_ref == sha)
-            if s.execute(q.limit(1)).first() is None:
+    # Adressage par contenu : un contenu encore référencé par une ligne non purgée est conservé. Vérification
+    # et suppression **sous le verrou d'écriture** (un dépôt enregistre ses fichiers dans une transaction
+    # d'écriture : il voit la suppression, ou la purge voit sa ligne), et un contenu redéposé à l'identique
+    # depuis moins de ``GARDE_REDEPOT_S`` (dépôt en cours, pas encore enregistré) est épargné (D-1324).
+    seuil = (now - timedelta(seconds=GARDE_REDEPOT_S)).timestamp()
+    tries = sorted(set(a_effacer))
+    for i in range(0, len(tries), PURGE_PAR_TRANSACTION):
+        with db.transaction_systeme() as s:
+            for tenant, sha, espace in tries[i:i + PURGE_PAR_TRANSACTION]:
+                if espace == "fichiers":
+                    q = select(Fichier.id).where(Fichier.tenant_id == tenant, Fichier.coffre_ref == sha)
+                else:
+                    q = select(PageTexte.id).where(PageTexte.tenant_id == tenant, PageTexte.texte_ref == sha)
+                if s.execute(q.limit(1)).first() is not None:
+                    continue
+                depuis = vault.depose_depuis(tenant, sha, espace=espace)
+                if depuis is not None and depuis >= seuil:
+                    rapport.epargnes += 1
+                    continue
                 vault.supprimer(tenant, sha, espace=espace)
     return rapport
 

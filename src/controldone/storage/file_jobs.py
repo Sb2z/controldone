@@ -223,6 +223,22 @@ class JobStore:
             job.run_after = now + delai_backoff(job.attempts)
             return "pending"
 
+    def reporter(self, job_id: str, worker_id: str, motif: str, *, delai_s: int = 30, now: datetime | None = None,
+                 tentative: int | None = None) -> str | None:
+        """Remet en file un job que son handler ne peut pas faire avancer maintenant (``Reporter``) : retour
+        à ``pending`` dans ``delai_s`` secondes, l'essai pris à la réservation est rendu (D-1321). ``None`` si
+        le bail a été perdu entre-temps."""
+        now = now or maintenant()
+        with self.db.transaction_systeme() as s:
+            job = s.execute(select(Job).where(self._detenu(job_id, worker_id, tentative))).scalar_one_or_none()
+            if job is None:
+                return None
+            job.statut, job.locked_by, job.locked_until = "pending", None, None
+            job.attempts = max(0, job.attempts - 1)
+            job.run_after = now + timedelta(seconds=max(1, delai_s))
+            job.last_error = f"reporte: {motif}"[:300]
+            return "pending"
+
     @staticmethod
     def _mort(s: Any, job: Job, erreur: str, now: datetime) -> None:
         job.statut, job.locked_by, job.locked_until, job.termine_le = "dead", None, None, now

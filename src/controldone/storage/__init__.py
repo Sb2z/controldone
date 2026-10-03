@@ -11,7 +11,7 @@ from controldone.storage import (
 )
 from controldone.storage.audit import verifier_chaine
 from controldone.storage.cles import charger_cles_maitresses, mode_execution, nouvelle_cle
-from controldone.storage.db import Database
+from controldone.storage.db import Database, SchemaPerime
 from controldone.storage.erreurs import AccesRefuse, CleManquante, ErreurCoffre, ErreurIntegrite
 from controldone.storage.retention import RapportPurge, exporter_client, purger_expires, supprimer_client
 from controldone.storage.scope import OperatorScope, TenantScope
@@ -28,6 +28,7 @@ __all__ = [
     "FileVault",
     "OperatorScope",
     "RapportPurge",
+    "SchemaPerime",
     "TenantScope",
     "charger_cles_maitresses",
     "exporter_client",

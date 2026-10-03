@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from controldone.storage.db import Database
     from controldone.storage.file_jobs import JobInfo
 
-__all__ = ["HANDLERS", "MODULES_HANDLERS", "BailPerdu", "ErreurDefinitive", "Handler", "JobContext",
+__all__ = ["HANDLERS", "MODULES_HANDLERS", "BailPerdu", "ErreurDefinitive", "Handler", "JobContext", "Reporter",
            "charger_handlers", "handler", "obtenir_handler"]
 
 log = logging.getLogger("controldone.jobs.registre")
@@ -37,6 +37,16 @@ MODULES_HANDLERS: tuple[str, ...] = (
 
 class ErreurDefinitive(Exception):
     """Échec non réessayable : le job passe ``dead`` immédiatement (avec alerte)."""
+
+
+class Reporter(Exception):
+    """Le job ne peut pas avancer **maintenant** (ex. le même lot est en cours de traitement par un autre
+    worker) : il repasse ``pending`` après ``delai_s`` secondes, **sans** consommer un essai ni compter
+    comme un échec (D-1321)."""
+
+    def __init__(self, motif: str, delai_s: int = 30) -> None:
+        super().__init__(motif)
+        self.delai_s = max(1, int(delai_s))
 
 
 class BailPerdu(Exception):

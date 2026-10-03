@@ -1094,3 +1094,231 @@ bruit `a_verifier` 1,411 -> 1,381 par dossier, violations de pièges 40 -> 38 ; 
   `ControlContext.other_dossiers`. Gardé : `ingest/texte.lignes_haut` (périmètre ingestion/OCR).
 - Banc : `findings.json` identiques avant et après (hors `duree_s`).
 
+
+# Audit final : corrections de la plateforme
+
+Corrections issues de l'audit B (robustesse de la plateforme, constats F-01 à F-20 et suspicions), du volet
+plateforme de l'audit D (P0-1, P0-2, P1-4, P1-6, P1-7, P2-8) et de l'analyse juridique France-Suisse
+(`docs/recherche/juridique_france_suisse.md` §1, §4.4, §5.4, §9). Chaque correction a un test qui échouait avant
+(`tests/platform/test_audit_final_platform.py`, `tests/web/test_audit_final_web.py`,
+`tests/ops/test_audit_final_ops.py`, `tests/facturation/test_audit_final_facturation.py`). Mesures de l'audit B
+refaites après correction (même scripts, même machine) :
+
+| Mesure | Avant | Après |
+|---|---|---|
+| `/sante` pendant 4 dépôts API de 45 Mo en parallèle (worker intégré actif) | médiane 2,8 s, max 3,1 s | médiane 0,13 s, max 1,1 s |
+| `/sante` pendant un dépôt de 10 × 45 Mo | bloqué 28 s | médiane 0,09 s, max 0,25 s |
+| Attente d'un autre écrivain pendant un dépôt de 10 × 45 Mo | 27 s | 0,0 s |
+| 3 processus déposant chacun 10 × 40 Mo | « database is locked » après 30,1 s | 3 dépôts réussis (35 à 36 s) |
+| Attente d'un autre écrivain pendant `publier_rapport` (70 dossiers) | 12,1 s | 0,0 s |
+| Mémoire du processus web, dépôt API de 10 × 45 Mo (VmHWM) | 105 → 885 Mo | 107 → 258 Mo |
+| Sauvegarde (RSS max) | 6 266 Mo pour un coffre de 1,1 Go | 77 Mo pour 1,7 Go (restauration : 70 Mo) |
+| Battement de cœur en échec une fois (`lease.py`) | double exécution (w1 perdu, w2 refait) | une exécution (w1 `done`, w2 ne prend rien) |
+
+## D-1301 — Clôture automatique, point de départ de la conservation (F-01)
+
+- **Constat** : la purge ne supprimait jamais rien : aucun chemin ne clôturait un dossier ni un lot.
+- **Choix** : `storage.retention.cloturer_inactifs`, appelée par le handler `purger_retention` avant la purge.
+  Dossier clos s'il est inactif depuis `CONTROLDONE_CLOTURE_AUTO_JOURS` (60) jours, sans écart encore ouvert
+  et sans constat en attente de décision dans sa version courante ; lot clos s'il est en erreur depuis le même
+  délai, ou traité et dont tous les dossiers sont clos. Une nouvelle activité rouvre le dossier. La conservation
+  de 180 jours court ensuite. Une transaction par client, entrée d'audit `cloture_auto`.
+
+## D-1302 — Une seule liste de handlers (F-07, audit D P1-6)
+
+- `jobs.registre.MODULES_HANDLERS` et `charger_handlers()` : utilisés par `python -m controldone.jobs.worker` et
+  par le worker intégré de `controldone serve`. Le worker intégré ne réserve que les kinds qu'il connaît
+  (`kinds=sorted(handlers)`) : un kind inconnu reste `pending` au lieu de mourir `handler_inconnu`. Identifiant
+  unique par processus (`web-integre:<hôte>:<pid>`, suspicion 5).
+
+## D-1303 — Battement de cœur robuste et jeton de clôture (F-05)
+
+- Une erreur de base dans `prolonger` est journalisée (`battement_echec`) et retentée ; le bail n'est perdu que
+  si la ligne n'est plus détenue ou si aucun renouvellement n'a réussi pendant `lease_s - heartbeat_s`.
+- Jeton de clôture `(locked_by, attempts)` : `prolonger`, `terminer`, `echouer` le vérifient ;
+  `JobContext.exiger_bail(session)` relit la ligne **dans la transaction** qui valide les résultats
+  (`traiter_lot` : avant le pipeline, après, et dans la transaction finale). Deux workers ne valident jamais le
+  même job, même avec le même identifiant. `python -m controldone.jobs.worker` passe par le module importé
+  (suspicion 4).
+
+## D-1304 — Routes synchrones ; dépôt reçu hors transaction (F-03, F-04, F-14)
+
+- Toutes les routes web et API sont des `def` (groupe de fils de Starlette) ; le formulaire multipart est lu
+  par `web.securite.formulaire_sync` (lecture asynchrone exécutée depuis le fil). Test : aucune route
+  `async def`.
+- Dépôt (`services.depot.deposer`) : (1) empreintes déjà reçues en transaction de lecture ; (2) réception,
+  contrôle et chiffrement **un fichier à la fois** (flux du téléversement, `gc.collect` après un gros PDF), sans
+  verrou ; (3) courte transaction d'écriture (lot, fichiers, job). Échec de (3) : les contenus créés par ce
+  dépôt sont retirés du coffre. Au plus `CONTROLDONE_DEPOTS_SIMULTANES` (2) dépôts à la fois.
+
+## D-1305 — Fichiers temporaires sur le volume de données ; coffre par segments (F-14, F-16)
+
+- `CONTROLDONE_TMP_DIR` (défaut `<data_dir>/tmp`) devient le répertoire de `tempfile` du web et du worker
+  (`Settings.appliquer_repertoire_temporaire`) : téléversements multipart, déchiffrement des lots, sauvegardes
+  ne vont plus dans le tmpfs `/tmp` de 1 Go du conteneur.
+- Coffre : contenus d'au moins 256 Kio au format `CDV2`, AES-256-GCM par segments d'1 Mio (ordre, fin et
+  substitution authentifiés), écrits et lus segment par segment ; les objets Fernet existants restent lisibles.
+- Dossier surveillé : `relever()` ne lit plus aucun fichier (`ElementsParesseux`, lecture à l'intégration),
+  ignore et signale les fichiers au-delà de `taille_fichier`, découpe en dépôts plafonnés à `taille_lot`.
+
+## D-1306 — Lectures du fondateur sans verrou ; job dans la transaction (F-06, F-12)
+
+- `OperatorScope.client(…, lecture=True)` : transaction différée. Consultation d'un dossier, vignettes,
+  téléchargements et `publier_rapport` (rapport généré en lecture, pièces déposées hors transaction, puis
+  courte écriture dans la file des sorties) ne bloquent plus les autres écrivains.
+- Correction d'une valeur : le job `recontroler_dossier` est inséré dans **la même** transaction que la
+  nouvelle version du dossier (`JobStore.enqueue_dans`, `TenantScope.mettre_en_file`) ; idem pour le dépôt
+  (lot + job) et les connecteurs.
+
+## D-1307 — Taux de commission : une seule source (F-10)
+
+- `litiges.commission.taux_commission(reglages)` : `reglages["commission_taux"]` du client, sinon le taux du
+  catalogue (`config/offres.yaml`). Utilisée par le service des litiges et par la page Finances.
+
+## D-1308 — Une frontière de mois : Europe/Paris (F-19)
+
+- `calendrier.mois_paris` pour l'échéance d'abonnement (agent, page Finances, webhook) et le plafond IA
+  (`jobs.couts.mois_courant`) : plus deux clés d'idempotence pour une même échéance la première heure du mois.
+
+## D-1309 — Lectures bornées et triées en SQL (F-11, F-15)
+
+- Job d'un lot cherché par sa clé (`traiter_lot:<client>:<lot>`, index unique) ; `jobs_du_client` retiré des
+  lectures de lot. Purge des jobs `done` de plus de `CONTROLDONE_JOBS_CONSERVATION_JOURS` (30) jours.
+- `file_validation` triée en SQL avant la limite, comptée par `count()` ; `statistiques` agrège colonne par
+  colonne (jamais le JSON `contenu`) sur la version courante ; listes de sorties et d'alertes : les plus récentes
+  d'abord en SQL ; `TenantScope.compter` en `COUNT(*)` ; recontrôle : une requête pour tous les documents du
+  client ; purge par client et par paquet de 500 fichiers. API `/dossiers` paginée (`limite`, `apres`,
+  `X-Page-Suivante`).
+
+## D-1310 — `.env` lu par toutes les lectures de réglages (F-13, audit D P1-4)
+
+- `config.charger_fichier_env` charge `./.env` (ou `CONTROLDONE_ENV_FILE`) dans `os.environ` une fois, sans
+  écraser l'environnement réel ; `config.env(nom)` remplace les `os.environ.get` directs (mode d'exécution, clé
+  maîtresse, secret de session, Stripe, vendeur, MCP…). Nouveaux champs de `Settings` : `env`, `tmp_dir`,
+  `lot_duree_max_s`, `jobs_conservation_jours`, `cloture_auto_jours`, `depots_simultanes`.
+
+## D-1311 — Durée maximale d'un lot et ordonnancement équitable (F-20, F-18)
+
+- `CONTROLDONE_LOT_DUREE_MAX_S` (prod 1800) : le pipeline tourne dans un processus fils (`spawn`), tué au-delà ;
+  le job devient `dead` (alerte) et le worker passe au lot suivant.
+- `reserver` sert d'abord le client dont l'activité la plus récente est la plus ancienne (tourniquet), FIFO au
+  sein d'un client.
+- Plafonds IA effectifs (F-18) : `CONTROLDONE_LLM_PLAFOND_DOSSIER_EUR` est passé au pipeline par le worker ;
+  `_CLIENT_MENSUEL_EUR` et `_DIAGNOSTIC_EUR` sont les défauts du plafond mensuel à la création d'un client.
+
+## D-1312 — Insertion d'une action sortante sous concurrence (suspicion 1)
+
+- `storage.sorties.inserer` : point de sauvegarde ; si la clé d'idempotence vient d'être prise par une
+  transaction concurrente (PostgreSQL), la ligne existante est renvoyée au lieu d'une `IntegrityError`. Le
+  cumul des avoirs d'une facture est vérifié dans la transaction de numérotation.
+
+## D-1313 — Coupon de lancement sans accord de publication (brief §4.4)
+
+- `consentement_requis: false` dans `config/offres.yaml` : la remise ne dépend d'aucune contrepartie.
+  `proposer_diagnostic` accepte l'absence de consentement (plus d'`AttributeError`) ; un accord signé est cité
+  à titre d'information (`revocable: true`), jamais comme condition (`accord_publication_condition: false`).
+
+## D-1314 — Assiette de la commission (brief §1.3)
+
+- Base = montants **hors taxes** des avoirs émis par un **transitaire** ; la TVA d'un avoir est conservée pour
+  information ; un remboursement ou une remise accordés par la douane ou une autre autorité
+  (`origine: "administration"`) est `hors_assiette` et n'ouvre aucune commission (service des litiges et page
+  Finances).
+
+## D-1315 — Relevé d'écarts et modèle à adapter ; vocabulaire ; alias d'API (brief §1.3, §9)
+
+- `litiges.redaction` produit deux parties : un **relevé d'écarts** factuel (documents, pages, valeurs lues,
+  différence, tolérance) et un court « **Modèle à adapter par le client** » neutre, qui demande de vérifier et
+  d'indiquer si un avoir sera émis. `verifier_modele` refuse « nous réclamons », mise en demeure, délais,
+  pénalités, citations de textes (`EXPRESSIONS_INTERDITES`).
+- Interface : « relevé d'écarts » au lieu de « dossier de réclamation », « suivi des avoirs reçus » au lieu de
+  « suivi du recouvrement » / « registre de recouvrement » (espace client, tableau de bord du fondateur).
+- API : `/suivi-avoirs` (alias de `/litiges`, mêmes réponses), événement `releve_envoye` (alias de
+  `reclamation_envoyee`), champs `rappel_suggere` (alias `relance_suggeree`), `ecart_id` (= `litige_id`),
+  `type_libelle` (`releve_ecarts`) : les anciens noms restent valides.
+
+## D-1316 — Un analyseur strict des montants saisis (audit D P1-7)
+
+- `services.saisie.montant_saisi` : utilisé par l'API, le MCP, l'espace client, la page Finances, la fiche
+  client (plafond IA), la création d'un client et l'import CSV d'une grille tarifaire (prix jusqu'à 4
+  décimales). Refuse `NaN`, `Infinity`, notation scientifique, `+`, négatif, zéro (sauf demande), groupes de
+  milliers mal formés, plus d'un milliard ; accepte espaces (y compris insécables), `1.234,56`, `1,234.56`, `€`.
+
+## D-1317 — Le suivi passe par `ServiceLitiges` ; rappels : une source (audit D P0-1, P0-2)
+
+- `services.reclamations.declarer_envoi_releve` et `enregistrer_avoir_recu` (web, API, MCP) : si l'écart
+  appartient à un relevé d'écarts, `ServiceLitiges.declarer_envoi` (tout le relevé `reclame`, rappels planifiés)
+  ou `ServiceLitiges.enregistrer_avoir` (imputation déterministe, commission, brouillon `facture_emise`) ;
+  sinon la transition directe historique.
+- `rappel_suggere` lit `reglages["relances_jours"]` du client, défaut `RELANCES_DEFAUT` = 15, 30, 45 jours
+  (D-602) ; la constante 30/60/90 est supprimée.
+
+## D-1318 — Référentiel : prix seulement pour un transitaire nommé (brief §5.4)
+
+- Un transitaire n'est nommé que si son entrée de `config/referentiel_alias_publics.yaml` porte
+  `accord_ecrit` (référence et date) ; sinon empreinte salée. Nommé, il n'a que des statistiques de prix :
+  `taux_dossiers_avec_ecart` vaut `None` (vide à l'export).
+
+## D-1319 — Totaux de la plateforme = règle du rapport
+
+- `TenantScope.enregistrer_resultats` applique `findings_io.constats_hors_totaux` par dossier et l'inscrit dans
+  `contenu.hors_totaux` de chaque constat ; `services.lecture` (espace client, API) et
+  `OperatorScope.statistiques` excluent ces constats (E6 remplaçant, doublon F5) comme le rapport. Les constats
+  enregistrés avant cette version n'ont pas la marque : ils comptent comme avant jusqu'au prochain traitement.
+
+## D-1320 — Sauvegarde et restauration en flux (F-02)
+
+- Format `CDSAV2` : tar.gz écrit en flux et chiffré par segments d'1 Mio (un jeton Fernet par segment, numéro et
+  drapeau final authentifiés) ; copie de la base dans un répertoire temporaire du volume de destination ;
+  restauration en flux ; l'ancien format reste restaurable. Échec : alerte `sauvegarde_echec` et code 1.
+
+## D-1321 — Report d'un job sans consommer d'essai (suspicion 6)
+
+- **Constat** : `POST /einvoices` met en file `traiter_lot` et `controle_avant_paiement` pour le même lot ; avec
+  deux workers, le pipeline (et le modèle de langage) tournait deux fois.
+- **Choix** : exception `jobs.registre.Reporter(motif, delai_s)` ; le worker rend le job `pending` après le
+  délai, rend l'essai (`JobStore.reporter`) et journalise `job_fin` statut `reporte`. `controle_avant_paiement`
+  se reporte tant que le `traiter_lot` du lot est en file ou en cours (bail valide) ; il ne lance lui-même le
+  pipeline que si ce job n'existe pas ou est mort.
+
+## D-1322 — Schéma périmé détecté au démarrage (suspicion 8)
+
+- `Database.colonnes_manquantes()` compare chaque table existante au modèle ; `exiger_schema_a_jour()` lève
+  `SchemaPerime`. `controldone serve` (après `--init-schema`) et le worker s'arrêtent avec le code 3 et la liste
+  des colonnes, au lieu d'échouer en cours de route sur « no such column ». Les migrations restent manuelles
+  (point ouvert de `docs/SECURITY.md`).
+
+## D-1323 — Expéditeur appelé hors transaction (suspicion 3)
+
+- `FileSortante.envoyer` : réservation courte (`reference_envoi = "envoi_en_cours:<jeton>:<horodatage>"`),
+  appel de l'expéditeur hors transaction (un dépôt réseau sur la plateforme agréée ne tient plus le verrou
+  d'écriture), puis enregistrement court. Second envoi pendant la réservation refusé ; échec de l'expéditeur :
+  réservation levée ; réservation abandonnée expirée après 15 minutes (le renvoi suivant doit rester idempotent
+  côté expéditeur, comme avant).
+
+## D-1324 — Purge et redépôt du même contenu (suspicion 2)
+
+- Coffre adressé par contenu : un fichier purgé redéposé à l'identique pendant la purge pouvait être effacé.
+- `FileVault.deposer` rafraîchit la date d'un contenu déjà présent (et le réécrit s'il vient d'être retiré) ;
+  `purger_expires` vérifie et supprime **sous le verrou d'écriture** et épargne un contenu redéposé depuis moins
+  d'une heure (`RapportPurge.epargnes`) ; un dépôt (web, API, connecteurs) revérifie la présence de ses
+  contenus dans la transaction qui l'enregistre et se refuse proprement sinon. Le nettoyage d'un dépôt échoué
+  se fait aussi sous le verrou d'écriture.
+
+## D-1325 — Planificateur : rattrapage sans doublon (suspicion 7)
+
+- `deploy/backup-cron.sh --si-absente` : rien si l'archive du jour (UTC) existe ; le planificateur l'utilise,
+  un redémarrage du conteneur ne refait plus la sauvegarde du jour.
+- Référentiel : mis en file à partir du 2 du mois (03 h UTC) avec la clé `referentiel:<AAAA-MM>` : rattrapé si le
+  conteneur était arrêté le 2, jamais deux fois dans le mois.
+
+## D-1326 — Installation (F-17) et points non corrigés
+
+- `make install` crée `.venv` s'il manque, installe `requirements.lock` puis le paquet éditable avec `[dev]` ;
+  `numpy` et `httpx` déclarés ; `alembic`, `mako`, `python-dateutil` retirés du lock.
+- Non corrigés : installation **non éditable** (`config/` et `ref/` hors de la roue ; contournement :
+  `CONTROLDONE_CONFIG_DIR`, `CONTROLDONE_REF_DIR`, ou installation `-e` comme le Dockerfile) ; dédoublonnage de
+  `enregistrer_avoir` par lecture puis écriture, sûr sous SQLite (`BEGIN IMMEDIATE`) mais non éprouvé sous
+  PostgreSQL ; registre de coûts IA persistant et cache de pages dans le pipeline (audit D P1-5 : périmètre du
+  moteur) ; plafonds par défaut encore codés dans `extract/llm.py`, `pipeline.py` et `model/referentiel.py`
+  (fichiers du moteur ; mêmes valeurs que `Settings`).
