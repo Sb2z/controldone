@@ -296,7 +296,8 @@ class _EnvironnementSansSecrets:
     l'environnement C, RS-14). ``os.environ`` (Python) n'est pas modifié : les autres fils n'en voient rien."""
 
     def __enter__(self):
-        self._retires = {k: v for k, v in os.environ.items() if _SECRETS_ENV.fullmatch(k)}
+        propre = _environnement_sans_secrets()  # même filtre que le sous-processus (RS-14)
+        self._retires = {k: v for k, v in os.environ.items() if k not in propre}
         self._ajoutes = {k: os.environ.get(k) for k in _ENV_PROCESSUS_PAGES}
         for k in self._retires:
             os.unsetenv(k)
