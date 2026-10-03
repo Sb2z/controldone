@@ -240,7 +240,7 @@ footer.pied .demo { color: var(--demo); font-weight: 700; letter-spacing: .1em; 
     {% for x in d.resultats %}<tr><td><span class="mono">{{ x.controle_id }}</span> {{ x.libelle }}</td><td class="oc-{{ x.resultat_code }}">{{ x.resultat }}</td>
       <td class="num mono">{{ x.attendu }}</td><td class="num mono">{{ x.constate }}</td><td class="discret">{{ x.raison }}</td></tr>{% endfor %}
     </table></details>
-    <p class="discret">État du recouvrement : aucune demande d'avoir enregistrée pour ce dossier.</p>
+    <p class="discret">Suivi des avoirs reçus : aucun relevé d'écarts transmis par le client pour ce dossier.</p>
   </article>
   {% endfor %}
 </section>

@@ -1322,3 +1322,91 @@ refaites après correction (même scripts, même machine) :
   PostgreSQL ; registre de coûts IA persistant et cache de pages dans le pipeline (audit D P1-5 : périmètre du
   moteur) ; plafonds par défaut encore codés dans `extract/llm.py`, `pipeline.py` et `model/referentiel.py`
   (fichiers du moteur ; mêmes valeurs que `Settings`).
+
+# Audit final : performance
+
+Mise en œuvre de l'audit C (performance), n° 1 à 7. Règle : **aucune sortie ne change**. Vérification sur le banc dev
+complet (202 dossiers, 4 processus, cache de pages vide, `--no-score`) entre la base `dbc2a9d` (worktree) et le
+nouveau code :
+- **202/202 `findings.json` identiques** hors `execution.duree_s`, mêmes non lus, 0 erreur ;
+- les **2 409 fichiers du cache de pages identiques octet pour octet** : texte OCR, boîtes et avertissements compris ;
+- `scripts/mesure_extraction.py --degradation d2,d3` : **19 356 comparaisons identiques en JSON** (déclaration
+  10 599, facture commerciale 5 261, facture transitaire 3 496).
+
+Temps et mémoire mesurés sur 4 vCPU :
+
+| Mesure | Base `dbc2a9d` | Après | Écart |
+|---|---|---|---|
+| Banc dev complet, cache vide (mur) | 1 170,7 s | 719,6 s | −39 % |
+| 3 dossiers en série (BX0039, BX0024, BX0102), `--workers 1` | 121,1 s | 22,8 s | ÷5,3 |
+| `mesure_extraction` déclaration d2+d3 (4 processus) | 254,4 s | 189,4 s | −26 % |
+| `mesure_extraction` facture commerciale d2+d3 | 217,8 s | 153,6 s | −29 % |
+| `mesure_extraction` facture transitaire d2+d3 | 83,1 s | 61,8 s | −26 % |
+| 8 rapports dans un même processus : pic de RSS | 363 Mo | 216 Mo | −147 Mo |
+| idem : RSS retenue après les 8 rapports | 363 Mo | 168 Mo | −195 Mo |
+| idem : durée | 8,9 s | 5,3 s | −40 % |
+| idem : taille des PDF | 2 748 Ko | 2 273 Ko | −17 % |
+
+## D-1400 — Image temporaire de Tesseract en PGM/PPM (audit C n° 1)
+
+- pytesseract enregistrait chaque image en PNG, soit environ 1 s d'encodage par appel pour une page A4 à 300 dpi.
+  `_pour_tesseract` fixe `image.format = "PPM"`, ce qui donne un PGM en mode `L`.
+- Le format est sans perte : Tesseract reçoit les mêmes pixels et le texte ne change pas (cache de pages identique).
+
+## D-1401 — `_page_texte_brut` linéaire (n° 7)
+
+- `largeur_max` est calculée une seule fois, avant la boucle sur les lignes. La sortie ne change pas.
+- 20 000 lignes : environ 13 s → moins de 0,3 s. Un gros XML ou un long courriel n'atteint plus le délai du
+  processus de pages.
+
+## D-1402 — Processus de pages issu d'un forkserver préchargé (n° 3)
+
+- **Un processus neuf par fichier**, créé par un forkserver qui précharge pdfplumber, pypdfium2, pytesseract, PIL,
+  openpyxl, lxml et `controldone.ingest.pages`. Les modules préchargés ne contiennent que du code, aucune donnée.
+- Les garde-fous restent les mêmes :
+  - `RLIMIT_AS` ;
+  - délai `poll(timeout)`, puis `kill` ;
+  - `alarm` de secours ;
+  - sorties standard vers `/dev/null` ;
+  - repli sans OCR, puis pages illisibles.
+- Le surcoût par fichier passe d'environ 0,43 s à environ 0,05 s.
+- **RS-14** : le forkserver est lancé avec l'environnement C dont on a retiré tout ce que filtre
+  `_environnement_sans_secrets()`, le même filtre que pour le sous-processus. Il est relancé de la même façon s'il
+  s'est arrêté.
+- L'enfant ne réimporte pas le `__main__` du parent.
+- Un processus « daemon » (worker de jobs, pool du banc) peut lancer ce processus, puisqu'il est toujours attendu ou
+  tué avant de rendre la main.
+- Si la plateforme n'offre pas de forkserver, on revient à `python -m controldone.ingest._worker`.
+
+## D-1403 — Registre des textes positionnés vidé en fin de lot (n° 6)
+
+- `preparer_lot` appelle `Decoupeur.liberer`, puis `liberer_textes`, dans un `finally`, après l'extraction.
+- Le registre gardait environ 85 Ko par page, jusqu'à 20 000 entrées (environ 0,85 Go), avec le texte des documents
+  en clair, dans le worker.
+- La clé `sha:` n'est retirée que si elle désigne encore la page du lot.
+
+## D-1404 — Désinclinaison sans numpy (n° 5)
+
+- Même algorithme, en PIL seul : `ImageStat`, `point`, comptage d'octets par ligne. Le score est un entier exact.
+- Angles **identiques sur 220 images sur 220** : les 55 pages OCR de l'audit, chacune à 0°, 90°, 180° et 270°. Le
+  cache de pages du banc dev est aussi identique.
+- numpy n'est plus importé par le code : sa déclaration est retirée de `pyproject.toml`.
+- **Reste à faire, côté plateforme** : retirer `numpy` de `requirements.lock`, soit −57 Mo dans le venv et environ
+  −72 Mo dans l'image.
+
+## D-1405 — Étape 2 en parallèle sur les fichiers d'un lot (n° 4)
+
+- `Decoupeur.precharger` lance `textes_pages` (cache disque, puis processus isolé) pour tous les fichiers du lot,
+  avec un `ThreadPoolExecutor` et un processus isolé par fichier. Les plus gros fichiers partent en premier.
+- Le découpage, l'attribution des identifiants et l'ordre restent séquentiels et inchangés. Le texte préchargé est
+  consommé puis libéré, et un échec laisse `decouper` refaire le travail.
+- Le parallélisme se règle par `CONTROLDONE_PAGES_PARALLELE` ; par défaut, `min(processeurs disponibles, 4)`. Il
+  n'agit qu'en processus isolé.
+- Mémoire de pointe : jusqu'à N processus d'OCR d'environ 400 Mo chacun. Sur un DEV1-S de 2 Go, régler N = 2.
+
+## D-1406 — Rapport : PNG sans `optimize`, flux PDF binaires, cache de rendu vidé par rapport (n° 2)
+
+- `rogner` enregistre le PNG sans `optimize=True`. L'image reste la même, sans perte.
+- `rl_config.useA85 = 0` : les PDF sont environ 17 % plus petits.
+- `generer_rapport` vide le cache `_page_image` à la fin de chaque rapport. Il gardait jusqu'à 64 pages rendues
+  d'environ 9 Mo, avec des images de pièces client déchiffrées, dans le processus web.

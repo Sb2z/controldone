@@ -387,7 +387,7 @@ def _dossier(d: DossierVue, s) -> list:
             _p(x.attendu, s["mono"]), _p(x.constate, s["mono"]), _p(x.raison, s["mini"]),
         ])
     out.append(_table(lignes, [58 * mm, 24 * mm, 26 * mm, 26 * mm, LARGEUR - 134 * mm]))
-    out.append(_p("État du recouvrement : aucune demande d'avoir enregistrée pour ce dossier.", s["petit"]))
+    out.append(_p("Suivi des avoirs reçus : aucun relevé d'écarts transmis par le client pour ce dossier.", s["petit"]))
     return out
 
 
