@@ -1,5 +1,5 @@
 """Handler ``referentiel_recalculer`` : recalcul périodique du référentiel anonymisé (job de plateforme,
-clé recommandée ``referentiel:<AAAA-MM-JJ>``)."""
+clé recommandée ``referentiel:<AAAA-MM>``, une par mois)."""
 
 from __future__ import annotations
 

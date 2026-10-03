@@ -12,7 +12,7 @@ transport **stdio**.
 | `lire_lot(lot_id)` | Avancement d'un dépôt et dossiers produits. |
 | `lire_dossier(dossier_id?)` | Un dossier (clés, documents, constats publiés) ; sans identifiant : la liste des dossiers. |
 | `lire_ecarts(dossier_id?)` | Constats **publiés** (validés par le fondateur), valeurs comparées avec document et page, tolérance. |
-| `suivre_litige(litige_id?)` | Registre de recouvrement. |
+| `suivre_litige(litige_id?)` | Suivi des avoirs reçus (écarts relevés, avoirs, rappels suggérés). |
 | `enregistrer_evenement_litige(litige_id, type_evenement, montant?, reference?, commentaire?)` | `reclamation_envoyee` ou `avoir_recu`. |
 
 Chaque description d'outil et chaque réponse rappellent que les résultats sont des **écarts factuels entre

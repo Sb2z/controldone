@@ -136,7 +136,7 @@ def initialiser_demo(plateforme: Plateforme, *, mot_de_passe_fondateur: str | No
 
 
 def _decisions(plateforme: Plateforme, fondateur: Acteur, res: ResultatDemo) -> None:
-    """Illustration : client 1 — écarts certains validés, rapport publié, dossier de réclamation à approuver,
+    """Illustration : client 1 — écarts certains validés, rapport publié, relevé d'écarts à approuver,
     une réclamation déclarée envoyée ; client 2 — tout reste à valider (file de validation)."""
     tid = "demo_ateliers"
     with plateforme.db.operateur(fondateur) as op:

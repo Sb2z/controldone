@@ -10,7 +10,7 @@ d'architecture : tout passe par ``controldone.storage``).
 - ``validation`` : décisions du fondateur sur les constats (§7.7), corrections de valeurs ;
 - ``recontrole`` : handler ``recontroler_dossier`` (contrôles relancés après une correction) ;
 - ``publication`` : rapport figé sur les constats validés, publication via la file des sorties ;
-- ``reclamations`` : registre de recouvrement (§17), dossier de réclamation rédigé pour le client ;
+- ``reclamations`` : suivi des avoirs reçus (§17), relevé d'écarts et modèle de courrier à adapter par le client ;
 - ``admin`` : clients, utilisateurs, entités, transitaires, grilles, clés d'API, tableau de bord ;
 - ``vignettes`` : rendu des pages (PNG) depuis le coffre ;
 - ``demo_init`` : base de démonstration (``controldone init-demo``).

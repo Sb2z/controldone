@@ -82,6 +82,10 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
                         doublons=doublons, refuses=sum(1 for f in nouveaux if f.fichier.statut is StatutFichier.refuse))
     try:
         with db.tenant(tenant, acteur) as sc:
+            # contenu retiré par une purge concurrente entre le coffre et la transaction (D-1324) : rien
+            # n'est enregistré, le relevé suivant réessaie
+            if any(ref and not vault.existe(tenant, ref) for ref in refs):
+                raise RuntimeError("contenu retiré du coffre pendant l'intégration")
             lot = sc.creer_lot(lot_id, canal=CanalLot(depot.canal).value, expediteur=reception.lot.expediteur)
             lot.resume = {"source": depot.source, "reference": depot.reference, "message_id": depot.message_id,
                           **{k: v for k, v in depot.meta.items() if k in ("facture_pa_id", "controle_avant_paiement")}}
@@ -99,11 +103,11 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
                                                   f"controle_avant_paiement:{tenant}:{pa_id}"))
     except BaseException:
         try:
-            with db.tenant(tenant, acteur, lecture=True) as sc:
+            with db.tenant(tenant, acteur) as sc:  # sous le verrou d'écriture (dépôt concurrent du même contenu)
                 encore = sc.contenus_references(nouveaux_blobs)
-            for sha in nouveaux_blobs:
-                if sha not in encore:
-                    vault.supprimer(tenant, sha)
+                for sha in nouveaux_blobs:
+                    if sha not in encore:
+                        vault.supprimer(tenant, sha)
         except Exception:  # pragma: no cover - nettoyage au mieux
             pass
         raise

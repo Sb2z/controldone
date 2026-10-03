@@ -15,7 +15,7 @@ import json
 import re
 import secrets
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from controldone.auth.cles_api import CleApiCreee, creer_cle_api
@@ -64,10 +64,10 @@ def _fondateur(acteur: Acteur) -> None:
 def _dec(x: Any, nom: str) -> Decimal | None:
     if x is None or str(x).strip() == "":
         return None
-    try:
-        return Decimal(str(x).strip().replace(" ", "").replace(",", "."))
-    except InvalidOperation as exc:
-        raise RequeteInvalide(f"{nom} : nombre attendu") from exc
+    from controldone.services.saisie import montant_saisi
+
+    # analyseur strict commun (D-1316) : ni NaN, ni Infinity, ni notation scientifique, ni valeur négative
+    return montant_saisi(x, nom=nom, decimales=4, zero=True)
 
 
 # --- clients et comptes ----------------------------------------------------------------------------------

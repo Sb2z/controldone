@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Sauvegarde ControlDOne pour la production. Deux modes :
 #
-#   deploy/backup-cron.sh               (dans le conteneur, appelé chaque jour par deploy/scheduler.sh)
+#   deploy/backup-cron.sh [--si-absente] (dans le conteneur, appelé chaque jour par deploy/scheduler.sh ;
+#                                        --si-absente : rien si l'archive du jour existe déjà)
 #       -> scripts/backup.sh --destination "$BACKUP_DIR" : archive chiffrée (clé dérivée de
 #          CONTROLDONE_MASTER_KEY) de la base SQLite (copie en ligne) et du coffre, puis rotation 7 j / 4 sem.
 #
@@ -33,6 +34,14 @@ fi
 
 DEST="${BACKUP_DIR:-$RACINE/var/sauvegardes}"
 mkdir -p "$DEST"
+# --si-absente (planificateur) : rien à faire si l'archive du jour (UTC) existe déjà (rattrapage au redémarrage)
+if [ "${1:-}" = "--si-absente" ]; then
+  if compgen -G "$DEST/controldone-$(date -u +%Y%m%d)T*.tar.gz.enc" >/dev/null; then
+    echo "$(horodatage) sauvegarde du jour déjà présente : rien à faire"
+    exit 0
+  fi
+  shift
+fi
 echo "$(horodatage) sauvegarde -> $DEST"
 "$RACINE/scripts/backup.sh" --destination "$DEST"
 echo "$(horodatage) sauvegarde terminée"

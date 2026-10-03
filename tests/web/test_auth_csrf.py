@@ -64,12 +64,15 @@ def test_fondateur_exige_totp(monde):
 
 
 def test_totp_anti_rejeu(monde):
+    import time
+
+    instant = time.time()  # même pas TOTP pour les deux connexions (sinon le test échoue à un changement de pas)
     c1, c2 = monde.client(), monde.client()
-    connecter_fondateur(c1, monde)
+    connecter_fondateur(c1, monde, t=instant)
     r = connecter(c2, FONDATEUR_EMAIL, MDP_FONDATEUR)
     assert r.headers["location"] == "/connexion/totp"
     t = jeton(c2.get("/connexion/totp").text)
-    r = c2.post("/connexion/totp", data={"csrf": t, "code": code_totp(monde.totp)}, follow_redirects=False)
+    r = c2.post("/connexion/totp", data={"csrf": t, "code": code_totp(monde.totp, instant)}, follow_redirects=False)
     assert r.status_code == 401  # même code, même pas : refusé
 
 

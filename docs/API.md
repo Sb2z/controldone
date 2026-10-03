@@ -58,7 +58,8 @@ curl -H "Authorization: Bearer $CLE" $CD/lots/lot_…
 ## Facture électronique reçue (contrôle avant paiement)
 
 `POST /einvoices` — une facture **reçue** par le client : Factur-X (PDF), UBL ou CII (XML). Corps multipart
-(champ `fichier`) ou octets bruts. Le dépôt est marqué `avant_paiement` et mis en file comme un lot. Le produit
+(champ `fichier`) ou octets bruts. Le dépôt est marqué `avant_paiement` et mis en file comme un lot ; le
+contrôle avant paiement attend la fin du traitement du lot (jamais deux traitements du même lot en parallèle). Le produit
 n'est pas une plateforme de facturation électronique (ni émission, ni transmission, ni cycle de vie).
 
 ```bash
@@ -90,33 +91,60 @@ Constat (extrait) :
 `niveau` : `ecart_certain` ou `a_verifier` (avec `raisons`). Un point réglementaire (`renvoi: true`) n'a jamais de
 montant et porte la phrase de renvoi vers un représentant en douane enregistré ou un avocat.
 
-## Rapports et dossiers de réclamation
+## Rapports et relevés d'écarts
 
 ```bash
 curl -H "Authorization: Bearer $CLE" $CD/rapports
 curl -H "Authorization: Bearer $CLE" -o rapport.pdf  "$CD/rapports/out_…?format=pdf"   # pdf | html | json | txt
 ```
 
-`type` : `rapport_publication` (rapport de diagnostic figé sur les constats validés) ou `reclamation_dossier`
-(demande d'avoir rédigée **à votre nom**, à relire, signer et envoyer vous-même au transitaire). Seuls les
+`type` : `rapport_publication` (rapport de diagnostic figé sur les constats validés) ou `reclamation_dossier` (nom
+technique conservé ; `type_libelle` = `releve_ecarts`). Un **relevé d'écarts** contient deux parties distinctes :
+le relevé factuel des différences entre documents (documents, pages, valeurs lues, différence calculée, tolérance)
+et un court **« Modèle à adapter par le client »**, neutre, que vous complétez, modifiez, signez et envoyez
+vous-même si vous le décidez (ni mise en demeure, ni délai, ni pénalité, ni citation de texte). Seuls les
 documents approuvés par le fondateur et mis à disposition sont listés.
 
-## Recouvrement (litiges)
+## Suivi des avoirs reçus
+
+Chemins : `/suivi-avoirs` (nouveau nom) et `/litiges` (nom historique, **mêmes réponses**, conservé).
 
 ```bash
-curl -H "Authorization: Bearer $CLE" $CD/litiges
-curl -H "Authorization: Bearer $CLE" $CD/litiges/eca_…
-# vous avez envoyé la réclamation vous-même :
+curl -H "Authorization: Bearer $CLE" $CD/suivi-avoirs                 # = $CD/litiges
+curl -H "Authorization: Bearer $CLE" $CD/suivi-avoirs/eca_…
+# vous avez envoyé vous-même votre courrier (alias historique : "reclamation_envoyee") :
 curl -H "Authorization: Bearer $CLE" -H "Content-Type: application/json" \
-     -d '{"type": "reclamation_envoyee", "commentaire": "courriel du 3 mars"}' $CD/litiges/eca_…/evenements
-# avoir reçu :
+     -d '{"type": "releve_envoye", "commentaire": "courriel du 3 mars"}' $CD/suivi-avoirs/eca_…/evenements
+# avoir reçu (montant hors taxes) :
 curl -H "Authorization: Bearer $CLE" -H "Content-Type: application/json" \
-     -d '{"type": "avoir_recu", "montant": "120.00", "reference": "AV-2026-031"}' $CD/litiges/eca_…/evenements
+     -d '{"type": "avoir_recu", "montant": "1 234,56", "montant_tva": "246,91", "reference": "AV-2026-031"}' \
+     $CD/suivi-avoirs/eca_…/evenements
+# remboursement accordé par la douane ou une autre autorité (jamais d'assiette de commission) :
+curl -H "Authorization: Bearer $CLE" -H "Content-Type: application/json" \
+     -d '{"type": "avoir_recu", "montant": "80,00", "origine": "administration", "reference": "REMB-…"}' \
+     $CD/suivi-avoirs/eca_…/evenements
 ```
 
-Statuts (§17.1) : `ouvert` → `reclame` → `partiellement_credite` → `credite` ; `conteste`, `abandonne`. Un avoir
-d'un montant au moins égal au reste passe l'écart à `credite`. `age_jours` court depuis la réclamation ;
-`relance_suggeree` à 30, 60 et 90 jours. Chaque événement est conservé (append-only) et journalisé.
+- Champs de réponse : `litige_id` et `ecart_id` (identiques ; `ecart_id` est le nom historique), `statut`,
+  `statut_libelle`, `montant_initial_eur`, `montant_credite_eur`, `reste_eur`, `age_jours`, `rappel_suggere` et
+  `relance_suggeree` (même valeur ; `relance_suggeree` est l'alias historique), `evenements`.
+- Statuts (§17.1) : `ouvert` → `reclame` → `partiellement_credite` → `credite` ; `conteste`, `abandonne`.
+- Un écart qui appartient à un relevé d'écarts passe par le service des litiges : `releve_envoye` fait passer
+  tout le relevé à `reclame` et planifie les rappels internes ; `avoir_recu` impute l'avoir de façon
+  déterministe sur les écarts du relevé (par composante), met à jour les statuts et calcule la commission
+  (base **hors taxes**, hors remboursements accordés par une autorité, `origine: "administration"`).
+- `age_jours` court depuis l'envoi déclaré ; `rappel_suggere` aux jours du réglage `relances_jours` du client
+  (défaut **15, 30 et 45 jours**, D-602). Ce n'est qu'un rappel interne : rien n'est envoyé au transitaire.
+- Montants (`montant`, `montant_tva`) : analyseur strict commun au web, à l'API et au MCP — `1234.56`,
+  `1 234,56` (espace ou espace insécable), `1.234,56`, `1,234.56`, `€`/`EUR` tolérés ; refusés (`400`) : vide,
+  `NaN`, `Infinity`, notation scientifique (`1e9`), signe `+`, négatif, zéro (admis pour `montant_tva`), plus de
+  2 décimales, plus d'un milliard.
+- Chaque événement est conservé (append-only) et journalisé.
+
+## Pagination
+
+`GET /dossiers?limite=<1..1000>&apres=<dossier_id>` (défaut `limite=500`). Si la page est pleine, l'en-tête
+`X-Page-Suivante` donne le curseur à passer en `apres` pour la page suivante.
 
 ## Avertissement
 

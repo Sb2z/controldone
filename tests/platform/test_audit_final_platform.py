@@ -477,3 +477,150 @@ def test_f14_coffre_par_segments_memoire_et_integrite(tmp_path, cles):
     assert FileVault(tmp_path / "coffre", [nouvelle]).lire("cli_a", sha) == contenu
     with pytest.raises(ErreurIntegrite):
         FileVault(tmp_path / "coffre", cles).lire("cli_a", sha)
+
+
+# --- suspicion 6 : un lot reçu par l'API n'est jamais traité deux fois en parallèle (D-1321) -------------------------
+
+
+def test_controle_avant_paiement_reporte_pendant_traiter_lot(monde, monkeypatch):
+    from controldone.connecteurs import jobs as cjobs
+    from controldone.jobs import handlers
+
+    with monde.db.tenant("cli_a", SYSTEME) as sc:
+        sc._ajouter_interne(Lot(id="lot_pa", statut="recu"))
+    appels = []
+    monkeypatch.setattr(handlers, "traiter_lot", lambda ctx: appels.append(ctx.job.kind) or {})
+    monkeypatch.setattr(cjobs, "proposer_statut_litige", lambda *a, **kw: None)
+    store = JobStore(monde.db)
+    enqueue("traiter_lot", {"lot_id": "lot_pa"}, "traiter_lot:cli_a:lot_pa", "cli_a", db=monde.db)
+    controle = enqueue("controle_avant_paiement", {"lot_id": "lot_pa", "facture_pa_id": "api:lot_pa"},
+                       "controle_avant_paiement:cli_a:api:lot_pa", "cli_a", db=monde.db)
+    decalage = {"s": 0}
+    w2 = Worker(monde.db, worker_id="w2", kinds=["controle_avant_paiement"], poll_s=0.01,
+                handlers={"controle_avant_paiement": cjobs.controle_avant_paiement},
+                horloge=lambda: maintenant() + timedelta(seconds=decalage["s"]))
+    # traiter_lot encore en file : le contrôle attend (avant : pipeline lancé ici, puis une seconde fois)
+    assert w2.executer_un() == "reporte" and appels == []
+    j = store.obtenir(controle.id)
+    assert j.statut == "pending" and j.attempts == 0 and j.last_error.startswith("reporte")
+    # traiter_lot pris par un autre worker (bail valide) : toujours reporté, sans consommer d'essai
+    assert store.reserver("w1", lease_s=600, kinds=["traiter_lot"]).kind == "traiter_lot"
+    decalage["s"] = 20
+    assert w2.executer_un() == "reporte" and appels == [] and store.obtenir(controle.id).attempts == 0
+    # lot traité par w1 : le contrôle s'exécute, sans relancer le pipeline
+    with monde.db.tenant("cli_a", SYSTEME) as sc:
+        sc.obtenir(Lot, "lot_pa").statut = "traite"
+    decalage["s"] = 60
+    assert w2.executer_un() == "done" and appels == []
+
+
+# --- suspicion 8 : schéma périmé détecté au démarrage (D-1322) ------------------------------------------------------
+
+
+def test_schema_perime_refuse_au_demarrage(tmp_path, monkeypatch):
+    import tempfile
+
+    from controldone.config import reset_settings
+    from controldone.jobs import worker
+    from controldone.storage import Database, SchemaPerime
+
+    url = f"sqlite:///{tmp_path}/ancienne.db"
+    db = Database(url)
+    db.creer_schema()
+    db.exiger_schema_a_jour()  # base neuve : rien à signaler
+    db.fermer()
+    with sqlite3.connect(tmp_path / "ancienne.db") as cx:  # base d'une version antérieure : colonne absente
+        cx.execute("ALTER TABLE jobs DROP COLUMN resultat")
+    db = Database(url)
+    db.creer_schema()  # create_all n'ajoute pas la colonne
+    with pytest.raises(SchemaPerime, match=r"jobs\.resultat"):
+        db.exiger_schema_a_jour()  # avant : erreur « no such column » au premier job seulement
+    db.fermer()
+    monkeypatch.setenv("CONTROLDONE_DATABASE_URL", url)
+    monkeypatch.setenv("CONTROLDONE_TMP_DIR", str(tmp_path / "tmp"))
+    monkeypatch.setattr(tempfile, "tempdir", tempfile.tempdir)
+    reset_settings()
+    try:
+        assert worker.main(["--once"]) == 3
+    finally:
+        reset_settings()
+
+
+# --- suspicion 3 : l'expéditeur (appel réseau) est appelé hors du verrou d'écriture (D-1323) ----------------------
+
+
+def test_envoi_sortant_hors_verrou_d_ecriture(monde):
+    from controldone.outbox import FileSortante, TransitionInterdite, TypeAction
+
+    fs = FileSortante(monde.db)
+    a = fs.approuver(fs.proposer(TypeAction.rapport_publication, {"objet": "Rapport FICTIF", "corps": "Disponible."},
+                                 SYSTEME, tenant_id="cli_a").id, FONDATEUR)
+    vu = {}
+
+    class PALente:
+        nom = "pa_lente"
+
+        def envoyer(self, action):
+            cx = sqlite3.connect(monde.db.chemin_sqlite(), timeout=0.3)
+            try:
+                cx.execute("BEGIN IMMEDIATE")  # un autre écrivain (worker, dépôt) pendant l'appel réseau
+                cx.rollback()
+                vu["autre_ecrivain"] = True
+            except sqlite3.OperationalError:
+                vu["autre_ecrivain"] = False  # avant : « database is locked » pendant tout l'envoi
+            finally:
+                cx.close()
+            with pytest.raises(TransitionInterdite, match="déjà en cours"):
+                fs.envoyer(action.id, self, FONDATEUR)  # second envoi concurrent : refusé
+            return "pa:FICTIF-1"
+
+    assert fs.envoyer(a.id, PALente(), FONDATEUR).reference_envoi == "pa:FICTIF-1"
+    assert vu == {"autre_ecrivain": True}
+
+    b = fs.approuver(fs.proposer(TypeAction.rapport_publication, {"objet": "Rapport FICTIF 2", "corps": "Ok."},
+                                 SYSTEME, tenant_id="cli_a").id, FONDATEUR)
+
+    class PAEnPanne:
+        nom = "pa_en_panne"
+
+        def envoyer(self, action):
+            raise ConnectionError("PA injoignable")
+
+    with pytest.raises(ConnectionError):
+        fs.envoyer(b.id, PAEnPanne(), FONDATEUR)
+    assert fs.obtenir(b.id, FONDATEUR).reference_envoi is None  # réservation levée : nouvel essai possible
+    assert fs.envoyer(b.id, PALente(), FONDATEUR).statut.value == "envoye"
+
+
+# --- suspicion 2 : purge et redépôt du même contenu (D-1324) --------------------------------------------------------
+
+
+def test_purge_epargne_un_contenu_redepose_et_depot_reverifie(monde):
+    from controldone.services import depot
+    from controldone.services.plateforme import Plateforme, RequeteInvalide
+
+    t = maintenant()
+    blobs = {p: _dossier_sans_suite(monde, p=p) for p in ("x", "y")}
+    with monde.db.tenant("cli_a", SYSTEME) as sc:
+        for p in ("x", "y"):
+            sc.obtenir(Dossier, f"dos_{p}").cloture_le = t - timedelta(days=400)
+            sc.obtenir(Lot, f"lot_{p}").cloture_le = t - timedelta(days=400)
+    vieux = (t - timedelta(days=2)).timestamp()
+    for sha, txt in blobs.values():
+        os.utime(monde.vault._chemin("cli_a", sha, "fichiers"), (vieux, vieux))
+        os.utime(monde.vault._chemin("cli_a", txt, "textes"), (vieux, vieux))
+    # un dépôt en cours redépose le contenu de x (pas encore enregistré en base) pendant la purge
+    assert monde.vault.deposer("cli_a", b"PDF FICTIF x") == blobs["x"][0]
+    rapport = purger_expires(monde.db, monde.vault, t)
+    assert rapport.fichiers["cli_a"] == 2 and rapport.epargnes == 1
+    assert monde.vault.existe("cli_a", blobs["x"][0])  # avant : supprimé, le dépôt référençait un contenu absent
+    assert not monde.vault.existe("cli_a", blobs["y"][0])
+    # filet : contenu retiré entre la réception et l'enregistrement -> dépôt refusé proprement, rien d'enregistré
+    pf = Plateforme(db=monde.db, vault=monde.vault, cles_maitresses=[])
+    prep = depot.preparer_depot(pf, "cli_a", [("f.xml", b"<facture>FICTIF z</facture>")], {})
+    ref = next(r for _f, r in prep.fichiers if r)
+    monde.vault.supprimer("cli_a", ref)
+    with pytest.raises(RequeteInvalide, match="retiré du coffre"), monde.db.tenant("cli_a", SYSTEME) as sc:
+        depot.enregistrer_prepare(sc, prep, vault=monde.vault)
+    with monde.db.tenant("cli_a", SYSTEME, lecture=True) as sc:
+        assert sc.lister(Lot, id=prep.lot_id) == []
