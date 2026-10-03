@@ -9,10 +9,11 @@ import json
 import math
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .controles import CONTROLES_INTER_DOSSIERS, equivalents, ordre_cle
 from .formulations import Formulations, charger_formulations
@@ -136,7 +137,7 @@ class Constat:
     documents: tuple[str, ...]
     brut: dict
     # rempli par l'appariement
-    erreur: "Erreur | None" = None
+    erreur: Erreur | None = None
     classe: str | None = None
     motif: str | None = None
     piege: str | None = None
@@ -805,12 +806,12 @@ def metriques_regroupement(dossiers: dict[str, Dossier]) -> dict[str, Any]:
             continue
         produits = list(dos.docs_produits.values())
         corr = {tid: meilleur_produit(t, produits) for tid, t in dos.docs_verite.items()}
-        liens = [l for l in (dos.findings.get("liens") or []) if isinstance(l, dict)]
+        liens = [lien for lien in (dos.findings.get("liens") or []) if isinstance(lien, dict)]
         paires_prod = set()
         noeuds_prod = set()
-        mode_paires = bool(liens) and all(_paire_lien(l)[0] for l in liens)
-        for l in liens:
-            src, cib = _paire_lien(l)
+        mode_paires = bool(liens) and all(_paire_lien(lien)[0] for lien in liens)
+        for lien in liens:
+            src, cib = _paire_lien(lien)
             if cib:
                 noeuds_prod.add(cib)
             if src and cib and src != cib:

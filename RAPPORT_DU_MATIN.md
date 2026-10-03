@@ -4,6 +4,8 @@
 
 **En une phrase.** Le moteur de contrôle tourne de bout en bout sur des dossiers synthétiques, passe le seuil bloquant sur un corpus tenu à l'écart (précision des écarts certains 100 %, 46 sur 46), mais il n'a jamais vu un document réel : ce sont les trois diagnostics gratuits qui diront s'il tient et si le marché existe.
 
+> **Mise à jour du 3 octobre 2026 :** audit final complet (bugs, robustesse, performance, cohérence, juridique France-Suisse) et corrections vérifiées au banc. Voir `docs/AUDIT_FINAL.md`. Les « dossiers de demande d'avoir » sont devenus un relevé d'écarts et un modèle neutre que le client adapte ; l'offre gratuite est une remise de lancement avec un accord de publication séparé.
+
 ---
 
 ## 1. Ce qui fonctionne, et comment le vérifier vous-même
