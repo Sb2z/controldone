@@ -2171,3 +2171,154 @@ certains » faux restants (C5 sur pièges 7, A5 3, B2 2, C1 2, A1 1, B4 1) sont 
 `forte` par références explicites (extraction et contrôles, hors regroupement). Banc d'origine dev
 (`bench/out/dev_grp`) : seuil bloquant PASSE, précision certain 1,000, rappel 0,818, rappel P1 1,0, faux P1 25
 (inchangé), P4 48 -> 47, regroupement du banc F1 0,965 -> 0,965.
+
+# Généralisation : factures commerciales
+
+Constat : sur `bench/corpus_g2` (split dev, 288 factures commerciales en 11 présentations : allemande en francs
+suisses, italienne, néerlandaise, espagnole, française, quatre anglaises dont une chinoise bilingue et une indienne,
+UBL, XLSX ; pro forma ; scans, photos, télécopies), les champs obligatoires de la facture commerciale n'étaient
+exacts qu'à 61,9 % (champs clés 61,3 %), 65 valeurs de confiance ≥ 0,90 étaient fausses (98,4 %), et les listes de
+colisage n'étaient pas lues du tout (0 %). Règles générales, sans nom de fichier, code de présentation ni nom
+fictif ; vocabulaire dans `extract/deterministe/_fc_langues.py`, aides de mise en page sans état dans
+`_fc_regles.py` ; `_mise_en_page.py` inchangé. Tests sur des PDF reportlab propres aux tests
+(`tests/extract/test_facture_commerciale_generalisation.py`).
+
+## D-2001 — Vocabulaire multilingue (de, it, nl en plus de fr, en, es)
+
+- Numéro (« Rechnung Nr. », « Rechnungsnummer », « Fattura n. », « Factuurnummer », « Invoice number ») ; un
+  numéro en deux mots, préfixe de 2 à 4 capitales puis partie chiffrée (« FT 4800/2026 », « ODH 2026.3681 »), est
+  lu entier. « n. o… » n'est pas « n° » (le libellé doit finir sur une frontière de mot).
+- Date (« Datum », « Data », « Factuurdatum », « Issue date ») ; devise (« Währung », « Valuta ») ; conditions de
+  livraison (« Lieferbedingungen », « Resa », « Leveringsvoorwaarden », « Terms: ») ; titre de transport
+  (« CMR-Frachtbrief », « Polizza di carico », « Luchtvrachtbrief », « Transport document », « Ref. ROAD: »).
+- Pavés : acheteur (« Rechnungsempfänger », « Kunde », « Intestatario », « Factuuradres », « TO (BUYER): »), livré
+  à (« Lieferadresse », « Destinatario merce », « Afleveradres »), vendeur (« Verkäufer », « Fornitore »…).
+- Masses et colis (« Bruttogewicht », « Peso lordo », « Brutogewicht », « TOTAL G.W.: », « Gross 433.696 kg »,
+  « Packstücke », « Colli ») ; totaux (« Rechnungsbetrag CHF », « Totale fattura », « Totaal », « Total due (INR) »,
+  « Zollwert ») ; sous-totaux (« Warenwert », « Totale merce », « Subtotaal » ; « Fracht », « Vracht », « Nolo » ;
+  « Versicherung » ; « Imballo », « Verpackung » ; « Rabatt », « Sconto », « Korting ») ; un libellé de document
+  (« Transport document », « Frachtbrief ») n'est jamais une ligne de fret.
+- Colonnes : « Zolltarifnr. », « Voce doganale », « GN-code », « Fracción arancelaria », « N° tarif douanier »,
+  « Tariff no. » (code) ; « Ursprung », « Herkunft », « Oorsprong », « C/O », « COO » (origine) ; « Menge »,
+  « Q.tà », « Aantal » ; « Einh. », « U.M. », « Eenh. » ; « Einzelpreis », « Prezzo unit. », « Prijs » ;
+  « Gesamtpreis », « Importo », « Bedrag », « Line total ». La mention « (Incoterms® 2020) » ne fait pas partie du
+  lieu de livraison.
+
+## D-2002 — En-tête du tableau des lignes
+
+`_fc_regles.nettoyer_colonnes` et `scinder_mots_colles`, appliqués à la ligne d'en-tête retenue (repérée une fois
+par page, `_reperer_entetes`) :
+- code de devise accolé au libellé d'une colonne de prix ou de montant (« Amount CNY », « Importo EUR ») : rattaché à
+  cette colonne au lieu d'ouvrir une colonne inconnue qui volait les montants alignés à droite (toutes les lignes
+  sauf la première étaient perdues) ; en tableur, seule l'étendue du mot du code est rattachée (la cellule voisine
+  soudée reste inconnue) ;
+- mots soudés par l'extraction du texte (« arancelariaOrigen », « UnidadPrecio ») redécoupés à la frontière
+  minuscule → majuscule ;
+- deuxième colonne « numéro » (« NO. | ITEM NO. ») lue comme référence d'article ; deuxième colonne « article »
+  sans colonne de désignation (« SKU | Item ») lue comme désignation.
+
+## D-2003 — Devise sans libellé « devise »
+
+Indices, dans l'ordre de la règle antérieure (libellé, puis code accolé à la valeur du total) : code ISO accolé à
+une colonne de prix ou de montant ou imprimé sous elle (« (USD) »), code dans le libellé d'un total (« TOTAL CNY »,
+« Total due (INR) ») ou sa valeur, symbole à côté du total. Symboles univoques € £ ₩ ₹ ₺ ; « ¥ » (CNY ou JPY) et
+« $ » ne sont résolus que si un seul code ISO compatible est imprimé sur le document, sinon devise inconnue
+(0,30). Un seul code : 0,90 (0,95 si en-tête de colonne **et** total le donnent ; OCR 0,85 / 0,90) ; plusieurs
+codes : celui du total à 0,60. Une devise lue sous libellé que contredisent ces indices est plafonnée à 0,60.
+
+## D-2004 — Nom du vendeur sans libellé
+
+Titre à gauche et émetteur à droite sur la même ligne (« HANDELSFACTUUR   Société X N.V. ») : le segment de droite
+est le nom. Un libellé « vendeur » placé après le pavé acheteur (« Expediteur: » d'un transitaire en pied) n'ouvre
+pas le pavé de l'émetteur (il donnait 0,90 à une ligne d'adresse). Un couple « Date: … » ou un identifiant
+majoritairement chiffré (« CHE-000.000.001 MWST ») n'est jamais un nom (sa TVA reste lue).
+
+## D-2005 — Masses écrites sur une même ligne
+
+« Net weight: 1.0 kg   Gross weight: 1.2 kg » : à défaut de libellé en tête de segment, le libellé est cherché au
+milieu du segment (frontière de mot) et la valeur lue dans le reste du segment seulement.
+
+## D-2006 — Normalisation (ajouts)
+
+`normalize/amounts.py` : groupement indien (« 1,23,456.00 », « 12,34,56,789 » : groupes de 2 chiffres puis un
+dernier de 3, virgule seulement). `normalize/units.py` : Stück, Stk., pezzi, pz, stuks, Paar, paia, litri, metri ;
+correction : les mots d'un libellé de plusieurs mots (« metre cube ») ne remplacent plus l'unité simple
+(« metre », « meter » étaient lus MTQ).
+
+## D-2007 — Chiffres de la désignation débordant dans la colonne du code
+
+« Taladro 18 V | 8467.21 », « Martillo 500 g 8205.20.00.00 » : sur la première ligne de la rangée, seul le dernier
+groupe de mots contigus de la cellule du code est gardé ; à défaut de code valide, le plus long suffixe qui forme un
+code de 6, 8 ou 10 chiffres ; confiance plafonnée à 0,85 quand des mots sont écartés.
+
+## D-2008 — Origine déclarée pour toute la facture
+
+Sans colonne d'origine, « Country of origin: China (CN) » (« Ursprungsland », « Paese d'origine », « Land van
+oorsprong »…) est reporté sur chaque ligne, lecture ancrée sur cette mention, confiance ≤ 0,85.
+
+## D-2009 — Rangées lues par OCR
+
+- Une rangée s'ouvre aussi sur une référence d'article et une quantité lues quand le montant est illisible (sinon
+  les rangées suivantes étaient décalées, et quantité × prix = montant les portait à 0,92 sous le mauvais rang) ;
+  un montant imprimé seul une ligne plus bas lui est rattaché (≤ 0,85).
+- Filets du tableau lus comme du texte (« | », « _ ») retirés des cellules (« 1'000 | kg », « TW | »).
+- En-tête de quantité illisible mais colonne d'unité reconnue : « 50 kg » lu sous « Eenh. » donne quantité et unité
+  (≤ 0,85).
+- Prix unitaire OCR sans séparateur (« 485 ») : le prix ÷ 10ᵏ qui redonne exactement le montant est retenu, ≤ 0,60.
+
+## D-2010 — Documents support : listes de colisage
+
+Libellés « Ref. invoice / facture: », « Rechnung Nr. », « Fattura n. » (numéro en deux mots admis ; une date n'est
+jamais un numéro de facture), « Transport: », « Frachtbrief », « Packages / colis: », « Packstücke », « Colli ».
+Masse brute (et nette) lue sur la ligne de total du tableau des articles (« Total », « Summe », « Totale »,
+« Totaal ») dans la colonne de son en-tête (« Gross kg », « Brutto kg », « Lordo kg », « Bruto kg ») ; nombre le plus
+proche de l'en-tête quand la cellule en porte plusieurs (colonne voisine illisible). Séparateur décimal tiré de la
+colonne : un nombre qui porte les deux signes, ou des milliers groupés par apostrophe ou espace, le donnent ; des
+masses toutes écrites « d,ddd » sont présumées au gramme près (§5.2 ; ≤ 0,85 sauf « 0,ddd »). Confiance 0,95
+(OCR 0,90) seulement si la somme des lignes redonne le total.
+
+## D-2011 — Avoirs fournisseurs
+
+Libellés allemands, italiens, néerlandais (« Gutschrift Nr. », « Nota di credito n. », « Creditnota nr. »,
+« Ursprungsrechnung », « Fattura di riferimento », « Oorspronkelijke factuur », « Grund », « Causale », « Reden »).
+Le motif (« Grund: Transportschaden ») n'est plus pris pour un libellé de prestation de transitaire dans le
+routage `est_avoir_fournisseur`. Aucun avoir fournisseur dans `corpus_g2` dev (tous de transitaire).
+
+## D-2012 — Mesures
+
+Outil : `scripts/mesure_extraction.py` ; la comparaison des `sous_totaux` (champ facultatif) ignore désormais le
+sous-total des marchandises des deux côtés (la vérité de `corpus_g2` le porte, la lecture ne le compare pas ; aucune
+vérité du corpus d'origine ne le porte). Champs obligatoires (valeurs justes ou absentes des deux côtés) :
+
+`corpus_g2` dev, facture commerciale (288 documents, 7 527 valeurs) : 61,9 % → 86,2 % ; champs clés (acheteur.tva,
+devise, numéro, total) 61,3 % → 95,8 %.
+
+| langue | valeurs | avant | après |  | présentation | avant | après |  | dégradation | avant | après |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| de | 698 | 46,0 % | 83,4 % | | CA (en) | 56,4 % | 79,8 % | | d0 | 78,1 % | 100,0 % |
+| en | 4 298 | 72,8 % | 86,8 % | | CB (de) | 46,0 % | 83,4 % | | d1 | 49,9 % | 81,5 % |
+| es | 868 | 38,8 % | 77,1 % | | CC (it) | 54,5 % | 97,0 % | | d2 | 44,8 % | 70,7 % |
+| fr | 710 | 57,6 % | 90,0 % | | CD (nl) | 32,2 % | 71,8 % | | d3 | 26,9 % | 46,2 % |
+| it | 708 | 54,5 % | 97,0 % | | CE (es) | 38,8 % | 77,1 % | | | | |
+| nl | 245 | 32,2 % | 71,8 % | | CE2 (en) | 67,7 % | 72,8 % | | | | |
+| | | | | | CF (en/zh) | 77,3 % | 95,9 % | | | | |
+| | | | | | CG (en, INR) | 72,6 % | 89,5 % | | | | |
+| | | | | | CH (fr) | 57,6 % | 90,0 % | | | | |
+| | | | | | CK (XLSX), CU (UBL) | 100 % | 100 % | | | | |
+
+Pro forma 61,9 % → 82,0 %. Les pertes restantes sont surtout des scans : l'OCR mis en cache ne restitue pas les
+colonnes de droite de tableaux à filets (quantité, prix, montant absents du texte) ou les brouille (télécopie,
+photo) ; non corrigeables à l'extraction.
+
+Calibration (justes / lues) `corpus_g2` : ≥ 0,90 3 888 / 3 953 (98,4 %) → 6 560 / 6 560 (100 %) ; 0,80–0,90
+1 113 / 1 251 → 2 006 / 2 057 ; 0,50–0,80 1 150 / 1 344 → 317 / 411.
+
+Documents support `corpus_g2` (105 documents, 375 valeurs) : 31,5 % → 88,0 % (listes de colisage 0 % → 88,3 % ;
+d0 37,7 % → 100 %) ; ≥ 0,90 49 / 49 → 148 / 148. Avoirs `corpus_g2` : 88,5 % → 88,5 % (91 / 91 ≥ 0,90).
+
+Corpus d'origine (dev, non-régression) : facture commerciale 84,0 % → 84,1 % (17 valeurs gagnées, aucune perdue),
+champs clés 93,2 % → 93,2 %, ≥ 0,90 9 111 / 9 111 → 9 128 / 9 128, 0,80–0,90 2 633 / 2 739 → 2 633 / 2 736 ;
+documents support 74,3 % → 74,3 % (282 / 282 ≥ 0,90) ; avoirs 98,0 % → 98,0 % (109 / 109 ≥ 0,90).
+
+Non traité (hors périmètre) : lieu de livraison d'une facture UBL écrit seulement dans `DeliveryTerms/SpecialTerms`
+(`ingest/structure.py`).
