@@ -1,4 +1,4 @@
-"""Écarts trouvés sur le corpus public de factures électroniques (``scripts/corpus_public.py``, D-1500 à D-1508).
+"""Écarts trouvés sur le corpus public de factures électroniques (``scripts/corpus_public.py``, D-1500 à D-1509).
 
 Chaque cas est reproduit par un XML minimal écrit à la main (données FICTIVES) : aucun fichier tiers n'est copié.
 """
@@ -287,3 +287,52 @@ def test_ligne_de_texte_seul_ignoree():
     xml = zf1().replace(b"<ram:IncludedSupplyChainTradeLineItem>", note + b"<ram:IncludedSupplyChainTradeLineItem>", 1)
     _doc, res = _extraire(xml, "rechnung.xml")
     assert len(res.champs.lignes) == 1 and res.champs.lignes[0].montant_ligne.valeur == "100.00"
+
+
+# --- codes de type, acompte, arrondi BT-114 ------------------------------------------------------------------
+
+
+def test_codes_type_261_avoir_et_389_facture():
+    """261 (avoir autofacturé) est un avoir ; 389 (autofacture) reste une facture."""
+    lignes = [("Article fictif", "1", "50.00", "50.00", None, None, "20")]
+    for code, attendu in (("261", TypeDocument.avoir), ("389", TypeDocument.facture_commerciale),
+                          ("384", TypeDocument.facture_commerciale)):
+        info = analyser_contenu_structure(fab.cii(type_code=code, devise="EUR", lignes=lignes), MIME_XML, fiches=())
+        assert info is not None and info.type is attendu, code
+
+
+def _ft_cii(*, arrondi: str | None, acompte: str | None) -> bytes:
+    """Facture de transitaire CII à deux taux (0 et 20 %), avec acompte BT-113 et arrondi BT-114 facultatifs."""
+    xml = fab.cii(numero="FT-ARR-1", devise="EUR", incoterm=None,
+                  lignes=[("Droits de douane", "1", "313.50", "313.50", None, None, "0"),
+                          ("Frais de dédouanement", "1", "65.33", "65.33", None, None, "20")],
+                  vendeur="FICTIF TRANSIT SARL", tva_vendeur="FR40000987651")
+    # TTC = 313.50 + 65.33 + 13.07 = 391.90
+    net = "391.90"
+    if acompte:
+        xml = xml.replace(b"<ram:DuePayableAmount>", f"<ram:TotalPrepaidAmount>{acompte}</ram:TotalPrepaidAmount>"
+                                                     "<ram:DuePayableAmount>".encode())
+        net = f"{391.90 - float(acompte):.2f}"
+    if arrondi:
+        xml = xml.replace(b"<ram:GrandTotalAmount>",
+                          f"<ram:RoundingAmount>{arrondi}</ram:RoundingAmount><ram:GrandTotalAmount>".encode())
+        net = f"{float(net) + float(arrondi):.2f}"
+    return xml.replace(b"<ram:DuePayableAmount>391.90<", f"<ram:DuePayableAmount>{net}<".encode())
+
+
+def test_acompte_bt113_et_plusieurs_taux():
+    doc, res = _extraire(_ft_cii(arrondi=None, acompte="100.00"), "ft.xml")
+    assert doc.type is TypeDocument.facture_transitaire
+    c = res.champs
+    assert c.total_tva.valeur == "13.07" and c.total_ttc.valeur == "391.90"
+    assert c.acomptes.valeur == "100.00" and c.net_a_payer.valeur == "291.90"
+    assert [str(lg.taux_tva.valeur) for lg in c.lignes] == ["0", "20"]
+
+
+def test_arrondi_bt114_net_non_transmis():
+    """BT-115 = BT-112 − BT-113 + BT-114 : sans champ d'arrondi dans le modèle, le net n'est pas transmis (D-1509)."""
+    _doc, res = _extraire(_ft_cii(arrondi="0.10", acompte="100.00"), "ft.xml")
+    c = res.champs
+    assert c.total_ttc.valeur == "391.90" and c.acomptes.valeur == "100.00" and c.net_a_payer is None
+    _doc, res = _extraire(_ft_cii(arrondi="0.00", acompte=None), "ft.xml")
+    assert res.champs.net_a_payer.valeur == "391.90" and res.champs.acomptes is None

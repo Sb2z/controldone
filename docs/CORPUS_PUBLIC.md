@@ -2,7 +2,7 @@
 
 Ce document recense les spécimens publics utilisés pour éprouver la lecture des factures électroniques
 (Factur-X / ZUGFeRD, XRechnung, CII, UBL, Peppol BIS 3). Il indique aussi comment les récupérer et ce que la
-mesure a donné. Décisions associées : D-1500 à D-1508 (`docs/DECISIONS.md`, section « Corpus public »).
+mesure a donné. Décisions associées : D-1500 à D-1509 (`docs/DECISIONS.md`, section « Corpus public »).
 
 ## Principe
 
@@ -94,6 +94,9 @@ Règles de comparaison :
 
 ## Résultats (révisions ci-dessus, 859 fichiers, 320 factures avec vérité XML)
 
+Mesure refaite le 2026-10-05 après redémarrage et ajout de D-1509 : chiffres identiques, 0 régression
+(`compare`).
+
 **Avant** : code du dépôt avant ce lot de corrections. Les deux factures Qvalia géantes en sont exclues : la lecture,
 quadratique, dépassait 15 minutes. **Après** : code corrigé, tous les fichiers.
 
@@ -156,6 +159,20 @@ seulement classés facture.
 
 - **Classement des 320 factures** : 284 factures commerciales, 35 avoirs, 1 refus. Aucune facture de transitaire :
   aucune ligne ne décrit des débours.
+- **Codes de type BT-3 des 320 factures** et classement obtenu :
+
+  | Code | n | Classement |
+  |---|---|---|
+  | 380 | 246 | 235 facture commerciale, 10 avoirs (total négatif, D-1504), 1 refus (`trop_gros`) |
+  | 381 | 15 | 15 avoirs |
+  | 384 | 10 | 10 avoirs : tous les spécimens « Rechnungskorrektur » ont un total négatif |
+  | 389 (autofacture) | 10 | 10 factures commerciales |
+  | 575, 387, 204, 877, 751, sans code | 39 | factures commerciales |
+
+  Aucun spécimen n'a le code 261 : il est couvert par un test unitaire (avoir).
+- **Acompte et arrondi** : 200 factures portent BT-113 (souvent à zéro), 23 portent BT-114, dont 14 non nul (exemples
+  Peppol suédois et norvégien). Aucune n'est une facture de transitaire. Pour une facture de transitaire à arrondi non
+  nul, le net à payer n'est pas transmis (D-1509).
 - **Validité au schéma** : 300 valides, 21 non valides, lues avec une confiance de 0,95. Ce sont surtout des
   ZUGFeRD 2.0 / 2.1 antérieurs aux XSD Factur-X 1.07 embarqués, des dossiers `fail/` et des exemples grecs Peppol.
 - **Temps**, avec le cache de pages chaud :
@@ -168,6 +185,9 @@ seulement classés facture.
   | Ensemble, 3 processus | 74 s |
 
 ## Limites connues
+
+- Le modèle ne porte pas l'arrondi BT-114. Le net à payer d'une facture de transitaire à arrondi non nul n'est donc
+  pas lu (D-1509) ; le contrôle D1 `net_a_payer` n'est pas exécuté pour elle.
 
 - Le modèle `facture_commerciale` ne porte ni BT-109, ni BT-110, ni BT-115, ni l'acompte (BT-113). Le modèle
   `avoir` ne porte ni l'acheteur ni les remises et frais. Ces champs sont lus par le script mais pas comparés.

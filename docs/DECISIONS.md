@@ -1514,3 +1514,16 @@ licences, les exclusions et les mesures sont dans `docs/CORPUS_PUBLIC.md`.
   de chercher l'élément racine.
 - Un CSV dont un champ dépasse la limite du module `csv` (ou qui est illisible) levait `_csv.Error`. Il n'est plus
   reconnu par la fiche de correspondance (`reconnait` → faux), et l'extracteur rend `export_illisible`.
+
+## D-1509 — Arrondi BT-114 : net à payer non transmis s'il est non nul
+
+- EN 16931 : BT-115 = BT-112 − BT-113 + BT-114. Le modèle `facture_transitaire` porte le TTC, les acomptes et le net,
+  mais pas l'arrondi. Le contrôle D1 `net_a_payer` vérifie net = TTC − acomptes.
+- Avant : une facture de transitaire structurée à arrondi non nul (`ram:RoundingAmount`,
+  `cbc:PayableRoundingAmount`) aurait produit un faux écart D1, l'arrondi pouvant atteindre presque une unité.
+- Après : l'arrondi est lu. S'il est non nul, `net_a_payer` n'est pas renseigné ; D1 ne vérifie alors que le TTC.
+  Un arrondi nul ou absent ne change rien.
+- Un acompte écrit `0`, `0.00` ou `-0.00` reste ignoré.
+- Corpus public : 14 factures ont un arrondi non nul, aucune de transitaire ; mesures inchangées. Tests :
+  codes 261 (avoir) / 389 et 384 positif (facture), acompte et deux taux de TVA, arrondi.
+- Banc dev inchangé : précision 1,000, rappel 0,813.

@@ -871,6 +871,11 @@ def _remplir_fc(c: _Constructeur, champs: ChampsFactureCommerciale, d: dict[str,
         _champs_notes_ligne_fc(c, champs, p, lg["notes"])
 
 
+def _non_nul(brut: str | None) -> bool:
+    """Montant XML présent et différent de zéro (``0``, ``0.00``, ``-0.0`` sont nuls)."""
+    return bool(brut and re.sub(r"[0.,\s+-]", "", brut))
+
+
 def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
     hdr, dl, st, sm = _CII_HDR, _CII_DEL, _CII_SET, _CII_SUM
     total = lec.un(None, f"{sm}/ram:GrandTotalAmount")
@@ -891,6 +896,7 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
             "tva": lec.montant_devise(None, f"{sm}/ram:TaxTotalAmount", (devise_lu[0] or "").upper() or None),
             "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
             "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
+            "arrondi": lec.un(None, f"{sm}/ram:RoundingAmount"),
         },
         "vendeur": f"{hdr}/ram:SellerTradeParty", "acheteur": f"{hdr}/ram:BuyerTradeParty",
         "destinataire": f"{dl}/ram:ShipToTradeParty",
@@ -957,6 +963,7 @@ def _lire_zf1(lec: _Lecteur) -> dict[str, Any]:
             "tva": lec.montant_devise(None, f"{sm}/ram:TaxTotalAmount", devise),
             "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
             "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
+            "arrondi": lec.un(None, f"{sm}/ram:RoundingAmount"),
         },
         "vendeur": f"{hdr}/ram:SellerTradeParty", "acheteur": f"{hdr}/ram:BuyerTradeParty",
         "destinataire": f"{dl}/ram:ShipToTradeParty",
@@ -1008,6 +1015,7 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
             "ttc": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"),
             "net": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount"),
             "acomptes": lec.un(None, "cac:LegalMonetaryTotal/cbc:PrepaidAmount"),
+            "arrondi": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableRoundingAmount"),
         },
         "vendeur": "cac:AccountingSupplierParty", "acheteur": "cac:AccountingCustomerParty",
         "destinataire": None,
@@ -1123,9 +1131,12 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
         _definir(champs, "total_ht", c.vs("total_ht", *t["ht"][:2], devise=devise))
         _definir(champs, "total_tva", c.vs("total_tva", *t["tva"][:2], devise=devise))
         _definir(champs, "total_ttc", c.vs("total_ttc", *t["ttc"][:2], devise=devise))
-        _definir(champs, "net_a_payer", c.vs("net_a_payer", *t["net"][:2], devise=devise))
+        # BT-115 = BT-112 − BT-113 + BT-114 : le modèle ne porte pas l'arrondi BT-114. S'il est non nul, le net
+        # n'est pas transmis, sans quoi D1 (net = TTC − acomptes) signalerait un faux écart (D-1509).
+        if not _non_nul(t["arrondi"][0]):
+            _definir(champs, "net_a_payer", c.vs("net_a_payer", *t["net"][:2], devise=devise))
         ac = t["acomptes"]
-        if ac[0] and re.sub(r"[0.,\s]", "", ac[0]):
+        if _non_nul(ac[0]):
             _definir(champs, "acomptes", c.vs("acomptes", *ac[:2], devise=devise))
         if debours:
             total = deriver_somme(chemin_complet(c.type_doc, "total_debours"), debours, document_id=c.document.id,
