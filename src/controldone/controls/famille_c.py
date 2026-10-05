@@ -1880,6 +1880,13 @@ def _c8_motifs_non_certain(ctx: ControlContext, groupe: Sequence[Document], cf_t
     #    à l'entité concernée par cet envoi (D-2707).
     if not all(facture_rattachee_a_l_envoi(ctx, f) for f in groupe):
         motifs.append("facture_non_rattachee_a_l_envoi")
+    # 6. Aucune déclaration du dossier ne porte un numéro d'importateur lu de façon sûre : la comparaison ne repose
+    #    que sur l'acheteur de la facture commerciale, alors que l'entité importatrice déclarée peut être celle que
+    #    le transitaire facture (D-2710).
+    if ctx.declarations() and not any(
+            v.valeur and v.confiance >= 0.90 for v in importateurs
+            if v.chemin.startswith("declaration")):
+        motifs.append("importateur_declare_non_lu")
     return motifs
 
 

@@ -3186,3 +3186,23 @@ retournées : aucune page du dev n'a changé d'orientation (les cas G4 « rotate
 réessai est couvert par un test (OSD forcé à 180° sur une page droite). Temps (A/B alterné sur 42 pages des
 trois corpus, un processus) : p50 2,53 -> 2,84 s, p95 4,39 -> 4,52 s, moyenne 2,85 -> 3,02 s par page
 (+6 %). Tests : `tests/ingest/test_ingest_pretraitement.py` (images synthétiques générées dans les tests).
+
+### D-2710 — C8 : importateur déclaré illisible
+
+Constat (dev `corpus_g4`, après le passage à l'OCR 1.1.0) : piège GZ0220-T3. Le transitaire facture l'entité
+importatrice déclarée, mais le numéro de TVA de l'importateur est illisible sur la déclaration (confiance 0,02),
+si bien que C8 comparait le client facturé à l'acheteur de la facture commerciale et concluait avec certitude.
+Règle : quand le dossier contient une déclaration et qu'aucune ne porte un numéro d'importateur lu à 0,90 au
+moins, C8 reste « à vérifier » (motif `importateur_declare_non_lu`). Coût sur les dev : un vrai C8 certain du
+`corpus_g2` (GX0200, même situation de lecture) passe « à vérifier », toujours détecté ; deux faux certains en
+moins (GZ0220, et BX0038 avec D-2711). Test : `test_c8_importateur_declare_illisible_reste_a_verifier`.
+
+### D-2711 — B2 : total de droits et taxes imprimé négatif
+
+Constat (dev `corpus`, OCR 1.1.0) : BX0038, total « -83,69 » lu au lieu de « 83,69 ». Sur une déclaration
+d'import, un total de droits et taxes négatif est presque toujours un signe mal lu (tiret, trait de tableau) :
+il ne fonde pas un écart certain (motif de structure). Test :
+`test_total_negatif_imprime_ne_fonde_pas_un_ecart_certain`.
+
+Mesures après D-2710/D-2711 (dev, OCR 1.1.0) : `corpus_g4` 84 vrais / 0 faux certains (rappel 0,805),
+`corpus_g2` 111 / 0 (0,840), `corpus` 120 / 0 (0,827) ; les trois seuils passent.

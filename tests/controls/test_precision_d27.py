@@ -24,7 +24,7 @@ from controldone.model import (
 )
 from controldone.model.enums import RAISON_LIBELLES, Methode
 from controldone.recouvrement.imputation import REGLE_HT_DEPUIS_TTC, montant_net_ligne
-from controldone.testing import declaration, dossier_pour, facture_transitaire, taxation, vs
+from controldone.testing import declaration, dossier_pour, facture_commerciale, facture_transitaire, taxation, vs
 
 N = NatureLigne
 TVA_TRANSITAIRE = "FR11000555550"  # transitaire FICTIF
@@ -325,3 +325,19 @@ def test_c6_faf_par_envoi_additionnes_sur_unite_non_ventilee():
     assert RaisonCode.attribution_non_univoque in cs[0].constat.raisons
     assert any(r.outcome is Outcome.non_applicable and r.details.get("motif") == "faf_additionnes_par_unite"
                for r in rs)
+
+
+# --- D-2710 : C8, importateur déclaré illisible ---------------------------------------------------------------------
+
+
+def test_c8_importateur_declare_illisible_reste_a_verifier():
+    # La déclaration porte un numéro d'importateur illisible ; seul l'acheteur de la facture commerciale est lu.
+    d = dec(importateur=TVA_CLIENT)
+    d.dec.importateur = Partie(tva=vs("declaration.importateur.tva", "FR07000711922", document_id="doc_dec",
+                                      confiance=0.02, methode=Methode.ocr))
+    fc = facture_commerciale(id="doc_fc", acheteur=Partie(tva=vs("facture_commerciale.acheteur.tva", TVA_CLIENT,
+                                                                  document_id="doc_fc")))
+    f = ft(ligne(N.debours_droits, "10.00", mrn=MRN_A), mrns=(MRN_A,), client_tva=TVA_CLIENT_2)
+    r = un_constat([d, fc, f], "C8")
+    assert r.outcome is Outcome.a_verifier and RaisonCode.entite_facturee_attestee in r.constat.raisons
+    assert "importateur_declare_non_lu" in r.details["entite_facturee_attestee"]

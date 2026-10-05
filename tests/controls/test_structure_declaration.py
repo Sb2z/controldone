@@ -193,3 +193,12 @@ def test_nette_totale_sans_masses_brutes_d_articles_reste_certaine():
     d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "150"), nombre_articles=dv("nombre_articles", "2"),
                     articles=[art("1", masse_nette="100"), art("2", masse_nette="100")])
     assert _nette_total(d).outcome is Outcome.ecart_certain
+
+
+def test_total_negatif_imprime_ne_fonde_pas_un_ecart_certain():
+    # D-2711 : « -83,69 » au lieu de « 83,69 » (tiret lu comme signe) sur une déclaration d'import.
+    d = dec(droit("1", "1000.00", "5", "50.00"), tva("1", "1050.00", "210.00"),
+            total="-83.69", n=1, articles=[art("1")])
+    (r,) = constats(b2_sommes_taxes(contexte([d])))
+    assert r.outcome is Outcome.a_verifier and RaisonCode.structure_non_validee in r.constat.raisons
+    assert any("négatif" in m for m in r.details["structure_non_validee"])

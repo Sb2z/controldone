@@ -291,8 +291,14 @@ def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, l
         ctx, dec, unite=unite, sous_controle="categorie", total=total, v_total=v_total, operandes=operandes,
         somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
         composante=_COMPOSANTE.get(taxations[i_total].categorie),
-        structure=lambda: motifs_structure_taxes(dec, lignes, _num, ctx.tol, i_total=i_total),
+        structure=lambda: motifs_structure_taxes(dec, lignes, _num, ctx.tol, i_total=i_total) + _motif_total_negatif(v_total),
     )
+
+
+def _motif_total_negatif(total: Decimal) -> list[str]:
+    """Un total de droits et taxes imprimé négatif sur une déclaration d'import est presque toujours un signe mal
+    lu (tiret, trait de tableau) : il ne fonde pas un écart certain (D-2711)."""
+    return ["total imprimé négatif : signe probablement mal lu"] if total < 0 else []
 
 
 def _b2_resultat(
@@ -412,7 +418,7 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
     return _b2_resultat(
         ctx, dec, unite=unite, sous_controle="total", total=v_tot, v_total=vt, operandes=ops, somme=s,
         details={**details, "total": nom_total, "hypothese": nom_h}, objet=objet, composante=None,
-        structure=lambda: motifs_structure_taxes(dec, indices, _num, ctx.tol),
+        structure=lambda: motifs_structure_taxes(dec, indices, _num, ctx.tol) + _motif_total_negatif(vt),
     )
 
 
