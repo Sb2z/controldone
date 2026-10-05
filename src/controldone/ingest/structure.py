@@ -104,6 +104,11 @@ NS_ZF1 = {
     "udt": "urn:un:unece:uncefact:data:standard:UnqualifiedDataType:15",
 }
 _MRN_RE = re.compile(r"\b(\d{2}[A-Z]{2}[A-Z0-9]{14})\b")
+#: Note d'en-tête qui cite le(s) titre(s) de transport (« Titre de transport: FICU… », « AWB / B/L: … »).
+_RX_TRANSPORT_NOTE = re.compile(
+    r"^\s*(?:titre de transport|transport document|document de transport|lta|awb|hawb|mawb|b/l|bl|cmr|"
+    r"connaissement|bill of lading|lettre de transport|air waybill)(?:\s*/\s*(?:lta|awb|b/l|bl|cmr))*"
+    r"\s*(?:n°|no\.?)?\s*:\s*(\S.*)$", re.IGNORECASE)
 #: Codes de type de document (UNTDID 1001) : avoirs.
 CODES_AVOIR = {"381", "261", "262", "396", "532"}
 
@@ -311,7 +316,8 @@ class FicheCorrespondance:
             if chemin not in valides:
                 raise ValueError(f"{self.format_id} : champ inconnu du modèle : {chemin}")
         for nom, spec in self.listes.items():
-            if "source" not in spec and "type_enregistrement" not in spec:
+            a_plat = self.type == "csv" and not self.csv.get("multi_enregistrements")  # une ligne = un élément
+            if "source" not in spec and "type_enregistrement" not in spec and "eclater" not in spec and not a_plat:
                 raise ValueError(f"{self.format_id} : liste {nom} sans source")
             for chemin in [*(spec.get("champs") or {}), *(spec.get("enumerations") or {})]:
                 if f"{nom}[].{chemin}" not in valides:
@@ -379,9 +385,18 @@ class FicheCorrespondance:
                 out.append(d)
                 numeros.append(i)
             return vues, out, numeros
-        entete = [c.strip() for c in rangs[0]]
-        for i, r in enumerate(rangs[1:], start=2):
-            if not any(c.strip() for c in r):
+        # lignes de commentaire (``csv.commentaire``, ex. « # ») : ignorées partout, avant l'en-tête comprise
+        prefixe = self.csv.get("commentaire")
+
+        def commentaire(r: list[str]) -> bool:
+            return bool(prefixe) and bool(r) and r[0].lstrip().startswith(str(prefixe))
+
+        debut = next((k for k, r in enumerate(rangs) if any(c.strip() for c in r) and not commentaire(r)), None)
+        if debut is None:
+            return [], [], []
+        entete = [c.strip() for c in rangs[debut]]
+        for i, r in enumerate(rangs[debut + 1:], start=debut + 2):
+            if not any(c.strip() for c in r) or commentaire(r):
                 continue
             out.append({entete[j]: r[j].strip() for j in range(min(len(entete), len(r)))})
             numeros.append(i)
@@ -1086,6 +1101,7 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
         if m not in [x for x, _ in mrns]:
             mrns.append((m, cx))
 
+    transports: set[str] = set()
     for brut, cx, _nom in d["refs_doc"]:
         if not brut:
             continue
@@ -1093,7 +1109,20 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
         if m:
             ajouter_mrn(m.group(1), cx)
         else:
+            transports.add(re.sub(r"[^A-Z0-9]", "", brut.upper()))
             _definir(champs, "refs_transport[]", c.vs("refs_transport[]", brut, cx))
+    # notes d'en-tête « Titre de transport: … » / « MRN: … » (CII : IncludedNote, D-1903)
+    for texte, cx in d.get("notes") or []:
+        mt = _RX_TRANSPORT_NOTE.match(texte or "")
+        if mt:
+            for ref in re.split(r"\s*[,;]\s*", mt.group(1).strip()):
+                cle = re.sub(r"[^A-Z0-9]", "", ref.upper())
+                if len(re.sub(r"\D", "", ref)) >= 5 and cle not in transports and not _MRN_RE.fullmatch(cle):
+                    transports.add(cle)
+                    _definir(champs, "refs_transport[]", c.vs("refs_transport[]", ref, cx))
+        elif re.match(r"\s*mrn\b", texte or "", re.IGNORECASE):
+            for m in _MRN_RE.finditer((texte or "").upper()):
+                ajouter_mrn(m.group(1), cx)
     for i, lg in enumerate(d["lignes"]):
         p = f"lignes[{i}]"
         lib = lg["libelle"][0]
@@ -1164,6 +1193,18 @@ def _spec(spec: Any) -> dict[str, Any]:
     return dict(spec or {})
 
 
+def _valeur_table(v: ValeurSourcee | None, spec: dict[str, Any]) -> ValeurSourcee | None:
+    """``valeurs: {brut: valeur}`` d'un champ de fiche : valeur imprimée traduite (ex. sens du taux de change) ;
+    une valeur absente de la table est gardée telle quelle. ``valeur_brute`` reste celle du fichier."""
+    table = spec.get("valeurs")
+    if v is None or not table or v.valeur_brute is None:
+        return v
+    for k, val in table.items():
+        if str(k).strip().upper() == v.valeur_brute.strip().upper():
+            return v.model_copy(update={"valeur": str(val)})
+    return v
+
+
 def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: bytes,
                         avert: list[str]) -> ChampsDeclaration:
     champs = ChampsDeclaration()
@@ -1205,6 +1246,21 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
             out, vus = [], set()
             filtre = spec.get("type_enregistrement")
             cle = spec.get("cle")
+            ecl = spec.get("eclater")
+            if ecl:
+                # une cellule porte plusieurs éléments (« code:réf|code:réf ») : un élément par motif reconnu
+                for r, n in zip(rangs, numeros, strict=True):
+                    if filtre is not None and col_type and r.get(col_type) != str(filtre):
+                        continue
+                    cellule = r.get(ecl["source"]) or ""
+                    if not cellule.strip():
+                        continue
+                    for morceau in cellule.split(ecl.get("separateur") or "|"):
+                        m = re.fullmatch(ecl.get("motif") or r"(?P<valeur>.+)", morceau.strip())
+                        if m:
+                            out.append(((m.groupdict(), n), f"ligne {n}"))
+                    break  # cellule répétée sur chaque ligne (export dénormalisé) : lue une fois
+                return out
             for r, n in zip(rangs, numeros, strict=True):
                 if filtre is not None and col_type and r.get(col_type) != str(filtre):
                     continue
@@ -1238,7 +1294,7 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
             unite = lire(base, spec["source_unite"])[0] or unite
         if unite is None and type_valeur_pour(chemin) is TypeValeur.montant:
             unite = devise_lue if chemin in ("montant_total_facture",) else (spec.get("unite") or devise_defaut)
-        v = c.vs(chemin, val, ctx_, devise=unite)
+        v = _valeur_table(c.vs(chemin, val, ctx_, devise=unite), spec)
         _definir(champs, chemin, v)
         if chemin == "devise_facture" and v is not None:
             devise_lue = v.valeur
@@ -1254,7 +1310,10 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
     # listes
     for nom, spec_l in fiche.listes.items():
         spec_l = dict(spec_l)
-        for i, (base, _ctx) in enumerate(bases_liste(spec_l)):
+        bases = bases_liste(spec_l)
+        if spec_l.get("requis"):  # élément retenu seulement si cette source est renseignée
+            bases = [(b, x) for b, x in bases if lire(b, spec_l["requis"])[0]]
+        for i, (base, _ctx) in enumerate(bases):
             p = f"{nom}[{i}]"
             for rel, brute in (spec_l.get("champs") or {}).items():
                 spec = _spec(brute)
@@ -1265,7 +1324,8 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
                 tv = type_valeur_pour(rel)
                 if unite is None and tv is TypeValeur.montant:
                     unite = (devise_lue if rel == "montant_facture_article" else None) or devise_defaut
-                v = c.vs(f"{p}.{rel}", val, ctx_, devise=unite if tv is TypeValeur.montant else None)
+                v = _valeur_table(c.vs(f"{p}.{rel}", val, ctx_, devise=unite if tv is TypeValeur.montant else None),
+                                  spec)
                 if v is not None and tv is TypeValeur.quantite and unite:
                     u = normalize_unit(unite)
                     v = v.model_copy(update={"unite": u.code, "unite_brute": u.brut})
@@ -1332,6 +1392,9 @@ def _colonnes_csv_connues(fiche: FicheCorrespondance) -> set[str]:
             cols.add(nom(sp["source_unite"], sp, type_entete))
     for spec_l in fiche.listes.values():
         t = spec_l.get("type_enregistrement")
+        for extra in ((spec_l.get("eclater") or {}).get("source"), spec_l.get("requis")):
+            if extra:
+                cols.add(f"{t}.{extra}" if multi and t else extra)
         if isinstance(spec_l.get("cle"), str):
             cols.add(f"{t}.{spec_l['cle']}" if multi and t else spec_l["cle"])
         for spec in [*(spec_l.get("champs") or {}).values(), *(spec_l.get("enumerations") or {}).values()]:

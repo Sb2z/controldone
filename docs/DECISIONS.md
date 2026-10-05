@@ -1527,3 +1527,321 @@ licences, les exclusions et les mesures sont dans `docs/CORPUS_PUBLIC.md`.
 - Corpus public : 14 factures ont un arrondi non nul, aucune de transitaire ; mesures inchangées. Tests :
   codes 261 (avoir) / 389 et 384 positif (facture), acompte et deux taux de TVA, arrondi.
 - Banc dev inchangé : précision 1,000, rappel 0,813.
+
+# Robustesse
+
+Campagne d'entrées hostiles, cassées ou inhabituelles (`scripts/fuzz/`, compte rendu : `docs/ROBUSTESSE.md`).
+Règle commune : tout fichier déposé finit **traité**, **refusé avec un motif** ou **listé non lu** ; jamais une
+exception qui emporte le lot, un dépassement du délai configuré ou de la mémoire autorisée. Aucune limite de
+sécurité de §20.3 n'est relâchée ; les bornes ajoutées ne touchent pas les documents réels (banc dev inchangé).
+
+## D-1600 — Archives : entrée illisible, archive vide, filet de sécurité par fichier
+
+- Avant : un flux deflate altéré dans une entrée ZIP levait `zlib.error` (non rattrapé) et faisait perdre toute la
+  réception du lot ; une archive sans fichier (vide, répertoires seuls, EOCD seul) disparaissait sans trace.
+- Après : toute erreur de décompression d'une entrée (`zlib.error`, `lzma.LZMAError`, `EOFError`, `KeyError`…)
+  refuse **cette entrée** « corrompu » ; une archive sans aucun fichier est refusée « vide » ; chaque fichier
+  déposé passe par `_traiter_sur` (une erreur imprévue d'analyseur refuse ce fichier « corrompu », journal sans
+  contenu) ; un fichier illisible sur disque est refusé, le lot continue.
+- Tests : `test_d1600_*`.
+
+## D-1601 — pypdf ne journalise plus d'extraits de document
+
+- pypdf écrit dans ses avertissements des octets bruts du fichier (en-têtes d'objets, flux) ; la réception tourne
+  dans le processus web. Journal `pypdf` relevé à `CRITICAL` (§20.8). Test : `test_d1601_*`.
+
+## D-1602 — Classeurs XLSX/ODS soumis aux limites d'archive
+
+- Un `.xlsx` est un ZIP : une feuille de 1 Go de zéros (1 Mo compressé) passait la réception puis occupait le
+  processus de pages jusqu'au délai. Les limites des ZIP déposés (§20.3 : entrées, taille décompressée, taux de
+  compression) s'appliquent désormais au classeur (`_motif_conteneur`), avant le contrôle d'intégrité :
+  refus `archive_dangereuse`. Test : `test_d1602_*`.
+
+## D-1603 — Courriels : imbrication bornée, message joint encodé lu
+
+- Le parcours MIME est itératif et borné (40 niveaux ; au-delà, courriel refusé « corrompu » au lieu d'une
+  `RecursionError`) ; un courriel joint compte comme un niveau d'imbrication, comme une archive (profondeur ≤ 5,
+  zip → eml → zip → eml… borné) ; un `message/rfc822` joint encodé en base64 ou quoted-printable (non conforme
+  mais courant) est décodé au lieu d'être perdu. Tests : `test_d1603_*`.
+
+## D-1604 — Texte positionné et feuilles de tableur bornés
+
+- Un XML ou un CSV de 50 Mo produisait des millions de mots positionnés (plusieurs Go dans le processus de pages
+  puis dans le processus principal qui les relit) ; une feuille aux dimensions annoncées aberrantes
+  (`A1:XFD1048576`) faisait lire 16 384 colonnes par ligne.
+- Le texte de la page reste **complet** ; les mots positionnés s'arrêtent à 50 000 lignes / 500 000 mots
+  (avertissement `texte_positionne_tronque`) ; un tableur est lu sur 512 colonnes et 2 000 000 de cellules par
+  feuille (`tableur_tronque`). Tests : `test_d1604_*`.
+
+## D-1605 — Rognages du rapport bornés en pixels
+
+- Même défaut que RS-04, côté rapport : une page de 2 × 5 m réclamait un bitmap de plusieurs gigaoctets, gardé dans
+  le cache de rendu. Échelle réduite au-delà de `MAX_PIXELS` (≈ A3 à 144 dpi) pour les PDF ; images réduites
+  (décodage JPEG réduit puis `resize`). Page A4 : rendu inchangé. Test : `test_d1605_*`.
+
+## D-1606 — Lot sans dossier : ses fichiers sont listés non lus
+
+- Un lot dont aucun document n'était reconnu ne produisait aucun dossier : le résumé du lot indiquait `non_lus: 0`
+  et les fichiers acceptés disparaissaient sans trace. `traiter_lot` liste alors chaque fichier accepté avec le
+  motif `aucun_dossier` (`non_lus_detail`, chemins et motifs techniques seulement). Test : `test_d1606_*`.
+
+## D-1607 — Étape 3 bornée sur une page démesurée
+
+- Mesure (sous plafond de 3 Go) : un XML de 49 Mo à 1,6 million d'éléments faisait monter le processus principal à
+  **2,6 Go** et durait 61 s : arbre lxml de ~1 Go pour l'analyse structurée, puis normalisation caractère par
+  caractère de 25 Mo de texte pour le classement (~1 Go de plus). Un texte de 30 Mo sur une seule ligne :
+  1 Go (l'en-tête du classement découpait la ligne entière en mots, une fois par motif).
+- Après : un XML de plus de 1 000 000 de balises n'est pas soumis à l'analyse structurée (format inconnu,
+  avertissement `structure_non_analysee:trop_d_elements`) ; le classement travaille sur un extrait de la page
+  (1 000 000 de caractères, 20 000 lignes de 10 000 caractères au plus ; avertissement `classement_sur_extrait`).
+  Le texte complet de la page reste celui qui est conservé et extrait. Pic : 2,6 Go → 0,39 Go (7,8 s) ; 30 Mo
+  sur une ligne : 1,0 Go → 0,46 Go.
+- Les documents réels en sont loin (facture UBL de 10 000 lignes : ~300 000 balises ; pages du corpus : quelques
+  Ko) : sans effet sur le banc. Tests : `test_d1607_*`.
+
+## D-1608 — Garde-fous de la campagne elle-même
+
+- Une première campagne (3 cas en parallèle, sans plafond d'espace d'adressage, arbre de processus jusqu'à 3,2 Go
+  par cas) a épuisé la mémoire du conteneur. `campagne.py` exécute désormais chaque cas sous `RLIMIT_AS`
+  (1 500 000 000 octets, hérité par les processus de pages, qui ne peuvent pas le relever ; leur propre plafond de
+  production est 3 Go), avec délai (900 s) et plafond de mémoire résidente de l'arbre (3 Go), au plus 2 cas en
+  parallèle ; un `MemoryError` est classé `memoire` (défaut). Le générateur écrit les bombes en flux (jamais
+  200 Mo matérialisés).
+
+# Généralisation : déclarations
+
+Constat : sur le corpus de généralisation `bench/corpus_g2` (split dev, 308 déclarations, six présentations M1–M6
+jamais vues du moteur), les champs obligatoires de la déclaration n'étaient exacts qu'à 35,5 % (champs clés
+49,4 %) et 296 valeurs de confiance ≥ 0,90 étaient fausses (93,8 % d'exactitude). Règles générales, sans
+référence aux noms de fichiers, gabarits ou sociétés fictives ; aides sans état dans
+`extract/deterministe/_declaration_generique.py` ; tests sur des PDF reportlab et des contenus écrits dans les
+tests (`tests/extract/test_declaration_generalisation.py`, `tests/ingest/test_ingest_structure_exports_attributs.py`).
+
+## D-1801 — Fiches de correspondance des exports XML à attributs et CSV dénormalisé
+
+- Deux fiches (`config/mappings/g2_m5_xml.yaml`, `g2_m6_csv.yaml`) décrivent les formats publiés dans
+  `bench/generator2/FORMATS.md` ; le mécanisme de §5.3.6 n'est pas réécrit.
+- XML : données portées par des attributs (XPath `@…`, texte d'élément `.`), taxations d'article et de niveau
+  déclaration lues par une union XPath ; le rattachement est `ancestor::position[1]/@rang` (et non `../../@rang`,
+  qui lirait le rang de version du dossier pour une taxation globale).
+
+## D-1802 — Options génériques des fiches (rétrocompatibles)
+
+Ajouts à `ingest/structure.py`, inactifs si la fiche ne les déclare pas :
+- `csv.commentaire` : lignes commençant par ce préfixe ignorées partout (y compris avant l'en-tête et en fin
+  de fichier) ; le contenu d'un commentaire n'est jamais lu (règle 7) ;
+- `listes.<nom>.eclater` : une cellule portant plusieurs éléments (`N380:REF|N705:REF`) est découpée par
+  séparateur et motif à groupes nommés ; lue une fois (colonne répétée sur chaque ligne d'un export dénormalisé) ;
+- `listes.<nom>.requis` : élément retenu seulement si cette source est renseignée (article sans taxation : ses
+  colonnes de taxation sont vides, il ne donne pas de ligne de taxation) ;
+- `valeurs: {brut: valeur}` sur un champ : valeur imprimée traduite (sens du taux `1EUR` → `devise_par_eur`) ;
+  `valeur_brute` reste celle du fichier ;
+- une liste d'un CSV « à plat » (une ligne = un élément) n'a plus besoin de `source`.
+
+## D-1803 — Déclaration imprimée : colonnes, libellés et récapitulatifs en texte
+
+- Colonne « À payer » (DE 14 03 042) distincte du montant : rattachée jusque-là à la colonne « Montant », elle en
+  prenait la place (« 0,00 » d'une TVA autoliquidée) ou en tronquait les milliers. Lue en `montant_a_payer`.
+- Colonnes des tableaux d'articles (masse nette / brute, valeur statistique, colis, préférence, régime,
+  quantité supplémentaire) et des tableaux de taxes (`Tax`, `Basis`, `Payment`, colonne « Art » de
+  rattachement) en fr / en / de / it / es ; un en-tête de tableau (« Item | Commodity code | … ») n'ouvre plus de
+  bloc d'article ; une ligne « Total A00: … » ferme un tableau de taxes.
+- « Impositions au niveau de la déclaration » ferme le bloc du dernier article (la taxation n'y est plus
+  rattachée).
+- Documents produits : colonne « nature » entre le code et la référence (référence = premier mot qui porte un
+  chiffre, préfixe court en capitales collé compris : « FT 4800/2026 ») ; même règle pour 1008 / FR7.
+- Libellés : rubrique ouverte par un tiret (« LRN … — version 1 ») ou une parenthèse (« (TVA FR…) ») ; TVA et
+  EORI sur la ligne du libellé de la partie ; « masse brute / colis » sous un même libellé ; « 63 colis » écrit en
+  clair ; un nombre pris dans une référence (« CMR-FX-554972 ») n'est jamais un nombre de colis ; taux
+  « EUR 1 = CHF 0.91106 » ; libellés d'en-tête de/it/es.
+- Récapitulatif en texte (courriel « bon à enlever ») : articles en liste ouverts par « [n] code », couples
+  « libellé valeur » séparés par « | », taxations en prose « CODE libellé : base B x T % = M (mode) » ; une base
+  suivie d'un code de devise est un montant, pas une quantité ; le mode est le premier mot qui le dit.
+
+## D-1804 — Date d'acceptation dans une phrase ; dates en lettres
+
+Sans libellé de date lu, la date de la phrase qui porte un mot d'acceptation (« acceptée … le 18 août 2026 »,
+« released … on 11 Mar 2026 », « … am 7. September 2026 angenommen ») est retenue, pénalité 0,02 (jamais au-dessus
+d'une date sous libellé). Les dates écrites avec le nom du mois (fr / en / de / it / es) sont lues partout.
+
+## D-1805 — OCR : lignes sans code, « 1 » lu « I », lectures contredites
+
+- Ligne d'un tableau de liquidation (article de bloc ou colonne « article ») dont le code est illisible mais dont
+  base × taux = montant : gardée sans code, toutes ses valeurs plafonnées à 0,75.
+- Numéro d'article « I », « l », « | » dans la colonne des numéros : lu « 1 » avec pénalité 0,25.
+- Code de taxe « AQO » corrigé (Q → 0, pénalité) ; mode de paiement « É » lu « E » (pénalité 0,10).
+- Montant et « à payer » d'une même ligne en désaccord (sauf « à payer » nul) : les deux lectures OCR sont
+  plafonnées à 0,80, même si une autre relation les confirme (décimales perdues : « 12 » / « 12,12 »).
+- Montant à zéro de tête suivi d'un chiffre non nul (« 036,48 » : premier groupe de milliers perdu) : pénalité
+  0,25, jamais confirmé.
+
+## D-1806 — Mesures
+
+`scripts/mesure_extraction.py --type declaration`, champs obligatoires (exactitude) :
+- `bench/corpus_g2` dev : 35,5 % → 85,9 % (M1 89,1 → 93,0 ; M2 43,4 → 62,9 ; M3 20,2 → 77,1 ; M4 19,1 → 100 ;
+  M5 10,0 → 100 ; M6 10,1 → 100 ; d0 : 100 % pour les six présentations). Champs clés 49,4 % → 92,1 %.
+  Calibration ≥ 0,90 : 4 741 valeurs à 93,8 % → 16 121 valeurs à 99,98 % (4 fausses, lectures OCR confirmées par
+  base × taux = montant mais rattachées à un numéro d'article mal lu ou montant entier arrondi).
+  Les scans dégradés (d2, d3) restent limités par l'OCR (tableaux sans nombres, page retournée et inclinée).
+- `bench/corpus` dev (non-régression) : champs clés 92,6 % (inchangé) ; calibration ≥ 0,90 : 22 882 valeurs, 100 %
+  (inchangé) ; 0,80–0,90 : 4 254 valeurs, 98,0 % (inchangé) ; champs obligatoires 81,1 % → 81,2 %. Les lignes de
+  taxes sans code (D-1805, ≤ 0,75) ajoutent quelques valeurs fausses de basse confiance dans L1/d2 et L3/d1-d2
+  (appariement par clé article / code).
+
+# Généralisation : factures de transitaire
+
+Constat : sur le corpus indépendant `bench/corpus_g2` (split dev, 12 familles de factures de transitaire G1–G12
+jamais vues : tableau en paysage, relevé sur plusieurs pages avec reports, en-tête à deux colonnes intercalées,
+« € » avant ou après le montant, TVA par ligne ou récapitulative, débours en annexe, factures allemandes,
+italiennes, espagnoles, néerlandaises et anglaises, tampons et filigranes sur les montants, annotations
+manuscrites, totaux en tête de page, remise négative, XML UBL et CII seuls), l'extracteur `ft_regles` ne lisait
+que 51,0 % des champs obligatoires et D1 produisait 15 « écarts certains » dont 14 faux (lignes manquantes ou
+mal attribuées lues à 0,97 alors que les totaux étaient justes). Règles générales, sans code de gabarit, nom de
+fichier ni nom fictif ; vocabulaire dans `extract/deterministe/_ft_langues.py`, nettoyage des surimpressions dans
+`_ft_nettoyage.py` ; tests sur des PDF reportlab propres aux tests
+(`tests/extract/test_facture_transitaire_generalisation.py`).
+
+## D-1901 — Vocabulaire multilingue (fr, en, de, it, es, nl), table des natures unique
+
+- **En-têtes de colonnes** (`VOCABULAIRE_COLONNES`) : Leistung / Menge / Einzelpreis / Betrag, Descrizione /
+  Q.tà / Prezzo / Importo / Cod. IVA, Concepto / Cant. / Precio / Importe / Cuota IVA, Omschrijving / Aantal /
+  Bedrag… Nouveaux rôles : `pos` (n° de position, jamais le libellé) et `ttc` (« Montant TTC », « Brutto » :
+  jamais lu comme montant HT). Deux colonnes « montant » : la première est le HT, les suivantes un TTC. Un
+  qualificatif accolé (« P.U. **HT** », « Prix (EUR) ») prolonge la colonne précédente au lieu d'en ouvrir une.
+- **Libellés d'en-tête** : numéro (« Nr. », « N. », « N.º », « Rechnungsnummer », « Invoice / Facture … »),
+  date (« Datum », « Data », « Fecha », « … del 3 marzo 2026 », « Lyon, le … », date seule sous le numéro),
+  client (« Rechnungsempfänger », « Cliente », « Klant », « Importer / Destinataire »), titres de transport
+  composés (« LTA / B/L / CMR: », « Air waybill / B/L » en tête de colonne : références alignées dessous),
+  facture d'origine et motif d'un avoir (« Ursprungsrechnung », « Grund », « Oorspronkelijke factuur »,
+  « Reden »…). Numéro en deux mots (« RG 2026-46020 », « FACTURE MDF 84826 » : préfixe de 2 à 4 capitales puis
+  partie chiffrée) ; libellé en tête de colonne (« Nr. | Datum | Btw-nr. ») : valeur juste dessous (0,93).
+- **Dates** (`normalize/dates.py`) : mois allemands, italiens et néerlandais ajoutés (« 5. März 2026 »,
+  « 1 dicembre 2026 », « 12 maart 2026 »).
+- **Natures** (`normalize/natures.py`, table unique D-1213, aussi utilisée par les exports structurés) :
+  Zollabgaben, Einfuhrumsatzsteuer, Verzollung, Vorlageprovision, Lagergeld, Umschlag, Zustellung ; dazi
+  doganali, IVA all'importazione, sdoganamento, commissione anticipo, magazzinaggio, movimentazione, consegna ;
+  aranceles, comisión por anticipo, partidas adicionales ; invoerrechten, btw bij invoer, inklaring,
+  voorschotprovisie, opslag, behandeling, bezorging ; « additional entry lines ». Tous les libellés des deux
+  corpus dev reçoivent la nature de leur vérité.
+- **Totaux** : Summe Auslagen / Nettobetrag gesamt / MwSt. / Rechnungsbetrag, di cui anticipazioni / Totale
+  imponibile / Totale documento, Total suplidos / Total sin IVA / TOTAL FACTURA, Totaal voorschotten / Totaal
+  excl. btw / Totaal incl. btw, « Total droits et taxes » (= débours). Sous-totaux de prestations seuls (« Summe
+  Leistungen netto », « Base imponible », « Total charges (net) ») : ignorés. La TVA **à l'importation**
+  (« IVA de importación », « Einfuhrumsatzsteuer ») n'est jamais le total de TVA de la facture.
+
+## D-1902 — Totaux n'importe où sur la page
+
+- Libellé d'un total : d'abord le texte **immédiatement à gauche** du montant (segment voisin, sans « € » ni
+  « EUR »), puis, à défaut, toute la ligne (règle antérieure) : un bloc de totaux posé à droite du pavé client,
+  en tête de page, se lit (« Optique SARL ‖ Totale documento ‖ € 924,51 »).
+- Libellé seul sur sa ligne, montant seul juste en dessous et aligné (« NET À PAYER » / « 1 695,28 € ») : lu à
+  0,93.
+- Lignes de report (« Carried forward », « Brought forward », « À reporter », « Übertrag », « Riporto »,
+  « Suma y sigue », « Over te brengen ») : ni total, ni ligne, ni fin de tableau.
+
+## D-1903 — Tableaux : plusieurs pages, intertitres, annexe, tableaux côte à côte, MRN de ligne
+
+- **Report de page** sauté sans clore le tableau ; l'en-tête répété en page suivante rouvre la lecture.
+- **Intertitre** (« DÉBOURS (HORS CHAMP DE TVA) », « PRESTATIONS ») ou suite de libellé entre deux rangées,
+  sans chiffre : sauté si la ligne suivante est une rangée du tableau ; une ligne chiffrée sans montant lisible
+  (« 2,5 % x 376,64 ») est une rangée illisible et clôt la lecture (sauf bruit OCR) ; une rangée lue mais
+  illisible compte comme rangée.
+- **Deux tableaux côte à côte** (« Item Qty Amount | Item Qty Amount ») : l'en-tête est scindé à chaque colonne
+  de libellé répétée (chaque groupe ayant sa colonne de montant) ; chaque tableau lit sa bande horizontale.
+- **Segment à cheval sur deux colonnes** (« 95,00 A 20,00% » serrés) : découpé mot par mot selon la colonne qui
+  contient chaque mot.
+- **Montants** : « €45.00 », « 60,87€ », « EUR 792.16 », « 478,65 € » lus comme montants et attribués à leur
+  colonne (symbole et code de devise font partie de la cellule numérique).
+- **Annexe de débours** : une ligne dont le libellé renvoie à une annexe (« Suplidos según anexo », « see
+  annex », « siehe Anlage », « vedi allegato », « zie bijlage ») est écartée quand son montant est égal à la somme
+  des lignes d'un autre tableau du document (le détail de l'annexe, lu sur sa page) ; sinon elle est gardée.
+- **MRN de ligne** : un tableau dont la colonne de référence ne porte **que** des MRN (cellule vide sinon) ne
+  rattache pas le MRN unique du document aux lignes sans MRN ; une colonne mixte (« MRN / détail ») garde la
+  règle antérieure. Ligne de suite qui ne porte qu'un MRN (« [26FR…] » sous le libellé) : MRN de la rangée
+  précédente. Code d'une colonne sans en-tête reconnu (« A », « E ») imprimé avant le libellé : hors libellé.
+- `3,00 × 3` dans le libellé ou la base de calcul : prix unitaire × quantité retenus seulement s'ils redonnent
+  le montant de la ligne (règle du détail étendue au libellé et à la base de calcul).
+
+## D-1904 — Tampons, filigranes, annotations manuscrites (texte natif)
+
+`_ft_nettoyage.retirer_surimpressions`, avant la lecture : (a) mot court (1–2 lettres, sans chiffre) de hauteur
+≥ 2 fois la médiane de la page, ou tout mot ≥ 4 fois la médiane : glyphe de tampon ou de filigrane (« A
+C Q U I T T É » glissé entre « Total HT » et « 1 637,25 € », « COPIE » en diagonale) ; (b) suite d'au moins
+4 glyphes isolés rapprochés (dont 3 lettres ou chiffres) dont au moins la moitié des boîtes voisines se
+chevauchent : écriture manuscrite (« Bon pour accord », « Dossier n° 962 ») ; les signes espacés d'une légende
+(« A = TVA 20 % ; E = … ») ne sont pas touchés. Les glyphes sont retirés **avant** la recherche d'écriture
+manuscrite (sinon le « 1 » des milliers, jointif au tampon, disparaissait). Lignes reclassées de haut en bas.
+Le texte de la page (ancrage) n'est pas modifié. Les pages OCR ne sont pas traitées (boîtes peu fiables : retirer
+un tiret y fusionnait deux en-têtes de colonnes).
+
+## D-1905 — OCR : lignes parasites, en-tête sur deux lignes, montant illisible
+
+- Ligne de taches (fragments de 5 caractères au plus, sans chiffre ni montant) entre deux rangées : ignorée.
+- En-tête de tableau découpé par l'OCR sur deux lignes très proches qui ne se recouvrent pas : fusionné si la
+  fusion reconnaît plus de colonnes.
+- Montant de ligne imprimé mais illisible, quantité et prix unitaire lus : montant `derive` = quantité × prix
+  (confiance plafonnée à 0,60, jamais une valeur clé d'écart certain).
+- Signes isolés en bout de libellé (« Droits de douane : ») retirés (pas au milieu : l'ancrage serait perdu).
+
+## D-1906 — Avoirs : routage et vocabulaire
+
+`avoir.est_avoir_fournisseur` : un avoir qui cite un MRN ou dont un libellé est une prestation ou un débours de
+transitaire (table des natures) est lu par le moteur transitaire, même si son tableau a l'allure d'un tableau
+d'articles (« Désignation / Qté / P.U. HT / Montant HT » était pris pour un avoir de vendeur : ligne à 0,80 lue
+dans la colonne TTC). Facture d'origine et motif multilingues (D-1901).
+
+## D-1907 — CII : titre de transport et MRN en note d'en-tête
+
+`ingest/structure._remplir_ft` : une note d'en-tête « Titre de transport: … » / « AWB / B/L: … » (CII
+`ExchangedDocument/IncludedNote`) donne `refs_transport[]` (sans doublon avec les références de document) ;
+« MRN: … » en note d'en-tête complète `refs_mrn[]`. Aucun autre changement de lecture des XML ; UBL inchangé.
+
+**Mesures** (`scripts/mesure_extraction.py`, champs obligatoires) :
+
+`corpus_g2` dev, facture de transitaire (255 documents, 16 230 valeurs), par famille — « hors conventions » :
+une valeur déduite (confiance < 0,90) là où la vérité vaut `null` est comptée juste (voir plus bas) :
+
+| famille | valeurs | avant | après | après (hors conventions) |
+|---|---|---|---|---|
+| G1 | 1168 | 39,1 % | 89,7 % | 90,0 % |
+| G2 | 3908 | 66,6 % | 69,5 % | 86,6 % |
+| G3 | 1612 | 32,4 % | 65,9 % | 90,8 % |
+| G4 | 1066 | 12,2 % | 75,0 % | 80,5 % |
+| G5 | 1002 | 17,7 % | 72,7 % | 81,5 % |
+| G6 | 1360 | 77,9 % | 79,7 % | 89,4 % |
+| G7 | 960 | 100,0 % | 100,0 % | 100,0 % |
+| G8 | 666 | 96,2 % | 98,2 % | 100,0 % |
+| G9 | 598 | 55,2 % | 66,6 % | 72,1 % |
+| G10 | 1266 | 52,2 % | 57,7 % | 89,9 % |
+| G11 | 1576 | 32,0 % | 86,7 % | 95,4 % |
+| G12 | 1048 | 21,7 % | 85,4 % | 97,9 % |
+| toutes | 16230 | 51,0 % | 76,7 % | 89,4 % |
+
+Par dégradation (toutes familles) :
+
+| dégradation | valeurs | avant | après |
+|---|---|---|---|
+| d0 | 8016 | 58,2 % | 86,3 % |
+| d1 | 4684 | 48,8 % | 75,5 % |
+| d2 | 1348 | 39,3 % | 63,8 % |
+| d3 | 2182 | 36,3 % | 51,8 % |
+
+Avoirs `corpus_g2` (39 documents, 234 valeurs) : 33,3 % -> 88,5 % (fausses 15 -> 3). Corpus d'origine (dev) :
+facture de transitaire 83,3 % -> 83,4 % (aucune valeur juste perdue : 16 valeurs absentes deviennent justes,
+1 MRN OCR à 0,49 devient faux), avoirs 98,0 % -> 98,0 %.
+
+Calibration (valeurs de confiance ≥ 0,90, justes / lues) : `corpus_g2` facture 3 212 / 3 311 (97,0 %) -> 6 263 /
+6 266 (99,95 %) ; avoirs 28 / 30 -> 91 / 91 ; corpus d'origine facture 8 092 / 8 094 -> 8 097 / 8 099 (99,98 %),
+avoirs 109 / 109 -> 109 / 109.
+
+Banc complet `corpus_g2` dev (`bench/out/g2_dev_ft2`) : D1 15 écarts certains dont 14 faux -> 3 écarts certains,
+3 vrais (précision 100 %, rappel 80 %). Banc d'origine dev (`bench/out/dev_ft2`) : seuil bloquant PASSE,
+précision certain 1,000, rappel 0,818 ; D1 inchangé (2 certains, 2 vrais).
+
+**Conventions de vérité non suivies** (comptées « fausses » ci-dessus, volontairement inchangées) : sur
+`corpus_g2`, une valeur non imprimée vaut `null` (prix unitaire, taux et montant de TVA d'une facture à TVA
+récapitulative, MRN d'une ligne sans MRN, total des débours non imprimé, total des débours imprimé « 0,00 »),
+alors que la vérité du corpus d'origine porte les valeurs déduites (prix = montant / quantité, taux d'après le code
+ou le taux unique, MRN unique rattaché, total reconstruit). L'extracteur garde les valeurs déduites, toutes
+`derive` ou plafonnées (≤ 0,85) : elles ne fondent aucun écart certain. Les trois valeurs « fausses » à 0,97
+de `corpus_g2` sont des totaux de débours **imprimés** « 0,00 » dont la vérité est `null`.

@@ -1,0 +1,83 @@
+# Fiche de correspondance (SPEC §5.3.6) — export CSV dénormalisé « M6 » du corpus de généralisation (format
+# inventé, décrit dans bench/generator2/FORMATS.md) : ligne de commentaire « # » en tête, une ligne par ligne de
+# taxation, colonnes de déclaration et d'article répétées ; virgule décimale ; Windows-1252.
+format_id: g2_m6_csv
+version: "1.0.0"
+type: csv
+sous_type: export_csv
+detection:
+  colonnes_requises: [mrn, total_facture, monnaie_facture, position, type_imposition, pieces_jointes]
+  # colonnes connues sans champ du modèle (non journalisées comme inconnues)
+  ignorer: [libelle_imposition]
+csv:
+  separateur: ";"
+  separateur_decimal: ","
+  format_date: "%d/%m/%Y"
+  commentaire: "#"
+devise_par_defaut: EUR
+
+entete:
+  mrn: mrn
+  lrn: lrn
+  version: rang
+  date_acceptation: date_acceptation
+  importateur.nom: importateur
+  importateur.tva: tva_importateur
+  importateur.eori: eori_importateur
+  declarant.nom: declarant
+  declarant.tva: tva_declarant
+  incoterm: incoterm
+  incoterm_lieu: lieu_livraison
+  pays_expedition: pays_expedition
+  devise_facture: monnaie_facture
+  montant_total_facture: total_facture
+  taux_change: taux_change
+  taux_change_sens:
+    source: base_taux
+    valeurs: {1EUR: devise_par_eur, 1DEVISE: eur_par_devise}
+  masse_brute_totale: masse_brute_totale
+  nombre_colis_total: colis_total
+  nombre_articles: nb_positions
+  total_droits_taxes: total_droits_taxes
+  total_a_payer: total_a_acquitter
+
+listes:
+  documents_references:
+    # « code:référence » séparés par « | » dans une seule cellule
+    eclater: {source: pieces_jointes, separateur: "|", motif: "(?P<type_code>[^:]+):(?P<reference>.+)"}
+    champs:
+      type_code: type_code
+      reference: reference
+  articles:
+    cle: position          # colonnes d'article répétées sur chaque ligne de taxation : une fois par position
+    champs:
+      numero_article: position
+      code_marchandise: code_nc
+      description: designation
+      pays_origine: origine
+      code_preference: preference
+      regime: regime
+      montant_facture_article: montant_facture_position
+      valeur_statistique: valeur_statistique
+      masse_nette: masse_nette
+      masse_brute: masse_brute
+      quantite_unite_supplementaire: {source: quantite, source_unite: unite_quantite}
+      nombre_colis: colis_position
+  taxations:
+    requis: type_imposition  # un article sans taxation propre a des colonnes de taxation vides
+    champs:
+      article: position
+      type_taxe: type_imposition
+      base_montant: assiette
+      base_quantite: {source: assiette_quantite, source_unite: unite_assiette}
+      base_unite: unite_assiette
+      taux: taux
+      montant: montant
+      montant_a_payer: montant_exigible
+      mode_paiement: mode_paiement
+    enumerations:
+      taux_nature: mode_calcul
+
+tables:
+  categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, FPE: forfait_petits_envois, B00: tva}
+  paiement: {COMPTANT: comptant, DIFFERE: differe, AUTOLIQUIDATION: autoliquide}

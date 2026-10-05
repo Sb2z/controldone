@@ -1,0 +1,84 @@
+# Fiche de correspondance (SPEC §5.3.6) — export XML de dédouanement « M5 » du corpus de généralisation
+# (schéma inventé, décrit dans bench/generator2/FORMATS.md). Données surtout portées par des attributs.
+# Chemins XPath relatifs à la racine ; préfixe « d » = espace de noms.
+format_id: g2_m5_xml
+version: "1.0.0"
+type: xml
+sous_type: export_xml
+detection:
+  racine: dedouanement
+  espace_noms: "urn:fictif:g2:dedouanement:2"
+  # éléments connus sans champ du modèle (non journalisés comme inconnus)
+  ignorer: [mention, total, recapitulatif, impositions, impositions-globales, positions, pieces, acteurs]
+xml:
+  espaces_noms:
+    d: "urn:fictif:g2:dedouanement:2"
+# Montants en EUR sauf montant_total_facture et montant_facture_article (monnaie de facturation).
+devise_par_defaut: EUR
+
+entete:
+  mrn: d:dossier/@mrn
+  lrn: d:dossier/@lrn
+  version: d:dossier/@rang
+  date_acceptation: d:dossier/@acceptee-le
+  importateur.nom: d:dossier/d:acteurs/d:importateur
+  importateur.tva: d:dossier/d:acteurs/d:importateur/@tva
+  importateur.eori: d:dossier/d:acteurs/d:importateur/@eori
+  declarant.nom: d:dossier/d:acteurs/d:declarant
+  declarant.tva: d:dossier/d:acteurs/d:declarant/@tva
+  incoterm: d:dossier/d:livraison/@incoterm
+  incoterm_lieu: d:dossier/d:livraison/@lieu
+  pays_expedition: d:dossier/d:livraison/@expedition
+  devise_facture: d:dossier/d:facturation/@monnaie
+  montant_total_facture: d:dossier/d:facturation/@total
+  taux_change: d:dossier/d:facturation/d:conversion
+  taux_change_sens:
+    source: d:dossier/d:facturation/d:conversion/@expression
+    valeurs: {unites_devise_pour_un_euro: devise_par_eur, euros_pour_une_unite_devise: eur_par_devise}
+  masse_brute_totale: d:dossier/d:colisage/@masse-brute-kg
+  nombre_colis_total: d:dossier/d:colisage/@colis
+  nombre_articles: d:dossier/d:colisage/@positions
+  total_droits_taxes: d:dossier/d:recapitulatif/d:total-droits-taxes
+  total_a_payer: d:dossier/d:recapitulatif/d:total-a-acquitter
+
+listes:
+  documents_references:
+    source: d:dossier/d:pieces/d:piece
+    champs:
+      type_code: "@code"
+      reference: "."
+  articles:
+    source: d:dossier/d:positions/d:position
+    champs:
+      numero_article: "@rang"
+      code_marchandise: d:nomenclature
+      description: d:libelle
+      pays_origine: d:origine
+      code_preference: d:preference
+      regime: d:regime
+      regime_complementaire: d:regime/@complementaire
+      montant_facture_article: d:montant-facture
+      valeur_statistique: d:valeur-statistique
+      masse_nette: d:masse/@nette
+      masse_brute: d:masse/@brute
+      quantite_unite_supplementaire: {source: d:quantite, source_unite: d:quantite/@unite}
+      nombre_colis: d:colis
+  taxations:
+    # taxations par article puis taxations de niveau déclaration (article absent)
+    source: d:dossier/d:positions/d:position/d:impositions/d:imposition | d:dossier/d:impositions-globales/d:imposition
+    champs:
+      article: ancestor::d:position[1]/@rang
+      type_taxe: "@code"
+      base_montant: "@assiette"
+      base_quantite: {source: "@assiette-quantite", source_unite: "@unite-assiette"}
+      base_unite: "@unite-assiette"
+      taux: "@taux"
+      montant: "@montant"
+      montant_a_payer: "@exigible"
+      mode_paiement: "@paiement"
+    enumerations:
+      taux_nature: "@mode-calcul"
+
+tables:
+  categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, FPE: forfait_petits_envois, B00: tva}
+  paiement: {A: comptant, E: differe, G: autoliquide}
