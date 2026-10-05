@@ -12,7 +12,8 @@ from pathlib import Path
 from .build import ANNEXE_A, COMPOSANTE, NATURE, STRUCTURED_FORMATS, expected_level
 from .model import FAMCAP, LAYCAP
 from .render_ft import _multi_mrn, tr_ref
-from .util import GENERATOR_VERSION, cur_decimals, date_candidates, fmt_hs, fmt_num, q2, s2
+from .ext import VAT_INCLUSIVE_FAMILIES
+from .util import cur_decimals, output_version, date_candidates, fmt_hs, fmt_num, q2, s2
 
 PAY_NORM = {"A": "comptant", "E": "differe", "G": "autoliquide"}
 SCHEMA_PATH = Path(__file__).with_name("truth.schema.json")
@@ -48,7 +49,7 @@ def _lang_doc(doc):
     if k in ("ci",):
         return doc["lang"]
     if k == "dec":
-        return "en" if doc["layout"] == "M3" else "fr"
+        return "en" if doc["layout"] in ("M3", "M9") else "fr"
     if k in ("ft", "av"):
         return "fr_en" if doc["lang"] == "fr_en" else doc["lang"]
     return doc.get("lang", "fr") if doc.get("lang") != "fr_en" else "fr_en"
@@ -72,7 +73,8 @@ def tv_ci(ci):
                       "masse_nette": None, "masse_brute": None})
     sub = {k: _m(v, dev) for k, v in ci["sub"].items()} if len(ci["sub"]) > 1 else {}
     return {"numero": ci["numero"], "date": ci["date"].isoformat(), "devise": dev, "total_facture": _m(ci["total"], dev),
-            "total_imprime": True, "vendeur.nom": ci["supplier"]["nom"], "acheteur.nom": ci["acheteur"]["nom"],
+            "total_imprime": True, "vendeur.nom": ci["supplier"]["nom"],
+            "acheteur.nom": ci["acheteur"].get("nom_affiche", ci["acheteur"]["nom"]),
             "acheteur.tva": ci["acheteur"]["tva"], "incoterm": ci["incoterm"], "incoterm_lieu": ci["incoterm_lieu"],
             "ref_transport": ci["ref_transport"], "masse_nette_totale": _d3(ci["net_total"]),
             "masse_brute_totale": _d3(ci["gross_total"]), "nombre_colis": ci["colis"], "sous_totaux": sub, "lignes": lines}
@@ -113,8 +115,10 @@ def _line_mrn_printed(doc, ln):
     fam = doc["family"]
     if not ln.get("mrn"):
         return False
-    if fam in ("G1", "G2", "G7", "G8"):
+    if fam in ("G1", "G2", "G7", "G8", "G13", "G15", "G16"):
         return True
+    if fam == "G14":
+        return ln["nature"].startswith("debours")
     if fam in ("G3", "G4", "G9", "G10"):
         return _multi_mrn(doc)
     if fam == "G5":
@@ -126,7 +130,7 @@ def _line_mrn_printed(doc, ln):
 
 def _line_vat_printed(doc, ln):
     fam = doc["family"]
-    if fam in ("G2", "G3", "G10"):
+    if fam in ("G2", "G3", "G10", "G14", "G15"):
         return False
     if fam == "G5":
         return not ln["nature"].startswith("debours")
@@ -145,14 +149,17 @@ def _total_debours_printed(doc):
 
 
 def _net_printed(doc):
-    return doc["kind"] != "av" and doc["family"] in ("G1", "G2", "G6", "G7", "G8")
+    return doc["kind"] != "av" and doc["family"] in ("G1", "G2", "G6", "G7", "G8", "G13", "G14", "G16")
 
 
 def tv_ft(doc):
     lines = []
     for ln in doc["lines"]:
         vp = _line_vat_printed(doc, ln)
-        pu_printed = doc["family"] not in ("G2", "G10")      # G2, G10 : quantité et montant net seulement
+        pu_printed = doc["family"] not in ("G2", "G10", "G15")      # G2, G10, G15 : quantité et montant net seulement
+        ttc_line = doc["family"] in VAT_INCLUSIVE_FAMILIES and ln["vat_rate"] > 0   # G13 : ligne TTC
+        if ttc_line:
+            pu_printed = False
         lines.append({"nature": ln["nature"], "libelle": ln["libelle"], "quantite": _qty(ln["qty"]),
                       "prix_unitaire": _rate(ln["pu"]) if pu_printed else None,
                       "montant_ht": s2(abs(ln["ht"])) if doc["kind"] == "av" else s2(ln["ht"]),
@@ -160,11 +167,17 @@ def tv_ft(doc):
                       "mrn": ln["mrn"] if _line_mrn_printed(doc, ln) else None,
                       "date_debut": ln["date_debut"].isoformat() if ln.get("date_debut") else None,
                       "date_fin": ln["date_fin"].isoformat() if ln.get("date_fin") else None})
+        if doc["family"] in VAT_INCLUSIVE_FAMILIES:     # 2.1 (G13) : TVA par ligne non imprimée ; lignes taxables TTC
+            lines[-1]["montant_tva"] = None
+            if ttc_line:
+                lines[-1]["montant_ht"] = None
+                lines[-1]["montant_ttc"] = s2(abs(ln["ht"]) + abs(ln["vat"]))
     if doc["kind"] == "av":
         return {"numero": doc["numero"], "date": doc["date"].isoformat(), "emetteur.tva": doc["emetteur"]["tva"],
                 "refs_facture_origine": list(doc["refs_facture_origine"]), "refs_mrn": list(doc["refs_mrn"]),
                 "refs_transport": [tr_ref(r, doc.get("transport_ref_style", "raw")) for r in doc["refs_transport"]],
-                "lignes": [{"nature": x["nature"], "libelle": x["libelle"], "montant_ht": x["montant_ht"]} for x in lines],
+                "lignes": [{"nature": x["nature"], "libelle": x["libelle"], "montant_ht": x["montant_ht"],
+                            **({"montant_ttc": x["montant_ttc"]} if "montant_ttc" in x else {})} for x in lines],
                 "total_credite_ht": s2(doc["total_ht"]), "total_tva": s2(doc["total_tva"]), "total_credite_ttc": s2(doc["total_ttc"]),
                 "devise": "EUR", "motif": doc.get("motif")}
     return {"numero": doc["numero"], "date": doc["date"].isoformat(), "emetteur.nom": doc["emetteur"]["nom"],
@@ -264,7 +277,7 @@ def build_truth(dos, files, seed) -> dict:
     return {
         "schema": "controldone.bench.truth/1.0.0",
         "dossier_id": dos.did, "split": sp["split"], "client_id": sp["client_id"],
-        "generator": "bench.generator2", "generator_version": GENERATOR_VERSION, "seed": seed,
+        "generator": "bench.generator2", "generator_version": output_version(bool(sp.get("ext"))), "seed": seed,
         "transitaire_template": sp["family"] if fts else None,
         "declaration_layout": decs[0]["layout"] if decs else None,
         "degradation": dos.deg_dossier,
@@ -469,6 +482,8 @@ def checks_for(doc, tv):
         for i, ln in enumerate(tv["lignes"]):
             add(f"lignes[{i}].libelle", "text", ln["libelle"])
             add(f"lignes[{i}].montant_ht", "amount2", ln["montant_ht"])
+            if "montant_ttc" in ln:
+                add(f"lignes[{i}].montant_ttc", "amount2", ln["montant_ttc"])
             if k == "ft":
                 add(f"lignes[{i}].quantite", "qty", ln["quantite"])
                 add(f"lignes[{i}].prix_unitaire", "pu", ln["prix_unitaire"])

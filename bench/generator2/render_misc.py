@@ -87,6 +87,11 @@ def render_letter(doc, rng):
                "Adjuntamos nuestras facturas correspondientes al despacho de su envío.", "Atentamente,", "", "Administración"],
         "nl": [f"Betreft: facturen zending {', '.join(ft['refs_transport'])}", "", "Geachte heer, mevrouw,",
                "Bijgaand ontvangt u onze facturen voor de inklaring van uw zending.", "Met vriendelijke groet,", "", "Administratie"],
+        "pt": [f"Assunto: faturas da remessa {', '.join(ft['refs_transport'])}", "", "Exmos. Senhores,",
+               "Junto enviamos as nossas faturas relativas ao desalfandegamento da vossa remessa.", "Com os melhores cumprimentos,", "",
+               "Contabilidade"],
+        "pl": [f"Dotyczy: faktury za przesyłkę {', '.join(ft['refs_transport'])}", "", "Szanowni Państwo,",
+               "w załączeniu przesyłamy faktury dotyczące odprawy celnej Państwa przesyłki.", "Z poważaniem,", "", "Księgowość"],
     }[lang]
     for ln in txt:
         y = p.para(50, y, W - 100, ln, size=10) - 4
@@ -100,7 +105,8 @@ def render_cgv(doc, rng):
     W, H = p.W, p.H
     y = H - 50
     p.text(W / 2, y, {"fr": "CONDITIONS GÉNÉRALES DE VENTE", "en": "GENERAL TERMS AND CONDITIONS", "de": "ALLGEMEINE GESCHÄFTSBEDINGUNGEN",
-                      "it": "CONDIZIONI GENERALI", "es": "CONDICIONES GENERALES", "nl": "ALGEMENE VOORWAARDEN"}[lang], size=12, style="B", align="c")
+                      "it": "CONDIZIONI GENERALI", "es": "CONDICIONES GENERALES", "nl": "ALGEMENE VOORWAARDEN",
+                      "pt": "CONDIÇÕES GERAIS", "pl": "OGÓLNE WARUNKI ŚWIADCZENIA USŁUG"}[lang], size=12, style="B", align="c")
     y -= 24
     para = ("Article {n}. Les prestations sont exécutées conformément aux usages de la profession (texte fictif de démonstration). "
             "Les débours avancés pour le compte du client lui sont refacturés à l'identique. Toute réclamation doit être formulée par écrit. "

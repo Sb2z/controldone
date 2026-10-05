@@ -21,17 +21,18 @@ from pathlib import Path
 
 from .build import ANNEXE_A, Dossier, expected_level
 from .plan import CONTROLES, plan_corpus
-from .util import GENERATOR_VERSION
+from .util import output_version
+from .ext import CLIENT_FORWARDERS_EXT
 from .world import CLIENT_FORWARDERS, build_world
 
 _STATE: dict = {}
 
 
 def build_all(seed: int, count: int, wanted: set | None = None, prefix: str = "GX",
-              all_holdout: bool = False, per_control: int | None = None) -> tuple[dict, dict, list]:
+              all_holdout: bool = False, per_control: int | None = None, ext: bool = False) -> tuple[dict, dict, list]:
     """Construit (sans rendu) les dossiers voulus et leurs partenaires (F2, F3, F5)."""
-    specs = plan_corpus(seed, count, prefix, all_holdout, per_control)
-    world = build_world(seed)
+    specs = plan_corpus(seed, count, prefix, all_holdout, per_control, ext)
+    world = build_world(seed, ext)
     byid = {s["dossier_id"]: s for s in specs}
     reg: dict = {}
 
@@ -52,9 +53,9 @@ def build_all(seed: int, count: int, wanted: set | None = None, prefix: str = "G
     return world, reg, specs
 
 
-def _init_worker(seed, count, wanted, prefix="GX", all_holdout=False, per_control=None):
+def _init_worker(seed, count, wanted, prefix="GX", all_holdout=False, per_control=None, ext=False):
     _STATE["seed"] = seed
-    _STATE["world"], _STATE["reg"], _ = build_all(seed, count, wanted, prefix, all_holdout, per_control)
+    _STATE["world"], _STATE["reg"], _ = build_all(seed, count, wanted, prefix, all_holdout, per_control, ext)
 
 
 def _work(args):
@@ -78,7 +79,7 @@ def write_clients(world: dict, out: Path):
                          "alias": list(e["alias"])} for e in cl["entites"]],
             "transitaires": [{"transitaire_id": world["forwarders"][f]["transitaire_id"], "nom": world["forwarders"][f]["nom"],
                               "tva": world["forwarders"][f]["tva"], "alias": list(world["forwarders"][f]["alias"])}
-                             for f in CLIENT_FORWARDERS[cid]],
+                             for f in (CLIENT_FORWARDERS_EXT if world.get("ext") else CLIENT_FORWARDERS)[cid]],
             "tolerances": {},
         }
         (d / "profil.json").write_text(json.dumps(prof, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -114,6 +115,9 @@ def main(argv=None) -> int:
     ap.add_argument("--all-holdout", action="store_true", help="tous les dossiers en holdout (jeu d'évaluation vierge)")
     ap.add_argument("--per-control", type=int, default=None,
                     help="erreurs planifiées par contrôle et par split (défaut : 5 dev, 2 holdout)")
+    ap.add_argument("--ext", action="store_true",
+                    help="extension 2.1 : familles G13-G16, présentations M7-M9, factures CP/CL/CM, clients CL15-CL18, "
+                         "nouvelles dégradations (sans cette option : sorties 2.0.1 identiques à l'octet)")
     ap.add_argument("--stats-only", action="store_true", help="planification et construction seulement, sans fichiers")
     a = ap.parse_args(argv)
     t0 = time.perf_counter()
@@ -121,7 +125,7 @@ def main(argv=None) -> int:
     # Construction de TOUS les dossiers (rapide, sans rendu) : statistiques et couverture planifiée
     if not (len(a.prefix) == 2 and a.prefix.isalpha() and a.prefix.isupper()):
         ap.error("--prefix : deux lettres majuscules")
-    world, reg_all, specs = build_all(a.seed, a.count, None, a.prefix, a.all_holdout, a.per_control)
+    world, reg_all, specs = build_all(a.seed, a.count, None, a.prefix, a.all_holdout, a.per_control, a.ext)
     splits = ["dev", "holdout"] if a.split == "all" else [a.split]
     ids = [s["dossier_id"] for s in specs if s["split"] in splits]
     if a.ids:
@@ -135,7 +139,7 @@ def main(argv=None) -> int:
         write_clients(world, out)
         tasks = [(d, str(out)) for d in ids]
         if jobs == 1:
-            _init_worker(a.seed, a.count, set(ids), a.prefix, a.all_holdout, a.per_control)
+            _init_worker(a.seed, a.count, set(ids), a.prefix, a.all_holdout, a.per_control, a.ext)
             for t in tasks:
                 r = _work(t)
                 results.append(r)
@@ -144,7 +148,7 @@ def main(argv=None) -> int:
         else:
             import multiprocessing as mp
             ctx = mp.get_context("fork")
-            with ctx.Pool(jobs, initializer=_init_worker, initargs=(a.seed, a.count, set(ids), a.prefix, a.all_holdout, a.per_control), maxtasksperchild=25) as pool:
+            with ctx.Pool(jobs, initializer=_init_worker, initargs=(a.seed, a.count, set(ids), a.prefix, a.all_holdout, a.per_control, a.ext), maxtasksperchild=25) as pool:
                 for r in pool.imap(_work, tasks, chunksize=1):
                     results.append(r)
                     print(f"{r['dossier_id']} {r['seconds']:6.2f}s  {len(r['files'])} fichier(s)"
@@ -165,7 +169,7 @@ def main(argv=None) -> int:
     if not a.stats_only:
         manifest = {
             "schema": "controldone.bench.manifest/1.0.0", "generator": "bench.generator2",
-            "generator_version": GENERATOR_VERSION, "seed": a.seed, "count": a.count,
+            "generator_version": output_version(a.ext), "seed": a.seed, "count": a.count,
             "split_rule": ("tous les dossiers en holdout (jeu d'évaluation vierge)" if a.all_holdout
                            else "holdout si int(sha256(dossier_id)[0:8], 16) % 5 == 0"),
             "mention": "DONNÉES FICTIVES",
@@ -194,7 +198,7 @@ def main(argv=None) -> int:
                 comp["ci_layout"][f"{s}:{doc['layout']}"] += 1
                 comp["ci_langue"][f"{s}:{doc['lang']}"] += 1
     stats = {
-        "generator_version": GENERATOR_VERSION, "seed": a.seed, "count": a.count, "split_generated": a.split,
+        "generator_version": output_version(a.ext), "seed": a.seed, "count": a.count, "split_generated": a.split,
         "generated": len(results), "seconds": round(time.perf_counter() - t0, 1),
         "coverage": cov, "composition": {k: dict(sorted(v.items())) for k, v in comp.items()},
         "problems": problems,

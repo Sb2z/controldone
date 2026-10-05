@@ -12,6 +12,7 @@ from . import model as M
 from .model import FAMCAP, LAYCAP, liquide, recompute_decl_totals, to_eur
 from .plan import INJ
 from .util import (ZERO, add_days, mrn_fictif, mrn_version, q2, q3, qcur, rng_for, s2)
+from .ext import EXT_MODES, GESTE_EXT, VAT_INCLUSIVE_FAMILIES
 from .world import (CATALOG, LABELS, PRESTATIONS_HORS_GRILLE, SURCHARGES_HORS_GRILLE, fam_lang,
                     poste)
 
@@ -85,6 +86,12 @@ MODES = {"d0": ["native"], "d1": ["scan300", "scan250j"],
          "d3": ["fax", "faxtiff"]}
 
 
+# Extension 2.1 : nouvelles dégradations, tirées deux fois plus souvent que les anciennes
+MODES_EXT = {"d0": ["native"], "d1": ["scan300", "scan250j"],
+             "d2": MODES["d2"] + ["skewlow", "skewlow", "overlay", "overlay", "twoup", "twoup", "jpegheavy", "jpegheavy"],
+             "d3": MODES["d3"] + ["faxnoise", "faxnoise", "faxnoise"]}
+
+
 class Dossier:
     def __init__(self, world, spec, seed, registry):
         self.world = world
@@ -153,6 +160,10 @@ class Dossier:
         self.shipments = []
         for k in range(n_ship):
             self.shipments.append(self._make_shipment(k, d_ci if k == 0 else add_days(d_ci, rng.randint(-20, 10)), sector, h7))
+        if sp.get("ext") and self.entity.get("fiscal_rep"):
+            for sh in self.shipments:
+                for d_ in sh["decls"]:
+                    d_["fiscal_rep"] = self.entity["fiscal_rep"]
         # Injections sur les déclarations
         self._inject_decl()
         # Version rectifiée (piège)
@@ -187,6 +198,8 @@ class Dossier:
             n_lines = max(n_lines, 1)
         lines_spec = M.pick_lines(rng, sector, n_lines, h7, need_ad=a.get("need_ad") and k == 0,
                                   need_multi_art=(a.get("multi_art") and not h7 and k == 0))
+        if sp.get("ext") and sp.get("ci_layout_override") == "CM" and not h7 and k == 0:
+            lines_spec = self._expand_cm(lines_spec)
         if h7 and k == 0:
             if self.has("forfait_codes_distincts"):
                 p0 = lines_spec[0][0]
@@ -242,6 +255,8 @@ class Dossier:
                 ci["hs_digits"] = 6
             if not a.get("ci_hs", True):
                 ci["hs_digits"] = 0
+            if sp.get("ext"):
+                self._ext_ci_features(ci)
             self.add(ci)
             cis.append(ci)
         # Déclarations
@@ -626,6 +641,64 @@ class Dossier:
                      "Somme des montants facturés des articles différente du montant total facturé.",
                      {"abs": abs(dl), "seuil": D(1)})
 
+    # ------------------------------------------------------------------
+    # Extension 2.1 (spec["ext"]) : jamais appelé sans --ext
+    def _expand_cm(self, lines_spec):
+        """Facture multipage : chaque produit décliné en variantes (taille, coloris), 22 à 45 lignes."""
+        rng = self.rng
+        suffixes = ["S", "M", "L", "XL", "BK", "WH", "RD", "BL", "GR"]
+        out = []
+        for p, q in lines_spec:
+            n = rng.randint(4, 8)
+            for j in range(n):
+                v = dict(p)
+                v["ref"] = f"{p['ref']}-{suffixes[j % len(suffixes)]}"
+                v["desc"] = {kk: f"{vv} / {suffixes[j % len(suffixes)]}" for kk, vv in p["desc"].items()}
+                qq = D(max(1, int(q) // n + rng.randint(0, 3))) if p["unit"] != "KGM" else D(max(5, int(q) // n))
+                out.append((v, qq))
+                if len(out) >= 45:
+                    return out
+        base_n = len(out)
+        while len(out) < 22:
+            p, q = out[len(out) % base_n]
+            v = dict(p)
+            v["ref"] = p["ref"] + str(len(out))
+            out.append((v, q))
+        return out
+
+    def _ext_ci_features(self, ci):
+        rng = self.rng
+        ent = self.entity
+        ci["ext"] = True
+        if ci["layout"] in ("CF", "CG", "CU", "CK"):    # présentations sans emplacement pour ces mentions
+            return
+        if ent.get("ship_to_sister"):
+            sis = [e for e in self.client["entites"] if e["tva"] != ent["tva"]]
+            if sis:
+                o = rng.choice(sis)
+                ci["destinataire"] = {"nom": o["raison_sociale"], "adresse": o["adresse"]}
+        if ent.get("vat_spaced"):
+            t = ent["tva"]
+            ci["acheteur"] = {**ci["acheteur"], "tva_affichee": f"{t[:2]} {t[2:4]} {t[4:7]} {t[7:10]} {t[10:]}"}
+        if ent.get("trade_name"):
+            ci["acheteur"] = {**ci["acheteur"], "nom_affiche": f"{ent['trade_name']} ({ent['raison_sociale']})"}
+        if self.attrs.get("multi_cur"):
+            dev = ci["devise"]
+            other = "EUR" if dev != "EUR" else rng.choice(["USD", "CHF", "PLN", "GBP"])
+            if dev != "EUR":
+                r = M.bce_rate(dev, ci["date"])           # unités de devise pour 1 EUR
+                val = q2(ci["total"] / r)
+            else:
+                r = M.bce_rate(other, ci["date"])
+                val = q2(ci["total"] * r)
+            ci["equiv"] = {"devise": other, "montant": val, "taux": r}
+
+    def _credit_line(self):
+        rng = self.rng
+        amt = -rng.choice([D("12.00"), D("18.50"), D("25.00"), D("40.00")])
+        prev = f"ZP-{self.d_ci.year % 100}-{rng.randint(100000, 999999)}"
+        return (amt, f"Gutschrift zu Rechnung {prev}")
+
     def _rectif(self):
         """Piège : version initiale (taxes erronées) et version rectifiée ; seule la dernière compte."""
         dec = self.dec1
@@ -652,7 +725,8 @@ class Dossier:
         a = self.attrs
         return {"storage": a.get("storage"), "storage_days": rng.randint(4, 14), "delivery": a.get("delivery"),
                 "manut": a.get("manut"), "surch": a.get("surch"), "dossier_fee": a.get("dossier_fee"),
-                "discount": self.spec["family"] == "G6" and self.rng.random() < 0.6,
+                "discount": self.spec["family"] in ("G6", "G15") and self.rng.random() < 0.6,
+                "credit_line": self._credit_line() if self.spec["family"] == "G15" else None,
                 "round_trap": a.get("round_trap") and not self.ctrl_in("C1", "C5", "C6", "E6"),
                 "transport_ref_style": rng.choice(["raw", "raw", "spaced", "slashed"])}
 
@@ -984,9 +1058,9 @@ class Dossier:
             self.err("faf_sur_excedent", docs, exc, [f"{faf_ft['doc_id']}.lignes.frais_avance_fonds"],
                      "Frais d'avance de fonds calculés sur des débours refacturés en écart.",
                      {"abs": exc, "seuil": D("0.10"), "depends_certain": True}, ctrl="C6")
-        elif self.has("faf_sur_excedent"):
-            raise RuntimeError(f"{self.did}: injection C6 sans effet sur le FAF")
         else:
+            # (2.1) FAF au plafond de la grille : l'excédent injecté ne change pas le FAF -> pas de C6, piège
+            # (chemin jamais atteint par les corpus 2.0.x, qui levaient une erreur ici)
             self.trap("C6", docs, "conforme", "FAF au minimum (ou au plafond) : l'excédent de débours ne change pas le FAF.")
 
     def _total_faux(self):
@@ -1074,7 +1148,7 @@ class Dossier:
             p = poste(self.grid, "autre_prestation")
             amt = q2(D(p["prix"]) / 2) if p else D("10.00")
             av = M.make_avoir(self.ctx, rng, doc_id="av1", ft=srv_ft, d_av=d_av,
-                              lines=[av_line("autre_prestation", amt, {"fr": "Geste commercial", "en": "Goodwill credit", "de": "Kulanzgutschrift", "it": "Abbuono commerciale", "es": "Abono comercial", "nl": "Coulancecredit"}[lang])],
+                              lines=[av_line("autre_prestation", amt, {"fr": "Geste commercial", "en": "Goodwill credit", "de": "Kulanzgutschrift", "it": "Abbuono commerciale", "es": "Abono comercial", "nl": "Coulancecredit", **GESTE_EXT}[lang])],
                               motif="Geste commercial")
             self.add(av)
             self.err("avoir_sans_ecart", ["av1", srv_ft["doc_id"]], None, [], "Avoir sans écart ouvert correspondant.")
@@ -1253,8 +1327,35 @@ class Dossier:
             self.trap("G3", [dec["doc_id"]], "conforme", "Base du forfait = nombre de codes distincts.")
         if self.ctrl_in("A1") and ft:
             self.trap("C8", [ft["doc_id"]], "a_verifier", "Transitaire facturant l'entité importatrice déclarée.")
-        if self.notes.get("av_double") and False:
-            pass
+        if self.spec.get("ext"):
+            self._ext_traps(ft, dec, has)
+
+    def _ext_traps(self, ft, dec, has):
+        ci = self.ci1 if has("fc1") else None
+        if self.entity.get("fiscal_rep"):
+            if ci:
+                self.trap("A1", ["fc1", dec["doc_id"]], "conforme",
+                          "Importateur suisse : n° TVA FR obtenu via un représentant fiscal (TVA du représentant aussi imprimée).")
+            if ft:
+                self.trap("C8", [ft["doc_id"]], "conforme", "Facture adressée à l'importateur « c/o » son représentant fiscal.")
+        if ci and ci.get("destinataire"):
+            self.trap("A1", ["fc1", dec["doc_id"]], "conforme", "Livré à une autre entité du groupe ; facturé à l'importateur.")
+        if ci and (ci["acheteur"].get("tva_affichee") or ci["acheteur"].get("nom_affiche")):
+            self.trap("A1", ["fc1", dec["doc_id"]], "conforme", "Acheteur sous son enseigne ou TVA imprimée avec espaces.")
+        if ci and ci.get("equiv"):
+            self.trap("A3", ["fc1", dec["doc_id"]], "conforme", "Contre-valeur indicative dans une autre devise sur la facture.")
+        if ci and ci["layout"] == "CM" and len(ci["lines"]) > 20:
+            self.trap("A4", ["fc1", dec["doc_id"]], "conforme", "Facture multipage : les totaux de page ne sont pas le total.")
+        for f in self.fts:
+            fam = f["family"]
+            if fam in VAT_INCLUSIVE_FAMILIES:
+                self.trap("D1", [f["doc_id"]], "conforme", "Lignes de prestation exprimées TTC (TVA incluse).")
+            if FAMCAP[fam].get("summary_page"):
+                self.trap("D1", [f["doc_id"]], "conforme", "Totaux sur une page récapitulative séparée.")
+            if any(ln.get("pu") is not None and ln["nature"] in ("transport", "manutention") and ln["qty"] > 1
+                   and poste(self.grid, ln["nature"]) and poste(self.grid, ln["nature"]).get("unite_base") == "kg"
+                   for ln in f["lines"]):
+                self.trap("D3", [f["doc_id"]], "conforme", "Prestation tarifée au kg : quantité = masse brute arrondie.")
 
     def _links(self):
         present = [d for d in self.order if d not in self.removed]
@@ -1315,11 +1416,11 @@ class Dossier:
             else:
                 c = order[rng.randint(0, order.index(cls))]
             doc["deg"] = c
-            doc["mode"] = rng.choice(MODES[c])
+            doc["mode"] = rng.choice(MODES_EXT[c] if self.spec.get("ext") else MODES[c])
         if pdfable and not any(self.docs[d]["deg"] == cls for d in pdfable):
             d = rng.choice(pdfable)
             self.docs[d]["deg"] = cls
-            self.docs[d]["mode"] = rng.choice(MODES[cls])
+            self.docs[d]["mode"] = rng.choice(MODES_EXT[cls] if self.spec.get("ext") else MODES[cls])
         # copies : même contenu, autre dégradation possible
         if "av1b" in present:
             self.docs["av1b"]["mode"] = rng.choice(MODES["d1"] + MODES["d2"])
@@ -1346,6 +1447,10 @@ def expected_level(dos: Dossier, e: dict) -> str:
     ctrl = e["ctrl"]
     li = e["li"]
     if ctrl not in CERTAIN_OK or li.get("force_av"):
+        return "a_verifier"
+    # 2.1 : lignes de prestation TTC (G13) -> montant HT dérivé (§8.5.1-4), au mieux à vérifier
+    if ctrl in ("C6", "D2", "D3", "D4", "D5", "D6", "D7", "D9") and any(
+            dos.docs.get(d, {}).get("family") in VAT_INCLUSIVE_FAMILIES for d in e["docs"]):
         return "a_verifier"
     # (2) qualité des documents
     for d in e["docs"]:

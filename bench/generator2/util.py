@@ -11,7 +11,14 @@ import string
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-GENERATOR_VERSION = "2.0.1"
+GENERATOR_VERSION = "2.1.0"
+# Sans --ext, les sorties reproduisent à l'octet le contrat 2.0.1 (corpus_g2, corpus_g3) : la version écrite
+# dans truth.json / manifest.json reste « 2.0.1 ».
+LEGACY_OUTPUT_VERSION = "2.0.1"
+
+
+def output_version(ext: bool) -> str:
+    return GENERATOR_VERSION if ext else LEGACY_OUTPUT_VERSION
 FICTIF = "DONNÉES FICTIVES"
 
 D = Decimal

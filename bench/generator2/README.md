@@ -195,3 +195,75 @@ python -m bench.generator2 --out bench/corpus_g3 --prefix GY --all-holdout --per
 - `--per-control` : erreurs planifiées par contrôle (3 pour `corpus_g3`, au lieu de 2 en holdout) ; les
   `n − 1` premières de chaque contrôle éligible sont placées dans des dossiers d0/d1.
 - Sans ces options, la planification de `corpus_g2` est inchangée (vérifié : mêmes octets).
+
+## Version 2.1.0 — extension « généralisation » (option `--ext`)
+
+Sans `--ext`, rien ne change : planification, tirages aléatoires, documents et `truth.json` des graines
+existantes sont reproduits **à l'octet** (vérifié sur des échantillons de `corpus_g2` dev/holdout, dont des G11
+et des XLSX, et de `corpus_g3`) ; la version écrite dans `truth.json` / `manifest.json` reste alors `2.0.1`.
+Avec `--ext`, elle vaut `2.1.0`. Code : `ext.py` (monde), `render_ext.py` (rendus), ajouts gardés par
+`spec["ext"]` dans `plan.py`, `build.py`, `model.py`, `degrade.py`, `truth.py`, `emit.py`.
+
+```bash
+python -m bench.generator2 --out bench/corpus_g4 --prefix GZ --ext --count 220 --seed 20261006 --split all --jobs 2
+```
+
+### Nouvelles familles de transitaire
+
+| Famille | Transitaire fictif | Pratique de facturation / mise en page |
+|---|---|---|
+| G13 | Trânsitos Imaginários Lda (PT) | Lignes de prestation **TVA incluse** (« Preço unit. c/ IVA », « Total c/ IVA ») ; montants HT seulement dans le « Quadro resumo do IVA » |
+| G14 | Spedycja Fikcyjna Sp. z o.o. (PL) | Manutention **au kg** (grille : poste `unitaire`, `unite_base = kg`) ; débours puis services ; **totaux sur une page récapitulative séparée** (« PODSUMOWANIE ») |
+| G15 | Zollagentur Phantasie AG (DE/CH) | Relevé multi-envois (« Kontoauszug / Sammelrechnung »), montants `1'234.50`, **lignes d'avoir mêlées aux débits** (« Gutschrift zu Rechnung … », montant négatif) |
+| G16 | Hypothèse Transports & Douane SAS (FR) | Paysage, **regroupement par envoi (MRN) avec sous-totaux**, livraison **au kg**, page « RÉCAPITULATIF DE LA FACTURE » |
+
+### Nouvelles présentations de déclaration
+
+| Code | Présentation | Format |
+|---|---|---|
+| M7 | Feuillet d'en-tête (cases, documents, récapitulatif de liquidation) + **annexes** par article avec récapitulatif des taxes **sur deux colonnes** (droits / TVA), police à chasse fixe | PDF |
+| M8 | « État de liquidation » **paysage** d'un autre logiciel fictif : en-tête à points de conduite, une ligne par taxation | PDF |
+| M9 | Export **XML anglais** (`urn:fictif:g2:customs-entry:3`, taxes hors des articles, voir FORMATS.md) | `xml_declaration` |
+
+### Nouvelles factures commerciales
+
+`CP` portugais (fret, assurance, emballage et remise **en lignes du tableau**), `CL` polonais (PLN ou EUR),
+`CM` anglais **multipage** (variantes de produits, 22 à 45 lignes, en-têtes répétés, « Page total … carried
+forward » et « Brought forward »). Fournisseurs fictifs `S_PT` (Porto) et `S_PL` (Gdańsk), devise PLN.
+Mention possible d'une **contre-valeur dans une autre devise** sur toutes les présentations PDF compatibles.
+
+### Nouvelles dégradations (`degradation_mode`)
+
+| Mode | Classe | Effet |
+|---|---|---|
+| `skewlow` | d2 | inclinaison 1,2–2,8° + faible contraste |
+| `overlay` | d2 | tampons encrés (« BON À PAYER », « RECEIVED 21/09 »…) et annotations manuscrites **posés sur le texte** |
+| `twoup` | d2 | **deux pages par feuille** (A4 paysage) ; le document compte alors ⌈n/2⌉ pages (documents d'au moins 2 pages) |
+| `jpegheavy` | d2 | sous-échantillonnage + double compression JPEG très forte (150 dpi) |
+| `faxnoise` | d3 | télécopie avec bandes verticales et bruit impulsionnel |
+
+### Nouveaux clients et pièges
+
+| Client | Structure | Piège bénin associé |
+|---|---|---|
+| CL15 Helvetia Fictiva AG | Importateur **suisse** avec n° TVA FR obtenu via un **représentant fiscal** (Repfisc Imaginaire SAS) dont la TVA est aussi imprimée (pavé acheteur, déclarations M7–M9) | A1, C8 `conforme` |
+| CL16 Groupe Mirabilis | Holding + 2 filiales ; marchandises **livrées à une filiale sœur** (« Ship to ») | A1 `conforme` |
+| CL17 Malterie du Songe | N° TVA imprimé **avec espaces** (`FR 12 000 …`) | A1 `conforme` |
+| CL18 Atelier Hypothétique | Deux entités ; acheteur désigné par son **enseigne** (« Brico-Chimère (Atelier Hypothétique SARL) ») | A1 `conforme` |
+
+Autres pièges : contre-valeur dans une autre devise (A3), totaux de page d'une facture multipage (A4), lignes
+TTC (D1, G13), page récapitulative séparée (D1, G14/G16), prestation au kg (D3), ligne d'avoir intégrée au
+relevé (D1, D2, G15). Les pièges qui contrediraient une erreur injectée sont retirés (règle 2.0.1).
+
+### Règles de vérité propres à 2.1
+
+- G13 : pour une ligne taxable, `montant_ht` et `prix_unitaire` ne sont pas imprimés (`null`) ; la vérité porte
+  `montant_ttc`. Les contrôles C6, D2–D7, D9 qui portent sur une facture G13 sont **au plus `a_verifier`**
+  (montant HT dérivé d'un TTC, §8.5.1-4).
+- G14, G15 : pas de TVA par ligne ; G15 sans prix unitaire ni net à payer.
+- Langues `pt`, `pl` ajoutées à `truth.schema.json`, ainsi que `G13`–`G16` et `M7`–`M9`.
+- Planification `--ext` : clients CL11–CL18, pondération ×3 des options comportant un nouveau client, une
+  nouvelle famille ou une nouvelle présentation ; nouvelles dégradations tirées deux fois plus souvent ;
+  `tva_sur_debours` exige une TVA payée en douane (sinon aucune ligne de débours n'existe).
+- Corrections de robustesse atteintes seulement par `--ext` : FAF déjà au plafond de la grille (l'injection C6
+  devient un piège C6 au lieu d'une erreur fatale) ; adresse longue en G11 imprimée sur deux lignes.

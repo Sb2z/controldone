@@ -75,6 +75,30 @@ Les données sont surtout portées par des **attributs**.
 
 Il n'y a pas de total par type de taxe dans ce format.
 
+## M9 — export XML anglais (schéma inventé, version 2.1)
+
+Espace de noms `urn:fictif:g2:customs-entry:3`, racine `CustomsEntry` (attribut `schemaVersion="3.0"`). Les
+données sont dans des **éléments** ; les taxes sont regroupées **hors des articles** et rattachées par
+l'attribut `item`.
+
+| Chemin | Sens |
+|---|---|
+| `Notice` | Mention de données fictives |
+| `Header/MRN`, `LRN`, `Version`, `DataSet` (`H1`/`H7`), `AcceptanceDate` | Identification |
+| `Header/Importer/Name`, `VATNumber`, `EORI` | Importateur |
+| `Header/Declarant/Name`, `VATNumber` (attribut `representation`) | Déclarant |
+| `Header/FiscalRepresentative/Name`, `VATNumber` | Représentant fiscal (s'il existe ; ce n'est pas l'importateur) |
+| `Header/DeliveryTerms/@code`, `@place`, `Header/DispatchCountry` | Incoterm, lieu, pays d'expédition |
+| `Header/InvoiceCurrency`, `InvoiceTotal` | Monnaie et montant total facturé |
+| `Header/ExchangeRate` (+ `@currency`, `@basis` = `CURRENCY_PER_EUR` ou `EUR_PER_CURRENCY`) | Taux imprimé (absent si aucun) |
+| `Header/GrossMass` (`@unit`), `Packages`, `ItemCount` | Totaux |
+| `SupportingDocuments/Document` (texte = référence, `@type` = code) | Documents (`N380`, `N325`, `N740`, `N705`, `N730`, `1008`, `FR7`) |
+| `Items/Item/@seq`, `CommodityCode`, `Description`, `Origin`, `Preference`, `Procedure` | Article |
+| `Item/InvoicedAmount` (`@currency`), `StatisticalValue`, `NetMass`, `GrossMass`, `SupplementaryUnits` (`@unit`), `Packages` | Article (suite) |
+| `Duties/Duty/@item` (vide = niveau déclaration), `@type`, `@method` (`AD_VALOREM`/`SPECIFIC`), `@label` | Ligne de taxation |
+| `Duty/Base`, `BaseQuantity` (`@unit`), `Rate`, `Amount`, `Payable`, `Payment` (`A`/`E`/`G`) | Base, taux, montant, montant à payer, mode de paiement |
+| `Summary/TypeTotal/@type`, `TotalDutiesAndTaxes`, `TotalPayable` | Totaux imprimés |
+
 ## M4 — courriel « bon à enlever » (texte seul)
 
 Fichier `.eml` (RFC 5322, `text/plain; charset=utf-8`, sujet encodé). Le corps est un récapitulatif en

@@ -34,6 +34,11 @@ FAMCAP = {
     "G10": {"ventile": True, "line_vat": False, "line_vat_debours": False, "storage": True, "avoir": True, "forfait_base": False, "total_debours": True},
     "G11": {"ventile": True, "line_vat": True, "line_vat_debours": True, "storage": False, "avoir": True, "forfait_base": True, "total_debours": True},
     "G12": {"ventile": True, "line_vat": True, "line_vat_debours": False, "storage": True, "avoir": True, "forfait_base": True, "total_debours": True, "split_invoices": True},
+    # --- extension 2.1 (option --ext) ---
+    "G13": {"ventile": True, "line_vat": True, "line_vat_debours": True, "storage": True, "avoir": True, "forfait_base": False, "total_debours": True, "vat_inclusive": True},
+    "G14": {"ventile": True, "line_vat": False, "line_vat_debours": False, "storage": True, "avoir": True, "forfait_base": True, "total_debours": True, "summary_page": True},
+    "G15": {"ventile": True, "line_vat": False, "line_vat_debours": False, "storage": True, "avoir": True, "forfait_base": False, "total_debours": True, "statement": True, "credit_lines": True},
+    "G16": {"ventile": True, "line_vat": True, "line_vat_debours": False, "storage": True, "avoir": True, "forfait_base": True, "total_debours": True, "summary_page": True},
 }
 
 LAYCAP = {
@@ -43,6 +48,10 @@ LAYCAP = {
     "M4": {"qty": False, "colis_art": True, "type_totals": False, "sous_type": "preuve_dedouanement", "format": "eml"},
     "M5": {"qty": True, "colis_art": True, "type_totals": True, "sous_type": "export_xml", "format": "xml_declaration"},
     "M6": {"qty": True, "colis_art": True, "type_totals": False, "sous_type": "export_csv", "format": "csv_declaration"},
+    # --- extension 2.1 (option --ext) ---
+    "M7": {"qty": True, "colis_art": True, "type_totals": True, "sous_type": "h1", "format": "pdf"},
+    "M8": {"qty": False, "colis_art": True, "type_totals": True, "sous_type": "h1", "format": "pdf", "landscape": True},
+    "M9": {"qty": True, "colis_art": True, "type_totals": True, "sous_type": "export_xml", "format": "xml_declaration"},
 }
 
 FORFAIT_UNITAIRE = D("3.00")
@@ -100,6 +109,7 @@ def _ci_number(rng, sup_id: str, d: date) -> str:
         "S_TR": f"IHM{d.year}{n:06d}", "S_GB": f"SPT-INV-{n:05d}", "S_CH1": f"RE-{d.year}-{n:04d}",
         "S_CH2": f"FT {n}/{d.year}", "S_CH3": f"GI-{d.year % 100}-{n:04d}", "S_AW": f"ODH {d.year}.{n:04d}",
         "S_MX": f"FMX-{n:05d}-{d.year % 100}", "S_US": f"OMS{n:06d}",
+        "S_PT": f"FT PIC{d.year}/{n:04d}", "S_PL": f"FV/{n:04d}/{d.year}/EXP",
     }
     return styles[sup_id]
 
@@ -132,9 +142,9 @@ def make_ci(ctx, rng, *, doc_id, sup_id, devise, d_ci: date, lines_spec, incoter
         if net <= 0:
             net = D("0.010")
         gross = q3(net * D(str(round(rng.uniform(1.04, 1.22), 3))))
-        lines.append({"no": i, "ref": prod["ref"], "hs10": prod["hs"], "desc": prod["desc"][sup["lang"]],
+        lines.append({"no": i, "ref": prod["ref"], "hs10": prod["hs"], "desc": prod["desc"].get(sup["lang"], prod["desc"]["en"]),
                       "desc_fr": prod["desc"]["fr"], "qty": D(qty), "unit": prod["unit"],
-                      "unit_raw": rng.choice(UNIT_LABELS[prod["unit"]][sup["lang"]]),
+                      "unit_raw": rng.choice(UNIT_LABELS[prod["unit"]].get(sup["lang"], UNIT_LABELS[prod["unit"]]["en"])),
                       "pu": pu, "amount": amount, "origin": origin, "net": net, "gross": gross,
                       "duty": prod["duty"], "ad": prod["ad"] if (prod["ad"] and origin == "CN") else None})
     goods = sum((ln["amount"] for ln in lines), ZERO)
@@ -464,10 +474,19 @@ def make_ft(ctx, rng, *, doc_id, decls, d_ft: date, opts: dict):
                                      date_debut=d0, date_fin=dec["date"]))
     if opts.get("delivery"):
         p = poste(grid, "transport")
-        lines.append(ft_line(fam, "transport", D(p["prix"]), mrn=decls[0]["mrn"] if len(decls) > 1 else None))
+        if p.get("unite_base") == "kg":      # extension 2.1 : tarif au kg (masse brute déclarée, arrondie au kg supérieur)
+            kg = _kg(decls)
+            lines.append(ft_line(fam, "transport", q2(D(p["prix"]) * kg), qty=kg, pu=D(p["prix"]),
+                                 mrn=decls[0]["mrn"] if len(decls) > 1 else None))
+        else:
+            lines.append(ft_line(fam, "transport", D(p["prix"]), mrn=decls[0]["mrn"] if len(decls) > 1 else None))
     if opts.get("manut") and poste(grid, "manutention"):
         p = poste(grid, "manutention")
-        lines.append(ft_line(fam, "manutention", D(p["prix"])))
+        if p.get("unite_base") == "kg":
+            kg = _kg(decls)
+            lines.append(ft_line(fam, "manutention", q2(D(p["prix"]) * kg), qty=kg, pu=D(p["prix"])))
+        else:
+            lines.append(ft_line(fam, "manutention", D(p["prix"])))
     if opts.get("surch") and any(p["nature"] == "surcharge" for p in grid["postes"]):
         p = poste(grid, "surcharge")
         lines.append(ft_line(fam, "surcharge", D(p["prix"]), libelle=p["libelles_reconnus"][0]))
@@ -475,7 +494,11 @@ def make_ft(ctx, rng, *, doc_id, decls, d_ft: date, opts: dict):
         p = poste(grid, "autre_prestation")
         lines.append(ft_line(fam, "autre_prestation", D(p["prix"])))
     if opts.get("discount"):
-        lines.append(ft_line(fam, "autre_prestation", D("-10.00"), libelle=REMISE[fam_lang(fam)], pu=D("-10.00")))
+        if opts.get("credit_line"):          # extension 2.1 (G15) : ligne d'avoir intégrée au relevé
+            amt, lib = opts["credit_line"]
+            lines.append(ft_line(fam, "autre_prestation", amt, libelle=lib, pu=amt))
+        else:
+            lines.append(ft_line(fam, "autre_prestation", D("-10.00"), libelle=REMISE[fam_lang(fam)], pu=D("-10.00")))
     num = ft_number(rng, fam, d_ft)
     ft = {"doc_id": doc_id, "kind": "ft", "type": "facture_transitaire", "family": fam, "lang": ctx["fwd_lang"],
           "numero": num, "date": d_ft, "emetteur": {"nom": fwd["nom"], "tva": fwd["tva"], "adresse": fwd["adresse"]},
@@ -488,6 +511,11 @@ def make_ft(ctx, rng, *, doc_id, decls, d_ft: date, opts: dict):
     return ft
 
 
+def _kg(decls) -> D:
+    tot = sum((d["gross_total"] for d in decls), ZERO)
+    return D(int(tot.to_integral_value(rounding="ROUND_CEILING")))
+
+
 def ft_number(rng, fam, d: date) -> str:
     n = rng.randint(1000, 99999)
     styles = {
@@ -495,6 +523,8 @@ def ft_number(rng, fam, d: date) -> str:
         "G4": f"{n}/{d.year}/SI", "G5": f"FT{d.year % 100}-{n:05d}", "G6": f"DMF{d.year}{n:05d}",
         "G7": f"VF-{d.year}-{n:06d}", "G8": f"PTD{d.year % 100}{n:06d}", "G9": f"MDF {n:05d}",
         "G10": f"CCB-INV-{n:05d}", "G11": f"NEB{d.year % 100}{d.month:02d}{n:05d}", "G12": f"SE-{d.year}-{n:05d}",
+        "G13": f"FT {d.year}/{n:05d}", "G14": f"FV/{n:05d}/{d.month:02d}/{d.year}", "G15": f"ZP-{d.year % 100}-{n:06d}",
+        "G16": f"HTD{d.year}-{n:05d}",
     }
     return styles[fam]
 
@@ -544,7 +574,8 @@ def make_avoir(ctx, rng, *, doc_id, ft, d_av: date, lines, with_ref=True, motif=
     n = rng.randint(100, 9999)
     num = {"G1": f"AV-FLT-{n:05d}", "G2": f"CN/{d_av.year % 100}/{n:05d}", "G3": f"GS {d_av.year}-{n:04d}",
            "G4": f"NC {n}/{d_av.year}", "G5": f"AB{d_av.year % 100}-{n:05d}", "G6": f"AVDMF{n:05d}",
-           "G9": f"MDF-AV {n:05d}", "G10": f"CCB-CN-{n:05d}", "G11": f"NEBCN{n:06d}", "G12": f"SE-CN-{n:05d}"}.get(fam, f"AV-{n}")
+           "G9": f"MDF-AV {n:05d}", "G10": f"CCB-CN-{n:05d}", "G11": f"NEBCN{n:06d}", "G12": f"SE-CN-{n:05d}",
+           "G13": f"NC {d_av.year}/{n:05d}", "G14": f"FK/{n:05d}/{d_av.year}", "G15": f"ZP-GS-{n:06d}", "G16": f"HTD-AV-{n:05d}"}.get(fam, f"AV-{n}")
     return {"doc_id": doc_id, "kind": "av", "type": "avoir", "family": fam, "lang": ft["lang"], "numero": num, "date": d_av,
             "emetteur": ft["emetteur"], "client": ft["client"], "refs_facture_origine": [ft["numero"]] if with_ref else [],
             "refs_mrn": list(ft["refs_mrn"][:1]), "refs_transport": list(ft["refs_transport"][:1]),

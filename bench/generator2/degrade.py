@@ -21,6 +21,8 @@ MODE_INFO = {
     "native": (None, "d0"), "scan300": (300, "d1"), "scan250j": (250, "d1"),
     "skew200": (200, "d2"), "photo": (200, "d2"), "lowcontrast": (200, "d2"), "jpeg150": (150, "d2"),
     "tiff200": (200, "d2"), "rotated": (200, "d2"), "fax": (200, "d3"), "faxtiff": (200, "d3"),
+    # extension 2.1 (--ext)
+    "skewlow": (200, "d2"), "overlay": (200, "d2"), "twoup": (200, "d2"), "jpegheavy": (150, "d2"), "faxnoise": (200, "d3"),
 }
 PDF_COMPAT = {"photo": "skew200", "tiff200": "lowcontrast", "faxtiff": "fax"}
 
@@ -166,7 +168,98 @@ def degrade_page(img, mode: str, rng: random.Random, page_idx: int, n_pages: int
         return fax(img, rng, fax_header + f"  P.{page_idx + 1:02d}/{n_pages:02d}"), "png1"
     if mode == "photo":
         return photo(img, rng), "jpeg:70"
+    # --- extension 2.1 ---
+    if mode == "skewlow":
+        img = _skew(img, rng.choice([-1, 1]) * rng.uniform(1.2, 2.8))
+        img = ImageEnhance.Contrast(img).enhance(rng.uniform(0.35, 0.5))
+        img = ImageEnhance.Brightness(img).enhance(rng.uniform(1.08, 1.2))
+        return _noise(img, rng, 0.05), "jpeg:72"
+    if mode == "overlay":
+        img = _skew(img, rng.uniform(-0.6, 0.6))
+        return overlay(img.convert("RGB"), rng), "jpeg:78"
+    if mode == "twoup":
+        img = _skew(img, rng.uniform(-0.8, 0.8))
+        return _noise(img, rng, 0.04), "jpeg:75"
+    if mode == "jpegheavy":
+        w, h = img.size
+        small = img.resize((int(w * 0.75), int(h * 0.75)), Image.BILINEAR)
+        for q in (18, 12):
+            buf = io.BytesIO()
+            small.save(buf, format="JPEG", quality=q)
+            small = Image.open(io.BytesIO(buf.getvalue())).convert("L")
+        return small.resize((w, h), Image.BILINEAR), "jpeg:20"
+    if mode == "faxnoise":
+        bw = fax(img, rng, fax_header + f"  P.{page_idx + 1:02d}/{n_pages:02d}").convert("L")
+        d = ImageDraw.Draw(bw)
+        w, h = bw.size
+        for _ in range(rng.randint(2, 5)):          # bandes verticales et rafales de bruit
+            x = rng.randrange(w)
+            d.rectangle((x, 0, x + rng.choice([1, 2]), h), fill=rng.choice([0, 255]))
+        _specks(bw, rng, 900)
+        return bw.convert("1"), "png1"
     raise ValueError(mode)
+
+
+STAMPS = ["REÇU LE", "PAYÉ", "BON À PAYER", "COMPTABILISÉ", "VU", "RECEIVED", "CONTRÔLÉ"]
+
+
+def overlay(img, rng: random.Random):
+    """Tampons encrés et annotations manuscrites posés sur le texte (souvent sur la zone des montants)."""
+    w, h = img.size
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    fs = max(28, w // 22)
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", fs)
+    hand = ImageFont.truetype("/usr/share/fonts/truetype/freefont/FreeSerifItalic.ttf", max(26, w // 26))
+    for _ in range(rng.randint(1, 2)):
+        txt = rng.choice(STAMPS) + (f" {rng.randint(1, 28):02d}/{rng.randint(1, 12):02d}" if rng.random() < 0.5 else "")
+        col = rng.choice([(192, 57, 43), (31, 58, 147), (30, 132, 73)])
+        tw = d.textlength(txt, font=font)
+        x = rng.randint(int(w * 0.35), max(int(w * 0.36), int(w - tw - 40)))
+        y = rng.randint(int(h * 0.30), int(h * 0.75))
+        st = Image.new("RGBA", (int(tw) + 40, fs + 40), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(st)
+        sd.rectangle((4, 4, tw + 34, fs + 34), outline=col + (150,), width=5)
+        sd.text((20, 14), txt, font=font, fill=col + (150,))
+        st = st.rotate(rng.uniform(-18, 18), expand=True, resample=Image.BICUBIC)
+        layer.alpha_composite(st, (min(x, w - st.size[0] - 1), min(y, h - st.size[1] - 1)))
+    for _ in range(rng.randint(1, 3)):
+        txt = rng.choice(["ok", "vu", "à vérifier ?", "payé", "réf. ok", "✓", "→ compta"])
+        x, y = rng.randint(int(w * 0.1), int(w * 0.8)), rng.randint(int(h * 0.15), int(h * 0.9))
+        d.text((x, y), txt, font=hand, fill=(20, 40, 120, 210))
+        pts = [(x + i * 12, y + hand.size + 6 + rng.randint(-4, 4)) for i in range(rng.randint(5, 12))]
+        d.line(pts, fill=(20, 40, 120, 200), width=3)
+    out = img.convert("RGBA")
+    out.alpha_composite(layer)
+    return out.convert("RGB")
+
+
+def two_up(pages: list, rng: random.Random):
+    """Deux pages A4 côte à côte sur une feuille A4 paysage (même résolution)."""
+    out = []
+    for i in range(0, len(pages), 2):
+        pair = [im.convert("L") for im, _ in pages[i:i + 2]]
+        land = pair[0].size[0] > pair[0].size[1]
+        if not land:        # pages portrait côte à côte sur une feuille paysage
+            sh = max(im.size[1] for im in pair)
+            sw = int(sh * 2339 / 1654)
+        else:               # pages paysage l'une sous l'autre sur une feuille portrait
+            sw = max(im.size[0] for im in pair)
+            sh = int(sw * 2339 / 1654)
+        sheet = Image.new("L", (sw, sh), 255)
+        for j, im in enumerate(pair):
+            cw, ch = (sw / 2, sh) if not land else (sw, sh / 2)
+            scale = min((cw - 20) / im.size[0], (ch - 20) / im.size[1])
+            im2 = im.resize((int(im.size[0] * scale), int(im.size[1] * scale)), Image.BILINEAR)
+            ox, oy = (j * cw, 0) if not land else (0, j * ch)
+            sheet.paste(im2, (int(ox + (cw - im2.size[0]) / 2), int(oy + (ch - im2.size[1]) / 2)))
+        d = ImageDraw.Draw(sheet)
+        if not land:
+            d.line((sw // 2, 0, sw // 2, sh), fill=170, width=2)
+        else:
+            d.line((0, sh // 2, sw, sh // 2), fill=170, width=2)
+        out.append((_noise(sheet, rng, 0.03), "jpeg:75"))
+    return out
 
 
 def encode(img, enc: str) -> bytes:
@@ -216,4 +309,6 @@ def degrade_doc(pdf_bytes: bytes, mode: str, rng: random.Random, fax_header=""):
     dpi = MODE_INFO[mode][0]
     imgs = rasterize(pdf_bytes, dpi)
     out = [degrade_page(im, mode, rng, i, len(imgs), fax_header) for i, im in enumerate(imgs)]
+    if mode == "twoup":
+        out = two_up(out, rng)
     return out, dpi

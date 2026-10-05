@@ -178,11 +178,13 @@ def render_std(ci, rng):
         y -= 80
     # Acheteur / destinataire
     ach = ci["acheteur"]
-    buyer = [ach["nom"]] + ach["adresse"] + [f"{lab['vat']}: {ach['tva']}"] + ([f"EORI: {ci['eori']}"] if ci.get("eori") else [])
+    buyer = [ach.get("nom_affiche", ach["nom"])] + ach["adresse"] + [f"{lab['vat']}: {ach.get('tva_affichee', ach['tva'])}"] + \
+        ([f"EORI: {ci['eori']}"] if ci.get("eori") else [])
     p.text(40, y, lab["buyer"], size=8, style="B", color=acc)
     p.lines(40, y - 12, buyer, size=8.5)
     p.text(310, y, lab["consignee"], size=8, style="B", color=acc)
-    p.lines(310, y - 12, [ach["nom"]] + ach["adresse"], size=8.5)
+    dst = ci.get("destinataire") or ach      # 2.1 : livraison à une autre entité du groupe
+    p.lines(310, y - 12, [dst["nom"]] + dst["adresse"], size=8.5)
     y -= 12 + 11 * len(buyer) + 12
     # Tableau
     cols_kind = ["no", "item", "desc"] + (["hs"] if ci["hs_digits"] else []) + (["orig"] if ci["origin_mode"] == "line" else []) + ["qty", "unit", "pu", "amount"]
@@ -234,6 +236,10 @@ def render_std(ci, rng):
         info.append(f"{lab['corig']}: {F.country(ci['lines'][0]['origin'], lang, 'name')}")
     if ci.get("carrier_mention"):
         info.append(f"{lab['via']}: {ci['carrier_mention']}")
+    if ci.get("equiv"):                       # 2.1 : contre-valeur indicative
+        q = ci["equiv"]
+        info.append(f"Equivalent: {F.amt(q['montant'], num)} {q['devise']} (1 EUR = {F.amt(q['taux'], num, 4)} "
+                    f"{dev if dev != 'EUR' else q['devise']}) - for information only")
     y = p.lines(40, y, info, size=8.5)
     p.text(W - 40, 70, lab["sign"], size=8, align="r", color=HexColor("#555555"))
     p.hline(W - 200, W - 40, 82, lw=0.4)

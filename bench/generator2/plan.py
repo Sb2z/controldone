@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .model import FAMCAP, LAYCAP
 from .util import rng_for, split_of
+from .ext import CLIENT_FORWARDERS_EXT, CLIENT_SUPPLIERS_EXT, EXT_CLIENTS, EXT_FAMILIES, EXT_LAYOUTS
 from .world import CLIENT_FORWARDERS, CLIENT_SUPPLIERS, SUPPLIERS_BY_ID
 
 CONTROLES = ([f"A{i}" for i in range(1, 16)] + [f"B{i}" for i in range(1, 6)] + [f"C{i}" for i in range(1, 9)]
@@ -100,7 +101,26 @@ CERTAIN_ELIGIBLE = {"A1", "A3", "A4", "A5", "A6", "B1", "B2", "B3", "B4", "C1", 
 CERTAIN_FRIENDLY = {"dev": 4, "holdout": 1}
 P_TARGET = {"dev": 2, "holdout": 1}
 
-LAYOUTS = list(LAYCAP)
+LAYOUTS = ["M1", "M2", "M3", "M4", "M5", "M6"]
+
+# Extension 2.1 : activée par plan_corpus(..., ext=True) (option --ext). Sans elle, rien ne change.
+_EXT = {"on": False}
+
+
+def _clients_all():
+    return ["CL11", "CL12", "CL13", "CL14"] + (EXT_CLIENTS if _EXT["on"] else [])
+
+
+def _fwds(cid):
+    return CLIENT_FORWARDERS_EXT[cid] if _EXT["on"] else CLIENT_FORWARDERS[cid]
+
+
+def _sups(cid):
+    return CLIENT_SUPPLIERS_EXT[cid] if _EXT["on"] else CLIENT_SUPPLIERS[cid]
+
+
+def _layouts():
+    return LAYOUTS + EXT_LAYOUTS if _EXT["on"] else LAYOUTS
 
 
 def _merge(req: dict, new: dict):
@@ -118,15 +138,17 @@ def _merge(req: dict, new: dict):
 
 def resolve(req: dict, rng):
     """Choisit (client, famille, layout) compatibles ; None si impossible."""
-    clients = sorted(req.get("client", {"CL11", "CL12", "CL13", "CL14"}))
+    clients = sorted(req.get("client", set(_clients_all())))
+    if _EXT["on"] and req.get("client") == {"CL11", "CL14"}:      # groupes multi-entités (A1 « entité du groupe »)
+        clients = sorted({"CL11", "CL14", "CL16", "CL18"})
     kind = next(iter(req["kind"])) if "kind" in req else None
     opts = []
     for cid in clients:
-        if kind == "h7" and cid == "CL12":
+        if kind == "h7" and cid in ("CL12", "CL17"):
             continue
-        if "need_ad" in req and not any(SUPPLIERS_BY_ID[s]["pays"] == "CN" for s in CLIENT_SUPPLIERS[cid]):
+        if "need_ad" in req and not any(SUPPLIERS_BY_ID[s]["pays"] == "CN" for s in _sups(cid)):
             continue
-        fams = CLIENT_FORWARDERS[cid]
+        fams = _fwds(cid)
         if "family" in req:
             fams = [f for f in fams if f in req["family"]]
         for fam in fams:
@@ -136,17 +158,17 @@ def resolve(req: dict, rng):
                 if k.startswith("cap_"):
                     if bool(cap.get(k[4:], False)) not in v:
                         ok = False
-            if kind == "h7" and fam in ("G2",):
+            if kind == "h7" and fam in ("G2", "G15"):
                 ok = False
             if not ok:
                 continue
-            for lay in LAYOUTS:
+            for lay in _layouts():
                 lc = LAYCAP[lay]
                 if any(k.startswith("lay_") and bool(lc.get(k[4:], False)) not in v for k, v in req.items()):
                     continue
                 if "layout" in req and lay not in req["layout"]:
                     continue
-                if kind == "h7" and lay == "M2":
+                if kind == "h7" and lay in ("M2", "M8"):
                     continue
                 opts.append((cid, fam, lay))
     if not opts:
@@ -155,7 +177,15 @@ def resolve(req: dict, rng):
 
 
 def plan_corpus(seed: int, count: int, prefix: str = "GX", all_holdout: bool = False,
-                per_control: int | None = None) -> list[dict]:
+                per_control: int | None = None, ext: bool = False) -> list[dict]:
+    _EXT["on"] = ext
+    try:
+        return _plan_corpus(seed, count, prefix, all_holdout, per_control, ext)
+    finally:
+        _EXT["on"] = False
+
+
+def _plan_corpus(seed, count, prefix, all_holdout, per_control, ext):
     """prefix : préfixe des identifiants (GX = corpus_g2) ; all_holdout : tous les dossiers en holdout
     (jeu d'évaluation vierge), sinon règle sha256 % 5 de §19.2."""
     ids = [f"{prefix}{i:04d}" for i in range(1, count + 1)]
@@ -216,6 +246,8 @@ def plan_corpus(seed: int, count: int, prefix: str = "GX", all_holdout: bool = F
     for s, code, k in tasks:
         nf = CERTAIN_FRIENDLY[s] if per_control is None else max(1, per_control - 1)
         extra = {"deg_ok": {True}} if (INJ[code][0] in CERTAIN_ELIGIBLE and k < nf) else None
+        if ext and code == "tva_sur_debours":      # 2.1 : garantir une ligne de débours (TVA payée en douane)
+            extra = {**(extra or {}), "autoliq": {False}}
         pool = [d for d in by_split[s] if d not in clean]
         cand = [d for d in pool if len(slots[d]["inj"]) < maxn[s] and not (code in EXCLUSIVE and slots[d]["inj"])]
         rng.shuffle(cand)
@@ -296,7 +328,12 @@ def choose_attrs(did: str, sl: dict, rng, clean: set, split: str) -> dict:
     req = {**req, "kind": {kind}}
     opts = resolve(req, rng)
     # poids : préférer la diversité des familles et des présentations
-    cid, fam, lay = rng.choice(opts)
+    if _EXT["on"]:
+        # pondération vers les nouveautés 2.1 (client, famille, présentation)
+        w = [1 + 2 * (o[0] in EXT_CLIENTS) + 2 * (o[1] in EXT_FAMILIES) + 2 * (o[2] in EXT_LAYOUTS) for o in opts]
+        cid, fam, lay = rng.choices(opts, w)[0]
+    else:
+        cid, fam, lay = rng.choice(opts)
     if kind == "h7" and "family" not in req:
         h7opts = [o for o in opts if o[1] == "G11"]
         if h7opts and rng.random() < 0.6:
@@ -315,7 +352,7 @@ def choose_attrs(did: str, sl: dict, rng, clean: set, split: str) -> dict:
     if decl_mode == "eur" and "rate_printed" not in req:
         rate_printed = rng.random() < 0.88
     structure = pick("structure", rng.choices(["simple", "multi_ci", "split_decl"], [0.80, 0.10, 0.10])[0] if kind == "h1" else "simple")
-    if fam == "G2" and kind == "h1" and "structure" not in req:
+    if fam in ("G2", "G15") and kind == "h1" and "structure" not in req:
         structure = "statement"
     attrs = {
         "foreign": foreign, "decl_mode": decl_mode, "rate_printed": rate_printed,
@@ -353,16 +390,16 @@ def choose_attrs(did: str, sl: dict, rng, clean: set, split: str) -> dict:
     if attrs["need_ad"] and (kind == "h7" or not foreign):
         attrs["need_ad"] = False
     # Fournisseur
-    sups = [s for s in CLIENT_SUPPLIERS[cid]
+    sups = [s for s in _sups(cid)
             if (("EUR" in SUPPLIERS_BY_ID[s]["devises"]) if not foreign else any(dv != "EUR" for dv in SUPPLIERS_BY_ID[s]["devises"]))]
     if attrs["need_ad"]:
-        sups = [s for s in CLIENT_SUPPLIERS[cid] if SUPPLIERS_BY_ID[s]["pays"] == "CN"] or sups
+        sups = [s for s in _sups(cid) if SUPPLIERS_BY_ID[s]["pays"] == "CN"] or sups
         if not foreign:
             attrs["foreign"] = foreign = True
             if "foreign" in req:
                 raise RuntimeError("need_ad et facture EUR incompatibles")
     if not sups:
-        sups = CLIENT_SUPPLIERS[cid]
+        sups = _sups(cid)
     sup = rng.choice(sorted(sups))
     devs = [dv for dv in SUPPLIERS_BY_ID[sup]["devises"] if (dv != "EUR") == foreign]
     if not devs:
@@ -373,9 +410,16 @@ def choose_attrs(did: str, sl: dict, rng, clean: set, split: str) -> dict:
     if attrs["devise"] == "EUR":
         attrs["foreign"] = False
         attrs["decl_mode"] = "same"
-    deg = rng.choices(["d0", "d1", "d2", "d3"], [0.26, 0.20, 0.31, 0.23])[0]
+    deg = rng.choices(["d0", "d1", "d2", "d3"], [0.18, 0.17, 0.40, 0.25] if _EXT["on"] else [0.26, 0.20, 0.31, 0.23])[0]
     if "deg_ok" in req:
         deg = rng.choices(["d0", "d1"], [0.6, 0.4])[0]
-    return {"dossier_id": did, "split": split, "client_id": cid, "kind": kind, "family": fam, "layout": lay,
+    spec = {"dossier_id": did, "split": split, "client_id": cid, "kind": kind, "family": fam, "layout": lay,
             "deg": deg, "attrs": attrs, "injections": list(inj), "partners": list(sl["partner_of"]),
             "role": sl["role"], "clean": did in clean and not inj}
+    if _EXT["on"]:
+        spec["ext"] = True
+        slang = SUPPLIERS_BY_ID[sup]["lang"]
+        if sup not in ("S_PT", "S_PL") and kind == "h1" and slang == "en" and rng.random() < 0.45:
+            spec["ci_layout_override"] = "CM"           # facture multipage (en-têtes répétés, totaux de page)
+        attrs["multi_cur"] = rng.random() < 0.6          # mention d'une contre-valeur dans une autre devise
+    return spec

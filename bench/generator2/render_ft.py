@@ -718,8 +718,15 @@ def render_g11(doc, rng):
     p.text(W - 32, y - 12, f"Invoice / Facture {doc['numero']}", size=8, align="r")
     p.text(W - 32, y - 26, F.date(doc["date"], "dmy/"), size=8, align="r")
     y -= 48
-    p.lines(24, y, [f"Importer / Destinataire : {cl['nom']}", ", ".join(cl["adresse"]), f"VAT / TVA : {cl['tva']}"], size=7.6)
-    y -= 38
+    addr = ", ".join(cl["adresse"])
+    if p.width(addr, 7.6) <= W - 48:
+        p.lines(24, y, [f"Importer / Destinataire : {cl['nom']}", addr, f"VAT / TVA : {cl['tva']}"], size=7.6)
+        y -= 38
+    else:   # adresse longue (2.1 : client avec représentant fiscal) : sur deux lignes
+        h = len(cl["adresse"]) // 2
+        p.lines(24, y, [f"Importer / Destinataire : {cl['nom']}", ", ".join(cl["adresse"][:h]), ", ".join(cl["adresse"][h:]),
+                        f"VAT / TVA : {cl['tva']}"], size=7.6)
+        y -= 48
     for r in _refs_lines(doc, lab)[:1] + _refs_lines(doc, lab)[2:]:
         p.text(24, y, r, size=7.6)
         y -= 10

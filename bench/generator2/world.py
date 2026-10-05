@@ -214,7 +214,7 @@ INCOTERMS = ["EXW", "FCA", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DDP"]
 # Construction déterministe du monde
 # ---------------------------------------------------------------------------
 
-def build_world(seed: int) -> dict:
+def build_world(seed: int, ext: bool = False) -> dict:
     rng = rng_for(seed, "world")
     used: set = set()
     clients = {}
@@ -237,7 +237,11 @@ def build_world(seed: int) -> dict:
     for cid, fams in CLIENT_FORWARDERS.items():
         for fam in fams:
             grids[(cid, fam)] = make_grid(rng_for(seed, "grid", cid, fam), cid, fam, forwarders[fam])
-    return {"clients": clients, "tiers": tiers, "forwarders": forwarders, "grids": grids}
+    world = {"clients": clients, "tiers": tiers, "forwarders": forwarders, "grids": grids}
+    if ext:
+        from .ext import extend_world
+        extend_world(world, seed, make_grid)
+    return world
 
 
 # Libellés de prestations par langue ; le premier est le libellé imprimé par défaut
@@ -352,8 +356,15 @@ PRESTATIONS_HORS_GRILLE = {
 REMISE = {"fr": "Remise commerciale", "en": "Commercial discount", "de": "Rabatt", "it": "Sconto", "es": "Descuento", "nl": "Korting"}
 
 
+def fwd_def(fam: str) -> dict:
+    if fam in FORWARDERS_DEF:
+        return FORWARDERS_DEF[fam]
+    from .ext import FORWARDERS_EXT
+    return FORWARDERS_EXT[fam]
+
+
 def fam_lang(fam: str) -> str:
-    lang = FORWARDERS_DEF[fam]["lang"]
+    lang = fwd_def(fam)["lang"]
     return "fr" if lang == "fr_en" else lang
 
 
@@ -366,7 +377,7 @@ def make_grid(rng, cid: str, fam: str, fwd: dict) -> dict:
         out = list(lab[nature])
         if lang != "fr":
             out += [x for x in labs_fr[nature] if x not in out]
-        if FORWARDERS_DEF[fam]["lang"] == "fr_en":
+        if fwd_def(fam)["lang"] == "fr_en":
             out += [x for x in LABELS["en"][nature] if x not in out]
         return out
 
@@ -431,3 +442,8 @@ def poste(grid: dict, nature: str) -> dict | None:
         if p["nature"] == nature:
             return p
     return None
+
+
+from . import ext as _ext  # noqa: E402
+
+_ext.install_dicts(__import__(__name__, fromlist=["x"]))

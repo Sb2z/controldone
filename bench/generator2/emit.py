@@ -48,6 +48,15 @@ def render_native(dos: Dossier, doc: dict) -> bytes:
     rng = rng_for(dos.seed, dos.did, doc["doc_id"], "render")
     k = doc["kind"]
     fmt = doc["format_base"]
+    if k == "ci" and doc["layout"] in ("CP", "CL", "CM"):       # extension 2.1
+        from .render_ext import render_ci_ext
+        return render_ci_ext(doc, rng)
+    if k == "dec" and doc["layout"] in ("M7", "M8", "M9"):
+        from .render_ext import render_decl_ext
+        return render_decl_ext(doc, rng)
+    if k in ("ft", "av") and doc.get("family") in ("G13", "G14", "G15", "G16"):
+        from .render_ext import render_ft_ext
+        return render_ft_ext(doc, rng)
     if k == "ci":
         if fmt == "ubl":
             return render_ci_ubl(doc, rng)
@@ -248,6 +257,8 @@ def write_dossier(dos: Dossier, out_dir: Path) -> dict:
             doc = docs[d]
             data = render_native(dos, doc)
             natives[d] = data
+            if doc.get("mode") == "twoup" and doc["format_base"] == "pdf" and pdf_pages(data) < 2:
+                doc["mode"] = "skewlow"         # 2.1 : le « deux pages par feuille » n'a de sens qu'à partir de 2 pages
             fb = doc["format_base"]
             miss = selfcheck(doc, truth_values(doc), data, CHECK_FMT.get(fb, fb))
             if miss:
