@@ -1845,3 +1845,83 @@ alors que la vérité du corpus d'origine porte les valeurs déduites (prix = mo
 ou le taux unique, MRN unique rattaché, total reconstruit). L'extracteur garde les valeurs déduites, toutes
 `derive` ou plafonnées (≤ 0,85) : elles ne fondent aucun écart certain. Les trois valeurs « fausses » à 0,97
 de `corpus_g2` sont des totaux de débours **imprimés** « 0,00 » dont la vérité est `null`.
+
+# Prudence sur mises en page inconnues
+
+Constat : sur un corpus de mises en page jamais vues (`bench/corpus_g2`, générateur indépendant), le moteur
+produisait 49 faux « écarts certains » sur le split dev (B1 24, D1 14, B2 5, D3 2, A5, D4, C5, B3 1) pour 3 vrais.
+Cause : des extracteurs réglés sur un autre corpus lisent, sur une mise en page inconnue, des valeurs **fausses à
+confiance ≥ 0,90** : séparateur de milliers perdu (« 2 450,57 » lu « 450,57 »), colonne « à payer » (0,00) prise
+pour le montant d'une TVA autoliquidée, colonne voisine lue comme montant facturé des articles, lignes de
+prestations ou de débours non lues, montant TTC d'une ligne lu comme HT, assiette des frais d'avance de fonds
+calculée sur des lignes incomplètes. La confiance ne protège pas : il faut une preuve interne.
+
+## D-1700 — Lecture corroborée : condition supplémentaire de l'« écart certain »
+
+- **Règle** (`controls/corroboration.py`, appliquée par `ControlContext.classify` à **tous** les contrôles) : un
+  classement qui serait `ecart_certain` devient `a_verifier`, raison `lecture_non_corroboree`, si un montant
+  **lu** (type `montant`, méthode `texte_natif`, `ocr` ou `llm`, après remontée des valeurs dérivées à leurs
+  sources) n'est confirmé par **aucune autre identité arithmétique imprimée sur son document** qui tient. Valeurs
+  XML/CSV valides et saisies humaines : dispensées (§6.3).
+- **Réseau d'identités** d'un document, bâti uniquement sur des valeurs lues (jamais `derive` : une valeur
+  déduite reproduirait la lecture qu'elle prétend confirmer) : déclaration — base × taux = montant, totaux par
+  taxe, Σ lignes = total des droits et taxes / total à payer (TVA autoliquidée incluse ou exclue), Σ montants
+  facturés des articles = total facturé, écho montant facturé de l'article = valeur statistique ou base du droit
+  (deux zones distinctes de la page) ; facture du transitaire et avoir — quantité × prix (quantité ≠ 1 :
+  « 1 × x = x » ne prouve rien), HT × taux = TVA de la ligne, Σ débours, Σ lignes = total HT (deux
+  présentations), Σ TVA des lignes ou Σ HT × taux = total TVA, HT + TVA = TTC, TTC − acomptes = net ; facture
+  commerciale — quantité × prix, Σ lignes (+ pieds) = total.
+- **Identité contestée** : quand toutes les valeurs clés viennent d'un seul document (B1, B2, B3, D1, E4, G1…),
+  les identités entièrement formées des valeurs clés sont le calcul contesté et ne comptent pas comme preuve.
+  Somme contestée : le total imprimé est la valeur mise en cause (pas de confirmation exigée), chaque ligne
+  sommée doit être confirmée (B1 de la ligne, autre total) ; pour une facture du transitaire, la **complétude**
+  des lignes lues doit être prouvée par une autre identité de même portée (débours : total des débours ; lignes
+  taxables : total de TVA ; total des débours contesté : total HT). Produit contesté (B1, G1, D1 ligne) : le
+  montant imprimé doit être confirmé (par une somme qui le contient) ; les facteurs (base, prix unitaire) sont
+  admis si une autre identité de même nature tient sur le document (colonnes lues au bon endroit). B3 : un
+  article au plus sans confirmation (l'écart vrai porte sur un article ; les autres prouvent la colonne), au
+  moins un confirmé.
+- **Libellé** : « à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même
+  document (total, somme des lignes) ; une erreur de lecture pourrait expliquer l'écart » (`check_text` vide).
+- **Écarté** : relever `C_MIN_CERTAIN` (les lectures fausses étaient à 0,97) ; des règles par mise en page ou par
+  gabarit (non générales) ; exiger une confirmation de chaque base et de chaque taux (B1 ne serait plus jamais
+  certain : aucune autre identité ne contient ces valeurs).
+- **Limite assumée** : une base mal lue sur une ligne dont le montant est confirmé par le total, alors qu'une
+  autre ligne de la même déclaration tient, reste possible ; aucun cas observé.
+
+## D-1701 — Confirmation par la rangée ; un zéro n'est jamais confirmé par une somme
+
+- Un montant d'une rangée de tableau (ligne de taxation, article, ligne de facture) est aussi confirmé quand un
+  **autre** montant de la même rangée figure dans une identité qui tient (hors écho) : la rangée a été lue au bon
+  endroit (ex. `montant_a_payer` d'une ligne dont base × taux = montant tient ; HT d'une ligne dont la TVA lue
+  entre dans le total de TVA).
+- Un opérande nul d'une somme (et un total nul) n'est pas confirmé par cette somme : une valeur lue « 0,00 » dans
+  une colonne vide ne change pas la somme (cas de la colonne « à payer » d'une TVA autoliquidée, où le total à
+  payer concorde justement sans ces lignes).
+
+## D-1702 — Tests
+
+- `tests/controls/test_corroboration.py` (fictif) reproduit chaque mode de lecture fausse observé et le cas vrai
+  correspondant, qui reste certain : séparateur de milliers perdu (B1, B2), colonne « à payer » prise pour le
+  montant, B1 sans total imprimé, valeurs structurées dispensées, vrai B2, colonne voisine pour B3 et vrai B3 (un
+  article modifié), écho dans la même zone non probant, lignes de prestations / de débours non lues et vrai total
+  HT faux (D1), TTC lu comme HT (D1 ligne), déclaration sans ligne de taxation lue (C5), remontée des dérivées.
+- Les tests unitaires de logique des familles A à G (`tests/controls/`) bâtissent des documents minimaux sans
+  redondance : `conftest.py` y construit le contexte avec `exiger_lecture_corroboree=False` (champ de
+  `ControlContext`, toujours vrai en production). Les tests de bout en bout (`test_famille_b1.py`,
+  `test_findings_io.py`, `assembly/test_pipeline.py`) l'exigent : leurs déclarations portent désormais un total
+  imprimé qui reprend les lignes.
+
+## D-1703 — Mesures
+
+- Corpus d'origine, dev (`dev_calib`) : précision certain 1,000 (inchangée), rappel certain 0,736 (inchangé,
+  106 erreurs certaines appariées en certain avant et après). Deux constats certains deviennent `a_verifier`
+  (BX0242 A5 et C3, facture commerciale et facture du transitaire scannées dont les totaux ne réconcilient pas les
+  lignes lues) ; la vérité les attend `a_verifier` (surclassements 8 -> 6). Aucune perte.
+- `corpus_g2`, dev : les extracteurs ont été corrigés en parallèle pendant ce travail ; à code d'extraction égal,
+  sans la règle -> avec : faux certains 14 -> 13, vrais certains 44 -> 43, précision 0,759 -> 0,768. Les 13
+  restants ne sont pas des lectures fausses (valeurs conformes aux documents) : doublons de composantes (C5 avec
+  C1, G5 avec G4), avoirs non imputés (D3, C1), pièges de pied de facture UBL (A5), montant D7 calculé sur le
+  forfait, incohérences imprimées non listées par le générateur (B4 masse nette > brute, A1, A5). Perte : GX0078
+  D5 (facture du transitaire découpée en deux documents, la première moitié sans aucun total : ses lignes ne
+  peuvent pas être confirmées).
