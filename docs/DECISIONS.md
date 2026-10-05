@@ -867,6 +867,20 @@ mesure finale.
 - **Choix** : la page citée pour chaque déclaration (ou facture) est la première valeur lue de ce document ; plus
   d'exception. Les deux dossiers produisent désormais leur constat A11 `a_verifier`.
 
+## D-907 — Correcteur : constats neutres évalués avant les pièges
+
+- **Constat** (revue du banc `corpus_g2` dev) : dans `bench/score/core.py` `classer`, un constat non apparié était
+  confronté aux pièges **avant** le test « neutre ». Un C5 sans montant, raison `doublon_composantes`, redondant
+  d'un C1 apparié qui porte le montant (§8.6), était compté FP sur un piège C3 « TVA autoliquidée non refacturée »
+  (C5 est équivalent de C3 dans l'Annexe A) ; idem pour l'occurrence miroir F3–F5.
+- **Choix** : `_neutre` est évalué avant `_piege_pour`, pour tous les corpus et splits. Un constat neutre est par
+  construction candidat d'une erreur réelle déjà appariée ; il n'accuse rien de plus et ne peut donc pas violer
+  un piège. Un constat certain avec montant reste soumis aux pièges.
+- **Vérification** : re-notation à l'identique (métriques inchangées octet pour octet hors identifiants de run) de
+  `corpus` dev (`dev_ctl`), `corpus` holdout (`holdout_final_1`), `corpus_h2` holdout (`holdout2_final`) ;
+  `corpus_g2` dev (`g2_dev_ctl`, vérité d'avant régénération) : 6 FP certains et 2 FP à vérifier deviennent
+  neutres (C5 redondants ; un miroir F3), `precision_certain` 0,857 → 0,906.
+
 # Généralisation à une mise en page inconnue
 
 Constat : le jeu de démonstration (`src/controldone/demo`, famille de mise en page jamais vue des extracteurs)

@@ -153,13 +153,29 @@ def _mrn_connu(p: str, connus: list[str]) -> bool:
     return any(_proches(p, q) for q in connus)
 
 
+def _mrn_voisin(a: str, b: str) -> bool:
+    """Deux lectures OCR d'un même MRN (préfixe de 15) : même année et même pays, au plus 4 caractères
+    différents. Deux MRN distincts diffèrent sur presque tous leurs 11 caractères aléatoires."""
+    if len(a) != len(b) or len(a) < 15 or a[:4] != b[:4]:
+        return False
+    return sum(1 for x, y in zip(a, b, strict=True) if x != y) <= 4
+
+
+def _suite_de_declaration(cur: _EnCours, c: ClassementPage) -> bool:
+    """Page qui annonce une suite (« Suite », « page 2/2 ») d'une déclaration dont l'OCR a abîmé le MRN au-delà
+    de deux confusions : même déclaration (D-2113)."""
+    r = c.refs
+    return (cur.type is TypeDocument.declaration and c.suite and bool(r.mrn_prefixes) and bool(cur.mrn_prefixes)
+            and r.page_n != 1 and any(_mrn_voisin(r.mrn_prefixes[0], q) for q in cur.mrn_prefixes))
+
+
 def _changement_ref(cur: _EnCours, c: ClassementPage) -> bool:
     r = c.refs
     if r.numero_facture and cur.numero_facture and not _proches(r.numero_facture, cur.numero_facture) \
             and cur.type in (*_FACTURES, TypeDocument.document_non_exploitable):
         return True
     if cur.type is TypeDocument.declaration and r.mrn_prefixes and cur.mrn_prefixes:
-        return not _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes)
+        return not (_mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes) or _suite_de_declaration(cur, c))
     return False
 
 
@@ -178,7 +194,8 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
     if r.page_n and r.page_n > 1 and (not cur.page_total or not r.page_total or r.page_total == cur.page_total):
         return True
     if cur.type is TypeDocument.declaration:
-        return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes))
+        return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes)) \
+            or _suite_de_declaration(cur, c)
     if cur.type in _FACTURES:
         if r.numero_facture and cur.numero_facture:
             return _proches(r.numero_facture, cur.numero_facture)

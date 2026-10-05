@@ -11,7 +11,7 @@ import string
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-GENERATOR_VERSION = "2.0.0"
+GENERATOR_VERSION = "2.0.1"
 FICTIF = "DONNÉES FICTIVES"
 
 D = Decimal

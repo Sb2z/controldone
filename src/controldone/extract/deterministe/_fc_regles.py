@@ -1,4 +1,4 @@
-"""Règles générales de mise en page des factures commerciales (aides sans état, D-2001 à D-2004).
+"""Règles générales de mise en page des factures commerciales (aides sans état, D-2002, D-2003, D-2005).
 
 - ``scinder_mots_colles`` : mots d'un en-tête de tableau soudés par l'extraction du texte (« arancelariaOrigen »,
   « UnidadPrecio ») redécoupés à la frontière minuscule → majuscule, positions interpolées ;

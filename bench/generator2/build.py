@@ -104,6 +104,13 @@ class Dossier:
         self.client = cl
         ents = cl["entites"]
         self.entity = ents[0] if len(ents) == 1 else self.rng.choice(ents)
+        # Dossiers appariés (F2, F3, F5) : même entité importatrice que le dossier partenaire, sinon
+        # une pièce copiée du partenaire créerait un écart d'entité (A1/C8) non injecté.
+        # Le tirage ci-dessus est conservé pour ne pas décaler l'aléa.
+        for _code, pid in spec.get("partners", []):
+            if pid in registry:
+                self.entity = registry[pid].entity
+                break
         self.forwarder = world["forwarders"][spec["family"]]
         self.grid = world["grids"][(spec["client_id"], spec["family"])]
         self.ctx = {"spec": spec, "client": cl, "entity": self.entity, "forwarder": self.forwarder,
@@ -889,10 +896,11 @@ class Dossier:
         dd = [ft["doc_id"], dec["doc_id"]]
         ex = self.notes["excess"]
         mrn_ok = True
-        if "droit" in ex and (self.has("droits_surfactures") or self.has("faf_sur_excedent")):
+        if "droit" in ex and (self.has("droits_surfactures") or self.has("faf_sur_excedent") or self.has("avoir_partiel")):
+            # avoir_partiel : l'écart C1 reste dû (montant net de l'avoir, fixé dans _inject_post)
             self.err("droits_surfactures",
                      dd, ex["droit"], [f"{ft['doc_id']}.lignes.montant_ht"], "Droits refacturés supérieurs aux droits liquidés.",
-                     {"abs": ex["droit"], "seuil": D(1), "links": mrn_ok}, ctrl="C1")
+                     {"abs": ex["droit"], "seuil": D(1), "links": mrn_ok, "gross": ex["droit"]}, ctrl="C1")
         if "autre_taxe" in ex:
             self.err("autres_taxes_surfacturees", dd, ex["autre_taxe"], [], "Autres taxes refacturées supérieures aux montants liquidés.",
                      {"abs": ex["autre_taxe"], "seuil": D(1)})
@@ -954,7 +962,8 @@ class Dossier:
         ex = {}
         for e in self.errors:
             if e["ctrl"] in ("C1", "C2", "C3", "C4", "C5") and e["amount"] is not None and e["amount"] > 0:
-                ex[e["ctrl"]] = e["amount"]
+                # excédent BRUT : un avoir partiel crédite les droits, pas le FAF calculé sur l'excédent
+                ex[e["ctrl"]] = e["li"].get("gross", e["amount"])
         if not ex:
             if self.has("faf_sur_excedent"):
                 raise RuntimeError(f"{self.did}: C6 sans excédent")

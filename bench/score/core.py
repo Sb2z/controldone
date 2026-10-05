@@ -467,15 +467,19 @@ def classer(constats: list[Constat], erreurs: list[Erreur], pieges: list[Piege],
                 c.classe = "vp_a_verifier"
             continue
         # Constat non apparié à une erreur.
+        # Neutre d'abord (D-907) : un constat redondant (montant null + doublon_composantes, un
+        # autre constat apparié du même dossier portant le montant) ou l'occurrence miroir F3–F5
+        # d'une erreur déjà appariée n'est pas une accusation propre ; il ne peut donc pas
+        # « violer » un piège dont le contrôle est équivalent (ex. C5 redondant sur piège C3).
+        neutre = _neutre(c, erreurs, index)
+        if neutre:
+            c.classe, c.motif = neutre
+            continue
         t = _piege_pour(c, pieges, index)
         if t is not None and RANG_NIVEAU[c.niveau] > RANG_NIVEAU.get(t.max_level, 0):
             c.piege = t.trap_id
             c.classe = "fp_certain" if c.niveau == "ecart_certain" else "fp_a_verifier"
             c.motif = "piege"
-            continue
-        neutre = _neutre(c, erreurs, index)
-        if neutre:
-            c.classe, c.motif = neutre
             continue
         if t is not None:  # niveau toléré par le piège (a_verifier sur piège a_verifier)
             c.piege, c.classe, c.motif = t.trap_id, "piege_tolere", "piege"

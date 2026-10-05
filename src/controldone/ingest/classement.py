@@ -278,6 +278,8 @@ _CITATION_AVANT = re.compile(r"(?:ref|refs|reference|your|votre|vtre|uw|ihre|vos
 
 _PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|blatt|blad|p\.)\s*[:.]?\s*(\d{1,3})\s*(?:/|of|sur|de|von|di|van)\s*"
                      r"(\d{1,3})\b")
+#: « Page 2 » seul sur sa ligne, sans total.
+_PAGE_SEULE = re.compile(r"^[ \t]*(?:page|seite|pagina|pag\.?|blad|blatt)[ \t]*[:.]?[ \t]*(\d{1,3})[ \t]*$", re.MULTILINE)
 _SUITE = re.compile(r"\b(?:suite|continued|continuation|a reporter|report|carried forward|(?:\(|-)\s?cont|"
                     r"fortsetzung|ubertrag|seguito|riporto|continuacion|suma y sigue|vervolg)\b")
 _NUM_FACTURE = re.compile(
@@ -340,6 +342,8 @@ class ClassementPage:
     indices: list[str] = field(default_factory=list)
     #: La page porte un intitulé propre (et non des indices de corps seulement).
     intitulee: bool = False
+    #: Le haut de page annonce une suite (« Suite », « page 2/2 », « Fortsetzung »…) : D-2113.
+    suite: bool = False
 
     @property
     def est_continuation(self) -> bool:
@@ -387,6 +391,10 @@ def extraire_refs(texte: str) -> RefsPage:
         pn, pt = int(m.group(1)), int(m.group(2))
         if pt == 0 or pn > pt:
             pn = pt = None
+    else:
+        m = _PAGE_SEULE.search(t)
+        if m and int(m.group(1)) > 0:
+            pn = int(m.group(1))  # « Page 2 » seul sur sa ligne (relevé sur plusieurs pages, D-2113)
     return RefsPage(mrns=tuple(mrns), numero_facture=num, page_n=pn, page_total=pt)
 
 
@@ -595,7 +603,8 @@ def classer_page(
     def res(type_, sous_type=None, conf=0.0, motif=None) -> ClassementPage:
         return ClassementPage(type=type_, sous_type=sous_type, confiance=_borne(conf), motif_non_exploitable=motif,
                               titre=tt.premiere(), indices=indices,
-                              intitulee=bool(n_titre_facture or n_support or n_p2 or t_decl), **base)
+                              intitulee=bool(n_titre_facture or n_support or n_p2 or t_decl),
+                              suite=bool((refs.page_n and refs.page_n > 1) or _SUITE.search(tt.texte_lignes)), **base)
 
     # 1. Déclaration : MRN + vocabulaire douanier, sans intitulé de facture (une facture de transitaire
     #    cite des MRN mais porte un intitulé de facture et des débours).

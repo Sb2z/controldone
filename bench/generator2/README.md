@@ -164,3 +164,20 @@ la page.
 - Les erreurs F2–F5 portent `other_dossiers` ; leurs `documents` sont des `doc_id` **locaux** (le correcteur
   rapproche l'autre dossier par le type de document). La forme qualifiée `BX0043/ft1` n'est pas utilisée
   (l'expression du correcteur ne reconnaît que le préfixe `BX`).
+
+## Corrections après revue du banc (version 2.0.1)
+
+Revue de l'équipe contrôles sur le dev `corpus_g2` ; régénération complète (seed 777, mêmes identifiants, même
+règle de split). Seuls les dossiers concernés changent (liste dans le compte rendu de régénération).
+
+- **(b) `avoir_partiel` (E6)** : l'excédent de droits injecté n'était pas déclaré en C1 (seul E6 figurait). Le C1
+  est désormais présent avec le montant **net de l'avoir** (§8.6, montant net des avoirs imputés) ; E6 porte le
+  reste à recouvrer et ne s'ajoute pas aux totaux. L'erreur C6 induite (FAF calculé sur l'excédent) utilise
+  l'excédent **brut** : l'avoir partiel crédite les droits, pas le FAF.
+- **(c) A7 `ordre_grandeur_incoherent`** : en mode « déclaration en EUR sans taux imprimé », le taux était
+  quand même imprimé (l'erreur devenait un A5 de fait). Le taux n'est plus imprimé quand `rate_printed` est faux
+  (conversion faite au taux calculé, aléa consommé à l'identique) ; `taux_change` est alors `null` dans la vérité.
+  `accepted_control_ids` reste celui de l'Annexe A (A7, A6).
+- **(d) Dossiers appariés F2/F3/F5** : la facture commerciale copiée du dossier partenaire (F5) ou la facture de
+  débours d'un autre envoi (F3) pouvait viser une autre entité du groupe que celle du dossier, créant un écart A1
+  ou C8 non injecté (ex. GX0001). Le dossier reprend désormais l'entité du dossier partenaire.

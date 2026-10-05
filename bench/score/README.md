@@ -93,15 +93,18 @@ Constat apparié à une erreur :
 
 Constat **non apparié**, évalué dans cet ordre :
 
-1. **Piège** (voir §7) dont `max_level` est inférieur au niveau du constat : `fp_certain` ou
-   `fp_a_verifier`, motif `piege`, `trap_id` renseigné.
-2. **Neutres** (ni VP ni FP, comptés dans `neutres`, rapportés dans `details`) — interprétation
+1. **Neutres** (ni VP ni FP, comptés dans `neutres`, rapportés dans `details`) — interprétation
    du correcteur, voir §10 :
    - `miroir_inter_dossiers` : constat F3–F5 candidat d'une erreur déjà appariée à un constat
      posé dans **un autre dossier** cité par l'erreur (les deux occurrences d'un doublon) ;
    - `redondant_doublon_composantes` : constat sans montant, raison `doublon_composantes`,
      candidat d'une erreur `recouvrable` déjà appariée à un autre constat du même dossier qui
      porte un montant (ex. C5 recalculé alors que C1 porte l'écart, §8.6).
+   Les neutres sont évalués **avant** les pièges (D-907) : un constat redondant n'est pas une
+   accusation propre et ne peut donc pas violer un piège d'un contrôle équivalent (ex. C5 sans
+   montant, doublon d'un C1 apparié, sur un piège C3 « TVA autoliquidée non refacturée »).
+2. **Piège** (voir §7) dont `max_level` est inférieur au niveau du constat : `fp_certain` ou
+   `fp_a_verifier`, motif `piege`, `trap_id` renseigné.
 3. Piège dont `max_level` est atteint sans être dépassé (`a_verifier` sur un piège
    `a_verifier`) : `piege_tolere` (neutre, pas du bruit).
 4. Sinon `fp_certain` / `fp_a_verifier`, motif `non_apparie`.

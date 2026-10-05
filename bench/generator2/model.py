@@ -268,6 +268,10 @@ def make_decl(ctx, rng, *, doc_id, cis, lines_sel=None, d_acc: date, decl_mode: 
         if ci0["incoterm"] in ("EXW", "FCA", "FOB") and not h7:
             adj = D(str(round(rng.uniform(0.02, 0.07), 3)))
         a["stat_value"] = q2(v_eur * (1 + adj))
+    # Taux imprimé : seulement si rate_printed. En mode « eur » sans taux imprimé, la conversion a bien
+    # été faite (taux calculé ci-dessus, aléa consommé à l'identique) mais le taux n'est PAS imprimé
+    # (A7 : ordre de grandeur au taux indicatif seulement).
+    printed_rate = rate if rate_printed else None
     # Taxations
     taxes = []
     euro_round = sp["attrs"].get("duty_euro_round", False)
@@ -333,7 +337,8 @@ def make_decl(ctx, rng, *, doc_id, cis, lines_sel=None, d_acc: date, decl_mode: 
         "numero_declaration": f"{d_acc.year % 100}{rng.randint(100000, 999999)}", "date": d_acc,
         "importateur": {"nom": ent["raison_sociale"], "tva": ent["tva"], "eori": ent["eori"]},
         "declarant": {"nom": fwd["nom"], "tva": fwd["tva"]},
-        "devise": devise_decl, "montant": total_decl, "rate": rate, "sens": sens if rate else None, "devise_taux": devise_ci if rate else None,
+        "devise": devise_decl, "montant": total_decl, "rate": printed_rate, "sens": sens if printed_rate else None,
+        "devise_taux": devise_ci if printed_rate else None,
         "incoterm": ci0["incoterm"], "incoterm_lieu": ci0["incoterm_lieu"], "pays_exp": ci0["supplier"]["pays"],
         "gross_total": gross_total, "colis_total": colis_total, "n_articles": len(arts),
         "refs": refs, "autoliq": autoliq, "articles": arts, "taxes": taxes, "cis": [ci["doc_id"] for ci in cis],
