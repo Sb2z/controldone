@@ -161,7 +161,7 @@ def couples(ctx: ControlContext) -> list[Couple]:
     derniere: dict[str, str] = {d.id: d.id for d in decs}
     for d in ctx.declarations(dernieres_versions=False):
         if d.id not in derniere:
-            retenue = ctx.mrn_prefixes().get(d.dec.mrn_prefixe)
+            retenue = ctx.version_retenue(d)
             if retenue is not None:
                 derniere[d.id] = retenue.id
     aretes: list[tuple[str, str, Allocation]] = []
@@ -546,29 +546,35 @@ def _explication_version(ctx: ControlContext, c: Couple, accepte: Callable[[Deci
     return None
 
 
-def _lignes_pied(ctx: ControlContext, c: Couple) -> list[ValeurSourcee]:
+def _lignes_pied(ctx: ControlContext, c: Couple) -> list[tuple[ValeurSourcee, int]]:
+    """Lignes de pied utilisables avec leur sens : +1 (fret, assurance, emballage), −1 (remise)."""
     out = []
     for fc in c.fcs:
         for st in fc.fc.sous_totaux:
             if st.type in _DEUX_PIEDS and ctx.utilisable(st.montant):
                 assert st.montant is not None
-                out.append(st.montant)
+                out.append((st.montant, -1 if st.type is TypeSousTotal.remise else 1))
     return out[:_MAX_LIGNES_PIED]
 
 
 def _explique_par_pied(
-    pieds: Sequence[ValeurSourcee], ecart: Decimal, tolerance: Decimal, facteur: Decimal = Decimal(1)
+    pieds: Sequence[tuple[ValeurSourcee, int]], ecart: Decimal, tolerance: Decimal, facteur: Decimal = Decimal(1)
 ) -> list[ValeurSourcee]:
-    """Lignes de pied dont la somme (en valeur absolue) égale ``|écart|`` dans la tolérance (A4 ; A5 avec
-    ``facteur`` = EUR par unité de devise de la facture, la somme convertie arrondie au centime, D-2202)."""
-    montants = [(v, abs(v.decimal_signe())) for v in pieds if _decimal(v) is not None]
+    """Lignes de pied dont la somme égale ``|écart|`` dans la tolérance (A4 ; A5 avec ``facteur`` = EUR par
+    unité de devise de la facture, la somme convertie arrondie au centime, D-2202). Deux lectures : montants
+    en valeur absolue, et montants signés (une remise se retranche du fret et de l'assurance qu'elle
+    accompagne : « fret + assurance − remise », D-2309)."""
+    montants = [(v, abs(v.decimal_signe()), sens) for v, sens in pieds if _decimal(v) is not None]
     for n in range(1, len(montants) + 1):
         for combi in combinations(montants, n):
-            somme = sum((m for _, m in combi), Decimal(0))
-            if facteur != 1:
-                somme = arrondi_centime(somme * facteur)
-            if abs(abs(ecart) - somme) <= tolerance:
-                return [v for v, _ in combi]
+            brute = sum((m for _, m, _ in combi), Decimal(0))
+            signee = abs(sum((m * sens for _, m, sens in combi), Decimal(0)))
+            sommes = {brute, signee}
+            for somme in sorted(sommes):
+                if facteur != 1:
+                    somme = arrondi_centime(somme * facteur)
+                if abs(abs(ecart) - somme) <= tolerance:
+                    return [v for v, _, _ in combi]
     return []
 
 

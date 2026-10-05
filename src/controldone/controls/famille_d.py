@@ -59,6 +59,7 @@ from controldone.model import (
     Document,
     GrilleTarifaire,
     LigneFactureTransitaire,
+    Methode,
     ModePoste,
     NatureLigne,
     PosteGrille,
@@ -68,6 +69,7 @@ from controldone.model import (
     RolePreuve,
     ValeurSourcee,
 )
+from controldone.normalize.natures import renvoie_a_une_annexe
 from controldone.normalize.refs import (
     cle_confusion_ocr,
     mrn_prefixe,
@@ -424,6 +426,7 @@ def _d1_resultat(
     avec_montant: bool,
     alternatives: Sequence[Decimal] = (),
     ligne_non_lue: bool = False,
+    produit: bool = False,
 ) -> ResultatControle:
     v_imp = imprime.decimal_signe()
     candidats = [calcul, *alternatives]
@@ -446,6 +449,10 @@ def _d1_resultat(
 
     def acc_operande(o: ValeurSourcee):
         d = o.decimal_signe()
+        if produit:
+            # D-2311 : facteur d'un produit (quantité, prix, taux) : la variante remplace le facteur, elle ne
+            # s'ajoute pas (la forme additive ne valait que pour une somme).
+            return lambda x: d != 0 and any(abs(v_imp - c * x / d) <= tol for c in candidats)
         return lambda x: any(abs(v_imp - (c - d + x)) <= tol for c in candidats)
 
     classement = ctx.classify(
@@ -502,18 +509,24 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
             montants.append((lg, lg.montant_ht))
         if q is not None and pu is not None and m is not None:
             assert lg.quantite is not None and lg.prix_unitaire is not None and lg.montant_ht is not None
-            out.append(_d1_resultat(
-                ctx, f, "ligne", unite, lg.montant_ht, q * pu, [lg.quantite, lg.prix_unitaire], tol.t_ligne(),
-                f"le montant de la ligne {_libelle_ligne(lg)}",
-                f"{format_nombre(q)} × {format_montant(pu)}", avec_montant=False,
-            ))
+            if Methode.derive in (lg.quantite.methode, lg.prix_unitaire.methode):
+                # D-2311 : quantité implicite (« 1 » non imprimé) ou prix déduit : le produit n'est pas imprimé,
+                # il n'y a pas d'identité à vérifier sur cette ligne.
+                out.append(ctx.non_verifiable("D1", RaisonCode.valeur_absente, unite=unite, sous_controle="ligne",
+                                              documents=[f.id], details={"motif": "facteur_non_imprime"}))
+            else:
+                out.append(_d1_resultat(
+                    ctx, f, "ligne", unite, lg.montant_ht, q * pu, [lg.quantite, lg.prix_unitaire], tol.t_ligne(),
+                    f"le montant de la ligne {_libelle_ligne(lg)}",
+                    f"{format_nombre(q)} × {format_montant(pu)}", avec_montant=False, produit=True,
+                ))
         taux, mtva = _dec(ctx, lg.taux_tva), _dec(ctx, lg.montant_tva)
         if m is not None and taux is not None and mtva is not None:
             assert lg.montant_ht is not None and lg.taux_tva is not None and lg.montant_tva is not None
             out.append(_d1_resultat(
                 ctx, f, "tva_ligne", unite, lg.montant_tva, m * taux / _CENT, [lg.montant_ht, lg.taux_tva],
                 tol.t_ligne(), f"la TVA de la ligne {_libelle_ligne(lg)}",
-                f"{format_montant(m)} × {format_pourcentage(taux)}", avec_montant=False,
+                f"{format_montant(m)} × {format_pourcentage(taux)}", avec_montant=False, produit=True,
             ))
     toutes_lisibles = len(montants) == len([lg for lg in ft.lignes if lg.montant_ht is not None])
     unite_f = cle_unite(ft=f.id)
@@ -607,13 +620,23 @@ def _hors_grille(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
     assert v is not None
     interdites = lr.grille.prestations_hors_grille is PrestationsHorsGrille.interdites
     tol, seuil = ctx.tol.t_tarif(), ctx.tol.s_tarif()
+    details = {"grille": lr.grille.id, "prestations_hors_grille": lr.grille.prestations_hors_grille.value}
     commun = dict(unite=lr.unite, entrees={"montant": v}, attendu=ZERO, constate=m, ecart=arrondi_centime(m),
-                  tolerance=tol, seuil_certitude=seuil, documents=[lr.facture.id],
-                  details={"grille": lr.grille.id, "prestations_hors_grille": lr.grille.prestations_hors_grille.value})
+                  tolerance=tol, seuil_certitude=seuil, documents=[lr.facture.id], details=details)
     if m <= tol:
         return ctx.conforme(cid, **commun)
+    if lr.ligne.libelle is None or not lr.ligne.libelle.valeur:
+        # D-2306 : sans libellé lu, « aucun poste ne correspond » n'est pas établi (le poste se reconnaît au
+        # libellé) : impossible de conclure, jamais conforme (P8).
+        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
+                                  details={**details, "motif": "libelle_absent"})
+    if renvoie_a_une_annexe(lr.ligne.libelle.valeur):
+        # D-2306 : ligne qui reprend le total d'une annexe (« Suplidos según anexo ») dont le détail n'a pas été
+        # ventilé : ce n'est pas une prestation hors grille ; sa nature n'est pas établie.
+        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
+                                  details={**details, "motif": "renvoi_annexe"})
     cles = [x for x in (lr.ligne.libelle, v) if x is not None]
-    raisons = [] if lr.ligne.libelle is not None and lr.ligne.libelle.valeur else [RaisonCode.valeur_absente]
+    raisons: list[RaisonCode] = []
     classement = ctx.classify(cid, ecart=m, tolerance=tol, seuil_certitude=seuil, valeurs_cles=cles,
                               documents=[lr.facture.id], eligible=interdites, montant=m,
                               raisons_supplementaires=raisons)

@@ -27,6 +27,7 @@ from controldone.model import (
     Document,
     Entite,
     ForceLien,
+    LienDocument,
     MotifNonExploitable,
     Niveau,
     Partie,
@@ -410,10 +411,14 @@ def p3_champ_cle_illisible(ctx: ControlContext) -> list[ResultatControle]:
 
 @control("P4")
 def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
-    """P4 — un résultat par lien : constat ``a_verifier`` (raison ``rattachement_faible``, signaux affichés)
-    pour un lien de force ``faible``, ``conforme`` sinon. La condition 5 de §8.5.1 rend en outre « au plus
-    à vérifier » tout constat qui dépend d'un lien non solide."""
+    """P4 — un résultat par lien : ``conforme`` pour un lien solide ; les liens de force ``faible`` donnent
+    **un** constat ``a_verifier`` (raison ``rattachement_faible``, signaux affichés pour chaque document).
+    Plusieurs documents faiblement rattachés au même dossier relèvent d'une même vérification (D-2312) : un
+    seul constat les énumère tous, les autres liens faibles renvoient à lui (``couvert_par_autre_controle``).
+    La condition 5 de §8.5.1 rend en outre « au plus à vérifier » tout constat qui dépend d'un lien non
+    solide."""
     resultats = []
+    faibles: list[tuple[LienDocument, Document, list[str], dict]] = []
     for lien in ctx.dossier.liens:
         doc = ctx.document(lien.document_id)
         if doc is None:
@@ -429,26 +434,46 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
         if lien.force is not ForceLien.faible:
             resultats.append(ctx.conforme("P4", unite=unite, documents=[doc.id], details=details))
             continue
+        faibles.append((lien, doc, signaux, details))
+    if not faibles:
+        return resultats
+    lien0, _doc0, _, details0 = faibles[0]
+    morceaux = []
+    for _lien, doc, signaux, _details in faibles:
         noms = ", ".join(_SIGNAUX.get(s, s) for s in signaux) or "aucun"
+        pages = _pages(doc)
+        lieu = f" ({pages})" if pages else ""
+        morceaux.append((doc, noms, f"{_type_doc(doc)}{lieu} (signaux : {noms})"))
+    if len(morceaux) == 1:
+        doc, noms, _ = morceaux[0]
         pages = _pages(doc)
         lieu = f" ({pages})" if pages else ""
         libelle = (
             f"Le document {_type_doc(doc)}{lieu} est rattaché au dossier par un lien faible "
             f"(signaux : {noms})."
         )
-        resultats.append(
-            ctx.constat(
-                "P4",
-                _classement_p(RaisonCode.rattachement_faible),
-                unite=unite,
-                libelle=libelle,
-                prochaine_action=ACTION_P4,
-                preuves=[_preuve_document(doc, noms)],
-                documents=[doc.id],
-                constate=lien.force.value,
-                details=details,
-            )
+    else:
+        libelle = ("Les documents suivants sont rattachés au dossier par un lien faible : "
+                   + " ; ".join(m[2] for m in morceaux) + ".")
+    unite0 = cle_unite(lien=lien0.document_id)
+    resultats.append(
+        ctx.constat(
+            "P4",
+            _classement_p(RaisonCode.rattachement_faible),
+            unite=unite0,
+            libelle=libelle,
+            prochaine_action=ACTION_P4,
+            preuves=[_preuve_document(doc, noms) for doc, noms, _ in morceaux],
+            documents=[doc.id for doc, _, _ in morceaux],
+            constate=lien0.force.value,
+            details={**details0, "documents_faibles": [
+                {"document_id": doc.id, "signaux": signaux} for _, doc, signaux, _ in faibles]},
         )
+    )
+    for lien, doc, _signaux, details in faibles[1:]:
+        resultats.append(ctx.non_applicable(
+            "P4", RaisonCode.couvert_par_autre_controle, unite=cle_unite(lien=lien.document_id), documents=[doc.id],
+            details={**details, "regroupe_dans": unite0}))
     return resultats
 
 

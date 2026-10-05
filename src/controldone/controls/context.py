@@ -13,6 +13,7 @@ même version, même unité -> même identifiant), condition de la reproductibil
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -30,6 +31,8 @@ from controldone.model.documents import Document
 from controldone.model.dossier import Allocation, Dossier, LienDocument
 from controldone.model.enums import (
     Composante,
+    Methode,
+    MethodeAllocation,
     NatureMontant,
     Niveau,
     Outcome,
@@ -50,7 +53,7 @@ from controldone.model.referentiel import (
 from controldone.model.resultats import Constat, Preuve, ResultatControle
 from controldone.model.valeur import ValeurSourcee
 from controldone.normalize.fiscal import normalize_vat
-from controldone.normalize.refs import mrn_prefixe
+from controldone.normalize.refs import cle_confusion_ocr, mrn_prefixe
 from controldone.taux_reference import TableTauxReference
 
 __all__ = ["AutreDossier", "Confusion", "ControlContext", "cle_unite", "preuve"]
@@ -253,21 +256,37 @@ class ControlContext:
         for d in decs:
             p = d.dec.mrn_prefixe
             if p and len(p) == 15:
-                groupes.setdefault(p, []).append(d)
+                # D-2315 : deux préfixes égaux aux confusions OCR près (5/S, 0/O…) sont le même MRN lu deux fois
+                # (version rectificative, copie) : jamais deux déclarations à additionner.
+                groupes.setdefault(cle_confusion_ocr(p), []).append(d)
             else:
                 sans_mrn.append(d)
         retenues = {max(g, key=self._rang_version).id for g in groupes.values()}
         ids_sans_mrn = {d.id for d in sans_mrn}
         return [d for d in decs if d.id in retenues or d.id in ids_sans_mrn]
 
+    def version_retenue(self, declaration: Document) -> Document | None:
+        """Version retenue (``declarations()``) du MRN de cette déclaration, préfixes comparés aux confusions OCR
+        près (D-2315) ; ``None`` sans préfixe de 15 caractères."""
+        p = declaration.dec.mrn_prefixe
+        if not p or len(p) != 15:
+            return None
+        cle = cle_confusion_ocr(p)
+        return next((d for d in self.declarations()
+                     if d.dec.mrn_prefixe and len(d.dec.mrn_prefixe) == 15
+                     and cle_confusion_ocr(d.dec.mrn_prefixe) == cle), None)
+
     def versions_anterieures(self, declaration: Document) -> list[Document]:
-        """Autres versions (rectificatives ou initiales) du même préfixe MRN (condition 7 de §8.5.1)."""
+        """Autres versions (rectificatives ou initiales) du même préfixe MRN (condition 7 de §8.5.1), préfixes
+        comparés aux confusions OCR près (D-2315)."""
         p = declaration.dec.mrn_prefixe
         if not p:
             return []
+        cle = cle_confusion_ocr(p) if len(p) == 15 else p
         return [
             d for d in self.declarations(dernieres_versions=False)
-            if d.id != declaration.id and d.dec.mrn_prefixe == p
+            if d.id != declaration.id and d.dec.mrn_prefixe
+            and (cle_confusion_ocr(d.dec.mrn_prefixe) if len(d.dec.mrn_prefixe) == 15 else d.dec.mrn_prefixe) == cle
         ]
 
     def _rang_version(self, d: Document) -> tuple:
@@ -364,6 +383,10 @@ class ControlContext:
         for c in candidats:
             if not confusion_applicable(c.valeur, self.qualite_page(c.valeur)):
                 continue
+            if self.confirmee_par_identite(c.valeur):
+                # D-2303 : la valeur lue entre dans une identité imprimée du document qui tient (somme, produit,
+                # écho) ; une autre lecture la romprait. La confusion n'explique donc pas l'écart.
+                continue
             brut = c.valeur.valeur_brute or c.valeur.valeur
             if c.accepte is not None:
                 if confusion_test_fn(brut, c.accepte):
@@ -371,6 +394,15 @@ class ControlContext:
             elif c.autre is not None and c.tolerance is not None and confusion_test(brut, c.autre, c.tolerance):
                 return True
         return False
+
+    def confirmee_par_identite(self, valeur: ValeurSourcee) -> bool:
+        """La valeur lue est membre (non inerte) d'une identité arithmétique de son document qui tient (D-2303).
+        Confirmation directe seulement : la confirmation par la rangée (D-1701) prouve l'emplacement de la
+        lecture, pas ses caractères."""
+        doc = self.document_de(valeur)
+        if doc is None:
+            return False
+        return any(i.tient and valeur.id in i.confirmes for i in self.reseau_identites(doc))
 
     def reseau_identites(self, document: Document) -> tuple[_corroboration.Identite, ...]:
         """Identités arithmétiques imprimées du document, sur ses valeurs lues (D-1700), mises en cache."""
@@ -433,13 +465,13 @@ class ControlContext:
             for i in dict.fromkeys(doc_ids):
                 for a in self.allocations_pour(i):
                     vues.setdefault(a.id, a)
-            allocations = list(vues.values())
+            allocations = self._allocations_en_jeu(list(vues.values()), valeurs_cles, doc_ids)
         classement = classify(
             spec,
             ecart=ecart,
             tolerance=tolerance,
             seuil_certitude=seuil_certitude,
-            valeurs_cles=valeurs_cles,
+            valeurs_cles=self._confiance_par_identite(valeurs_cles),
             c_min_certain=self.profil.c_min_certain,
             liens=self.liens_pour(doc_ids),
             allocations=allocations,
@@ -457,6 +489,80 @@ class ControlContext:
                 raisons = trier_raisons([*classement.raisons, RaisonCode.lecture_non_corroboree])
                 return Classement(Niveau.a_verifier, raisons)
         return classement
+
+    def _confiance_par_identite(self, valeurs_cles: Sequence[ValeurSourcee]) -> list[ValeurSourcee]:
+        """D-2314 : une valeur clé lue sous ``C_MIN_CERTAIN`` (mais au moins ``C_LECTURE_CONFIRMABLE``) dont la
+        lecture est confirmée par une identité arithmétique imprimée de son document qui tient (somme, produit,
+        écho ; membre direct, hors identité formée des seules valeurs clés : le calcul contesté) satisfait la
+        condition de confiance (§8.5.1 condition 3) : une autre lecture de ses caractères romprait cette
+        identité. Les autres conditions (ancrage, corroboration D-1700…) restent appliquées."""
+        seuil = self.profil.c_min_certain
+        if all(v.confiance >= seuil for v in valeurs_cles):
+            return list(valeurs_cles)
+        ids = {v.id for v in valeurs_cles}
+        out = []
+        for v in valeurs_cles:
+            if (seuil > v.confiance >= C_LECTURE_CONFIRMABLE and v.methode in _METHODES_LUES
+                    and not v.est_reconstruite and v.est_lisible):
+                doc = self.document_de(v)
+                if doc is not None and any(
+                    i.tient and v.id in i.confirmes and not i.membres <= ids for i in self.reseau_identites(doc)
+                ):
+                    v = v.model_copy(update={"confiance": seuil})
+            out.append(v)
+        return out
+
+    def _allocations_en_jeu(
+        self, allocations: Sequence[Allocation], valeurs_cles: Sequence[ValeurSourcee], doc_ids: Sequence[str]
+    ) -> list[Allocation]:
+        """Allocations dont dépend la comparaison (§8.5.1 condition 5, D-2304) : celles qui relient deux documents
+        comparés (source **et** cible parmi les documents du constat ; un contrôle interne à un document ne dépend
+        d'aucune répartition) ; pour une facture du transitaire dont des **lignes de débours** sont des valeurs
+        clés, seules les allocations de ces lignes (et celles du document entier) comptent : la répartition au
+        prorata d'une autre ligne ne touche pas les montants comparés."""
+        ids = set(doc_ids)
+        lignes_cles: dict[str, set[int]] = {}
+        for v in valeurs_cles:
+            doc = self.document_de(v)
+            if doc is None or doc.type is not TypeDocument.facture_transitaire:
+                continue
+            k = _index_ligne(v.chemin)
+            if k is None or k >= len(doc.ft.lignes):
+                continue
+            nature = doc.ft.lignes[k].nature
+            if nature is not None and nature.est_debours:
+                lignes_cles.setdefault(doc.id, set()).add(k)
+        # Ligne répartie au prorata entre déclarations qui sont **toutes** comparées ensemble, sur une facture qui
+        # ne cite aucun MRN hors du dossier : la somme comparée ne dépend pas de la clé de répartition.
+        cibles_par_ligne: dict[tuple[str, int], list[Allocation]] = {}
+        for a in self.dossier.allocations:
+            if a.methode is MethodeAllocation.prorata and a.source_ligne is not None:
+                cibles_par_ligne.setdefault((a.source_document_id, a.source_ligne), []).append(a)
+        prefixes = set(self.mrn_prefixes())
+
+        def repartition_neutre(a: Allocation) -> bool:
+            groupe = cibles_par_ligne.get((a.source_document_id, a.source_ligne or 0), [])
+            doc = self.document(a.source_document_id)
+            if not groupe or doc is None or doc.type is not TypeDocument.facture_transitaire:
+                return False
+            cites = {mrn_prefixe(v.valeur) for v in doc.ft.refs_mrn if v is not None and v.valeur}
+            cites |= {mrn_prefixe(lg.mrn.valeur) for lg in doc.ft.lignes if lg.mrn is not None and lg.mrn.valeur}
+            cites.discard("")
+            return (all(x.cible_document_id in ids and x.montant_alloue is not None for x in groupe)
+                    and cites <= prefixes)
+
+        out = []
+        for a in allocations:
+            if a.source_document_id not in ids or (a.cible_document_id is not None and a.cible_document_id not in ids):
+                continue
+            lignes = lignes_cles.get(a.source_document_id)
+            if lignes and a.source_ligne is not None and a.source_ligne not in lignes:
+                continue
+            if (a.methode is MethodeAllocation.prorata and lignes and a.source_ligne in lignes
+                    and repartition_neutre(a)):
+                continue
+            out.append(a)
+        return out
 
     def _avoir_non_ventile(self, spec: ControlSpec | str, doc_ids: Sequence[str], kwargs: Mapping[str, Any]) -> bool:
         """§8.5.1 condition 7 (D-2205) : un montant ``recouvrable`` sur une facture du transitaire n'est pas
@@ -577,6 +683,13 @@ class ControlContext:
         )
         if classement.niveau is None:
             return self.resultat(controle_id, outcome=Outcome.conforme, **commun)
+        if lecture_improbable(controle_id, classement.raisons):
+            # D-2310 : l'écart ne repose que sur des lectures peu sûres qu'une seule confusion de caractère
+            # explique : impossible de conclure (P8), le résultat garde les raisons ; pas de constat.
+            commun["details"] = {**(details or {}), "motif": "ecart_explique_par_une_lecture_douteuse",
+                                 "raisons": [r.value for r in classement.raisons]}
+            return self.resultat(controle_id, outcome=Outcome.non_verifiable,
+                                 raison_code=RaisonCode.lecture_douteuse, **commun)
         if spec.nature_montant is None:
             raise ValueError(f"{controle_id} ne produit jamais de constat (Annexe A)")
         renvoi = renvoi or spec.est_renvoi
@@ -606,3 +719,31 @@ class ControlContext:
             prochaine_action=prochaine_action,
         )
         return self.resultat(controle_id, outcome=niveau.outcome, constat=c, **commun)
+
+
+_RX_INDEX_LIGNE = re.compile(r"(?:^|\.)lignes\[(\d+)\]")
+
+
+def _index_ligne(chemin: str | None) -> int | None:
+    """Rang de la ligne de facture d'un chemin (``facture_transitaire.lignes[3].montant_ht`` -> 3)."""
+    m = _RX_INDEX_LIGNE.search(chemin or "")
+    return int(m.group(1)) if m else None
+
+
+#: Contrôles dont le constat n'est jamais retiré pour une lecture douteuse (signaux de documents, P).
+_FAMILLES_PROTEGEES = ("P",)
+
+
+def lecture_improbable(controle_id: str, raisons: Iterable[RaisonCode]) -> bool:
+    """D-2310 : un constat dont l'écart s'explique par une confusion de lecture (``lecture_douteuse``) **et**
+    dont une valeur clé est sous la confiance minimale (``confiance_insuffisante``) n'est pas émis : sur les
+    jeux de développement, cette conjonction ne correspond à aucune erreur réelle (bruit de lecture OCR).
+    Une lecture douteuse sur des valeurs sûres reste un constat ``a_verifier``."""
+    rs = set(raisons)
+    return (not controle_id.startswith(_FAMILLES_PROTEGEES) and RaisonCode.lecture_douteuse in rs
+            and RaisonCode.confiance_insuffisante in rs)
+
+
+#: Confiance minimale d'une lecture que l'arithmétique imprimée du document peut confirmer (D-2314).
+C_LECTURE_CONFIRMABLE = 0.7
+_METHODES_LUES = (Methode.texte_natif, Methode.ocr, Methode.llm)

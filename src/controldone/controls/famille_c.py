@@ -837,6 +837,10 @@ def _comparer_composante(
     )
     if abs(ecart) <= tol:
         return ctx.conforme(cid, **commun)
+    if not lignes and not credits and ecart < 0:
+        # D-2313 : aucune ligne de cette composante sur la facture (non refacturée, ou ligne non lue) : rien n'est
+        # refacturé au-delà du liquidé ; l'écart « en faveur du client » n'est pas établi (P8).
+        return nv(RaisonCode.valeur_absente, "aucune_ligne_de_la_composante")
     manquant = _somme(refs[d.id].manquant for d in u.declarations)
     if manquant > 0 and tol < ecart <= manquant + tol:
         # Le total à payer imprimé contient des montants non retrouvés dans les lignes lues : une ligne de

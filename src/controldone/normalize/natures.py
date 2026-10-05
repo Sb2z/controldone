@@ -17,7 +17,7 @@ import re
 from controldone.model.enums import NatureLigne
 from controldone.normalize.text import cle_texte
 
-__all__ = ["NATURES_LIBELLES", "nature_libelle"]
+__all__ = ["NATURES_LIBELLES", "nature_libelle", "renvoie_a_une_annexe"]
 
 NATURES_LIBELLES: tuple[tuple[NatureLigne, re.Pattern[str]], ...] = (
     (NatureLigne.frais_avance_fonds, re.compile(
@@ -84,12 +84,83 @@ NATURES_LIBELLES: tuple[tuple[NatureLigne, re.Pattern[str]], ...] = (
 )
 
 
-def nature_libelle(libelle: str | None) -> NatureLigne | None:
-    """Nature reconnue d'après le libellé ; ``None`` si aucun mot-clé n'est reconnu."""
+def nature_libelle(libelle: str | None, *, tolerant: bool = False) -> NatureLigne | None:
+    """Nature reconnue d'après le libellé ; ``None`` si aucun mot-clé n'est reconnu.
+
+    ``tolerant`` (libellé lu par OCR, D-2305) : si rien n'est reconnu, chaque mot d'au moins 6 caractères qui
+    n'est pas un mot du vocabulaire est remplacé par **l'unique** mot du vocabulaire à une seule édition de lui
+    (« Comisi6n » -> « comision », « dédauanement » -> « dedouanement ») ; la table est appliquée une seconde
+    fois. Aucun remplacement s'il y a deux candidats ou plus."""
     if not libelle:
         return None
     t = cle_texte(libelle)
+    n = _chercher(t)
+    if n is not None or not tolerant:
+        return n
+    corrige = _corriger_ocr(t)
+    return _chercher(corrige) if corrige != t else None
+
+
+def _chercher(t: str) -> NatureLigne | None:
     for nature, motif in NATURES_LIBELLES:
         if motif.search(t):
             return nature
     return None
+
+
+#: Mots (et radicaux) du vocabulaire des natures, tirés des expressions de la table.
+_VOCABULAIRE: frozenset[str] = frozenset(
+    w for _, motif in NATURES_LIBELLES for w in re.findall(r"[a-z]{6,}", motif.pattern)
+)
+_RX_MOT = re.compile(r"[a-z0-9]+")
+
+
+def _une_edition(a: str, b: str) -> bool:
+    """``a`` et ``b`` diffèrent d'exactement une substitution, insertion ou suppression."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    court, long_ = (a, b) if len(a) < len(b) else (b, a)
+    i = 0
+    while i < len(court) and court[i] == long_[i]:
+        i += 1
+    return court[i:] == long_[i + 1:]
+
+
+def _candidat(mot: str) -> str | None:
+    """Mot du vocabulaire à une édition de ``mot`` (mot entier, ou radical en tête du mot) ; ``None`` si
+    aucun ou plusieurs."""
+    trouves: set[str] = set()
+    for v in _VOCABULAIRE:
+        if _une_edition(mot, v):
+            trouves.add(v)
+        elif len(mot) > len(v) + 1:
+            # radical (« dedouan », « warehous ») : tête du mot à une édition du radical, reste conservé
+            for k in (len(v) - 1, len(v), len(v) + 1):
+                if _une_edition(mot[:k], v):
+                    trouves.add(v + mot[k:])
+                    break
+        if len(trouves) > 1:
+            return None
+    return trouves.pop() if trouves else None
+
+
+def _corriger_ocr(t: str) -> str:
+    def remplacer(m: re.Match[str]) -> str:
+        mot = m.group(0)
+        if len(mot) < 6 or mot in _VOCABULAIRE or sum(c.isalpha() for c in mot) < 4:
+            return mot
+        return _candidat(mot) or mot
+
+    return _RX_MOT.sub(remplacer, t)
+
+
+#: Libellé d'une ligne qui renvoie au détail d'une annexe (« Suplidos según anexo », « Disbursements as per annex »).
+_RX_RENVOI_ANNEXE = re.compile(
+    r"\b(annexe|annex|anexo|anlage|allegato|bijlage|appendix|see attached|ci-joint|siehe|vedi|zie)\b")
+
+
+def renvoie_a_une_annexe(libelle: str | None) -> bool:
+    """La ligne résume un détail imprimé ailleurs (annexe) : ce n'est pas une prestation (D-2305)."""
+    return bool(libelle) and bool(_RX_RENVOI_ANNEXE.search(cle_texte(libelle or "")))

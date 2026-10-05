@@ -939,6 +939,11 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
             "taux_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent"),
             "marqueur_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"),
             "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
+            # période de facturation de la ligne (BG-26, BT-134/135 ; magasinage, D-2301)
+            "periode_debut": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/"
+                                        "ram:StartDateTime/udt:DateTimeString"),
+            "periode_fin": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/"
+                                      "ram:EndDateTime/udt:DateTimeString"),
         })
     return d
 
@@ -1093,6 +1098,9 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
             "taux_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent"),
             "marqueur_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:ID"),
             "notes": _notes(lec, el, "cbc:Note"),
+            # période de facturation de la ligne (BG-26, BT-134/135 ; magasinage, D-2301)
+            "periode_debut": lec.un(el, "cac:InvoicePeriod/cbc:StartDate"),
+            "periode_fin": lec.un(el, "cac:InvoicePeriod/cbc:EndDate"),
         })
     return d
 
@@ -1184,6 +1192,14 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
             if per:
                 _definir(champs, f"{p}.date_debut", c.vs(f"{p}.date_debut", per.group(1), cx))
                 _definir(champs, f"{p}.date_fin", c.vs(f"{p}.date_fin", per.group(2), cx))
+        # période structurée de la ligne (BG-26) : prioritaire sur une note en texte libre (D-2301)
+        debut, fin = lg.get("periode_debut") or (None, None), lg.get("periode_fin") or (None, None)
+        if debut[0] and fin[0]:
+            v_debut = c.vs(f"{p}.date_debut", *debut[:2])
+            v_fin = c.vs(f"{p}.date_fin", *fin[:2])
+            if v_debut is not None and v_fin is not None and v_debut.valeur and v_fin.valeur:
+                champs.definir(f"{p}.date_debut", v_debut)
+                champs.definir(f"{p}.date_fin", v_fin)
         mt = champs.obtenir(f"{p}.montant_ht")
         if nature.est_debours and mt is not None:
             debours.append(mt)

@@ -105,10 +105,11 @@ _CENT = Decimal("0.01")
 
 # --- nature des lignes (§5.3.3) -----------------------------------------------------------------------------
 
-def classer_nature(libelle: str | None) -> NatureLigne | None:
+def classer_nature(libelle: str | None, *, tolerant: bool = False) -> NatureLigne | None:
     """Nature d'une ligne d'après son libellé ; ``None`` si aucun mot-clé n'est reconnu (table unique
-    ``normalize.natures``, D-1213)."""
-    return nature_libelle(libelle)
+    ``normalize.natures``, D-1213). ``tolerant`` : une faute de lecture d'un caractère par mot est admise
+    (D-2305) ; réservé à la nature d'une ligne déjà lue, jamais au repérage des rangées."""
+    return nature_libelle(libelle, tolerant=tolerant)
 
 
 # --- vocabulaire des en-têtes de tableau -------------------------------------------------------------------
@@ -244,6 +245,8 @@ _ENTIER_RE = re.compile(r"^\d{1,4}$")
 _POURCENT_RE = re.compile(r"^(\d{1,2}(?:[.,]\d{1,2})?)\s*%$")
 _MARQUEUR_RE = re.compile(r"^[A-Z]$")
 _MRN_RE = re.compile(r"(?<![A-Z0-9])(\d{2}[A-Z]{2}[A-Z0-9]{14})(?![A-Z0-9])")
+#: séparateur entre les deux dates d'une période écrite dans un libellé (D-2301)
+_RX_SEP_PERIODE = re.compile(r"\s*(?:[-–—]{1,2}|au|to|until|bis|al|a|tot|t/m|hasta)\s*", re.IGNORECASE)
 _DATE_RE = re.compile(
     r"\b(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|"
     rf"(?:{L.MOTS_MOIS}|fév|aoû|déc)[a-zéûä]*\.? \d{{1,2}},? \d{{4}}|"
@@ -908,8 +911,9 @@ class _Extraction:
             conf = conf_client if not client_tva.corrigee else 0.6
             if client_tva.norm.startswith("FR") and tva_fr_valide(client_tva.norm) is False:
                 conf = min(conf, 0.5)
-            v = self._vs("client_facture.tva", Lu(client_tva.lu.lecture, base=conf, brut=client_tva.lu.brut),
-                         type_valeur=TypeValeur.tva)
+            lu_cl = Lu(client_tva.lu.lecture, base=conf, brut=client_tva.lu.brut)
+            v = self._vs("client_facture.tva", lu_cl, type_valeur=TypeValeur.tva,
+                         conf=_conf_tva_cle_valide(client_tva, conf))
             if v is not None and v.valeur != client_tva.norm:
                 v = v.model_copy(update={"valeur": client_tva.norm, "confiance": min(v.confiance, 0.6)})
             c.definir("client_facture.tva", v)
@@ -1247,6 +1251,8 @@ class _Extraction:
                     if ms_pu and ms_q:
                         pu_detail = self._lu_mots(ms_pu, p, li, base=0.93, brut=mx.group(1))
                         qte_detail = self._lu_mots(ms_q, p, li, base=0.93, brut=mx.group(2))
+        if not dates:
+            dates = self._periode_libelle(p, li, lib_segs)
         if transport is not None:
             self._transports_tableaux.append(transport)
         if transport is not None or (date_rel is not None and mrn is not None):
@@ -1337,12 +1343,32 @@ class _Extraction:
             sorties.append(ligne)
         for lg in sorties:
             if lg is base or not lg.libelle_entete:
-                n = classer_nature(lg.libelle.texte if lg.libelle else None)
+                n = classer_nature(lg.libelle.texte if lg.libelle else None, tolerant=True)
                 if lg is base:
                     lg.nature = n or NatureLigne.autre_prestation
         return sorties
 
     # --- totaux ---
+
+    def _periode_libelle(self, p: VuePage, li: VueLigne, lib_segs: list[Segment]) -> list[Lu]:
+        """Période écrite dans le libellé (« Lagergeld (07/03/2026 – 15/03/2026) », « Storage 01/06/2026 to
+        05/06/2026 ») sans colonne de dates : exactement deux dates reliées par un séparateur d'intervalle
+        (D-2301). Une date isolée ou trois dates ne donnent rien."""
+        for s in lib_segs:
+            trouvees = list(_DATE_RE.finditer(s.texte))
+            if len(trouvees) != 2:
+                continue
+            entre = s.texte[trouvees[0].end():trouvees[1].start()]
+            if not _RX_SEP_PERIODE.fullmatch(entre):
+                continue
+            out: list[Lu] = []
+            for dm in trouvees:
+                ms = _mots_de_sous_chaine(s.mots, dm.start(), dm.end())
+                if not ms:
+                    return []
+                out.append(self._lu_mots(ms, p, li, brut=dm.group(0)))
+            return out
+        return []
 
     def _totaux(self, pages: list[VuePage]) -> dict[str, Total]:
         out: dict[str, Total] = {}
@@ -1692,6 +1718,25 @@ def _conf_ocr_min(v: ValeurSourcee, vue: VueDocument) -> float | None:
         return None
     cs = [m.confiance for m in p.texte.mots_dans(v.zone, recouvrement=0.6) if m.confiance is not None]
     return min(cs) if cs else None
+
+
+#: Confiance OCR minimale des mots d'un numéro de TVA dont la clé confirme la lecture (D-2302).
+C_OCR_TVA_CLE_MIN = 0.6
+
+
+def _conf_tva_cle_valide(lt: LectureTva, conf_attribution: float) -> float | None:
+    """Numéro de TVA français lu par OCR dont la **clé de contrôle** est juste (D-2302) : la clé (modulo 97)
+    détecte toute substitution d'un chiffre et toute permutation de deux chiffres voisins, elle confirme donc
+    la lecture des caractères. La confiance est alors celle de l'attribution du numéro (pavé libellé ou non),
+    plafonnée comme une lecture OCR recoupée (``C_OCR_RECOUPEE``). ``None`` (règle ordinaire) sinon : texte natif, numéro
+    corrigé, clé fausse ou non vérifiable, mots OCR peu sûrs."""
+    lec = lt.lu.lecture
+    if lec is None or lec.methode is not Methode.ocr or lt.corrigee or tva_fr_valide(lt.norm) is not True:
+        return None
+    c = lec.confiance_ocr
+    if c is None or c < C_OCR_TVA_CLE_MIN:
+        return None
+    return min(conf_attribution, C_OCR_RECOUPEE)
 
 
 def _ligne_de(p: VuePage, mot: Mot) -> VueLigne | None:

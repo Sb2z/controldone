@@ -233,6 +233,22 @@ def _articles_tous_lus(dec: Document) -> bool:
     return lus == imprime
 
 
+def _articles_manquants(dec: Document) -> bool:
+    """Le nombre d'articles imprimé est lu et des articles imprimés n'ont pas été lus (D-2307)."""
+    c = dec.dec
+    if c.nombre_articles is None or not c.nombre_articles.est_lisible:
+        return False
+    try:
+        imprime = c.nombre_articles.entier()
+    except ValueError:
+        return False
+    numeros = {a.numero_article.valeur for a in c.articles if a.numero_article is not None and a.numero_article.valeur}
+    lus = len(numeros) if numeros else len(c.articles)
+    if not c.articles:
+        lus = len({t.article.valeur for t in c.taxations if t.article is not None and t.article.valeur})
+    return lus < imprime
+
+
 def _confusions_somme(
     total: ValeurSourcee,
     v_total: Decimal,
@@ -307,6 +323,11 @@ def _b2_resultat(
     )
     if concorde if concorde is not None else abs(ecart) <= t_somme:
         return ctx.conforme("B2", **commun)
+    if ecart > 0 and _articles_manquants(dec):
+        # D-2307 : total imprimé supérieur à la somme lue alors que des articles imprimés n'ont pas été lus :
+        # leurs lignes manquent à la somme, l'écart n'est pas établi (impossible de conclure, P8).
+        return ctx.non_verifiable("B2", RaisonCode.valeur_absente, unite=unite, sous_controle=sous_controle,
+                                  documents=[dec.id], details={**details, "motif": "articles_non_lus"})
     raisons = [] if _articles_tous_lus(dec) else [RaisonCode.valeur_absente]
     # D-2210 : un écart certain repose sur une structure de tableau validée (doublons, couverture des
     # articles, lignes cohérentes, total de catégorie non ambigu).
@@ -457,6 +478,10 @@ def _b3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     )
     if abs(ecart) <= t_somme:
         return ctx.conforme("B3", **commun)
+    if ecart > 0 and _articles_manquants(dec):
+        # D-2307 : total imprimé supérieur à la somme lue alors que des articles imprimés n'ont pas été lus.
+        commun["details"] = {**details, "devise": devise, "motif": "articles_non_lus"}
+        return ctx.non_verifiable("B3", RaisonCode.valeur_absente, **commun)
 
     # Montant en EUR (§8.6) : direct si EUR, sinon au taux imprimé de la déclaration (§8.7).
     raisons: list[RaisonCode] = [] if _articles_tous_lus(dec) else [RaisonCode.valeur_absente]
@@ -648,6 +673,10 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
                       documents=[dec.id], details={"declaration_id": dec.id})
         if abs(ecart) <= t:
             out.append(ctx.conforme("B4", **commun))
+        elif ecart < 0 and _articles_manquants(dec):
+            # D-2307 : somme lue inférieure au total alors que des articles imprimés n'ont pas été lus.
+            commun["details"] = {"declaration_id": dec.id, "motif": "articles_non_lus"}
+            out.append(ctx.non_verifiable("B4", RaisonCode.valeur_absente, **commun))
         else:
             classement = ctx.classify("B4", ecart=ecart, tolerance=t, seuil_certitude=t,
                                       valeurs_cles=[total, *brutes], eligible=False)

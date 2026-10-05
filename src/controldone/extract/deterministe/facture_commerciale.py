@@ -386,6 +386,12 @@ def _devise(e: _Etat) -> None:
             conf = min(conf, 0.6)
         elif indices and set(indices) != {code_lu}:
             conf = min(conf, 0.6)  # en-tête de colonne ou libellé de total dans une autre devise
+        elif lec.methode is Methode.ocr and conf >= C_OCR_DEVISE_MIN and (
+            indices or _code_seul_relu(vue.texte, code_lu, codes_page)
+        ):
+            # D-2308 : le code du libellé « devise » est relu ailleurs (en-tête de colonne, total, ou seul code
+            # ISO de la page imprimé sur deux lignes) : deux lectures concordantes en deux endroits.
+            conf = max(conf, 0.9)
         e.champs.devise = e.fab.valeur("devise", lec, confiance=conf)
         e.devise = code_lu
         return
@@ -400,6 +406,9 @@ def _devise(e: _Etat) -> None:
             if (c and c != DEVISE_INCONNUE and m.texte.strip("()-").isupper()) or (c and m.texte in ("€", "£")):
                 lecd = Lecture((m,), lt.page, lt.methode, contexte=lt.contexte)
                 conf = min(confiance_mots(lecd), 0.9)
+                if lecd.methode is Methode.ocr and conf >= C_OCR_DEVISE_MIN and _code_seul_relu(
+                        vue.texte, c, codes_page):
+                    conf = 0.9  # D-2308 : seul code ISO du document, relu sur une autre ligne
                 e.champs.devise = e.fab.valeur("devise", lecd, confiance=conf)
                 e.devise = c
                 return
@@ -412,6 +421,15 @@ def _devise(e: _Etat) -> None:
         return
     if lec is not None:  # « $ » non confirmé
         e.champs.devise = e.fab.valeur("devise", lec, confiance=0.3)
+
+
+def _code_seul_relu(texte: str, code: str, codes_page) -> bool:
+    """``code`` est le seul code ISO de devise imprimé sur le document et figure, en mot entier, sur au moins
+    deux lignes distinctes (D-2308)."""
+    if set(codes_page or ()) != {code}:
+        return False
+    motif = re.compile(rf"(?<![A-Z]){re.escape(code)}(?![A-Z])")
+    return sum(1 for ligne in texte.splitlines() if motif.search(ligne)) >= 2
 
 
 def _devise_indices(e: _Etat, codes_page) -> dict[str, list[tuple[str, Lecture]]]:
@@ -445,6 +463,10 @@ def _devise_indices(e: _Etat, codes_page) -> dict[str, list[tuple[str, Lecture]]
     return out
 
 
+#: Confiance OCR minimale (``confiance_mots``) des mots d'un code de devise lu à deux endroits (D-2308).
+C_OCR_DEVISE_MIN = 0.65
+
+
 def _devise_par_indices(e: _Etat, indices: dict[str, list[tuple[str, Lecture]]]) -> bool:
     """Devise sans libellé : un seul code parmi les indices -> retenu (0,90 ; 0,95 si deux sources distinctes,
     en-tête de colonne et total ; OCR 0,85 / 0,90) ; plusieurs codes -> celui du total, 0,60."""
@@ -465,7 +487,10 @@ def _devise_par_indices(e: _Etat, indices: dict[str, list[tuple[str, Lecture]]])
     if conf_haute is None:
         conf = 0.6
     elif ocr:
-        conf = min(0.9 if conf_haute else 0.85, max(confiance_mots(lec), 0.6))
+        c_mots = confiance_mots(lec)
+        # D-2308 : deux lectures concordantes du même code ISO à deux endroits distincts (en-tête de colonne et
+        # total) se confirment : 0,90 comme annoncé (D-2003), au lieu du plafond d'une lecture OCR isolée.
+        conf = 0.9 if conf_haute and c_mots >= C_OCR_DEVISE_MIN else min(0.85, max(c_mots, 0.6))
     else:
         conf = 0.95 if conf_haute else 0.9
     v = e.fab.valeur("devise", lec, confiance=conf)
