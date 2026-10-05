@@ -377,6 +377,14 @@ def _e4_comparer(
                        **commun)
 
 
+def _abs(v: ValeurSourcee | None) -> Decimal | None:
+    """Montant d'avoir en valeur absolue : un avoir imprime ses montants tantôt positifs, tantôt négatifs
+    (« -15,00 »), parfois sur la ligne et pas sur le prix unitaire ; le crédit est le même (comme
+    ``lignes_credit_depuis_avoir``, D-2207)."""
+    x = num(v)
+    return abs(x) if x is not None else None
+
+
 def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
     c = av.av
     tol = ctx.tol
@@ -385,7 +393,7 @@ def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
         q, pu, ht = ln.quantite, ln.prix_unitaire, ln.montant_ht
         if q is not None and pu is not None and ht is not None:
             if all(aides.utilisable_num(ctx, v) for v in (q, pu, ht)):
-                vq, vpu, vht = num(q) or ZERO, num(pu) or ZERO, num(ht) or ZERO
+                vq, vpu, vht = _abs(q) or ZERO, _abs(pu) or ZERO, _abs(ht) or ZERO
                 txt = f"{format_nombre(vq)} × {format_montant(vpu, 'EUR')} = {format_montant(arrondi_centime(vq * vpu), 'EUR')}"
                 out.append(_e4_comparer(ctx, av, sous="ligne", unite=cle_unite(av=av.id, ligne=i), imprime=ht,
                                         v_imprime=vht, calcul=vq * vpu, tolerance=tol.t_ligne(), operandes=[q, pu],
@@ -396,7 +404,7 @@ def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
         tx, tva = ln.taux_tva, ln.montant_tva
         if ht is not None and tx is not None and tva is not None:
             if all(aides.utilisable_num(ctx, v) for v in (ht, tx, tva)):
-                vht, vtx, vtva = num(ht) or ZERO, num(tx) or ZERO, num(tva) or ZERO
+                vht, vtx, vtva = _abs(ht) or ZERO, _abs(tx) or ZERO, _abs(tva) or ZERO
                 calc = vht * vtx / Decimal(100)
                 txt = f"{format_montant(vht, 'EUR')} × {format_nombre(vtx)} % = {format_montant(arrondi_centime(calc), 'EUR')}"
                 out.append(_e4_comparer(ctx, av, sous="tva_ligne", unite=cle_unite(av=av.id, ligne=i), imprime=tva,
@@ -411,9 +419,9 @@ def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
         u = cle_unite(av=av.id)
         if aides.utilisable_num(ctx, c.total_credite_ht) and all(aides.utilisable_num(ctx, v) for v in hts):
             ops = [v for v in hts if v is not None]
-            s = sum((num(v) or ZERO for v in ops), ZERO)
+            s = sum((_abs(v) or ZERO for v in ops), ZERO)
             out.append(_e4_comparer(
-                ctx, av, sous="total_ht", unite=u, imprime=c.total_credite_ht, v_imprime=num(c.total_credite_ht) or ZERO,
+                ctx, av, sous="total_ht", unite=u, imprime=c.total_credite_ht, v_imprime=_abs(c.total_credite_ht) or ZERO,
                 calcul=s, tolerance=tol.t_somme(len(ops)), operandes=ops, quoi="le total HT crédité",
                 calcul_txt=f"somme des {len(ops)} lignes = {format_montant(arrondi_centime(s), 'EUR')}",
             ))
@@ -425,10 +433,10 @@ def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
         u = cle_unite(av=av.id)
         vals = (c.total_credite_ht, c.total_tva, c.total_credite_ttc)
         if all(aides.utilisable_num(ctx, v) for v in vals):
-            s = (num(c.total_credite_ht) or ZERO) + (num(c.total_tva) or ZERO)
+            s = (_abs(c.total_credite_ht) or ZERO) + (_abs(c.total_tva) or ZERO)
             out.append(_e4_comparer(
                 ctx, av, sous="total_ttc", unite=u, imprime=c.total_credite_ttc,
-                v_imprime=num(c.total_credite_ttc) or ZERO, calcul=s, tolerance=tol.t_somme(2),
+                v_imprime=_abs(c.total_credite_ttc) or ZERO, calcul=s, tolerance=tol.t_somme(2),
                 operandes=[c.total_credite_ht, c.total_tva], quoi="le total TTC crédité",
                 calcul_txt=f"total HT + total TVA = {format_montant(arrondi_centime(s), 'EUR')}",
             ))
@@ -463,6 +471,28 @@ def _composante_constat(r: ResultatControle) -> Composante | None:
             "C4": Composante.tva}.get(r.controle_id)
 
 
+def _composante_resultat(r: ResultatControle) -> Composante | None:
+    """Composante d'un résultat sans constat (écart soldé par un avoir) : C par catégorie, D prestation, G4."""
+    if r.controle_id.startswith("D"):
+        return Composante.prestation
+    if r.controle_id == "G4":
+        return Composante.forfait_petits_envois
+    cat = r.details.get("categorie") if r.details else None
+    try:
+        return Composante(cat) if cat else None
+    except ValueError:
+        return None
+
+
+def _nature_ligne(r: ResultatControle, ft: Document) -> NatureLigne | None:
+    """Nature de la ligne de facture d'un résultat par ligne (unité ``ft:<id>|ligne:<n>``, famille D)."""
+    for part in r.unite.split("|"):
+        if part.startswith("ligne:") and part[6:].isdigit():
+            i = int(part[6:])
+            return ft.ft.lignes[i].nature if i < len(ft.ft.lignes) else None
+    return None
+
+
 def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | None]]:
     """Écarts candidats : registre de recouvrement (reste recalculé depuis le montant initial, D-306) et
     constats ``recouvrable`` positifs des contrôles déjà exécutés (C, D). Retourne (écart, constat_id)."""
@@ -482,13 +512,21 @@ def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | 
         vus.add(e.constat_id)
     for r in ctx.anterieurs():
         c = r.constat
-        if c is None or c.nature_montant is not NatureMontant.recouvrable or c.id in vus:
-            continue
-        m = c.montant_brut if c.montant_brut is not None else c.montant_en_jeu
-        comp = _composante_constat(r)
+        if c is None:
+            # Écart entièrement soldé par un avoir déjà déduit par C, D ou G4 (résultat « conforme ») : il reste
+            # un écart candidat, sinon l'avoir serait imputé une seconde fois sur un autre écart (D-2208).
+            brut_txt = r.details.get("ecart_brut_avant_avoirs") if r.details else None
+            if brut_txt is None or r.id in vus:
+                continue
+            m, comp, cle, doc_ids = Decimal(brut_txt), _composante_resultat(r), r.id, r.documents_concernes
+        else:
+            if c.nature_montant is not NatureMontant.recouvrable or c.id in vus:
+                continue
+            m = c.montant_brut if c.montant_brut is not None else c.montant_en_jeu
+            comp, cle, doc_ids = _composante_constat(r), c.id, c.documents_concernes
         if m is None or m <= 0 or comp is None:
             continue
-        docs = [ctx.document(i) for i in c.documents_concernes]
+        docs = [ctx.document(i) for i in doc_ids]
         fts = [d for d in docs if d is not None and d.type is TypeDocument.facture_transitaire]
         decs = [d for d in docs if d is not None and d.type is TypeDocument.declaration]
         if len(fts) != 1:
@@ -496,10 +534,10 @@ def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | 
         ft = fts[0]
         mrn = aides.texte(decs[0].dec.mrn) if len(decs) == 1 else None
         out.append((EcartImputable(
-            id=f"constat:{c.id}", composante=comp, reste=m, emetteur=aides.emetteur_de(ctx, ft),
-            constat_id=c.id, facture_ref=aides.texte(ft.ft.numero), mrn=mrn,
-        ), c.id))
-        vus.add(c.id)
+            id=f"constat:{cle}", composante=comp, reste=m, emetteur=aides.emetteur_de(ctx, ft),
+            constat_id=cle, facture_ref=aides.texte(ft.ft.numero), mrn=mrn, nature=_nature_ligne(r, ft),
+        ), cle))
+        vus.add(cle)
     return out
 
 

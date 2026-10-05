@@ -359,6 +359,8 @@ def _g4_unite(ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours,
     credit = _credit_impute(ctx, ft, unite, decs, brut)
     net = brut - credit
     details |= {"nature_refacturee": nature.value, "credit_impute": str(credit), "lignes": lignes}
+    if credit > 0:
+        details["ecart_brut_avant_avoirs"] = str(arrondi_centime(brut))
     commun = dict(
         unite=unite, entrees={f"refacture_{k}": v for k, v in enumerate(vals_ref) if v is not None},
         attendu=arrondi_centime(v_liq), constate=arrondi_centime(refacture), ecart=arrondi_centime(net),

@@ -188,3 +188,14 @@ def test_lignes_credit_depuis_avoir_et_cle_emetteur():
     doc = _avoir(total_credite_ht=vs("avoir.total_credite_ht", "99.00", document_id="doc_av"))
     (l2,) = lignes_credit_depuis_avoir(doc)
     assert l2.nature is None and l2.montant == D("99.00")
+
+
+def test_prestation_de_meme_nature_imputee_d_abord():
+    # D-2208 : deux écarts « prestation » de la même facture ; la ligne d'avoir « dédouanement » va d'abord à
+    # l'écart dont la ligne facturée est de même nature, quel que soit l'ordre des identifiants.
+    surcharge = EcartImputable(id="a_surcharge", composante=Composante.prestation, reste=D("45.00"), emetteur=TRA,
+                               facture_ref="FT-001", nature=NatureLigne.surcharge)
+    dedou = EcartImputable(id="b_dedou", composante=Composante.prestation, reste=D("15.00"), emetteur=TRA,
+                           facture_ref="FT-001", nature=NatureLigne.frais_dedouanement)
+    r = imputer_avoirs([lc("15.00", NatureLigne.frais_dedouanement)], [surcharge, dedou])
+    assert r.credit_pour("b_dedou") == D("15.00") and r.credit_pour("a_surcharge") == D("0.00")

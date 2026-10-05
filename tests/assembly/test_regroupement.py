@@ -562,3 +562,71 @@ def test_repartition_prorata_demi_vers_le_haut_et_reliquat():
     assert repartir_prorata(D("100.00"), [D("1"), D("1"), D("1")]) == [D("33.33"), D("33.33"), D("33.34")]
     assert repartir_prorata(D("10.00"), [D("1"), None]) == [D("10.00"), None]
     assert repartir_prorata(None, [D("1")]) == [None]
+
+
+# --- généralisation (D-2110 à D-2112) ------------------------------------------------------------------
+
+
+def test_pdf_fusionne_sans_reference_ne_reunit_pas_les_dossiers():
+    """PDF fusionné « facture, déclaration, facture, déclaration » : « même fichier » vaut pour tous les dossiers ;
+    la déclaration sans autre signal va au dossier de la facture qui la précède, sans réunir les dossiers."""
+    lot = Lot()
+
+    def page(n):
+        d = lot.docs[-1]
+        lot.docs[-1] = document(d.type, d.champs, id=d.id, pages=(n,), fichier_id=lot.fichier("docs/scan.pdf"))
+
+    lot.fc("fc1", "docs/scan.pdf", numero="INV-10001", tva=None)
+    page(1)
+    lot.dec("dec1", "docs/scan.pdf", mrn=MRN1, montant=None, tva=None)
+    page(2)
+    lot.fc("fc2", "docs/scan.pdf", numero="INV-20002", total="777.00", tva=None)
+    page(3)
+    lot.dec("dec2", "docs/scan.pdf", mrn=MRN2, montant=None, tva=None)
+    page(4)
+    res = lot.regrouper(options=OptionsRegroupement(annee=2026, meme_source=False))
+    assert len(res.dossiers) == 2
+    assert _dossier_de(res, "dec1") is _dossier_de(res, "fc1")
+    assert _dossier_de(res, "dec2") is _dossier_de(res, "fc2")
+    assert _lien(_dossier_de(res, "dec2"), "dec2").force is ForceLien.faible  # P4 : rattachement faible
+
+
+def test_reference_tronquee_commune_a_plusieurs_factures_n_est_pas_citee():
+    lot = Lot()
+    lot.fc("fc1", "docs/a/fc1.pdf", numero="ODH 2026.4006", total="100.00", tva=None)
+    lot.fc("fc2", "docs/a/fc2.pdf", numero="ODH 2026.4007", total="200.00", tva=None)
+    lot.dec("dec1", "docs/a/dec1.pdf", refs=[("N380", "ODH 2026")], montant=None, tva=None)
+    res = lot.regrouper(options=OptionsRegroupement(annee=2026, meme_source=False))
+    for d in res.dossiers:
+        lien = d.lien("dec1")
+        assert lien is None or SignalLien.ref_facture_citee not in lien.signaux
+
+
+def test_reference_exacte_reste_citee_meme_si_compatible_avec_une_autre():
+    lot = Lot()
+    lot.fc("fc1", "docs/fc1.pdf", numero="INV-10001", tva=None)
+    lot.fc("fc2", "docs/fc2.pdf", numero="INV-10001-B", tva=None)
+    lot.dec("dec1", "docs/dec1.pdf", refs=[("N380", "INV-10001")], montant=None, tva=None)
+    res = lot.regrouper(options=OptionsRegroupement(annee=2026, meme_source=False))
+    assert SignalLien.ref_facture_citee in _lien(_dossier_de(res, "dec1"), "dec1").signaux
+    assert _dossier_de(res, "dec1") is _dossier_de(res, "fc1")
+
+
+def test_declarations_sans_facture_de_mrn_differents_restent_distinctes():
+    lot = Lot()
+    lot.dec("dec1", "docs/envoi/dec1.pdf", mrn=MRN1)
+    lot.dec("dec2", "docs/envoi/dec2.pdf", mrn=MRN2)
+    lot.ft("ft1", "docs/envoi/ft.pdf", mrns=(MRN1, MRN2))
+    res = lot.regrouper()
+    assert _dossier_de(res, "dec1") is not _dossier_de(res, "dec2")
+    assert sum(1 for d in res.dossiers if d.lien("ft1")) == 2  # facture mensuelle : dans les deux dossiers
+
+
+def test_facture_repartie_sur_deux_declarations_par_repli_reste_possible():
+    lot = Lot()
+    lot.fc("fc1", "docs/fc.pdf", total="1000.00", tva=None)
+    lot.dec("dec1", "docs/dec1.pdf", mrn=MRN1, refs=[("N380", "INV-10001")], montant="600.00")
+    lot.dec("dec2", "docs/dec2.pdf", mrn=MRN2, montant="400.00", tva=None)
+    res = lot.regrouper()
+    assert len(res.dossiers) == 1
+    assert _lien(res.dossiers[0], "dec2").force is ForceLien.faible

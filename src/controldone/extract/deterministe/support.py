@@ -65,7 +65,11 @@ LIB_MAISON = motifs(
 LIB_MAITRE = motifs(
     rf"(?:master\s*{_REF}|m(?:awb|bl|b/l)|{_REF}\s*(?:mere|master|madre)|lta\s*mere)\s*{_NO}?\s*:?",
 )
-LIB_TRANSPORT = motifs(rf"{_REF}(?:\s*/\s*{_REF})*\s*{_NO}?\s*:?", r"(?:tracking|shipment|expedition)\s*" + _NO + r"\s*:?")
+LIB_TRANSPORT = motifs(rf"{_REF}(?:\s*/\s*{_REF})*\s*{_NO}?\s*:?", r"(?:tracking|shipment|expedition)\s*" + _NO + r"\s*:?",
+                       # « Transport: 999-12345675 », « Frachtbrief: … », « Polizza di carico: … » (D-2010)
+                       r"transport(?:\s*(?:doc(?:ument)?|ref(?:erence)?)\.?)?\s*:",
+                       r"(?:cmr-?\s*)?frachtbrief\s*:?", r"konnossement\s*:?", r"polizza\s*di\s*carico\s*:?",
+                       r"lettera\s*di\s*vettura(?:\s*aerea)?\s*:?", r"(?:lucht)?vrachtbrief\s*:?", r"cognossement\s*:?")
 _TITRE_TRANSPORT = re.compile(
     r"^(?:air\s*waybill|bill of lading|sea\s*waybill|lettre de transport|lta\b|connaissement|conocimiento|"
     r"guia aerea|cmr\b|lettre de voiture|house air waybill|master air waybill)"
@@ -80,6 +84,10 @@ LIB_COLIS = motifs(
     r"(?:total\s*)?(?:packages|pkgs|pieces|colis|cartons)\s*:", r"total\s*(?:packages|pkgs|pieces|colis)\s*:?",
     r"(?:nombre|nb|nbre)\s*(?:total\s*)?(?:de\s*)?colis\s*:?", r"(?:numero|n\.?o|cantidad|total)\s*(?:de\s*)?bultos\s*:?",
     r"bultos\s*:",
+    # « Packages / colis: 60 », « Packstücke: 3 », « Colli: 4 » (D-2010)
+    r"(?:packages|pkgs|colis|colli|bultos|packstucke|pakketten|kolli)(?:\s*/\s*(?:packages|pkgs|colis|colli|bultos|"
+    r"packstucke|pakketten|kolli))+\s*:",
+    r"(?:anzahl\s*)?packstucke\s*:", r"(?:numero\s*)?colli\s*:", r"(?:aantal\s*)?colli\s*:",
 )
 LIB_BRUT = motifs(
     r"(?:total\s*)?gross\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?", r"(?:total\s*)?poids\s*brut(?:\s*total)?\s*:?",
@@ -93,7 +101,12 @@ LIB_TAXABLE = motifs(
     r"(?:total\s*)?(?:chargeable|taxable)\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?",
     r"(?:total\s*)?poids\s*taxable\s*:?", r"(?:total\s*)?peso\s*(?:tasable|facturable)\s*:?",
 )
+_FACT = r"(?:invoice|facture|factura|rechnung|fattura|factuur)"
 LIB_FACTURE = motifs(
+    # « Ref. invoice / facture: … », « Ref. Rechnung: … » (D-2010)
+    rf"ref(?:erence|\.)?\s*{_FACT}(?:\s*/?\s*{_FACT})*\s*(?:{_NO})?\s*:",
+    rf"(?:handels)?rechnung\s*(?:{_NO}|nummer)\s*:?", rf"fattura\s*(?:{_NO}|n\.)\s*:?",
+    r"factuur\s*-?\s*(?:nummer|nr\.?)\s*:?",
     rf"(?:commercial\s*|supplier\s*)?invoice\s*(?:{_NO}|ref(?:erence)?\.?)\s*:?",
     rf"(?:notre\s*|votre\s*)?facture(?:\s*(?:commerciale|fournisseur))?\s*(?:{_NO}|ref\.?)\s*:?",
     rf"factura(?:\s*comercial)?\s*{_NO}\s*:?",
@@ -112,6 +125,93 @@ VOCAB_TABLEAU: dict[str, list[str]] = {
     "masse_nette": ["net weight (kg)", "net weight", "net kg", "poids net", "peso neto", "n.w"],
     "date": ["date", "fecha", "date of issue"],
 }
+
+
+#: Tableau des articles d'une liste de colisage : masses par ligne et ligne de total (D-2010).
+VOCAB_COLISAGE: dict[str, list[str]] = {
+    "masse_brute": ["gross kg", "gross weight", "gross weight (kg)", "gross wt", "g.w", "brutto kg", "bruttogewicht",
+                    "bruto kg", "brutogewicht", "lordo kg", "peso lordo", "brut kg", "poids brut", "peso bruto",
+                    "peso bruto kg"],
+    "masse_nette": ["net kg", "net weight", "net weight (kg)", "n.w", "netto kg", "nettogewicht", "neto kg",
+                    "peso netto", "poids net", "peso neto", "peso neto kg"],
+    "quantite": ["qty", "quantity", "menge", "q.ta", "quantita", "aantal", "cantidad", "qte", "quantite"],
+    "article": ["item", "description", "#", "artikel", "articolo", "descrizione", "bezeichnung", "omschrijving",
+                "descripcion", "designation", "article"],
+}
+_LIGNE_TOTAL = re.compile(r"^(?:total(?:e|es)?|summe|gesamt|totaal|sum)\b")
+
+
+def _nombre_colonne(mots: Sequence[Mot], col) -> tuple[list[Mot], bool] | None:
+    """Nombre d'une cellule le plus proche du centre de l'en-tête de sa colonne ; vrai si la cellule en porte
+    plusieurs (colonne voisine non reconnue qui déborde : lecture douteuse)."""
+    nb = [n for n in nombres_dans(mots) if not n.tronque]
+    if not nb:
+        return None
+    centre = (col.x0 + col.x1) / 2
+    meilleur = min(nb, key=lambda n: abs((mots[n.i].x0 + mots[n.j - 1].x1) / 2 - centre))
+    return list(mots[meilleur.i:meilleur.j]), len(nb) > 1
+
+
+def _separateur_colonne(nombres: list[tuple[list[Mot], bool]], vue: VueDocument) -> tuple[str | None, bool]:
+    """Séparateur décimal des masses d'une colonne : un nombre qui porte les deux signes le donne (le dernier) ;
+    sinon, des masses toutes écrites « d,ddd » (ou « d.ddd ») avec le même signe : ce signe est décimal (masses au
+    gramme près, §5.2), présomption sauf « 0,ddd » ; à défaut, la règle du document."""
+    textes = [" ".join(m.texte for m in n[0]) for n in nombres]
+    for t in textes:
+        p, v = t.rfind("."), t.rfind(",")
+        if p >= 0 and v >= 0:
+            return ("." if p > v else ","), False
+        m = re.fullmatch(r"\d{1,3}(?:['’\u00a0\u202f ]\d{3})+([.,])\d{1,3}", t)
+        if m:  # milliers groupés par apostrophe ou espace : le signe restant est décimal (« 1'190,500 »)
+            return m.group(1), False
+    signes = {m.group(1) for t in textes for m in [re.fullmatch(r"\d{1,3}([.,])\d{3}", t)] if m}
+    if len(signes) == 1 and all(re.fullmatch(r"\d{1,3}[.,]\d{3}", t) for t in textes):
+        sep = signes.pop()
+        return sep, not any(re.fullmatch(r"0[.,]\d{3}", t) for t in textes)
+    return separateur_masse(vue, textes[-1] if textes else "")
+
+
+def _total_colisage(vue: VueDocument) -> dict[str, tuple[Lecture, bool, str | None, bool]]:
+    """Ligne de total du tableau d'une liste de colisage (« Total | 4,020.000 | 4,363.580 ») : masses lues dans
+    la colonne de leur en-tête ; vrai si la somme des lignes du tableau redonne ce total."""
+    from decimal import Decimal
+
+    out: dict[str, tuple[Lecture, bool, str | None, bool]] = {}
+    for p in vue.pages:
+        for k, li in enumerate(p.lignes):
+            cols = reconnaitre_entete(li, VOCAB_COLISAGE, min_colonnes=2)
+            if not cols or "masse_brute" not in {c.type for c in cols}:
+                continue
+            par_col = {c.type: c for c in cols}
+            lignes_tab: list[tuple[VueLigne, dict[str, list[Mot]]]] = []
+            total = None
+            for li2 in p.lignes[k + 1:k + 60]:
+                cell = attribuer(_nettoyer(li2.mots), cols, tableur=p.tableur)
+                if any(_LIGNE_TOTAL.match(s.cle.lstrip("|[]!. ")) for s in li2.segments):
+                    total = (li2, cell)
+                    break
+                lignes_tab.append((li2, cell))
+            if total is None:
+                return out
+            for typ in ("masse_brute", "masse_nette"):
+                if typ not in par_col:
+                    continue
+                lus = [(li2, _nombre_colonne(cell.get(typ, []), par_col[typ])) for li2, cell in lignes_tab]
+                li_t, cell_t = total
+                n_t = _nombre_colonne(cell_t.get(typ, []), par_col[typ])
+                if n_t is None or n_t[1]:
+                    continue
+                sep, presume = _separateur_colonne([n for _l, n in lus if n is not None] + [n_t], vue)
+                ms = n_t[0]
+                lec = lecture_mots(ms, p, li_t)
+                tot = parse_weight_kg(texte_nombre(lec.texte), separateur_decimal=sep)
+                vals = [parse_weight_kg(texte_nombre(" ".join(m.texte for m in n[0])), separateur_decimal=sep)
+                        for _l, n in lus if n is not None]
+                ok = (tot is not None and vals and None not in vals and not any(n[1] for _l, n in lus if n is not None)
+                      and abs(sum(vals, Decimal(0)) - tot) <= Decimal("0.0015"))  # type: ignore[arg-type]
+                out[typ] = (lec, bool(ok), sep, presume)
+            return out
+    return out
 
 
 class ExtracteurSupport:
@@ -184,17 +284,22 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
                 ch.ref_transport_maitre = fab.valeur("ref_transport_maitre", lec, confiance=_conf_ref(lec))
                 break
     # masses et colis : tableau d'en-tête, sinon libellés
+    tot_colisage = _total_colisage(vue) if not tab else {}
     for chemin, libs, acc in (("nombre_colis", LIB_COLIS, accepte_entier), ("masse_brute", LIB_BRUT, None),
                               ("masse_taxable", LIB_TAXABLE, None), ("masse_nette", LIB_NET, None)):
         lec = tab.get(chemin)
         if lec is None:
             lec = _premier(vue, libs, acc or accepte_masse(vue))
+        recoupe = None
+        sep_col = None
+        if lec is None and chemin in tot_colisage:
+            lec, recoupe, sep_col, presume_col = tot_colisage[chemin]
         if lec is None:
             continue
         if chemin == "nombre_colis":
             setattr(ch, chemin, fab.valeur(chemin, lec, type_valeur=TypeValeur.entier))
             continue
-        sep, presume = separateur_masse(vue, lec.texte)
+        sep, presume = separateur_masse(vue, lec.texte) if recoupe is None else (sep_col, presume_col)
         if parse_weight_kg(texte_nombre(lec.texte), separateur_decimal=sep) is None:
             continue
         conf = confiance_mots(lec)
@@ -202,6 +307,9 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
             conf = min(conf, 0.7)
         if lec.methode is Methode.ocr and re.search(r"\d{7,}", lec.texte):
             conf = min(conf, 0.4)  # séparateurs perdus par l'OCR (« 2739523277 »)
+        if recoupe is not None:  # total d'un tableau de colisage : sûr seulement si la somme des lignes le redonne
+            conf = max(conf, 0.95 if lec.methode is not Methode.ocr else 0.9) if recoupe and not presume \
+                else min(conf, 0.85)
         setattr(ch, chemin, fab.valeur(chemin, lec, type_valeur=TypeValeur.masse, separateur=sep, confiance=conf))
     _recouper_masses(ch)
     _parties(vue, fab, ch)
@@ -312,8 +420,14 @@ def _refs_facture(vue: VueDocument, fab: Fabrique, ch: ChampsSupport) -> None:
 
 
 def _accepte_ref_facture(mots: Sequence[Mot]) -> tuple[int, int] | None:
+    # numéro en deux mots : préfixe de 2 à 4 capitales puis partie chiffrée (« FT 4800/2026 », D-2010)
+    if len(mots) >= 2 and re.fullmatch(r"[A-Z]{2,4}", mots[0].texte) and re.fullmatch(
+            r"\d[A-Za-z0-9/\-_.]*\d", mots[1].texte.strip(":;,()")):
+        return 0, 2
     for k, m in enumerate(mots[:2]):
         t = m.texte.strip(":;,.()")
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}|\d{1,2}[./]\d{1,2}[./]\d{2,4}", t):
+            continue  # une date n'est pas un numéro de facture (D-2010)
         if len(t) >= 4 and re.search(r"\d", t) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9/\-_.]*", t):
             return k, k + 1
     return None

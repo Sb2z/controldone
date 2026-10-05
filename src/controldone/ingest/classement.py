@@ -69,10 +69,16 @@ def _rx(*motifs: str) -> re.Pattern[str]:
 TITRE_FACTURE = _rx(
     r"\bcommercial invoice\b", r"\bfacture commerciale\b", r"\bfactura comercial\b", r"\btax invoice\b",
     r"\binvoice\b", r"\bfacture\b", r"\bfactura\b", r"\bpro ?-?forma\b", r"\brechnung\b",
+    # de / it / nl / pt-tr-pl : « Handelsrechnung », « Fattura commerciale », « Handelsfactuur »,
+    # « Voorschotfactuur », « Dienstenfactuur » (mots composés néerlandais et allemands)
+    r"\b\w{0,16}rechnung\b", r"\bfattura\b",
+    r"\b\w{0,16}factuur\b", r"\bfatura\b", r"\bfaktura\b",
 )
 TITRE_AVOIR = _rx(
     r"\bcredit note\b", r"\bcredit memo\b", r"\bfacture d'avoir\b", r"\bnote de credit\b",
     r"\bnota de credito\b", r"\bfactura rectificativa\b", r"\bavoir\b", r"\babono\b", r"\bcreditnote\b",
+    r"\bgutschrift\b", r"\brechnungskorrektur\b", r"\bnota di credito\b", r"\bnota d'accredito\b",
+    r"\bcreditnota\b", r"\bcreditfactuur\b", r"\bfactura de abono\b",
 )
 PRO_FORMA = _rx(r"\bpro ?-?forma\b")
 VALEUR_DOUANE = _rx(r"for customs purposes? only", r"valeur (?:en douane|pour la douane) seulement",
@@ -88,6 +94,14 @@ TITRE_DECLARATION = _rx(
     r"bon a enlever", r"preuve de ded\w*", r"proof of (?:customs )?clearance", r"dedouanement import",
     r"envoi de faible valeur",
     r"declaration de mise en libre pratique", r"liquidation des droits",
+    # récapitulatifs et certificats de dédouanement, éditions de logiciel, autres langues
+    r"(?:certificate|certificat|attestation) (?:of|de) (?:customs )?(?:clearance|dedouanement)",
+    r"customs clearance (?:certificate|summary|confirmation)", r"clearance (?:certificate|summary)",
+    r"customs release", r"\brelease note\b", r"declaration (?:acceptee|import(?:ation)? acceptee)",
+    r"edition de la declaration", r"suite\W{0,4}(?:de la )?declaration", r"\bzollanmeldung\b", r"\beinfuhranmeldung\b",
+    r"\bzollfreigabe\b", r"\bdichiarazione (?:doganale|di importazione)\b", r"\bbolletta doganale\b",
+    r"\bdeclaracion (?:de importacion|aduanera|en aduana|sumaria)\b", r"\blevante aduanero\b",
+    r"\bdouaneaangifte\b", r"\baangifte ten invoer\b", r"\binvoeraangifte\b",
 )
 CORPS_DECLARATION = _rx(
     r"\bmrn\b", r"\blrn\b", r"\bdeclarant\b", r"\bregime\b", r"\bprocedure\b", r"\bmainlevee\b",
@@ -98,6 +112,16 @@ CORPS_DECLARATION = _rx(
     r"\bcustoms office\b", r"\bacceptance date\b", r"\bcommodity code\b", r"\bdeclarant\b",
     r"\bnombre d'articles\b", r"\bdroits et taxes\b", r"\baccepte le\b", r"\bref\. int", r"\bimportat\.",
     r"\bmise en libre pratique\b", r"\bcalcul des impositions\b", r"\bquotite\b",
+    # en / de / it / es / nl
+    r"\blocal reference\b", r"\bimporter\b", r"\bcountry of dispatch\b", r"\bnumber of items\b",
+    r"\bstatistical value\b", r"\bsupporting documents\b", r"\bcustoms duty\b", r"\bimport vat\b",
+    r"\btotal (?:duties and taxes|payable)\b", r"\bexchange rate\b", r"\bprocedure code\b",
+    r"\bwarennummer\b", r"\bzollwert\b", r"\bannahmedatum\b", r"\banmelder\b", r"\beinfuhrer\b",
+    r"\bversendungsland\b", r"\bzollstelle\b", r"\bcodice (?:merce|nc)\b", r"\bdata di accettazione\b",
+    r"\bdichiarante\b", r"\bimportatore\b", r"\bufficio doganale\b", r"\bvalore statistico\b",
+    r"\bfecha de admision\b", r"\bdeclarante\b", r"\bimportador\b", r"\baduana de\b",
+    r"\bvalor estadistico\b", r"\baangever\b", r"\bgoederencode\b", r"\bdatum van aanvaarding\b",
+    r"\bstatistische waarde\b", r"\bdouanekantoor\b",
 )
 TYPE_DAU = _rx(r"document administratif unique", r"\b(?:22 monnaie|33 code des marchandises|47 calcul|"
                r"8 destinataire|14 declarant|31 colis)")
@@ -106,8 +130,11 @@ CORPS_TRANSPORT = _rx(r"\bshipper\b", r"\bconsignee\b", r"\bnotify party\b", r"p
                       r"\bchargeable weight\b", r"issuing carrier", r"\bfreight (?:prepaid|collect)\b",
                       r"\bplace of (?:receipt|delivery)\b", r"\bbill\b", r"\blading\b")
 TYPE_H7 = _rx(r"\bh7\b", r"faible valeur", r"low value")
-TYPE_PREUVE = _rx(r"preuve de ded\w*", r"dedouanement import", r"avis de mainlevee", r"bon a enlever", r"proof of (?:customs )?clearance",
-                  r"release note")
+TYPE_PREUVE = _rx(r"preuve de ded\w*", r"dedouanement import", r"avis de mainlevee", r"bon a enlever",
+                  r"proof of (?:customs )?clearance", r"release note",
+                  r"(?:certificate|certificat|attestation) (?:of|de) (?:customs )?(?:clearance|dedouanement)",
+                  r"customs clearance (?:certificate|summary|confirmation)", r"clearance (?:certificate|summary)",
+                  r"customs release", r"\bzollfreigabe\b", r"\blevante aduanero\b")
 
 # Facture de transitaire : libellés de débours et de prestations (jamais un nom de transporteur).
 FORTS_TRANSITAIRE = _rx(
@@ -116,6 +143,11 @@ FORTS_TRANSITAIRE = _rx(
     r"\bhonoraires? de dedouanement\b", r"\bprestation de dedouanement\b", r"\bdroits de douane refactures\b",
     r"\btva (?:a l')?import(?:ation)? (?:refacturee|avancee|payee)\b", r"\bgastos suplidos\b", r"\bsuplidos\b",
     r"\bduties and taxes advanced\b", r"\brepresentation (?:en douane|fiscale)\b",
+    # de / it / es / nl : débours, commission d'avance, prestation de dédouanement
+    r"\bauslagen\b", r"\bvorlageprovision\b", r"\bverzollung\b", r"\bzollabfertigung\b",
+    r"\banticipazion[ei]\b", r"\bcommissione (?:di )?anticip\w*", r"\bsdoganamento\b",
+    r"\bcomision (?:por|de) anticipo\b", r"\bdespacho (?:de )?aduan\w*", r"\bhonorarios de despacho\b",
+    r"\bvoorschot(?:ten|provisie|factuur)?\b", r"\binklaring\b", r"\bdouane-?afhandeling\b",
 )
 CORPS_TRANSITAIRE = _rx(
     r"\bdedouanement\b", r"\bcustoms clearance\b", r"\bdroits de douane\b", r"\bdroits et taxes\b",
@@ -123,6 +155,11 @@ CORPS_TRANSITAIRE = _rx(
     r"\bhandling\b", r"\bfrais de dossier\b", r"\bligne(?:s)? supplementaire", r"\badditional (?:line|item)s?\b",
     r"\btransitaire\b", r"\bfreight forwarder\b", r"\bcommissionnaire\b", r"\bsurcharge\b", r"\bmrn\b",
     r"\bprestations?\b", r"\bdossier\b", r"\bltas?\b", r"\bawb\b", r"\bdroit forfaitaire\b",
+    r"\bzollabgaben\b", r"\beinfuhrumsatzsteuer\b", r"\blagergeld\b", r"\bumschlag\b", r"\bzustellung\b",
+    r"\bleistungen\b", r"\bdazi[oe]?\b", r"\biva (?:all'|di )?importazione\b", r"\bmagazzinaggio\b",
+    r"\bmovimentazione\b", r"\bspese di pratica\b", r"\baranceles?\b", r"\biva (?:de )?importacion\b",
+    r"\balmacenaje\b", r"\bmanipulacion\b", r"\binvoerrechten\b", r"\bbtw bij invoer\b",
+    r"\bopslag\b", r"\bbehandeling\b", r"\bbezorging\b",
 )
 CORPS_FACTURE_COMMERCIALE = _rx(
     r"\bhs ?code\b", r"\bcode (?:sh|nc|douanier)\b", r"\btariff code\b", r"\bcountry of origin\b",
@@ -132,6 +169,12 @@ CORPS_FACTURE_COMMERCIALE = _rx(
     r"\bpoids (?:net|brut)\b", r"\bsold to\b", r"\bbill to\b", r"\bship to\b", r"\bbuyer\b", r"\bacheteur\b",
     r"\bmade in\b", r"\bqty\b", r"\bquantite\b", r"\bcantidad\b", r"\bpart (?:no|number)\b",
     r"\breference article\b",
+    # de / it / es / nl
+    r"\b(?:waren|zoll)tarif(?:nummer)?\b", r"\bursprung(?:sland)?\b", r"\bherkunftsland\b",
+    r"\blieferbedingungen\b", r"\bvoce doganale\b", r"\bpaese di origine\b", r"\borigine\b",
+    r"\bprezzo unit\w*", r"\bpeso (?:netto|lordo|neto|bruto)\b", r"\bresa\b", r"\bpartida arancelaria\b",
+    r"\bcondiciones de entrega\b", r"\bgn-?code\b", r"\boorsprong\b", r"\b(?:netto|bruto)gewicht\b",
+    r"\bleveringsvoorwaarden\b", r"\bnettogewicht\b", r"\bbruttogewicht\b",
 )
 
 SUPPORT_TITRES: list[tuple[SousTypeSupport, re.Pattern[str]]] = [
@@ -141,10 +184,15 @@ SUPPORT_TITRES: list[tuple[SousTypeSupport, re.Pattern[str]]] = [
         r"conocimiento de embarque", r"\bguia aerea\b", r"\bhawb\b", r"\bmawb\b", r"\blta\b(?! ?n)",
     )),
     (SousTypeSupport.liste_colisage, _rx(r"\bpacking list\b", r"\bliste de colisage\b", r"\blista de empaque\b",
-                                         r"\bpacking slip\b", r"\bnote de colisage\b", r"\bcolisage\b")),
+                                         r"\bpacking slip\b", r"\bnote de colisage\b", r"\bcolisage\b",
+                                         r"\bpackliste\b", r"\bpackzettel\b", r"\bpacking ?list\b",
+                                         r"\b(?:lista|distinta) (?:di )?colli\b", r"\bdistint ?a di imball\w*", r"\bpaklijst\b",
+                                         r"\blista de (?:empaque|embalaje|bultos)\b", r"\bpakbon\b")),
     (SousTypeSupport.conditions_generales, _rx(
         r"conditions generales", r"general (?:terms|conditions)", r"terms and conditions", r"conditions de vente",
         r"\bcgv\b", r"condiciones generales", r"terminos y condiciones", r"standard trading conditions",
+        r"allgemeine (?:geschafts|liefer|verkaufs)\w*bedingungen", r"\bagb\b", r"\badsp\b",
+        r"condizioni generali", r"algemene (?:leverings|verkoop)?voorwaarden",
     )),
     (SousTypeSupport.certificat, _rx(r"certificat d'origine", r"certificate of origin", r"\beur\.? ?1\b",
                                      r"\beur-med\b", r"certificado de origen", r"\bcertificat\b",
@@ -164,6 +212,11 @@ LETTRE = _rx(
     r"\bci-?joint", r"\bcordialement\b", r"\bsincerely\b", r"kind regards", r"best regards",
     r"salutations distinguees", r"\batentamente\b", r"\bestimad[oa]s?\b", r"nous vous prions", r"\bobjet ?:",
     r"\bsubject ?:", r"\bre ?:",
+    # de / it / es / nl
+    r"sehr geehrte", r"mit freundlichen gru", r"\banbei\b", r"\bbetreff ?:", r"\bgentil[ei] (?:signor|client)",
+    r"cordiali saluti", r"distinti saluti", r"\bin allegato\b", r"\boggetto ?:", r"\badjunt[oa]s?\b",
+    r"\basunto ?:", r"\bun saludo\b", r"\bgeachte\b", r"met vriendelijke groet", r"\bbijgaand\b",
+    r"\bin de bijlage\b", r"\bonderwerp ?:",
 )
 CG_CORPS = _rx(r"\barticle \d+", r"\bart\. \d+", r"\bclause \d+", r"\bresponsabilite\b", r"\bliability\b",
                r"\bjuridiction\b", r"\bjurisdiction\b", r"\btribunal\b", r"\bforce majeure\b")
@@ -201,6 +254,11 @@ P2_CORPS = _rx(r"commercial invoice (?:sent separately|to follow|will follow)", 
                r"shipping details only", r"facture commerciale (?:suivra|envoyee separement)",
                r"document sans valeur commerciale", r"ceci n'est pas une facture", r"this is not an invoice")
 
+#: Montant à payer imprimé positif (« Net à payer 1 173,99 € ») : un tiret isolé ailleurs (« Total débours   -
+#: 975,38 € », OCR) ne fait pas un avoir.
+_A_PAYER_POSITIF = re.compile(
+    r"\b(?:net a payer|total ttc|amount due|balance due|grand total|total general|rechnungsbetrag|totale documento|"
+    r"total factura|totaal incl\.? btw)\b[a-z :€$£.]{0,25}?(?<![\w.,/-])(?<!- )(?<!\()\d", re.MULTILINE)
 _TOTAL_NEGATIF = re.compile(
     r"(?<!sous-)(?<!sous )(?<!sub-)(?<!sub )(?<!sub)\b(?:total|net a payer|amount due|montant (?:total|du)|"
     r"importe total|total general|grand total|balance due|a payer|to pay)\b[a-z :€$£.]{0,25}?"
@@ -209,11 +267,19 @@ _TOTAL_NEGATIF = re.compile(
 )
 
 #: Après un libellé de titre : étiquette de champ (« Connaissement n° : X ») ou début de phrase (« Invoice. »).
-_SUITE_CHAMP = re.compile(r"\s*(?:n°|nº|no\b|nr\b|number|numero|#|:|ref)")
+_SUITE_CHAMP = re.compile(r"\s*(?:n°|nº|no\b|nr\b|number|numero|#|:|ref|/)")
 _SUITE_PHRASE = re.compile(r"\.\s+\w")
+#: « Invoice currency / total », « Facture : montant » : rubrique qui cite la facture (déclaration), pas un intitulé.
+_SUITE_CITATION = re.compile(r"\.\s+\w|\s*(?:currency|value|amount|total)\b")
+#: Un « mot » compte s'il porte une lettre ou un chiffre (« / », « — », « | » ne comptent pas).
+_MOT = re.compile(r"[a-z0-9]")
+#: Mot qui, juste avant un libellé de titre, en fait une référence citée (« Ref. invoice », « Réf. facture »).
+_CITATION_AVANT = re.compile(r"(?:ref|refs|reference|your|votre|vtre|uw|ihre|vostra|su)[.:]?")
 
-_PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|p\.)\s*[:.]?\s*(\d{1,3})\s*(?:/|of|sur|de|von)\s*(\d{1,3})\b")
-_SUITE = re.compile(r"\b(?:suite|continued|continuation|a reporter|report|carried forward|(?:\(|-)\s?cont)\b")
+_PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|blatt|blad|p\.)\s*[:.]?\s*(\d{1,3})\s*(?:/|of|sur|de|von|di|van)\s*"
+                     r"(\d{1,3})\b")
+_SUITE = re.compile(r"\b(?:suite|continued|continuation|a reporter|report|carried forward|(?:\(|-)\s?cont|"
+                    r"fortsetzung|ubertrag|seguito|riporto|continuacion|suma y sigue|vervolg)\b")
 _NUM_FACTURE = re.compile(
     r"(?:invoice|facture|factura|avoir|credit note|nota de credito|note de credit|inv)\.?[ \t]*"
     r"(?:(?:no|n\.?\s?°|n\.?\s?º|n o|nr|num(?:ero|ber)?|#|ref)\.?[ \t]*(?:de facture)?[ \t]*[:#]?|[:#])[ \t]*"
@@ -231,7 +297,14 @@ _MOTS_LANGUE = {
            "price", "description"},
     "es": {"el", "los", "las", "del", "y", "factura", "importe", "peso", "pais", "por", "con", "para", "precio",
            "cantidad"},
+    "de": {"der", "die", "das", "und", "fur", "mit", "von", "rechnung", "betrag", "datum", "menge", "summe",
+           "zoll", "gesamt"},
+    "it": {"il", "di", "della", "delle", "fattura", "importo", "data", "totale", "per", "con", "prezzo",
+           "cliente", "dazio"},
+    "nl": {"het", "een", "en", "van", "factuur", "bedrag", "datum", "totaal", "voor", "met", "klant",
+           "omschrijving", "btw"},
 }
+_ORDRE_LANGUES = ["fr", "en", "es", "de", "it", "nl"]
 
 
 @dataclass(frozen=True)
@@ -282,7 +355,7 @@ def detecter_langue(texte: str) -> str | None:
     if tri[0][1] == 0:
         return None
     if tri[1][1] >= 0.6 * tri[0][1] and tri[1][1] >= 3:
-        return "_".join(sorted([tri[0][0], tri[1][0]], key=["fr", "en", "es"].index))
+        return "_".join(sorted([tri[0][0], tri[1][0]], key=_ORDRE_LANGUES.index))
     return tri[0][0]
 
 
@@ -323,35 +396,60 @@ class _Titres:
 
     grandes: list[str]
     entete: list[str]
+    #: Lignes entières du haut de page (un intitulé espacé, « Suite   déclaration », forme plusieurs segments).
+    lignes: list[str] = field(default_factory=list)
 
     @property
     def texte_entete(self) -> str:
         return "\n".join(self.entete)
 
+    @property
+    def texte_lignes(self) -> str:
+        return "\n".join(self.entete + self.lignes)
+
     def niveau(self, rx: re.Pattern[str], *, exclure_suite: re.Pattern[str] | None = None) -> int:
-        """2 : intitulé en grand corps ; 1 : en tête d'un segment court de l'en-tête ; 0 : absent.
+        return self.rang(rx, exclure_suite=exclure_suite)[0]
+
+    def rang(self, rx: re.Pattern[str], *, exclure_suite: re.Pattern[str] | None = None) -> tuple[int, int]:
+        """(niveau, position de la première ligne qui porte l'intitulé) ; niveau 2 : intitulé en grand corps ; 1 : en tête d'un segment court de l'en-tête ; 0 : absent.
 
         Le libellé doit ouvrir le segment (au plus un mot avant : « COMMERCIAL INVOICE », « Facture N° … »)
         ou le segment doit être très court (≤ 4 mots) ; segment de 10 mots au plus. Une phrase (« veuillez
         trouver ci-joint notre facture… ») ne compte pas. ``exclure_suite`` : texte qui, juste après le
         libellé, en fait une étiquette de champ (« Connaissement n° : … ») et non un intitulé.
         """
-        def ok(li: str) -> bool:
-            mots = li.split()
+        def ok1(li: str) -> bool:
+            mots = [w for w in li.split() if _MOT.search(w)]
             if len(mots) > 10:
                 return False
             for m in rx.finditer(li):
                 if exclure_suite is not None and exclure_suite.match(li, m.end()):
                     continue
-                if len(li[: m.start()].split()) <= 1 or len(mots) <= 4:
+                avant = [w for w in li[: m.start()].split() if _MOT.search(w)]
+                if avant and (any(c.isdigit() for c in avant[-1]) or _CITATION_AVANT.fullmatch(avant[-1])):
+                    # « N380 Facture commerciale … » (rangée d'un tableau de documents), « Ref. invoice : … »
+                    # (référence citée) : pas un intitulé
+                    continue
+                if len(avant) <= 1 or len(mots) <= 4:
                     return True
             return False
 
-        if any(ok(li) for li in self.grandes):
-            return 2
-        if any(ok(li) for li in self.entete):
-            return 1
-        return 0
+        def ok(li: str) -> bool:
+            if ok1(li):
+                return True
+            # intitulé espacé lettre à lettre par l'OCR (« HAN DE LS FACTU U R ») : relu sans les blancs
+            mots = li.split()
+            if 3 <= len(mots) <= 12 and sum(len(w) for w in mots) <= 3 * len(mots) and all(w.isalpha() for w in mots):
+                return ok1("".join(mots))
+            return False
+
+        for i, li in enumerate(self.grandes):
+            if ok(li):
+                return 2, i
+        for i, li in enumerate(self.entete):
+            if ok(li):
+                return 1, i
+        return 0, 10**6
 
     def premiere(self) -> str | None:
         for li in self.grandes + self.entete:
@@ -406,13 +504,14 @@ def _titres(page: PageText) -> _Titres:
     for li in haut:
         for texte, _taille, _y0 in _segments(li):
             entete.append(_norm(texte))
+    lignes_haut = [_norm(li.texte) for li in haut]
     for li in lignes:
         if li.y0 > 0.5:
             continue
         for texte, taille, _y0 in _segments(li):
             if mediane and taille and taille >= 1.3 * mediane and len(texte.split()) <= 8:
                 grandes.append(_norm(texte))
-    return _Titres(grandes=grandes, entete=entete)
+    return _Titres(grandes=grandes, entete=entete, lignes=lignes_haut)
 
 
 def _compte(rx: re.Pattern[str], texte: str) -> int:
@@ -436,6 +535,15 @@ def classer_page(
     langue = detecter_langue(page.texte)
     base = {"numero": numero, "refs": refs, "langue": langue}
     if corps_courriel:
+        # Le corps d'un courriel est une donnée (§7.1) : il reste un courriel, sauf s'il **est** le récapitulatif
+        # d'une déclaration acceptée (« bon à enlever », « clearance summary ») : MRN, intitulé ou vocabulaire de
+        # déclaration et rubriques douanières. Rien de ce texte n'est exécuté : il est seulement classé (D-2101).
+        c = classer_page(page, numero_dans_fichier=numero_dans_fichier)
+        if (c.type is TypeDocument.declaration and refs.mrns and c.confiance >= 0.85
+                and _compte(CORPS_DECLARATION, _norm(page.texte)) >= 4):
+            c.sous_type = SousTypeDeclaration.preuve_dedouanement.value
+            c.indices.append("courriel_recapitulatif_declaration")
+            return c
         return ClassementPage(type=TypeDocument.document_support, sous_type=SousTypeSupport.courriel.value,
                               confiance=0.99, indices=["corps_courriel"], **base)
     texte = _norm(page.texte)
@@ -456,23 +564,23 @@ def classer_page(
     entete = tt.texte_entete
     indices: list[str] = []
 
-    n_facture = tt.niveau(TITRE_FACTURE, exclure_suite=_SUITE_PHRASE)
-    n_avoir = tt.niveau(TITRE_AVOIR, exclure_suite=_SUITE_PHRASE)
-    t_decl = _compte(TITRE_DECLARATION, entete)
+    n_facture, pos_facture = tt.rang(TITRE_FACTURE, exclure_suite=_SUITE_CITATION)
+    n_avoir, pos_avoir = tt.rang(TITRE_AVOIR, exclure_suite=_SUITE_PHRASE)
+    t_decl = _compte(TITRE_DECLARATION, tt.texte_lignes)
     c_decl = _compte(CORPS_DECLARATION, texte)
     n_mrn = len(refs.mrns)
     f_ft = _compte(FORTS_TRANSITAIRE, texte)
     c_ft = _compte(CORPS_TRANSITAIRE, texte)
     c_fc = _compte(CORPS_FACTURE_COMMERCIALE, texte)
-    negatif = bool(_TOTAL_NEGATIF.search(texte))
+    negatif = bool(_TOTAL_NEGATIF.search(texte)) and not _A_PAYER_POSITIF.search(texte)
     lettre = _compte(LETTRE, texte)
     cg = _compte(CG_CORPS, texte)
 
-    support, n_support = None, 0
+    support, n_support, pos_support = None, 0, 10**6
     for st, rx in SUPPORT_TITRES:
-        n = tt.niveau(rx, exclure_suite=_SUITE_CHAMP)
+        n, pos = tt.rang(rx, exclure_suite=_SUITE_CHAMP)
         if n > n_support:
-            support, n_support = st, n
+            support, n_support, pos_support = st, n, pos
     motif_p2, n_p2 = None, 0
     for motif, rx in NON_EXPLOITABLE:
         n = tt.niveau(rx, exclure_suite=_SUITE_CHAMP)
@@ -482,6 +590,7 @@ def classer_page(
             and not (n_facture or n_avoir):
         motif_p2, n_p2 = None, 0  # « réparation », « reçu » dans une ligne ordinaire : pas un intitulé
     n_titre_facture = max(n_facture, n_avoir)
+    pos_titre_facture = min(p for n, p in ((n_facture, pos_facture), (n_avoir, pos_avoir)) if n == n_titre_facture)
 
     def res(type_, sous_type=None, conf=0.0, motif=None) -> ClassementPage:
         return ClassementPage(type=type_, sous_type=sous_type, confiance=_borne(conf), motif_non_exploitable=motif,
@@ -490,11 +599,16 @@ def classer_page(
 
     # 1. Déclaration : MRN + vocabulaire douanier, sans intitulé de facture (une facture de transitaire
     #    cite des MRN mais porte un intitulé de facture et des débours).
-    score_decl = (0.45 if t_decl else 0.0) + (0.2 if n_mrn else 0.0) + min(0.4, 0.06 * c_decl)
+    score_decl = (0.45 if t_decl else 0.0) + (0.2 if n_mrn else 0.0) + min(0.5, 0.06 * c_decl)
     facture_probable = n_titre_facture and (f_ft or c_fc >= 3 or n_avoir or n_titre_facture == 2)
+    decl_forte = c_decl >= 8 and not f_ft and c_fc < 3 and not n_avoir and (n_mrn or numero > 1)
+    if decl_forte:
+        # MRN (ou page de suite) et rubriques de déclaration en nombre, aucun débours : « facture » n'est qu'une
+        # rubrique citée (« Invoice currency / total », « N380 Facture commerciale » lu en grand corps par l'OCR)
+        facture_probable = False
     if score_decl >= 0.55 and not (facture_probable and not t_decl):
         indices.append("declaration")
-        if TYPE_PREUVE.search(entete):
+        if TYPE_PREUVE.search(tt.texte_lignes):
             st = SousTypeDeclaration.preuve_dedouanement
         elif TYPE_H7.search(entete):
             st = SousTypeDeclaration.h7
@@ -507,6 +621,9 @@ def classer_page(
             indices.append("export")
             return res(TypeDocument.document_non_exploitable, None, 0.85, motif_p2)
         return res(TypeDocument.declaration, st.value, 0.5 + score_decl * 0.5)
+    if decl_forte and numero > 1 and not t_decl:
+        indices.append("continuation_declaration")  # page de suite d'une déclaration (MRN illisible)
+        return res(CONTINUATION, None, 0.75)
 
     if n_titre_facture and n_p2 < n_titre_facture and P2_CORPS.search(texte):
         # Mention explicite « ce document n'est pas la facture » : elle l'emporte sur l'intitulé « facture »
@@ -528,8 +645,10 @@ def classer_page(
         return res(TypeDocument.document_non_exploitable, None, 0.88 if n_titre_facture else 0.82, motif_p2)
 
     # 3. Support titré en grand corps alors que « facture » n'apparaît que dans une ligne d'en-tête
-    #    (ex. liste de colisage citant « Invoice ref ») : document support.
-    if support is not None and n_support > n_titre_facture:
+    #    (ex. liste de colisage citant « Invoice ref ») : document support. À niveau égal, l'intitulé le plus haut
+    #    sur la page l'emporte (« BILL OF LADING » en tête, « Invoice IHM… » cité plus bas).
+    if support is not None and (n_support > n_titre_facture or (
+            n_support == n_titre_facture and pos_support < pos_titre_facture and not f_ft)):
         indices.append(f"support_{support.value}")
         return res(TypeDocument.document_support, support.value, 0.86)
 
@@ -556,7 +675,9 @@ def classer_page(
         elif SANS_VALEUR.search(texte):
             st_fc = SousTypeFactureCommerciale.sans_valeur_commerciale
         transitaire = (f_ft >= 1 and (f_ft * 2 + c_ft) >= c_fc * 0.5) or (c_ft >= 4 and c_ft > c_fc + 1)
-        if transitaire and st_fc is SousTypeFactureCommerciale.facture:
+        # Le sous-type « sans valeur / valeur douane » vient de mentions de corps (« free of charge ») : il ne
+        # retient pas en facture commerciale une page de débours et de prestations (seul « pro forma » le fait).
+        if transitaire and st_fc is not SousTypeFactureCommerciale.pro_forma:
             indices.append("facture_transitaire")
             conf = 0.82 + 0.03 * min(5, f_ft + c_ft // 2) - (0.1 if c_fc > c_ft + f_ft else 0)
             return res(TypeDocument.facture_transitaire, None, conf)

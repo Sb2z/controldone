@@ -30,6 +30,7 @@ from controldone.model.documents import Document
 from controldone.model.dossier import Allocation, Dossier, LienDocument
 from controldone.model.enums import (
     Composante,
+    NatureMontant,
     Niveau,
     Outcome,
     QualiteTexte,
@@ -445,6 +446,9 @@ class ControlContext:
             lecture_douteuse=kwargs.pop("lecture_douteuse", False) or self.lecture_douteuse(confusion),
             **kwargs,
         )
+        if classement.niveau is Niveau.ecart_certain and self._avoir_non_ventile(spec, doc_ids, kwargs):
+            raisons = trier_raisons([*classement.raisons, RaisonCode.avoir_non_ventile])
+            return Classement(Niveau.a_verifier, raisons)
         if classement.niveau is Niveau.ecart_certain and self.exiger_lecture_corroboree:
             corroboree, _ = self.lecture_corroboree(
                 valeurs_cles, operandes_non_confirmees_max=operandes_non_confirmees_max
@@ -453,6 +457,22 @@ class ControlContext:
                 raisons = trier_raisons([*classement.raisons, RaisonCode.lecture_non_corroboree])
                 return Classement(Niveau.a_verifier, raisons)
         return classement
+
+    def _avoir_non_ventile(self, spec: ControlSpec | str, doc_ids: Sequence[str], kwargs: Mapping[str, Any]) -> bool:
+        """§8.5.1 condition 7 (D-2205) : un montant ``recouvrable`` sur une facture du transitaire n'est pas
+        certain quand un avoir du même émetteur, rattaché à cette facture, n'a pu être ventilé (il pourrait
+        couvrir l'écart sans pouvoir être déduit)."""
+        sp = get_spec(spec) if isinstance(spec, str) else spec
+        nature = kwargs.get("nature_montant") or sp.nature_montant
+        if nature is not NatureMontant.recouvrable:
+            return False
+        from controldone.controls._aides_befg import avoirs_non_ventiles_pour  # import circulaire évité
+
+        for i in dict.fromkeys(doc_ids):
+            doc = self.document(i)
+            if doc is not None and doc.type is TypeDocument.facture_transitaire and avoirs_non_ventiles_pour(self, doc):
+                return True
+        return False
 
     # --- constructeurs de résultats ----------------------------------------------------------------
 

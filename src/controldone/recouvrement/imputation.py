@@ -22,8 +22,9 @@ Règles (§17.2) :
    ``partiellement_credite``, ``conteste``, ``ouvert``}, reste > 0 ; puis rattachement par paliers : même
    facture d'origine (``ref_compatibles``) ; à défaut (aucun candidat à ce palier), même MRN (préfixe) ;
    à défaut, même référence de transport.
-2. Ordre : écarts déjà réclamés (``reclame``, ``partiellement_credite``, ``conteste``) avant ``ouvert``,
-   puis date de constat croissante (absente en dernier), puis ``constat_id``, puis ``id``.
+2. Ordre : à composante égale, écart de même nature de ligne que la ligne d'avoir d'abord (D-2208) ; puis
+   écarts déjà réclamés (``reclame``, ``partiellement_credite``, ``conteste``) avant ``ouvert``, puis date de
+   constat croissante (absente en dernier), puis ``constat_id``, puis ``id``.
 3. ``impute = min(reste_avoir, reste_ecart)`` au centime ; statut ``credite`` si ``reste ≤ T_DEBOURS``,
    sinon ``partiellement_credite``.
 4. Ligne combinée (``debours_combines``) : composantes ``droit``, ``autre_taxe``, ``tva``,
@@ -152,6 +153,9 @@ class EcartImputable:
     mrn: str | None = None
     ref_transport: str | None = None
     montant_initial: Decimal | None = None
+    #: Nature de la ligne facturée en écart (prestations) : à composante égale, une ligne d'avoir de même
+    #: nature est imputée d'abord sur cet écart (même choix que la déduction ligne à ligne de D, D-2208).
+    nature: NatureLigne | None = None
 
     @classmethod
     def depuis_ecart(
@@ -339,7 +343,8 @@ def imputer_avoirs(
                 and etats[e.id].reste > 0
             ]
             palier, retenus = _palier(lc, candidats)
-            retenus.sort(key=lambda e: (comps.index(e.composante), *_cle_ecart(e)))
+            retenus.sort(key=lambda e: (comps.index(e.composante), e.nature is None or e.nature is not lc.nature,
+                                        *_cle_ecart(e)))
             for e in retenus:
                 if reste_avoir <= 0:
                     break

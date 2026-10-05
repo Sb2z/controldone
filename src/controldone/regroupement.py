@@ -73,6 +73,7 @@ from controldone.normalize.refs import (
     norm_ref,
     norm_ref_transport,
     ref_compatibles,
+    ref_egales,
     ref_transport_compatibles,
 )
 
@@ -355,6 +356,7 @@ class _Regroupeur:
         self.options = options
         self.front = frontieres(self.docs, fichiers)
         self.groupes: list[_Groupe] = []
+        self._cache_numeros: dict[TypeDocument, list[str]] = {}
 
     # -- outils --
 
@@ -366,6 +368,25 @@ class _Regroupeur:
             if fid in self.options.courriels:
                 return self.options.courriels[fid]
         return None
+
+    def _numeros(self, type_doc: TypeDocument) -> list[str]:
+        if type_doc not in self._cache_numeros:
+            self._cache_numeros[type_doc] = [
+                n for x in self.docs if x.type is type_doc and _exploitable(x) and (n := _numero(x))
+            ]
+        return self._cache_numeros[type_doc]
+
+    def _cite(self, ref: str | None, num: str | None, type_doc: TypeDocument) -> bool:
+        """``ref`` (référence citée) désigne le document numéroté ``num`` : égalité, ou compatibilité (§8.4)
+        **univoque** — une référence tronquée (« ODH 2026 ») compatible avec les numéros de plusieurs documents
+        du lot ne désigne aucun d'eux (D-2112)."""
+        if not ref or not num:
+            return False
+        if ref_egales(ref, num):
+            return True
+        if not ref_compatibles(ref, num):
+            return False
+        return not any(ref_compatibles(ref, n) for n in self._numeros(type_doc) if not ref_egales(n, num))
 
     def _meme_fichier(self, a: Document, b: Document) -> bool:
         return bool(set(a.fichier_ids()) & set(b.fichier_ids()))
@@ -450,7 +471,7 @@ class _Regroupeur:
         refs: list[str] = []
         for d in self.docs:
             if d.type is TypeDocument.document_support and _exploitable(d) and any(
-                ref_compatibles(_txt(r), num) for r in d.sup.refs_facture
+                self._cite(_txt(r), num, TypeDocument.facture_commerciale) for r in d.sup.refs_facture
             ):
                 refs.extend(_transports_support(d))
         return refs
@@ -460,7 +481,7 @@ class _Regroupeur:
         c = dec.dec
         num = _numero(fc)
         refs = _refs_documents_declaration(dec)
-        if num and any(ref_compatibles(r, num) for r in refs):
+        if num and any(self._cite(r, num, TypeDocument.facture_commerciale) for r in refs):
             s.append(SignalLien.ref_facture_citee)
         transports = [r for r in [_txt(fc.fc.ref_transport), *self._supports_citant(fc)] if r]
         if transports and any(ref_transport_compatibles(r, t) for r in refs for t in transports):
@@ -503,7 +524,8 @@ class _Regroupeur:
                 s.append(SignalLien.montant_egal)
         elif cible.type is TypeDocument.facture_commerciale:
             num = _numero(cible)
-            if num and any(ref_compatibles(_txt(r), num) for r in ft.ft.refs_facture_commerciale):
+            if num and any(self._cite(_txt(r), num, TypeDocument.facture_commerciale)
+                           for r in ft.ft.refs_facture_commerciale):
                 s.append(SignalLien.ref_facture_citee)
             t = _txt(cible.fc.ref_transport)
             if t and any(ref_transport_compatibles(a, t) for a in _transports_ft(ft)):
@@ -520,7 +542,7 @@ class _Regroupeur:
         c = av.av
         if cible.type is TypeDocument.facture_transitaire:
             num = _numero(cible)
-            if num and any(ref_compatibles(_txt(r), num) for r in c.refs_facture_origine):
+            if num and any(self._cite(_txt(r), num, TypeDocument.facture_transitaire) for r in c.refs_facture_origine):
                 s.append(SignalLien.ref_facture_citee)
             if any(mrn_egaux(_txt(m), x) for m in c.refs_mrn for x in _mrns_ft(cible)):
                 s.append(SignalLien.mrn_cite)
@@ -540,7 +562,7 @@ class _Regroupeur:
             refs = _transports_support(sup)
             if cible.type is TypeDocument.facture_commerciale:
                 num = _numero(cible)
-                if num and any(ref_compatibles(_txt(r), num) for r in sup.sup.refs_facture):
+                if num and any(self._cite(_txt(r), num, TypeDocument.facture_commerciale) for r in sup.sup.refs_facture):
                     s.append(SignalLien.ref_facture_citee)
                 t = _txt(cible.fc.ref_transport)
                 if t and any(ref_transport_compatibles(r, t) for r in refs):
@@ -552,7 +574,7 @@ class _Regroupeur:
                 if any(ref_transport_compatibles(r, x) for r in refs for x in _transports_ft(cible)):
                     s.append(SignalLien.ref_transport)
                 num = _numero(cible)
-                if num and any(ref_compatibles(_txt(r), num) for r in sup.sup.refs_facture):
+                if num and any(self._cite(_txt(r), num, TypeDocument.facture_transitaire) for r in sup.sup.refs_facture):
                     s.append(SignalLien.ref_facture_citee)  # lettre d'accompagnement de la facture (D-708)
         if self._meme_fichier(sup, cible):
             s.append(SignalLien.meme_fichier_source)
@@ -583,6 +605,54 @@ class _Regroupeur:
                 sortie[gi] = (score, sorted(union, key=_ORDRE_SIGNAUX.index))
         return sortie
 
+    def _departager(
+        self, d: Document, retenus: dict[int, tuple[int, list[SignalLien]]]
+    ) -> dict[int, tuple[int, list[SignalLien]]]:
+        """Plusieurs dossiers candidats (D-2110). Une référence explicite (facture, transport, MRN) peut rattacher
+        un document à plusieurs dossiers (plusieurs factures pour une déclaration, facture de transitaire
+        mensuelle) : seuls ces dossiers sont gardés. Sans référence explicite, le meilleur score l'emporte ; à
+        égalité (cas type : PDF fusionné où « même fichier » vaut pour tous les dossiers), une déclaration va au
+        seul dossier qui n'en a pas encore, puis tout document au dossier du document qui le **précède
+        immédiatement** dans le même fichier (« facture, puis sa déclaration »). Sinon, règle antérieure : tous les
+        candidats à égalité."""
+        if len(retenus) <= 1:
+            return retenus
+        explicites = {gi: v for gi, v in retenus.items() if set(v[1]) & SIGNAUX_FORTS}
+        if explicites:
+            return explicites
+        meilleur = max(v[0] for v in retenus.values())
+        tete = {gi: v for gi, v in retenus.items() if v[0] == meilleur}
+        if len(tete) == 1:
+            return tete
+        libres = tete
+        if d.type is TypeDocument.declaration:
+            libres = {gi: v for gi, v in tete.items() if not any(
+                self.par_id[m].type is TypeDocument.declaration and _exploitable(self.par_id[m])
+                for m in self.groupes[gi].membres)}
+            if len(libres) == 1:
+                return libres
+        precedent = self._precedent_dans_fichier(d)
+        if precedent is not None:
+            for ensemble in (libres, tete):
+                avec = [gi for gi in ensemble if precedent in self.groupes[gi].membres]
+                if len(avec) == 1:
+                    return {avec[0]: tete[avec[0]]}
+        return tete
+
+    def _precedent_dans_fichier(self, d: Document) -> str | None:
+        """Document qui précède immédiatement ``d`` dans son fichier (pages), ou ``None``."""
+        if not d.pages:
+            return None
+        fid, num = d.pages[0].fichier_id, min(p.numero for p in d.pages)
+        meilleur: tuple[int, str] | None = None
+        for x in self.docs:
+            if x.id == d.id or x.doublon_de:
+                continue
+            nums = [p.numero for p in x.pages if p.fichier_id == fid and p.numero < num]
+            if nums and (meilleur is None or max(nums) > meilleur[0]):
+                meilleur = (max(nums), x.id)
+        return meilleur[1] if meilleur else None
+
     def _repli_meme_source(self, d: Document, score_actuel: int = 0) -> tuple[int, _Groupe] | None:
         """Unique dossier candidat de la frontière : rattachement ``meme_dossier_source``."""
         if not self.options.meme_source:
@@ -590,8 +660,28 @@ class _Regroupeur:
         candidats = [g for g in self.groupes if d.id not in g.membres and self._compatible(d, g)]
         if len(candidats) != 1:
             return None
+        if d.type is TypeDocument.declaration and self._autre_declaration(d, candidats[0]):
+            return None  # dossier sans facture qui a déjà une déclaration d'un autre MRN : dossier distinct (D-2111)
         poids = POIDS_SIGNAL.get(d.type, {}).get(SignalLien.meme_dossier_source, ForceLien.moyenne)
         return score_actuel + POIDS_FORCE[poids], candidats[0]
+
+    def _autre_declaration(self, d: Document, g: _Groupe) -> bool:
+        """Le dossier, **sans facture commerciale**, contient déjà une déclaration exploitable d'un autre MRN
+        (préfixe) que ``d`` : rien ne justifie de les réunir (avec une facture, une facture répartie sur plusieurs
+        déclarations reste possible, §7.5 étape 8)."""
+        p = mrn_prefixe(_txt(d.dec.mrn)) if _exploitable(d) else ""
+        if len(p) != 15:
+            return False
+        if any(self.par_id[m].type is TypeDocument.facture_commerciale and _exploitable(self.par_id[m])
+               for m in g.membres):
+            return False
+        for mid in g.membres:
+            m = self.par_id[mid]
+            if m.type is TypeDocument.declaration and _exploitable(m):
+                q = mrn_prefixe(_txt(m.dec.mrn))
+                if len(q) == 15 and q != p:
+                    return True
+        return False
 
     def executer(self) -> ResultatRegroupement:
         exploitables = [d for d in self.docs if _exploitable(d)]
@@ -605,7 +695,7 @@ class _Regroupeur:
             if d.type is not TypeDocument.declaration:
                 continue
             cands = self._meilleur_par_groupe(d, (TypeDocument.facture_commerciale,), self.signaux_declaration)
-            retenus = {gi: v for gi, v in cands.items() if v[0] >= 2}
+            retenus = self._departager(d, {gi: v for gi, v in cands.items() if v[0] >= 2})
             if retenus:
                 groupes = [self.groupes[gi] for gi in retenus]
                 vals = [retenus[gi] for gi in retenus]
@@ -676,7 +766,7 @@ class _Regroupeur:
                 (TypeDocument.facture_commerciale, TypeDocument.declaration, TypeDocument.facture_transitaire),
                 self.signaux_support,
             )
-            retenus = {gi: v for gi, v in cands.items() if v[0] >= 2}
+            retenus = self._departager(d, {gi: v for gi, v in cands.items() if v[0] >= 2})
             if retenus:
                 for gi, (score, sig) in sorted(retenus.items()):
                     self._ajouter(self.groupes[gi], d.id, score, sig)
@@ -717,7 +807,7 @@ class _Regroupeur:
             if d.type is not type_doc or not _exploitable(d):
                 continue
             cands = self._meilleur_par_groupe(d, cibles, fn_signaux)
-            retenus = {gi: v for gi, v in cands.items() if v[0] >= 2}
+            retenus = self._departager(d, {gi: v for gi, v in cands.items() if v[0] >= 2})
             if retenus:
                 for gi, (score, sig) in sorted(retenus.items()):
                     self._ajouter(self.groupes[gi], d.id, score, sig)

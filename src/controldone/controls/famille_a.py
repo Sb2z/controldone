@@ -556,12 +556,18 @@ def _lignes_pied(ctx: ControlContext, c: Couple) -> list[ValeurSourcee]:
     return out[:_MAX_LIGNES_PIED]
 
 
-def _explique_par_pied(pieds: Sequence[ValeurSourcee], ecart: Decimal, tolerance: Decimal) -> list[ValeurSourcee]:
-    """Lignes de pied dont la somme (en valeur absolue) égale ``|écart|`` dans la tolérance (A4)."""
+def _explique_par_pied(
+    pieds: Sequence[ValeurSourcee], ecart: Decimal, tolerance: Decimal, facteur: Decimal = Decimal(1)
+) -> list[ValeurSourcee]:
+    """Lignes de pied dont la somme (en valeur absolue) égale ``|écart|`` dans la tolérance (A4 ; A5 avec
+    ``facteur`` = EUR par unité de devise de la facture, la somme convertie arrondie au centime, D-2202)."""
     montants = [(v, abs(v.decimal_signe())) for v in pieds if _decimal(v) is not None]
     for n in range(1, len(montants) + 1):
         for combi in combinations(montants, n):
-            if abs(abs(ecart) - sum((m for _, m in combi), Decimal(0))) <= tolerance:
+            somme = sum((m for _, m in combi), Decimal(0))
+            if facteur != 1:
+                somme = arrondi_centime(somme * facteur)
+            if abs(abs(ecart) - somme) <= tolerance:
                 return [v for v, _ in combi]
     return []
 
@@ -1041,7 +1047,14 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
                   <= t_conv)
         for v in t.valeurs
     ]
-    explication = _explication_version(ctx, c, lambda d: abs(d - attendu) <= t_conv)
+    # §8.5.1 condition 7 : une ligne de pied (fret, assurance, emballage, remise ; imprimée ou structurée,
+    # p. ex. ``AllowanceCharge`` UBL) convertie au même taux explique l'écart -> à vérifier (D-2202).
+    expliquent = _explique_par_pied(_lignes_pied(ctx, c), ev["ecart"], t_conv, facteur=eur)
+    if expliquent:
+        explication = RaisonCode.ecart_explique_par_ligne_de_pied
+        details["lignes_de_pied"] = [v.id for v in expliquent]
+    else:
+        explication = _explication_version(ctx, c, lambda d: abs(d - attendu) <= t_conv)
     cl = ctx.classify(cid, ecart=ev["ecart"], tolerance=t_conv, seuil_certitude=ev["s"],
                       valeurs_cles=[*m.fc_vals, *m.dec_vals, *t.valeurs, *dv.valeurs], confusion=confusion,
                       documents=c.doc_ids, explication=explication, raisons_supplementaires=raisons)
@@ -1053,10 +1066,17 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         f"la déclaration ({affichage.texte(dv.fc)}{'' if t.sens_lu else ', sens déduit'}), donne "
         f"{format_montant(attendu, 'EUR')}, soit un écart de {format_montant(ev['ecart'], 'EUR')}."
     )
+    if expliquent:
+        libelle += (
+            " Cet écart correspond, au même taux, à la ou les lignes de pied de la facture : "
+            + ", ".join(f"{format_montant(abs(v.decimal_signe()), dv.fc)} (page {v.page})" for v in expliquent) + "."
+        )
     preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [preuve(v, RolePreuve.valeur_b) for v in m.dec_vals]
     preuves += [preuve(v, RolePreuve.operande) for v in t.valeurs]
     preuves.append(preuve(None, RolePreuve.operande, calcul=calcul))
-    return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A5, montant=ev["ecart"],
+    preuves += [preuve(v, RolePreuve.contexte) for v in expliquent]
+    return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A4_PIED if expliquent else ACTION_A5,
+                        montant=ev["ecart"],
                         composante=Composante.valeur, preuves=preuves, **commun)]
 
 

@@ -27,6 +27,7 @@ from controldone.normalize.refs import mrn_prefixe, norm_ref, ref_compatibles
 from controldone.normalize.text import cle_texte
 from controldone.recouvrement.imputation import (
     LigneCredit,
+    choisir_par_paliers,
     cle_emetteur,
     emetteurs_compatibles,
     lignes_credit_depuis_avoir,
@@ -380,21 +381,43 @@ class AvoirDouble:
     motif: str
 
 
+def _qualite_avoir(ctx: ControlContext, doc: Document) -> tuple[int, float]:
+    """Exploitabilité d'une copie d'avoir : lignes ventilées (nature et montant utilisables), puis confiance
+    du total crédité."""
+    av = doc.av
+    ventilees = sum(
+        1 for ln in av.lignes
+        if ln.nature is not None and ctx.utilisable(ln.montant_ht if ln.montant_ht is not None else ln.montant_ttc)
+    )
+    total = av.total_credite_ttc if av.total_credite_ttc is not None else av.total_credite_ht
+    return ventilees, (total.confiance if total is not None else 0.0)
+
+
 def avoirs_doubles(ctx: ControlContext) -> dict[str, AvoirDouble]:
-    """Avoirs du dossier qui sont la **seconde** réception d'un avoir déjà reçu (ici ou ailleurs)."""
+    """Avoirs du dossier qui sont la **seconde** réception d'un avoir déjà reçu (ici ou ailleurs).
+
+    Ordre de réception : date, numéro ; deux copies de même date et de même numéro (même avoir reçu deux fois,
+    p. ex. PDF natif et scan) : la copie la mieux lue (lignes ventilées, confiance du total) est la première,
+    celle qui est imputée (D-2204) ; puis l'identifiant."""
     ici = ctx.avoirs()
     tous: list[tuple[Document, str | None]] = [(d, None) for d in ici]
     tous += [(x.doc, x.dossier_id) for x in documents_autres(ctx, TypeDocument.avoir)]
+
+    def cle(doc: Document) -> tuple:
+        ventilees, confiance = _qualite_avoir(ctx, doc)
+        c = cle_chrono(doc)
+        return (*c[:3], -ventilees, -confiance, c[3])
+
     out: dict[str, AvoirDouble] = {}
     for d in ici:
         ed = emetteur_de(ctx, d)
         anterieurs = []
         for autre, dos in tous:
-            if autre.id == d.id or cle_chrono(autre) >= cle_chrono(d):
+            if autre.id == d.id or cle(autre) >= cle(d):
                 continue
             motif = avoirs_en_double(d, autre, ed, emetteur_de(ctx, autre))
             if motif:
-                anterieurs.append((cle_chrono(autre), autre, dos, motif))
+                anterieurs.append((cle(autre), autre, dos, motif))
         if anterieurs:
             _, premier, dos, motif = min(anterieurs, key=lambda x: x[0])
             out[d.id] = AvoirDouble(d, premier, dos, motif)
@@ -414,3 +437,38 @@ def lignes_credit_du_dossier(ctx: ControlContext) -> list[LigneCredit]:
         lc for a in avoirs_imputables(ctx)
         for lc in lignes_credit_depuis_avoir(a, emetteur=emetteur_de(ctx, a), utilisable=ctx.utilisable)
     ]
+
+
+def avoirs_non_ventiles_pour(ctx: ControlContext, facture: Document) -> list[Document]:
+    """Avoirs à imputer du dossier (E3 exclu), du même émetteur que ``facture`` et rattachés à elle par les
+    paliers de §17.2 (facture d'origine, à défaut MRN, à défaut référence de transport), dont **aucune ligne**
+    n'a pu être ventilée par nature (lignes ou montants illisibles) : l'imputation ne peut pas les déduire, et
+    rien n'exclut qu'ils couvrent l'écart (§8.5.1 condition 7, D-2205)."""
+    if facture.type is not TypeDocument.facture_transitaire or facture.champs is None:
+        return []
+    f = facture.ft
+    ef = emetteur_de(ctx, facture)
+    num = texte(f.numero) if f.numero is not None and ctx.utilisable(f.numero) else None
+    mrns = [x.valeur for x in f.refs_mrn if x.valeur and ctx.utilisable(x)]
+    mrns += [ln.mrn.valeur for ln in f.lignes if ln.mrn is not None and ln.mrn.valeur and ctx.utilisable(ln.mrn)]
+    transports = [x.valeur for x in f.refs_transport if x.valeur and ctx.utilisable(x)]
+    out: list[Document] = []
+    for a in avoirs_imputables(ctx):
+        ea = emetteur_de(ctx, a)
+        if not memes_emetteurs(ea, ef):
+            continue
+        lignes = lignes_credit_depuis_avoir(a, emetteur=ea, utilisable=ctx.utilisable)
+        if any(lc.nature is not None for lc in lignes):
+            continue
+        av = a.av
+        tete = LigneCredit(
+            avoir_id=a.id, ligne=None, nature=None, montant=ZERO, emetteur=ea,
+            factures_origine=tuple(x.valeur for x in av.refs_facture_origine if x.valeur and ctx.utilisable(x)),
+            mrns=tuple(x.valeur for x in av.refs_mrn if x.valeur and ctx.utilisable(x)),
+            refs_transport=tuple(x.valeur for x in av.refs_transport if x.valeur and ctx.utilisable(x)),
+        )
+        palier, _ = choisir_par_paliers(tete, [facture], factures=lambda _x: (num,), mrns=lambda _x: mrns,
+                                        transports=lambda _x: transports)
+        if palier:
+            out.append(a)
+    return out

@@ -817,6 +817,9 @@ def _comparer_composante(
     liq = _somme(refs[d.id].liquide[cat] for d in u.declarations)
     sources = [v for d in u.declarations for v in refs[d.id].sources[cat]]
     ecart = refact - liq
+    if credits:
+        # Écart avant déduction des avoirs : E5/E6 ne réimputent pas un avoir déjà déduit ici (D-2208).
+        details["ecart_brut_avant_avoirs"] = str(arrondi_centime(brut - liq))
     tol, seuil = _tolerances(ctx, u, refs)
     vals_lignes = [x.valeur for x in lignes if x.valeur is not None]
     commun = dict(

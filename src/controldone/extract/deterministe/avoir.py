@@ -22,6 +22,7 @@ import re
 from collections.abc import Sequence
 
 from controldone.extract.base import ExtractionContext, ExtractionResult
+from controldone.extract.deterministe import _fc_langues as _L
 from controldone.extract.deterministe._mise_en_page import (
     Fabrique,
     Lecture,
@@ -65,6 +66,10 @@ LIB_ORIGINE = motifs(
     r"(?:ref\.?|referencia)\s*(?:de\s*la\s*)?(?:facture|factura)\s*:?",
 )
 LIB_MOTIF = motifs(r"(?:reason|motif|motivo|objet|raison)\s*(?:/\s*reason)?\s*:?")
+# compléments allemands, italiens, néerlandais (D-2011)
+LIB_NUMERO_AVOIR = LIB_NUMERO_AVOIR + _L.AVOIR_NUMERO
+LIB_ORIGINE = LIB_ORIGINE + _L.AVOIR_ORIGINE
+LIB_MOTIF = LIB_MOTIF + _L.AVOIR_MOTIF
 
 
 _MRN = re.compile(r"(?<![A-Z0-9])\d{2}[A-Z]{2}[A-Z0-9]{14}(?![A-Z0-9])")
@@ -78,7 +83,9 @@ def _signes_transitaire(vue: VueDocument) -> bool:
     for li in vue.lignes():
         if _MRN.search(li.texte):
             return True
-        if any(nature_libelle(s.texte) is not None for s in li.segments if len(s.texte) <= 60):
+        # le motif d'un avoir (« Grund: Transportschaden ») est une donnée, pas un libellé de prestation (D-2011)
+        if any(nature_libelle(s.texte) is not None for s in li.segments if len(s.texte) <= 60
+               and not any(mo.match(s.cle) for mo in LIB_MOTIF)):
             return True
     return False
 

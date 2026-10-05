@@ -264,6 +264,33 @@ def test_b4_nette_totale_superieure():
     assert tot.outcome is Outcome.ecart_certain
 
 
+def test_b4_total_consequence_d_un_article_deja_constate_pas_de_second_constat():
+    # D-2201 : article 1 nette 3,715 > brute 0,715 (constaté) ; au total Σ nettes 7,195 > brute 4,517, mais sans
+    # l'excédent de l'article 1 (3,000) le total tient : un seul constat pour un seul fait.
+    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "4.517"),
+                    articles=[art("1", masse_nette="3.715", masse_brute="0.715"),
+                              art("2", masse_nette="3.000", masse_brute="3.291"),
+                              art("3", masse_nette="0.480", masse_brute="0.511")])
+    rs = b4_masses(contexte([d]))
+    assert [r.outcome for r in par_sous(rs, "nette_brute")] == [Outcome.ecart_certain, Outcome.conforme,
+                                                                  Outcome.conforme]
+    (tot,) = par_sous(rs, "nette_total")
+    assert tot.outcome is Outcome.non_applicable and tot.raison_code is RaisonCode.couvert_par_autre_controle
+    # Un article seul : même fait au total et sur l'article.
+    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "281.765"),
+                    articles=[art("1", masse_nette="287.4", masse_brute="281.765")])
+    rs = b4_masses(contexte([d]))
+    assert [r.outcome for r in rs if r.outcome.est_constat] == [Outcome.ecart_certain]
+
+
+def test_b4_total_au_dela_des_articles_constates_reste_constate():
+    # L'excédent au total dépasse celui des articles constatés : le total garde son propre constat.
+    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "100"),
+                    articles=[art("1", masse_nette="60", masse_brute="50"), art("2", masse_nette="80")])
+    (tot,) = par_sous(b4_masses(contexte([d])), "nette_total")
+    assert tot.outcome is Outcome.ecart_certain
+
+
 def test_b4_sans_masse():
     (r,) = b4_masses(contexte([declaration(id=DEC, articles=[art("1")])]))
     assert r.outcome is Outcome.non_applicable

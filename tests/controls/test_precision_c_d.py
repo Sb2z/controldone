@@ -372,3 +372,67 @@ def test_avoir_peu_lisible_non_impute():
     av = _avoir("doc_av", peu_lisible)
     ctx = ctx_de([ft(ligne(N.frais_dedouanement, "83.34")), av])
     assert aides.lignes_credit_du_dossier(ctx) == []
+
+
+# --- D-2205 / D-2206 : avoirs rattachés par le MRN ou le transport ; avoir non ventilé ----------------------
+
+
+def _avoir_tete(aid, *lignes, mrns=(), transports=(), total_ht=None):
+    return document(TypeDocument.avoir, ChampsAvoir(
+        numero=vs("avoir.numero", "AV-FICTIF-9", document_id=aid),
+        refs_mrn=[vs("avoir.refs_mrn[]", m, document_id=aid) for m in mrns],
+        refs_transport=[vs("avoir.refs_transport[]", t, document_id=aid) for t in transports],
+        total_credite_ht=vs("avoir.total_credite_ht", total_ht, document_id=aid) if total_ht else None,
+        lignes=list(lignes),
+    ), id=aid)
+
+
+def test_d3_avoir_sans_facture_d_origine_rattache_par_le_mrn_de_l_en_tete():
+    # D-2206 : l'avoir ne cite que le MRN ; la ligne de la facture n'en porte pas, l'en-tête oui (§12.2).
+    f = ft(ligne(N.frais_dedouanement, "80.00", libelle="Frais de dédouanement"), numero="FA-FICTIF-9",
+           mrns=(MRN_A,))
+    av = _avoir_tete("doc_av", ligne(N.frais_dedouanement, "20.00", fid="doc_av"), mrns=(MRN_A,))
+    assert un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3").outcome is Outcome.conforme
+    # Rattachement par la référence de transport seulement (troisième palier).
+    f = ft(ligne(N.frais_dedouanement, "80.00", libelle="Frais de dédouanement"), numero="FA-FICTIF-9",
+           transports=("999-12345675",))
+    av = _avoir_tete("doc_av", ligne(N.frais_dedouanement, "20.00", fid="doc_av"), transports=("999-12345675",))
+    assert un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3").outcome is Outcome.conforme
+
+
+def test_avoir_non_ventile_rattache_a_la_facture_jamais_certain():
+    # D-2205 (§8.5.1 condition 7) : un avoir du même transitaire, rattaché par le MRN, dont ni les lignes ni le
+    # total n'ont pu être lus : rien n'exclut qu'il solde l'écart -> à vérifier, raison avoir_non_ventile.
+    f = ft(ligne(N.frais_dedouanement, "80.00", libelle="Frais de dédouanement"), numero="FA-FICTIF-9",
+           mrns=(MRN_A,))
+    r = un(run_controls(ctx_de([f]), controles=["D3"]), "D3")
+    assert r.outcome is Outcome.ecart_certain
+    av = _avoir_tete("doc_av", mrns=(MRN_A,))
+    r = un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3")
+    assert r.outcome is Outcome.a_verifier and RaisonCode.avoir_non_ventile in r.constat.raisons
+    assert r.constat.montant_en_jeu == D("20.00")
+    # Total lu mais aucune ligne ventilée : même prudence.
+    av = _avoir_tete("doc_av", mrns=(MRN_A,), total_ht="20.00")
+    r = un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3")
+    assert r.outcome is Outcome.a_verifier and RaisonCode.avoir_non_ventile in r.constat.raisons
+    # Avoir sans lien avec cette facture (autre MRN) : sans effet.
+    av = _avoir_tete("doc_av", mrns=(MRN_B,))
+    assert un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3").outcome is Outcome.ecart_certain
+    # C1 sur la même facture : même règle.
+    fc = ft(ligne(N.debours_droits, "150.00", mrn=MRN_A), numero="FA-FICTIF-9", mrns=(MRN_A,))
+    d = dec("doc_dec", MRN_A, "100.00")
+    assert un(run_controls(ctx_de([d, fc]), controles=["C1"]), "C1").outcome is Outcome.ecart_certain
+    r = un(run_controls(ctx_de([d, fc, _avoir_tete("doc_av", mrns=(MRN_A,))]), controles=["C1"]), "C1")
+    assert r.outcome is Outcome.a_verifier and RaisonCode.avoir_non_ventile in r.constat.raisons
+
+
+def test_avoir_deja_deduit_par_d3_n_est_pas_reimpute_sur_un_autre_ecart():
+    # D-2208 : l'avoir de 15,00 (dédouanement) solde l'écart D3 (75,00 facturés, 60,00 au tarif) ; il ne doit
+    # pas être imputé une seconde fois par E6 sur l'écart D2 (ligne hors grille) de la même facture.
+    f = ft(ligne(N.frais_dedouanement, "75.00", libelle="Frais de dédouanement"),
+           ligne(N.surcharge, "45.00", libelle="Surcharge haute saison"), numero="FA-FICTIF-7")
+    av = _avoir("doc_av", ligne(N.frais_dedouanement, "15.00", fid="doc_av"))
+    rs = run_controls(ctx_de([f, av]), controles=["D3", "D7", "E5", "E6"])
+    assert un(rs, "D3").outcome is Outcome.conforme
+    assert un(rs, "D7").constat.montant_en_jeu == D("45.00")
+    assert not constats(rs, "E6") and not constats(rs, "E5")

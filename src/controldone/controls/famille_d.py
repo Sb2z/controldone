@@ -115,6 +115,9 @@ ACTION_D_AMBIGU = (
     "Préciser à quel poste de la grille tarifaire cette ligne correspond, puis relancer le contrôle."
 )
 
+#: Natures dont seul le libellé désigne un poste de la grille (D-704, D-2203).
+_NATURES_PAR_LIBELLE = frozenset({NatureLigne.autre_prestation, NatureLigne.surcharge})
+
 #: Natures traitées par D3 lorsqu'elles sont rapprochées d'un poste.
 _ROUTE_SPECIALE = {
     NatureLigne.frais_avance_fonds: "D4",
@@ -166,8 +169,11 @@ def rapprocher_poste(grille: GrilleTarifaire, ligne: LigneFactureTransitaire) ->
         return [p for p in postes if any(_libelle_correspond(libelle, r) for r in p.libelles_reconnus)]
 
     candidats = [p for p in grille.postes if p.nature is ligne.nature]
-    if ligne.nature is NatureLigne.autre_prestation:
+    if ligne.nature in _NATURES_PAR_LIBELLE:
         # « tout le reste » (§5.3.3) : la nature n'identifie pas un poste, seul le libellé le fait (D-704).
+        # Idem pour une surcharge : carburant, sûreté, haute saison… sont des surcharges distinctes ; une
+        # surcharge dont le libellé ne figure dans aucun poste est « sans poste » (§13 D7), pas celle de la
+        # grille de même nature (D-2203).
         m = par_libelle(candidats) if libelle else []
         if len(m) == 1:
             return m[0], False
@@ -272,12 +278,17 @@ def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document,
     f = lr.facture
     num = f.ft.numero.valeur if f.ft.numero is not None and f.ft.numero.valeur else None
     mrn_ligne = mrn_prefixe(lr.ligne.mrn.valeur) if ctx.utilisable(lr.ligne.mrn) and lr.ligne.mrn else None
+    # Ligne sans MRN : MRN de l'en-tête de la facture (§12.2) ; référence de transport de la facture (§17.2,
+    # troisième palier), D-2206.
+    mrns = (mrn_ligne,) if mrn_ligne else tuple(x.valeur for x in f.ft.refs_mrn if x.valeur and ctx.utilisable(x))
+    transports = tuple(x.valeur for x in f.ft.refs_transport if x.valeur and ctx.utilisable(x))
     emetteur = aides.emetteur_de(ctx, f)
     out: list[tuple[Document, ValeurSourcee, Decimal]] = []
     for lc in aides.lignes_credit_du_dossier(ctx):
         if lc.nature is not lr.ligne.nature or not aides.memes_emetteurs(lc.emetteur, emetteur):
             continue
-        palier, _ = choisir_par_paliers(lc, [lr], factures=lambda _x: (num,), mrns=lambda _x: (mrn_ligne,))
+        palier, _ = choisir_par_paliers(lc, [lr], factures=lambda _x: (num,), mrns=lambda _x: mrns,
+                                        transports=lambda _x: transports)
         if not palier:
             continue
         memes = [i for i, lg in enumerate(f.ft.lignes) if lg.nature is lc.nature]
@@ -325,6 +336,7 @@ def _comparer_tarif(
     det = {"grille": lr.grille.id, "poste": poste, **(details or {})}
     if credits:
         det["avoirs_deduits"] = str(arrondi_centime(credit))
+        det["ecart_brut_avant_avoirs"] = str(arrondi_centime(brut))
     commun = dict(
         unite=lr.unite, entrees={"montant": v}, attendu=arrondi_centime(attendu + deduction), constate=facture,
         ecart=arrondi_centime(ecart), tolerance=tol, seuil_certitude=seuil, documents=docs, details=det,

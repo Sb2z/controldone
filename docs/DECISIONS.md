@@ -1925,3 +1925,249 @@ calculée sur des lignes incomplètes. La confiance ne protège pas : il faut un
   forfait, incohérences imprimées non listées par le générateur (B4 masse nette > brute, A1, A5). Perte : GX0078
   D5 (facture du transitaire découpée en deux documents, la première moitié sans aucun total : ses lignes ne
   peuvent pas être confirmées).
+
+# Contrôles : cas révélés par le corpus G2
+
+Constat : sur `bench/corpus_g2` dev (`g2_dev_calib`), 13 faux « écarts certains » restaient après la lecture
+corroborée (D-1700) ; ils ne venaient pas de lectures fausses. Analyse cas par cas (documents et `truth.json` lus) :
+sept relèvent de la logique des contrôles (corrigés ci-dessous), les autres de conventions de vérité du
+générateur G2 ou du correcteur (listés en fin de section, moteur inchangé). Chaque correction a un test unitaire
+fictif qui échoue avant et passe après.
+
+## D-2201 — B4 : le dépassement au total qui ne fait que reprendre un article n'est pas un second constat
+
+- **Constat** : un article dont la masse nette dépasse la brute produisait deux constats certains (`nette_brute`
+  sur l'article, `nette_total` au total), pour un seul fait (GX0188 : un article ; GX0268 : Σ nettes 7,195 >
+  brute totale 4,517, entièrement dû à l'article 1, 3,715 > 0,715).
+- **Choix** (`famille_b._b4_declaration`) : `nette_total` est `non_applicable` (raison
+  `couvert_par_autre_controle`) quand `Σ nettes − Σ (nette − brute) des articles déjà constatés ≤ brute totale +
+  T_MASSE`. Un dépassement au total plus grand que celui des articles reste constaté.
+
+## D-2202 — A5 : condition 7 (lignes de pied) appliquée au montant converti
+
+- **Constat** : A4 vérifiait déjà qu'une ligne de pied (fret, assurance, emballage, remise) explique l'écart ;
+  A5 ne le faisait pas. GX0023 (facture UBL en GBP, fret en `AllowanceCharge` lu comme sous-total `fret`) : la
+  déclaration reprend les marchandises seules, écart −17,46 EUR = 15,01 GBP de fret au taux imprimé.
+- **Choix** : A5 cherche, comme A4, une combinaison de lignes de pied dont la somme **convertie au même taux**
+  (arrondie au centime) égale `|écart|` à `T_CONVERSION` près → `a_verifier`, raison
+  `ecart_explique_par_ligne_de_pied`, prochaine action avec la phrase de renvoi (comme A4). Sous-totaux structurés
+  (UBL/CII) et imprimés traités de la même façon (`_lignes_pied`).
+
+## D-2203 — Grille : une surcharge est rapprochée par son libellé seulement
+
+- **Constat** : « Peak season surcharge » / « Recargo temporada alta » (45,00) étaient comparées au seul poste
+  surcharge de la grille (« Security surcharge », 12,00 / 5,00) : D7 = 33,00 / 40,00 au lieu de 45,00 (ligne sans
+  poste). Avec deux postes surcharge (corpus d'origine BX0052, « Surcharge haute saison »), la ligne était
+  « ambiguë » (plusieurs postes) alors qu'aucun libellé ne correspond.
+- **Choix** (`famille_d.rapprocher_poste`) : comme `autre_prestation` (D-704), la nature `surcharge` n'identifie
+  pas un poste (carburant, sûreté, haute saison… sont des surcharges distinctes) : poste par libellé reconnu
+  seulement ; aucun libellé → sans poste (D7 comme D2) ; plusieurs → ambigu. Un libellé lu sous `C_MIN_CERTAIN`
+  reste une valeur clé : la ligne sans poste n'est alors pas certaine.
+
+## D-2204 — E3 : deux copies du même avoir, la mieux lue est imputée
+
+- **Constat** : GX0225, même avoir reçu en PDF natif (ligne ventilée) et en scan (aucune ligne lue) ; même date et
+  même numéro : l'identifiant départageait, le scan était « premier » et seul imputé, le natif écarté (E3) ;
+  l'avoir sans ventilation ne pouvait rien déduire (D3 15,00 certain au lieu de soldé).
+- **Choix** (`_aides_befg.avoirs_doubles`) : ordre de réception = date, numéro, puis copie la mieux lue (lignes
+  ventilées utilisables, puis confiance du total), puis identifiant. E3 signale toujours une réception en double.
+
+## D-2205 — Avoir rattaché mais non ventilé : pas d'« écart certain » recouvrable sur cette facture
+
+- **Constat** : GX0136, avoir « Ajustement tarif dédouanement » rattaché par le MRN, dont ni les lignes ni les
+  totaux n'ont été lus : D3 20,00 certain alors que l'avoir solde précisément cet écart (piège « écart soldé par
+  un avoir rattaché seulement par le MRN »).
+- **Choix** (§8.5.1 condition 7, `ControlContext.classify` → `_aides_befg.avoirs_non_ventiles_pour`) : un
+  classement `ecart_certain` d'un contrôle à montant `recouvrable` dont un document est une facture du transitaire
+  devient `a_verifier`, raison nouvelle `avoir_non_ventile` (« un avoir du même transitaire, rattaché à cette
+  facture, n'a pas pu être ventilé par nature ; il peut couvrir tout ou partie de l'écart »), quand le dossier
+  contient un avoir imputable (E3 exclu), de même émetteur, rattaché à la facture par les paliers de §17.2
+  (facture d'origine, MRN de l'en-tête ou des lignes, référence de transport) et sans aucune ligne ventilée.
+  Un avoir ventilé suit l'imputation normale (déduction) ; un avoir sans lien avec la facture est sans effet.
+
+## D-2206 — D : rattachement d'une ligne d'avoir par le MRN de l'en-tête et par le transport
+
+- **Constat** : `_credits_ligne` (D) ne connaissait que le MRN **de la ligne** facturée et ignorait le troisième
+  palier : un avoir qui ne cite que le MRN (ou que la référence de transport) n'était pas déduit d'une ligne de
+  prestation sans MRN propre, alors que C et E le rattachaient.
+- **Choix** : ligne sans MRN → MRN de l'en-tête de la facture (§12.2) ; référence de transport de la facture pour
+  le palier « transport » (§17.2) ; même `choisir_par_paliers` qu'en C et E.
+
+## D-2207 — E4 : montants d'avoir comparés en valeur absolue
+
+- Un avoir imprime « -15,00 » sur la ligne et 15,00 en prix unitaire (ou l'inverse) : E4 signalait « −15,00 ≠ 1 ×
+  15,00 ». Comme `lignes_credit_depuis_avoir` (montants positifs), E4 compare les valeurs absolues (bruit
+  `a_verifier` seulement ; GX0151, GX0225).
+
+## D-2208 — Un avoir déjà déduit par C, D ou G4 n'est pas réimputé par E5/E6
+
+- **Constat** : après D-2204, l'avoir de GX0225 (15,00 dédouanement) soldait D3 (résultat `conforme`) ; E6 ne
+  voyait plus cet écart (sans constat) et imputait le même avoir sur l'écart D7 de la même facture (« reste
+  30,00 » à relancer) : un avoir compté deux fois.
+- **Choix** : C (par catégorie), D (par ligne) et G4 publient `details.ecart_brut_avant_avoirs` quand ils
+  déduisent un avoir ; E (`_ecarts_du_dossier`) retient aussi ces écarts soldés (résultats sans constat) comme
+  candidats de l'imputation. `EcartImputable.nature` (nature de la ligne facturée, D) : à composante égale, une
+  ligne d'avoir est imputée d'abord sur l'écart de même nature (même choix que la déduction ligne à ligne de D) ;
+  ordre §17.2 inchangé ensuite.
+
+## D-2209 — Mesures
+
+- `corpus_g2` dev (`g2_dev_ctl`, même code d'extraction que les autres équipes au moment de la mesure ; leurs
+  corrections ont été intégrées en parallèle, la référence `g2_dev_calib` est antérieure) : faux certains de la
+  liste initiale 13 -> 6 restants, tous hors logique des contrôles (voir ci-dessous) : GX0023 A5, GX0136 D3,
+  GX0188 B4, GX0225 D3, GX0225 D7 (montant), GX0263 D7 (montant), GX0268 B4 corrigés. Run complet : précision
+  certain 0,768 -> 0,857, 96 VP certains, exactitude des montants 0,977. Les 16 faux certains du run complet :
+  7 C5 sans montant (`doublon_composantes`) sur un piège C3, 2 C1 (GX0117, GX0151, convention `avoir_partiel`),
+  3 A5 (GX0006, GX0219, GX0269), 1 A1 (GX0001), 3 lectures/découpages (GX0055 B2 : ligne B00 de l'article 4 lue
+  comme total de la taxe ; GX0212 B2/B4 : deux versions d'une déclaration fusionnées en un document).
+- Corpus d'origine dev (`dev_ctl`) : seuil bloquant PASSE, précision certain 1,000, rappel 0,818, rappel certain
+  0,736 -> 0,743 (BX0052 D7 48,00 désormais certain : surcharge sans poste), exactitude des montants 0,959 -> 0,966.
+
+**Conventions de vérité et du correcteur à relayer (moteur inchangé, valeurs vérifiées sur les documents)** :
+
+- **C5 sans montant sur un piège C3** (GX0028, GX0145, GX0159, GX0192, GX0291 ; GX0117, GX0151) : quand C1 (ou
+  C4) porte l'écart, C5 garde son classement avec `montant_en_jeu = null`, raison `doublon_composantes` (§8.6). Le
+  correcteur le rend « neutre » (`redondant_doublon_composantes`) **sauf** si un piège C3 (« TVA autoliquidée non
+  refacturée », équivalents C3 → C5) couvre la même facture : le test des pièges passe avant celui des doublons.
+  Le corpus d'origine liste ce C5 comme erreur « Conséquence » ; G2 ne le liste pas.
+- **`avoir_partiel` (G2)** : l'excédent de droits sous-jacent (GX0151 : 153,08 refacturés pour 33,08 liquidés,
+  avoir 72,00 ; GX0117 : 300,00 d'excédent, avoir 180,00) n'est pas listé, seul E6 l'est ; le corpus d'origine
+  liste l'écart (D3/C1 au montant net) **et** E6 (BX0026, BX0105).
+- **`ordre_grandeur_incoherent` (A7) sur une déclaration qui imprime un taux** : GX0006 (CSV, `taux_change`
+  1,13890, base 1 EUR ; 224 681,50 USD → 197 279,39 EUR, déclaré 78 911,76), GX0219 (XML, 0,91544 CHF ; 1 710,67
+  CHF → 1 868,69 EUR, déclaré 747,48), GX0269 (PDF p. 2, 0,92522 CHF ; 3 398,59 CHF → 3 673,28 EUR, déclaré
+  7 713,89) ; aussi GX0096 et GX0109 (taux 0,85130 et 0,86374 dans `truth_values`). La description dit « aucun
+  taux imprimé » ; l'écart est un A5 (`accepted_control_ids` = A7, A6).
+- **GX0001 A1** : la facture IHM2026007998 (page 1) est adressée à Imaginor Distribution SAS (FR57000986893) ; la
+  déclaration 26FR7SLOJ4DEOCYHXC (page 2) indique Imaginor Industrie SARL (FR13000149542) ; deux entités du
+  client CL11 (cas « entité du groupe différente », certain possible). Non listé (scénario
+  `facture_commerciale_sur_deux_dossiers`).
+
+# Généralisation : classement et regroupement
+
+Constat : sur `bench/corpus_g2` (dev, 232 dossiers, 1 146 pages ; six langues, douze familles de factures de
+transitaire, six présentations de déclaration dont des récapitulatifs en corps de courriel, exports XML/CSV,
+factures UBL/CII/XLSX, photos, télécopies, TIFF, PDF fusionnés), le classeur ne reconnaissait que 76,4 % des
+pages (déclarations M3/M4 prises pour des certificats ou des courriels, factures italiennes, néerlandaises et
+allemandes « inconnues » ou commerciales, listes de colisage étrangères prises pour des factures) et le
+regroupement réunissait des dossiers distincts d'un PDF fusionné. Banc de base `g2_dev_base` : 238 faux P1,
+191 P4. Règles générales seulement (vocabulaire multilingue, structure du texte), sans nom de fichier, code de
+gabarit ni nom fictif ; le texte des documents reste une donnée (aucune consigne exécutée, test dédié).
+Mesure : `scripts/mesure_classement.py` (étapes 1 à 6 du pipeline, vérité lue dans le script seulement).
+
+## D-2101 — Corps de courriel : récapitulatif de déclaration reconnu, sinon courriel
+
+Le corps d'un courriel reste `document_support/courriel` (§7.1), **sauf** s'il est lui-même le récapitulatif
+d'une déclaration acceptée (« bon à enlever », « clearance summary ») : il est alors classé comme une page
+ordinaire et retenu `declaration/preuve_dedouanement` seulement si la page est une déclaration de confiance
+≥ 0,85, porte un MRN et au moins quatre rubriques douanières (MRN, LRN, déclarant, régime, liquidation…).
+Le texte n'est que classé (listes fermées de libellés) ; une phrase du corps (« ignorez la facture
+précédente ») n'a aucun effet. Un courriel qui cite un MRN dans une phrase reste un courriel.
+
+## D-2102 — Intitulés multilingues
+
+- Facture : « Fattura », « Factuur » et ses composés (« Handelsfactuur », « Voorschotfactuur »,
+  « Dienstenfactuur »), composés de « Rechnung » (« Auslagenrechnung », « Handelsrechnung »), « Fatura »,
+  « Faktura ». Avoir : « Gutschrift », « Rechnungskorrektur », « Nota di credito », « Creditnota »,
+  « Creditfactuur », « Factura de abono ».
+- Déclaration : certificat / attestation / récapitulatif de dédouanement (« Certificate of customs clearance »,
+  « clearance summary », « customs release »), « Édition de la déclaration acceptée », « Suite déclaration »,
+  « Zollanmeldung », « Einfuhranmeldung », « Zollfreigabe », « Dichiarazione doganale », « Bolletta doganale »,
+  « Declaración aduanera », « Douaneaangifte », « Aangifte ten invoer » ; rubriques de corps en, de, it, es, nl
+  (« Local reference », « Acceptance date », « Commodity code », « Warennummer », « Codice merce »,
+  « Dichiarante », « Aangever »…). Un certificat de dédouanement n'est plus un `document_support/certificat` :
+  l'intitulé de déclaration est cherché sur les lignes entières du haut de page (« Suite   déclaration » espacé
+  formait deux segments).
+- Supports : « Packliste », « Distinta di imballo », « Paklijst », « Lista de embalaje » ; conditions générales
+  « Allgemeine Geschäftsbedingungen », « ADSp », « Condizioni generali », « Algemene voorwaarden » ; formules de
+  lettre allemandes, italiennes, espagnoles et néerlandaises (« Sehr geehrte », « Mit freundlichen Grüßen »,
+  « In allegato », « Met vriendelijke groet »…). Pages « Seite / Blatt / pagina n di m », « Übertrag »,
+  « Riporto », « Suma y sigue ». Langue détectée : de, it, nl en plus de fr, en, es (information seulement).
+
+## D-2103 — Facture de transitaire ou facture commerciale : vocabulaire, pas mise en page
+
+Débours et prestations de dédouanement multilingues comptés comme signaux forts (« Auslagen »,
+« Vorlageprovision », « Verzollung », « anticipazioni », « commissione anticipo », « sdoganamento »,
+« despacho de aduanas », « voorschotten », « inklaring »…) ou de corps (« Zollabgaben », « Einfuhrumsatzsteuer »,
+« Lagergeld », « dazio », « IVA all'importazione », « aranceles », « invoerrechten », « opslag »…) ; signaux de
+facture commerciale en de, it, es, nl (« Warentarifnummer », « Ursprungsland », « voce doganale », « Resa »,
+« GN-code », « Oorsprong », « Nettogewicht »…). Le sous-type « sans valeur / valeur en douane » (mentions de corps,
+« free of charge ») ne retient plus en facture commerciale une page de débours (seul « pro forma » le fait).
+
+## D-2104 — Intitulé ou rubrique citée
+
+Ne sont plus des intitulés : un libellé de titre précédé d'un mot qui porte un chiffre (« N380 Facture
+commerciale » : rangée d'un tableau de documents), d'un mot de citation (« Ref. invoice », « Votre facture »,
+« Ihre », « uw »), suivi de « currency / value / amount / total » (« Invoice currency / total » d'une déclaration)
+ou d'une barre (« AWB / B/L : » est une étiquette de champ, pas un titre de transport). Les signes isolés (« / »,
+« — ») ne comptent plus comme mots avant l'intitulé (« STATEMENT / INVOICE »). Un intitulé que l'OCR a espacé
+lettre à lettre (« HAN DE LS FACTU U R ») est relu sans les blancs.
+
+## D-2105 — À niveau égal, l'intitulé le plus haut l'emporte
+
+Un document support titré au même niveau qu'une mention « facture » est support si son intitulé est plus haut sur
+la page et qu'aucun débours n'est lu (« BILL OF LADING » en tête, « Invoice IHM… » cité en grand corps plus bas).
+
+## D-2106 — Déclaration malgré une mention « facture »
+
+MRN (ou page de suite) et au moins huit rubriques de déclaration, sans débours, sans intitulé d'avoir et avec
+moins de trois signaux de facture commerciale : la mention « facture » est une rubrique citée, la page est une
+déclaration (score de corps plafonné à 0,50 au lieu de 0,40) ; une page de suite sans MRN lisible qui
+n'atteint pas le seuil est une `continuation` (0,75), jamais une facture de transitaire.
+
+## D-2107 — Avoir par total négatif : pas sur un tiret isolé
+
+Un total « négatif » ne fait plus un avoir quand un montant à payer est imprimé positif (« Total débours   -
+975,38 € » d'une télécopie suivi de « Net à payer 1 173,99 € ») : facture de transitaire.
+
+## D-2110 — Plusieurs dossiers candidats : référence explicite, sinon départage
+
+Une référence explicite (facture citée, transport, MRN) peut rattacher un document à plusieurs dossiers (plusieurs
+factures pour une déclaration, facture mensuelle) : seuls ces dossiers sont gardés. Sans référence explicite
+(PDF fusionné où « même fichier » vaut pour tous les dossiers), le meilleur score l'emporte ; à égalité, une
+déclaration va au seul dossier qui n'en a pas encore, puis tout document au dossier du document qui le précède
+immédiatement dans le même fichier ; sinon la règle antérieure (tous les candidats). Auparavant, une déclaration
+liée à cinq factures par le seul « même fichier » (score 2) réunissait les cinq dossiers.
+
+## D-2111 — Pas de repli « même source » entre déclarations sans facture
+
+Le repli `meme_dossier_source` (dossier unique de la frontière) ne rattache plus une déclaration à un dossier
+**sans facture commerciale** qui contient déjà une déclaration d'un autre MRN : chacune forme son dossier
+(P1 vrai : facture absente). Avec une facture, le repli reste possible (facture répartie sur plusieurs
+déclarations, §7.5 étape 8).
+
+## D-2112 — Référence citée univoque
+
+Une référence citée compatible (§8.4, inclusion) avec les numéros de **plusieurs** documents du lot (référence
+tronquée par l'OCR, « ODH 2026 ») ne désigne aucun d'eux : `ref_facture_citee` exige l'égalité ou une
+compatibilité univoque (facture commerciale pour les déclarations, supports et factures de transitaire ;
+facture de transitaire pour les avoirs et lettres).
+
+## D-2113 — Propositions de découpage (non appliquées, `ingest/decoupage.py` hors périmètre)
+
+- Relevé de transitaire sur deux pages dont la page 2 répète l'en-tête sans numéro lu (« STATEMENT / INVOICE »
+  puis « Page 2 ») : deux documents `facture_transitaire` au lieu d'un ; absorber une page de même type et même
+  émetteur quand elle ne porte pas de numéro différent et que la précédente annonce une suite.
+- Page de suite de déclaration dont l'OCR a abîmé le MRN au-delà de deux confusions (« 26FRUY… » / « 26FRXX… ») :
+  nouvelle déclaration ; garder la page dans la déclaration en cours si elle porte « suite » / « page 2/2 » et
+  aucun intitulé.
+- Pages retournées ou illisibles (texte OCR inversé) : `inconnu` à 0,30, ce qui est la dégradation prudente
+  attendue (7 pages G2 dev).
+
+**Mesures** (`scripts/mesure_classement.py`, caches `var/cache/g2_pages` et `var/cache/pages` ; regroupement : paires
+de documents de vérité liés par `expected_links`, un document étant dans le groupe des documents qu'il cite) :
+
+| corpus dev | pages : type | type + sous-type | regroupement P / R / F1 | liens faibles | dossiers incomplets |
+|---|---|---|---|---|---|
+| `corpus_g2` avant | 76,4 % | 74,9 % | 0,877 / 0,817 / 0,846 | 79 | 157 |
+| `corpus_g2` après | 99,4 % | 98,3 % | 0,955 / 0,963 / 0,959 | 33 | 33 |
+| `corpus` avant | 97,8 % | 96,7 % | 0,768 / 0,951 / 0,850 | 51 | 34 |
+| `corpus` après | 97,9 % | 96,8 % | 0,808 / 0,950 / 0,873 | 50 | 34 |
+
+Pages G2 encore mal classées (7) : pages retournées ou illisibles à l'OCR, rendues `inconnu` (0,30–0,65), jamais
+un type confiant faux. Banc complet `corpus_g2` dev (`bench/out/g2_dev_grp`, contre `g2_dev_base`) : faux P1
+238 -> 29, P1 détectés 2/4 -> 4/4, P4 191 -> 30, regroupement du banc F1 0,912 -> 0,981 ; les 16 « écarts
+certains » faux restants (C5 sur pièges 7, A5 3, B2 2, C1 2, A1 1, B4 1) sont tous dans des dossiers aux liens
+`forte` par références explicites (extraction et contrôles, hors regroupement). Banc d'origine dev
+(`bench/out/dev_grp`) : seuil bloquant PASSE, précision certain 1,000, rappel 0,818, rappel P1 1,0, faux P1 25
+(inchangé), P4 48 -> 47, regroupement du banc F1 0,965 -> 0,965.

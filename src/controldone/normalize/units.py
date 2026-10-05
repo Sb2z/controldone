@@ -24,17 +24,19 @@ _KG = Decimal("0.001")
 _UNITES: dict[str, str] = {}
 for _code, _libelles in {
     "C62": "pcs pc pce pces piece pieces pieza piezas pza pzas u un ud uds unit units unite unites unidad unidades ea each "
-    "nr nbr nb stk st qty c62 h87 nar item items article articles p/st",
+    "nr nbr nb stk st qty c62 h87 nar item items article articles p/st "
+    # de, it, nl (D-2006)
+    "stuck stueck stck stk. pz pz. pezzo pezzi unita stuks stuk",
     "KGM": "kg kgs kilo kilos kilogramme kilogrammes kilogram kilograms kilogramo kilogramos kgm",
     "GRM": "g gr grs gramme grammes gram grams gramo gramos grm",
     "TNE": "t to tonne tonnes ton tons tonelada toneladas tne",
-    "LTR": "l lt ltr litre litres liter liters litro litros",
+    "LTR": "l lt ltr litre litres liter liters litro litros litri",
     "MLT": "ml millilitre millilitres milliliter milliliters mlt",
-    "MTR": "m mtr metre metres meter meters metro metros ml_lineaire",
+    "MTR": "m mtr metre metres meter meters metro metros metri ml_lineaire",
     "MTK": "m2 m² sqm mtk metre carre metres carres square meter square meters",
     "MTQ": "m3 m³ cbm mtq metre cube metres cubes cubic meter cubic meters",
     "CMT": "cm centimetre centimetres centimeter centimeters cmt",
-    "PR": "pr prs pa pair pairs paire paires par pares",
+    "PR": "pr prs pa pair pairs paire paires par pares paar paare paia paio",
     "SET": "set sets jeu jeux ensemble ensembles juego juegos",
     "DZN": "dz dzn doz dozen dozens douzaine douzaines docena docenas",
     "CT": "ctn ctns carton cartons caja cajas",
@@ -45,7 +47,8 @@ for _code, _libelles in {
 }.items():
     _UNITES[_code.lower()] = _code
     for _l in _libelles.split():
-        _UNITES[_l.replace("_", " ")] = _code
+        # mots isolés d'un libellé de plusieurs mots (« metre carre ») : ils ne remplacent pas l'unité simple
+        _UNITES.setdefault(_l.replace("_", " "), _code)
 # libellés de plusieurs mots
 for _l, _code in {
     "metre carre": "MTK", "metres carres": "MTK", "square meter": "MTK", "square meters": "MTK",

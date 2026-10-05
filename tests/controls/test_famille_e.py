@@ -174,6 +174,22 @@ def test_e3_meme_numero():
     propre(second)
 
 
+def test_e3_deux_copies_le_meme_jour_la_mieux_lue_est_imputee():
+    # D-2204 : même avoir reçu en scan (aucune ligne lue, total seul) et en PDF natif (ligne ventilée), même
+    # date et même numéro : la copie ventilée est imputée, le scan est la « seconde réception ».
+    from controldone.controls import _aides_befg as aides
+
+    scan = avoir("doc_av1", total_ht="30.00")
+    scan.av.lignes = []
+    natif = avoir("doc_av2", total_ht="30.00")
+    ctx = contexte([ft_e(), scan, natif])
+    assert [d.id for d in aides.avoirs_imputables(ctx)] == ["doc_av2"]
+    assert [lc.nature for lc in aides.lignes_credit_du_dossier(ctx)] == [NatureLigne.debours_droits]
+    rs = e3_avoir_recu_deux_fois(ctx)
+    assert un(rs, "av:doc_av1").outcome is Outcome.a_verifier
+    assert un(rs, "av:doc_av2").outcome is Outcome.conforme
+
+
 def test_e3_meme_montant_meme_origine_moins_de_7_jours():
     a1 = avoir("doc_av1", total_ttc="30.00")
     a2 = avoir("doc_av2", numero="AV-777", date="2026-09-07", total_ttc="30.00")
@@ -192,6 +208,15 @@ def test_e3_dans_un_autre_dossier():
 
 
 # --- E4 ---------------------------------------------------------------------------------------------------
+
+
+def test_e4_montants_negatifs_d_un_avoir():
+    # D-2207 : l'avoir imprime la ligne « -15,00 » (quantité 1, prix 15,00) et ses totaux en positif : même
+    # crédit, aucune discordance.
+    av = avoir("doc_av1", ligne_av("doc_av1", "-15.00", quantite="1", pu="15.00"), total_ht="15.00",
+               total_tva="3.00", total_ttc="18.00")
+    rs = e4_arithmetique_avoir(contexte([av]))
+    assert rs and all(r.outcome is Outcome.conforme for r in rs)
 
 
 def test_e4():

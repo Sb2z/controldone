@@ -124,6 +124,8 @@ class RaisonCode(StrEnum):
     retrograde_par_fondateur = "retrograde_par_fondateur"
     # Ajout moteur (D-1700) : lecture non confirmée par l'arithmétique interne du document
     lecture_non_corroboree = "lecture_non_corroboree"
+    # Ajout moteur (D-2205) : avoir rattaché à la facture mais non ventilé (non imputable)
+    avoir_non_ventile = "avoir_non_ventile"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -171,6 +173,10 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
     RaisonCode.erreur_interne: "contrôle non réalisé à la suite d'une erreur interne",
     RaisonCode.retrograde_par_fondateur: (
         "à vérifier : classement abaissé lors de la relecture, une valeur reste à confirmer"
+    ),
+    RaisonCode.avoir_non_ventile: (
+        "à vérifier : un avoir du même transitaire, rattaché à cette facture, n'a pas pu être ventilé par nature ; "
+        "il peut couvrir tout ou partie de l'écart"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

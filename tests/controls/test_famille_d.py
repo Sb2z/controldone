@@ -354,6 +354,22 @@ def test_d7_surcharge_pourcentage_et_hors_grille():
     assert not par_id(run([ft(ligne(N.surcharge, "18.00"))], g=g), "D2")[1:]
 
 
+def test_d7_autre_surcharge_que_celle_de_la_grille_est_sans_poste():
+    # D-2203 : la grille ne prévoit qu'une surcharge carburant ; une surcharge haute saison n'est pas « la »
+    # surcharge de la grille : elle est sans poste (montant entier), pas comparée au tarif carburant.
+    f = ft(ligne(N.transport, "200.00"), ligne(N.surcharge, "45.00", libelle="Peak season surcharge"))
+    r = un(run([f]), "D7")
+    assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("45.00")
+    assert "aucun poste" in lib(r.constat)
+    # Deux surcharges dans la grille, libellé d'aucune des deux : sans poste (et non « plusieurs postes »).
+    g = grille(*POSTES, poste("SUR", N.surcharge, prix="6.00", libelles_reconnus=["surcharge sûreté"]))
+    r = un(run([ft(ligne(N.surcharge, "48.00", libelle="Surcharge haute saison"))], g=g), "D7")
+    assert r.constat.montant_en_jeu == D("48.00") and "aucun poste" in lib(r.constat)
+    # Libellé reconnu : comparé au tarif du poste, comme avant.
+    r = un(run([ft(ligne(N.surcharge, "10.00", libelle="Surcharge sûreté"))], g=g), "D7")
+    assert r.constat.montant_en_jeu == D("4.00")
+
+
 # --- D8 ----------------------------------------------------------------------------------------------------------------
 
 

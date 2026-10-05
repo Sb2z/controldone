@@ -576,6 +576,7 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
     out: list[ResultatControle] = []
     nettes: list[ValeurSourcee] = []
     brutes: list[ValeurSourcee] = []
+    excedent_articles = _ZERO  # Σ (nette − brute) des articles déjà constatés (``nette_brute``)
     for i, a in enumerate(c.articles):
         num = a.numero_article.valeur if a.numero_article is not None and a.numero_article.valeur else str(i + 1)
         if a.masse_nette is not None:
@@ -595,8 +596,11 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
             out.append(ctx.non_verifiable("B4", RaisonCode.valeur_absente, unite=unite, sous_controle="nette_brute",
                                           documents=[dec.id]))
             continue
-        out.append(_b4_nette_brute(ctx, dec, unite=unite, sous_controle="nette_brute", nette=a.masse_nette,
-                                   brute=a.masse_brute, v_nette=vn, v_brute=vb, sujet=f"Sur l'article {num}"))
+        r = _b4_nette_brute(ctx, dec, unite=unite, sous_controle="nette_brute", nette=a.masse_nette,
+                            brute=a.masse_brute, v_nette=vn, v_brute=vb, sujet=f"Sur l'article {num}")
+        if r.outcome.est_constat:
+            excedent_articles += vn - vb
+        out.append(r)
 
     total = c.masse_brute_totale
     n_art = len(c.articles)
@@ -613,10 +617,20 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
     if len(nettes) == n_art:
         if all(ctx.utilisable(v) and _num(v) is not None for v in nettes):
             somme_n = sum((_num(v) or _ZERO for v in nettes), _ZERO)
-            out.append(_b4_nette_brute(
-                ctx, dec, unite=cle_unite(dec=dec.id), sous_controle="nette_total", nette=nettes[0], brute=total,
-                v_nette=somme_n, v_brute=v_total, sujet="Au total", operandes=nettes,
-            ))
+            reste = somme_n - excedent_articles
+            if excedent_articles > 0 and reste - v_total <= ctx.tol.t_masse(reste, v_total):
+                # Le dépassement au total n'est que la conséquence des articles déjà constatés : pas de second
+                # constat pour le même fait (D-2201).
+                out.append(ctx.non_applicable(
+                    "B4", RaisonCode.couvert_par_autre_controle, unite=cle_unite(dec=dec.id),
+                    sous_controle="nette_total", documents=[dec.id],
+                    details={"couvert_par": "B4 nette_brute", "declaration_id": dec.id},
+                ))
+            else:
+                out.append(_b4_nette_brute(
+                    ctx, dec, unite=cle_unite(dec=dec.id), sous_controle="nette_total", nette=nettes[0], brute=total,
+                    v_nette=somme_n, v_brute=v_total, sujet="Au total", operandes=nettes,
+                ))
         else:
             out.append(ctx.non_verifiable("B4", RaisonCode.confiance_insuffisante, unite=cle_unite(dec=dec.id),
                                           sous_controle="nette_total", documents=[dec.id]))

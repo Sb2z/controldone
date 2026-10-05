@@ -28,12 +28,21 @@ présentée comme sûre (§8.5).
 
 from __future__ import annotations
 
+import itertools
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 
 from controldone.extract.base import ExtractionContext, ExtractionResult
+from controldone.extract.deterministe import _fc_langues as _L
+from controldone.extract.deterministe._fc_regles import (
+    chercher_partout,
+    codes_devise_libelle,
+    devise_symbole,
+    nettoyer_colonnes,
+    scinder_mots_colles,
+)
 from controldone.extract.deterministe._mise_en_page import (
     Colonne,
     Fabrique,
@@ -119,17 +128,17 @@ LIB_TRANSPORT = motifs(
     rf"|guia aerea|cmr|waybill|lettre de transport(?: aerien)?)\s*{_NO}?\s*:?",
 )
 _ACH = (r"(?:buyer|bill(?:ed)? to|sold to|invoice(?:d)? to|customer|acheteur|facture a|vendu a|client|comprador"
-        r"|facturar a|cliente|importer|importateur|importador)")
+        r"|facturar a|cliente|importer|importateur|importador|" + _L.ACHETEUR + ")")
 _DEST = (r"(?:ship(?:ped)? to|deliver(?:ed|y)? to|consignee|destinataire|livre a|livraison a|enviar a|entregar a"
-         r"|consignatario|destinatario)")
+         r"|consignatario|destinatario|" + _L.DESTINATAIRE + ")")
 _VEND = (r"(?:seller|shipper|exporter|vendor|supplier|vendeur|expediteur|exportateur|fournisseur|vendedor"
-         r"|exportador|proveedor|remitente)")
-LIB_ACHETEUR = motifs(rf"{_ACH}\b(?:\s*[/&-]\s*{_ACH}\b)*\s*:?")
+         r"|exportador|proveedor|remitente|" + _L.VENDEUR + ")")
+LIB_ACHETEUR = motifs(rf"{_ACH}\b(?:\s*[/&-]\s*{_ACH}\b)*\s*:?") + _L.ACHETEUR_PARENTHESE
 LIB_DESTINATAIRE = motifs(rf"{_DEST}\b(?:\s*[/&-]\s*{_DEST}\b)*\s*:?")
 LIB_VENDEUR = motifs(rf"{_VEND}\b(?:\s*[/&-]\s*{_VEND}\b)*\s*:?")
 LIB_FIN_PAVE = motifs(
     r"(?:buyer|bill(?:ed)? to|sold to|ship(?:ped)? to|consignee|seller|shipper|exporter|notify|acheteur"
-    r"|destinataire|vendeur|expediteur|comprador|vendedor|consignatario|livre a|enviar a)\b",
+    r"|destinataire|vendeur|expediteur|comprador|vendedor|consignatario|livre a|enviar a|" + _L.FIN_PAVE + r")\b",
 )
 LIB_POIDS_BRUT = motifs(
     r"(?:total\s*)?gross\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?", r"g\.?\s*w\.?\s*(?:total)?\s*:",
@@ -197,7 +206,7 @@ LIB_SOUS_TOTAUX: list[tuple[TypeSousTotal, list[re.Pattern[str]]]] = [
     )),
 ]
 _EXCLU_SOUS_TOTAL = re.compile(r"packing\s*list|liste\s*de\s*colisage|lista\s*de\s*empaque|shipped|via\b|terms|"
-                               r"poids|weight|peso")
+                               r"poids|weight|peso|document|waybill|frachtbrief|vrachtbrief|lettera di vettura")
 
 VOCAB_COLONNES: dict[str, list[str]] = {
     "numero_ligne": ["#", "no", "n°", "n.o", "nº", "nr", "pos", "line", "ligne", "item no", "n° ligne", "linea"],
@@ -249,8 +258,24 @@ _FIN_TABLEAU = re.compile(
     r"freight|fret|flete|insurance|assurance|seguro|packing|emballage|embalaje|discount|remise|descuento|"
     r"(?:total\s*)?gross|(?:total\s*)?net\s*(?:weight|wt)|(?:total\s*)?poids|(?:total\s*)?peso|number of|"
     r"nombre de|numero de|n\.o de bultos|we hereby|nous certifions|certificamos|declaration|amount due|"
-    r"montant total|importe total|valor total|value for customs|valeur pour|valor para)"
+    r"montant total|importe total|valor total|value for customs|valeur pour|valor para|" + _L.FIN_TABLEAU + ")"
 )
+
+# --- compléments multilingues (de, it, nl ; D-2001) -----------------------------------------------------------
+LIB_NUMERO = LIB_NUMERO + _L.LIB_NUMERO
+LIB_DATE = LIB_DATE + _L.LIB_DATE
+LIB_DEVISE = LIB_DEVISE + _L.LIB_DEVISE
+LIB_INCOTERM = LIB_INCOTERM + _L.LIB_INCOTERM
+LIB_TRANSPORT = LIB_TRANSPORT + _L.LIB_TRANSPORT
+LIB_POIDS_BRUT = LIB_POIDS_BRUT + _L.LIB_POIDS_BRUT
+LIB_POIDS_NET = LIB_POIDS_NET + _L.LIB_POIDS_NET
+LIB_COLIS = LIB_COLIS + _L.LIB_COLIS
+LIB_TOTAL = LIB_TOTAL + _L.LIB_TOTAL
+LIB_TOTAL_DOUANE = LIB_TOTAL_DOUANE + _L.LIB_TOTAL_DOUANE
+_EXCLU_TOTAL = re.compile(_EXCLU_TOTAL.pattern + "|" + _L.EXCLU_TOTAL)
+LIB_SOUS_TOTAUX = [(typ, mots + _L.SOUS_TOTAUX.get(typ.value, [])) for typ, mots in LIB_SOUS_TOTAUX]
+for _t, _libs in _L.COLONNES.items():
+    VOCAB_COLONNES[_t] = VOCAB_COLONNES[_t] + [x for x in _libs if x not in VOCAB_COLONNES[_t]]
 
 
 # --- extracteur -----------------------------------------------------------------------------------------------
@@ -292,6 +317,9 @@ class _Etat:
     lignes_tableau: set[tuple[int, int]] = field(default_factory=set)  # (page, rang) des lignes du tableau
     entetes: set[tuple[int, int]] = field(default_factory=set)
     fin_tableau: dict[int, int] = field(default_factory=dict)  # page -> rang de la 1re ligne après le tableau
+    #: en-tête du tableau des lignes par page : (ligne, colonnes nettoyées) ; codes de devise des colonnes
+    entetes_tab: dict[int, tuple[VueLigne, list[Colonne]]] = field(default_factory=dict)
+    codes_entete: list[tuple[str, Lecture]] = field(default_factory=list)
 
 
 def extraire_facture_commerciale(
@@ -300,6 +328,7 @@ def extraire_facture_commerciale(
     """Champs d'une facture commerciale à partir de sa vue (pages du document)."""
     fab = Fabrique(TypeDocument.facture_commerciale, document_id, INFO, vue, ids)
     e = _Etat(vue=vue, fab=fab)
+    _reperer_entetes(e)
     _devise(e)
     _separateur_par_devise(e)
     _entete(e)
@@ -348,16 +377,20 @@ def _devise(e: _Etat) -> None:
             c = devise_dans(lt.texte)
             if c:
                 codes_totaux.append(c)
+    indices = _devise_indices(e, codes_page)
     if code_lu and code_lu != DEVISE_INCONNUE:
         conf = confiance_mots(lec)
         if codes_totaux and all(c == code_lu for c in codes_totaux):
             conf = max(conf, 0.97 if lec.methode is not Methode.ocr else 0.93)
         elif codes_totaux and any(c != code_lu for c in codes_totaux):
             conf = min(conf, 0.6)
+        elif indices and set(indices) != {code_lu}:
+            conf = min(conf, 0.6)  # en-tête de colonne ou libellé de total dans une autre devise
         e.champs.devise = e.fab.valeur("devise", lec, confiance=conf)
         e.devise = code_lu
         return
     # pas de libellé : code ISO à côté du total
+    inconnue: Lecture | None = None
     for t in reversed(chercher(vue, LIB_TOTAL_DOUANE + LIB_TOTAL, exclure=_EXCLU_TOTAL)):
         lt = valeur_apres(vue, t, accepte_montant(vue, None))
         if lt is None:
@@ -370,12 +403,77 @@ def _devise(e: _Etat) -> None:
                 e.champs.devise = e.fab.valeur("devise", lecd, confiance=conf)
                 e.devise = c
                 return
-            if c == DEVISE_INCONNUE:
-                lecd = Lecture((m,), lt.page, lt.methode, contexte=lt.contexte)
-                e.champs.devise = e.fab.valeur("devise", lecd, confiance=0.3)
-                return
+            if c == DEVISE_INCONNUE and inconnue is None:
+                inconnue = Lecture((m,), lt.page, lt.methode, contexte=lt.contexte)
+    if _devise_par_indices(e, indices):
+        return
+    if inconnue is not None:  # symbole ambigu (« $ », « ¥ ») sans code ISO qui le résolve
+        e.champs.devise = e.fab.valeur("devise", inconnue, confiance=0.3)
+        return
     if lec is not None:  # « $ » non confirmé
         e.champs.devise = e.fab.valeur("devise", lec, confiance=0.3)
+
+
+def _devise_indices(e: _Etat, codes_page) -> dict[str, list[tuple[str, Lecture]]]:
+    """Devises imprimées hors libellé « devise » (D-2003) : code accolé au libellé d'une colonne de prix ou de
+    montant, code dans le libellé ou la valeur d'un total (« TOTAL CNY », « Total due (INR) », « USD 1,234.00 »),
+    symbole univoque à côté du total (€, £, ₩, ₹, ₺ ; ¥ et $ seulement si un seul code ISO compatible est
+    imprimé). Retourne {code: [(source, lecture)]}."""
+    out: dict[str, list[tuple[str, Lecture]]] = {}
+
+    def ajouter(code: str | None, source: str, lec: Lecture) -> None:
+        if code and code in ISO_4217:
+            out.setdefault(code, []).append((source, lec))
+
+    for code, lec in e.codes_entete:
+        ajouter(code if code in ISO_4217 else devise_symbole(code, codes_page), "entete", lec)
+    vue = e.vue
+    for t in chercher(vue, LIB_TOTAL + LIB_TOTAL_DOUANE, exclure=_EXCLU_TOTAL):
+        for m in t.segment.mots:
+            for c in codes_devise_libelle([m]):
+                ajouter(c, "total", lecture_mots([m], t.page, t.ligne))
+        lt = valeur_apres(vue, t, accepte_montant(vue, None))
+        if lt is None:
+            continue
+        for m in lt.mots:
+            for c in codes_devise_libelle([m]):
+                ajouter(c, "total", Lecture((m,), lt.page, lt.methode, contexte=lt.contexte))
+            sym = re.match(r"^[(\-]?(US\$|[€£₩₹₺¥$])", m.texte)
+            if sym:
+                ajouter(devise_symbole(sym.group(1), codes_page), "symbole",
+                        Lecture((m,), lt.page, lt.methode, contexte=lt.contexte))
+    return out
+
+
+def _devise_par_indices(e: _Etat, indices: dict[str, list[tuple[str, Lecture]]]) -> bool:
+    """Devise sans libellé : un seul code parmi les indices -> retenu (0,90 ; 0,95 si deux sources distinctes,
+    en-tête de colonne et total ; OCR 0,85 / 0,90) ; plusieurs codes -> celui du total, 0,60."""
+    if not indices:
+        return False
+    if len(indices) == 1:
+        code, srcs = next(iter(indices.items()))
+        conf_haute = len({s for s, _ in srcs}) >= 2
+    else:
+        totaux = {c for c, srcs in indices.items() if any(s == "total" for s, _ in srcs)}
+        if len(totaux) != 1:
+            return False
+        code = totaux.pop()
+        srcs = indices[code]
+        conf_haute = None
+    lec = next((x for s, x in srcs if s == "total"), srcs[0][1])
+    ocr = any(x.methode is Methode.ocr for _, x in srcs)
+    if conf_haute is None:
+        conf = 0.6
+    elif ocr:
+        conf = min(0.9 if conf_haute else 0.85, max(confiance_mots(lec), 0.6))
+    else:
+        conf = 0.95 if conf_haute else 0.9
+    v = e.fab.valeur("devise", lec, confiance=conf)
+    if v is not None and v.valeur != code:  # symbole (¥, $) résolu par le code ISO imprimé ailleurs
+        v = v.model_copy(update={"valeur": code, "confiance": min(conf, 0.85)})
+    e.champs.devise = v
+    e.devise = code
+    return True
 
 
 def _separateur_par_devise(e: _Etat) -> None:
@@ -421,7 +519,7 @@ def _accepte_incoterm(mots) -> tuple[int, int] | None:
 
 def _entete(e: _Etat) -> None:
     vue, fab, ch = e.vue, e.fab, e.champs
-    lec = _premier(vue, LIB_NUMERO, accepte_reference)
+    lec = _premier(vue, LIB_NUMERO, _accepte_numero)
     if lec is not None:
         ch.numero = fab.valeur("numero", lec, confiance=_conf_ref(lec))
     else:
@@ -440,14 +538,29 @@ def _entete(e: _Etat) -> None:
     if lec is not None:
         code = Lecture(lec.mots[:1], lec.page, lec.methode, contexte=lec.contexte)
         ch.incoterm = fab.valeur("incoterm", code, confiance=confiance_mots(lec, plafond_ocr=0.9))
-        if len(lec.mots) > 1:
-            lieu = Lecture(lec.mots[1:], lec.page, lec.methode, contexte=lec.contexte)
+        mots_lieu = list(lec.mots[1:])
+        # mention de version (« (Incoterms® 2020) », « Incoterms 2020 ») : hors du lieu
+        k_fin = next((k for k, m in enumerate(mots_lieu) if m.texte.startswith("(")
+                      or cle_texte(m.texte).startswith("incoterm")), len(mots_lieu))
+        mots_lieu = mots_lieu[:k_fin]
+        if mots_lieu:
+            lieu = Lecture(tuple(mots_lieu), lec.page, lec.methode, contexte=lec.contexte)
             ch.incoterm_lieu = fab.valeur("incoterm_lieu", lieu)
     else:
         _incoterm_libre(e)
     lec = _premier(vue, LIB_TRANSPORT, accepte_reference)
     if lec is not None:
         ch.ref_transport = fab.valeur("ref_transport", lec, confiance=_conf_ref(lec))
+
+
+def _accepte_numero(mots) -> tuple[int, int] | None:
+    """Numéro de facture : référence, précédée d'un préfixe de 2 à 4 capitales séparé par une espace
+    (« FT 4800/2026 », « ODH 2026.3681 », D-2001)."""
+    if len(mots) >= 2 and re.fullmatch(r"[A-Z]{2,4}", mots[0].texte):
+        r = accepte_reference(mots[1:])
+        if r is not None and r[0] == 0:
+            return 0, r[1] + 1
+    return accepte_reference(mots)
 
 
 def _conf_ref(lec: Lecture) -> float:
@@ -620,23 +733,34 @@ def _vendeur(e: _Etat) -> None:
     limite = t_ach[0].ligne.rang if t_ach else min(len(p.lignes), 6)
     bandeaux = lignes_bandeau(vue, entetes_repetes=False)
     t_v = [t for t in chercher(vue, LIB_VENDEUR, pages=[p.numero]) if (p.numero, t.ligne.rang) not in bandeaux]
-    if t_v and t_v[0].ligne.rang < (t_ach[0].ligne.rang if t_ach else 99):
+    # un libellé « vendeur » placé après le pavé acheteur (« Expediteur: » d'un transitaire en pied) n'ouvre pas
+    # le pavé de l'émetteur
+    t_v = t_v if t_v and t_v[0].ligne.rang < (t_ach[0].ligne.rang if t_ach else 99) else []
+    if t_v:
         lignes = pave(t_v[0], fin=LIB_FIN_PAVE, exclus=e.entetes | bandeaux)
     else:
         # sans libellé : premières lignes de la page, bandeaux et en-têtes répétés exclus (D-953)
         lignes = [(li, list(li.segments[0].mots)) for li in p.lignes[:limite]
                   if li.segments and (p.numero, li.rang) not in bandeaux]
-    titre = re.compile(r"\b(invoice|facture|factura|pro ?forma|commercial|comercial|commerciale|page|valeur|value"
-                       r"|valor|document|documento)\b")
+    titre = _L.TITRE
     for li, ms in lignes:
         # un titre collé au nom (« Société X   INVOICE ») : on garde les mots qui le précèdent
         k_titre = next((k for k, m in enumerate(ms) if titre.search(cle_texte(m.texte))), None)
+        if k_titre == 0 and not t_v and len(li.segments) > 1 and ms and ms[0] is li.segments[0].mots[0]:
+            # titre à gauche, nom de l'émetteur à droite (« HANDELSFACTUUR   Société X N.V. », D-2004)
+            ms = list(li.segments[1].mots)
+            k_titre = next((k for k, m in enumerate(ms) if titre.search(cle_texte(m.texte))), None)
+            if any(m.texte.endswith(":") for m in ms):
+                k_titre = 0
         if k_titre is not None:
             ms = ms[:k_titre]
         txt = cle_texte(" ".join(m.texte for m in ms))
         if not ms or not re.search(r"[a-z]{3}", txt) or re.match(r"^[\d\W]", txt):
             continue
-        if ch.vendeur.nom is None and _nom_plausible(ms):
+        # couple « Date: … » ou identifiant (« CHE-000.000.001 MWST ») : pas un nom (D-2004)
+        pas_un_nom = not t_v and (re.fullmatch(r"[^\W\d_][\w.\-/]*:", ms[0].texte) is not None
+                                  or sum(c.isdigit() for c in txt) * 2 > sum(c.isalnum() for c in txt))
+        if ch.vendeur.nom is None and not pas_un_nom and _nom_plausible(ms):
             lec_v = lecture_mots(ms, p, li)
             # sans libellé « vendeur », le nom est présumé (première ligne de l'en-tête)
             ch.vendeur.nom = fab.valeur("vendeur.nom", lec_v, type_valeur=TypeValeur.texte,
@@ -650,12 +774,63 @@ def _vendeur(e: _Etat) -> None:
 # --- tableau des lignes -------------------------------------------------------------------------------------
 
 
+def _reperer_entetes(e: _Etat) -> None:
+    """En-tête du tableau des lignes de chaque page (première ligne reconnue), colonnes nettoyées (mots soudés,
+    code de devise accolé au libellé d'une colonne de prix, D-2002) ; codes de devise lus dans l'en-tête ou sur
+    la ligne juste dessous (« (USD) » sous « UNIT PRICE »)."""
+    for p in e.vue.pages:
+        for li in p.lignes:
+            li_s = scinder_mots_colles(li)
+            cols = reconnaitre_entete(li_s, VOCAB_COLONNES)
+            if not cols or not ({"montant", "quantite"} & {c.type for c in cols}):
+                continue
+            cols, codes = nettoyer_colonnes(cols, li_s.mots)
+            e.entetes_tab[p.numero] = (li, cols)
+            mots_codes = [m for m in li.mots if m.texte.strip("():") in codes]
+            if li.rang + 1 < len(p.lignes):
+                dessous = p.lignes[li.rang + 1]
+                if dessous.mots and len(codes_devise_libelle(dessous.mots)) == len(dessous.mots):
+                    mots_codes += list(dessous.mots)
+            for m in mots_codes:
+                ligne = li if m in li.mots else p.lignes[li.rang + 1]
+                e.codes_entete.append((m.texte.strip("():"), lecture_mots([m], p, ligne)))
+            break
+
+
 def _est_debut(cellules) -> bool:
     mont = cellules.get("montant", [])
     if mont and any(re.search(r"\d", m.texte) for m in mont):
         return True
     num = cellules.get("numero_ligne", [])
-    return bool(num) and bool(re.fullmatch(r"\d{1,3}\.?", num[0].texte)) and len(cellules) >= 3
+    if bool(num) and bool(re.fullmatch(r"\d{1,3}\.?", num[0].texte)) and len(cellules) >= 3:
+        return True
+    # rangée dont le montant est illisible (OCR) : référence d'article et quantité lues (D-2009)
+    ref = [m.texte.strip("|[]") for m in cellules.get("reference_article", [])]
+    qte = cellules.get("quantite", [])
+    return (any(re.search(r"\d", t) and re.search(r"[A-Za-z]", t) and len(t) >= 4 for t in ref[:1])
+            and bool(qte) and bool(re.fullmatch(r"\d[\d.,' ]*", qte[0].texte)))
+
+
+def _a_chiffre(r: RangeeTableau, typ: str) -> bool:
+    return any(re.search(r"\d", m.texte) for m in r.mots(typ))
+
+
+def _recoller_montants(rs: list[RangeeTableau]) -> list[RangeeTableau]:
+    """Rangée ouverte sur sa référence et sa quantité dont le montant est imprimé (lu par l'OCR) une ligne plus
+    bas, seul : la ligne du montant est rattachée à la rangée au lieu d'en ouvrir une (D-2009)."""
+    out: list[RangeeTableau] = []
+    for r in rs:
+        seul = {t for t, ms in r.cellules.items() if any(re.search(r"\w", m.texte) for m in ms)} <= {
+            "montant", "prix_unitaire", "inconnue"}
+        if out and seul and _a_chiffre(r, "montant") and not _a_chiffre(out[-1], "montant") \
+                and _a_chiffre(out[-1], "quantite"):
+            prec = out[-1]
+            for typ, ms in r.cellules.items():
+                prec.cellules.setdefault(typ, []).extend(ms)
+            prec.lignes.extend(r.lignes)
+            continue
+        out.append(r)
+    return out
 
 
 def _est_fin(li: VueLigne) -> bool:
@@ -667,18 +842,14 @@ def _tableau(e: _Etat) -> None:
     colonnes_prec: list[Colonne] | None = None
     rangees: list[RangeeTableau] = []
     for p in vue.pages:
-        trouve = None
-        for li in p.lignes:
-            cols = reconnaitre_entete(li, VOCAB_COLONNES)
-            if cols and ("montant" in {c.type for c in cols} or "quantite" in {c.type for c in cols}):
-                trouve = (li, cols)
-                break
+        trouve = e.entetes_tab.get(p.numero)
         if trouve is None:
             continue
         li, cols = trouve
         e.entetes.add((p.numero, li.rang))
         colonnes_prec = cols
         rs, fin = lire_tableau(p, li.rang, cols, est_debut=_est_debut, est_fin=_est_fin)
+        rs = _recoller_montants(rs)
         e.fin_tableau[p.numero] = fin
         for r in rs:
             for x in r.lignes:
@@ -699,6 +870,38 @@ def _tableau(e: _Etat) -> None:
         return
     for k, r in enumerate(rangees):
         e.champs.lignes.append(_ligne(e, r, k))
+    _origine_document(e)
+
+
+def _accepte_pays(mots) -> tuple[int, int] | None:
+    """Pays : code entre parenthèses (« China (CN) »), sinon nom ou code reconnu (un à trois mots)."""
+    for k, m in enumerate(mots[:6]):
+        mm = re.fullmatch(r"\(([A-Z]{2})\)[.,;]?", m.texte)
+        if mm and country_to_iso2(mm.group(1)):
+            return k, k + 1
+    for n in (3, 2, 1):
+        if len(mots) >= n and country_to_iso2(" ".join(m.texte for m in mots[:n]).strip(".,;")):
+            return 0, n
+    return None
+
+
+def _origine_document(e: _Etat) -> None:
+    """Facture sans colonne d'origine : une origine déclarée pour toute la facture (« Country of origin: China
+    (CN) », « Ursprungsland: … ») est reportée sur chaque ligne (lecture ancrée sur cette mention ; confiance
+    plafonnée à 0,85 : la mention peut ne pas couvrir toutes les lignes, D-2008)."""
+    if not e.champs.lignes or any(ln.pays_origine is not None for ln in e.champs.lignes):
+        return
+    if any(c.type == "origine" for _li, cols in e.entetes_tab.values() for c in cols):
+        return
+    lec = _premier(e.vue, _L.LIB_ORIGINE_DOC, _accepte_pays, dessous=False)
+    if lec is None:
+        return
+    lec = Lecture(tuple(m for m in lec.mots), lec.page, lec.methode, contexte=lec.contexte,
+                  texte_force=lec.texte.strip("().,;"))
+    for k, ln in enumerate(e.champs.lignes):
+        v = e.fab.valeur(f"lignes[{k}].pays_origine", lec, confiance=min(0.85, confiance_mots(lec)))
+        if v is not None and v.valeur:
+            ln.pays_origine = v
 
 
 _BRUIT = re.compile(r"^[|_—–\-~.,:;'\"“”‘’°*()\[\]{}]+$")
@@ -775,10 +978,39 @@ def _lec_cellule(r: RangeeTableau, typ: str, *, premiere_ligne: bool = False) ->
     return lecture_mots(mots, r.page, li)
 
 
+def _quantite_sous_unite(e: _Etat, r: RangeeTableau) -> float | None:
+    """En-tête de quantité illisible (OCR) mais colonne d'unité reconnue : « 50 kg » lu sous « Eenh. » donne la
+    quantité et l'unité (confiance plafonnée à 0,85, D-2009). Retourne le plafond, ``None`` sans changement."""
+    entete = e.entetes_tab.get(r.page.numero)
+    if entete is None:
+        return None
+    types = {c.type for c in entete[1]}
+    if "quantite" in types or "unite" not in types:
+        return None
+    mots = [m for m in r.mots("unite") if m in r.lignes[0].mots]
+    nb = nombres_dans(mots)
+    if not nb or nb[0].i != 0 or nb[0].tronque:
+        return None
+    r.cellules["quantite"] = list(mots[:nb[0].j])
+    r.cellules["unite"] = list(mots[nb[0].j:])
+    return 0.85
+
+
+def _sans_filets(r: RangeeTableau) -> None:
+    """OCR : filets de tableau lus comme du texte (« | », « [ », « _ ») retirés des cellules (« 1'000 | kg »,
+    « TW | ») (D-2009)."""
+    if r.page.methode is not Methode.ocr:
+        return
+    for typ, ms in list(r.cellules.items()):
+        r.cellules[typ] = [m for m in ms if not _BRUIT.match(m.texte)]
+
+
 def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
     fab = e.fab
     ln = LigneFactureCommerciale()
     base = f"lignes[{k}]"
+    _sans_filets(r)
+    plafond_q = _quantite_sous_unite(e, r)
     lec = _lec_cellule(r, "numero_ligne", premiere_ligne=True)
     if lec is not None and re.fullmatch(r"\d{1,4}\.?", lec.texte):
         ln.numero_ligne = fab.valeur(f"{base}.numero_ligne", lec, type_valeur=TypeValeur.entier)
@@ -791,7 +1023,7 @@ def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
         ln.description = fab.valeur(f"{base}.description", lec, type_valeur=TypeValeur.texte)
     lec = _lec_cellule(r, "code")
     if lec is not None:
-        ln.code_marchandise_imprime = _code(e, lec, f"{base}.code_marchandise_imprime")
+        ln.code_marchandise_imprime = _code(e, lec, f"{base}.code_marchandise_imprime", r)
     lec = _lec_cellule(r, "origine", premiere_ligne=True)
     if lec is not None and country_to_iso2(lec.texte.strip("()")):
         ln.pays_origine = fab.valeur(f"{base}.pays_origine", lec, confiance=confiance_mots(lec, plafond_ocr=0.9))
@@ -815,6 +1047,8 @@ def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
             if vq is not None and (vq.unite == "inconnue" or (lu is not None and vq.unite is None)):
                 # unité imprimée mais non reconnue : la quantité (valeur + unité) est douteuse
                 vq = vq.model_copy(update={"confiance": min(vq.confiance, 0.6)})
+            if vq is not None and plafond_q is not None:
+                vq = vq.model_copy(update={"confiance": min(vq.confiance, plafond_q)})
             ln.quantite = vq
     for typ, chemin in (("masse_nette", "masse_nette"), ("masse_brute", "masse_brute")):
         lec = _lec_cellule(r, typ, premiere_ligne=True)
@@ -830,11 +1064,18 @@ def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
             lec = Lecture(lp.mots[res[0]:res[1]], lp.page, lp.methode, contexte=lp.contexte)
             ln.prix_unitaire = fab.valeur(f"{base}.prix_unitaire", lec, devise=e.devise)
     lm = _lec_cellule(r, "montant", premiere_ligne=True)
+    plafond_mt = None
+    if (lm is None or not re.search(r"\d", lm.texte)) and len(r.lignes) > 1:
+        lm = _lec_cellule(r, "montant")  # montant imprimé sous la ligne de la rangée (D-2009)
+        plafond_mt = 0.85
     if lm is not None:
         res = lire_montant_mots(lm.mots, vue=e.vue, devise=e.devise)
         if res is not None:
             lec = Lecture(lm.mots[res[0]:res[1]], lm.page, lm.methode, contexte=lm.contexte)
             ln.montant_ligne = fab.valeur(f"{base}.montant_ligne", lec, devise=e.devise)
+            if plafond_mt is not None and ln.montant_ligne is not None:
+                ln.montant_ligne = ln.montant_ligne.model_copy(
+                    update={"confiance": min(ln.montant_ligne.confiance, plafond_mt)})
     _recouper_ligne(ln)
     return ln
 
@@ -877,15 +1118,50 @@ def _deborder(r: RangeeTableau, typ: str, vers: str) -> None:
     r.cellules[vers].sort(key=lambda m: (round(m.y0, 3), m.x0))
 
 
-def _code(e: _Etat, lec: Lecture, chemin: str) -> ValeurSourcee | None:
+def _code_sans_debord(r: RangeeTableau, mots: list) -> tuple[list, bool]:
+    """Chiffres d'une désignation voisine débordant dans la colonne du code (« Taladro 18 V | 8467.21 »,
+    « Martillo 500 g 8205.20.00.00 », D-2007) : sur la première ligne de la rangée, seul le dernier groupe de
+    mots contigus (même segment, sans mot d'une autre colonne entre eux) est gardé ; à défaut de code valide,
+    le plus long suffixe qui forme un code de 6, 8 ou 10 chiffres. Retourne (mots, vrai si des mots sont écartés)."""
+    li0 = r.lignes[0]
+    premiers = [m for m in mots if m in li0.mots]
+    suite = [m for m in mots if m not in li0.mots]
+    if len(premiers) >= 2:
+        ordre = li0.mots
+        pos = {id(m): k for k, m in enumerate(ordre)}
+        seg = {id(m): s.rang for s in li0.segments for m in s.mots}
+        groupes: list[list] = [[premiers[0]]]
+        for a, b in itertools.pairwise(premiers):
+            if pos[id(b)] == pos[id(a)] + 1 and seg[id(a)] == seg[id(b)]:
+                groupes[-1].append(b)
+            else:
+                groupes.append([b])
+        if len(groupes) > 1:
+            premiers = groupes[-1]
+    garde = premiers + suite
+    if code_marchandise(" ".join(m.texte for m in garde)) is None:
+        for k in range(1, len(premiers)):
+            essai = premiers[k:] + suite
+            if code_marchandise(" ".join(m.texte for m in essai)) is not None:
+                garde = essai
+                break
+    return garde, len(garde) < len(mots)
+
+
+def _code(e: _Etat, lec: Lecture, chemin: str, r: RangeeTableau | None = None) -> ValeurSourcee | None:
     """Code marchandise imprimé : chiffres et ponctuation, 6 à 10 chiffres ; un code coupé sur deux lignes
     physiques est recollé (valeur non ancrée, confiance réduite)."""
     mots = [m for m in lec.mots if re.fullmatch(r"[\d.\s\-/]+", m.texte)]
     if not mots:
         return e.fab.valeur(chemin, lec, confiance=min(0.3, confiance_mots(lec)))
+    plafond = 1.0
+    if r is not None:
+        mots, ecartes = _code_sans_debord(r, mots)
+        if ecartes:
+            plafond = 0.85
     lec2 = Lecture(tuple(mots), lec.page, lec.methode, contexte=lec.contexte)
     chiffres = re.sub(r"\D", "", lec2.texte)
-    conf = confiance_mots(lec2, plafond_ocr=0.85)
+    conf = min(plafond, confiance_mots(lec2, plafond_ocr=0.85))
     if code_marchandise(lec2.texte) is None:
         conf = min(conf, 0.3)
         if len(chiffres) == 9:
@@ -909,6 +1185,15 @@ def _recouper_ligne(ln: LigneFactureCommerciale) -> None:
     # recoupement strict : montant = quantité × prix au centime près (un prix unitaire arrondi qui
     # n'explique le montant qu'à l'arrondi près ne relève pas la confiance)
     ok = abs(q * pu - mt) <= Decimal("0.011")
+    if not ok and ln.prix_unitaire.methode is Methode.ocr and re.fullmatch(r"\d+", ln.prix_unitaire.valeur_brute or ""):
+        # séparateur décimal du prix perdu par l'OCR (« 485 » pour « 4.85 ») : le prix qui redonne exactement le
+        # montant est retenu, confiance plafonnée à 0,60 (D-2009) ; montant et quantité inchangés
+        for k in (1, 2, 3, 4):
+            cand = pu.scaleb(-k)
+            if q != 0 and abs(q * cand - mt) <= Decimal("0.0051"):
+                ln.prix_unitaire = ln.prix_unitaire.model_copy(update={"valeur": str(cand), "confiance": min(
+                    ln.prix_unitaire.confiance, 0.6)})
+                return
     exp = pu.as_tuple().exponent
     demi = Decimal(1).scaleb(exp if isinstance(exp, int) else -2) / 2
     if not ok and abs(q * pu - mt) <= q * demi + Decimal("0.011"):
@@ -1008,7 +1293,7 @@ def _pied(e: _Etat) -> None:
     exclure_tab = {(p, r) for p, r in e.lignes_tableau} | e.entetes
     for chemin, libs, champ_ligne in (("masse_brute_totale", LIB_POIDS_BRUT, "masse_brute"),
                                       ("masse_nette_totale", LIB_POIDS_NET, "masse_nette")):
-        lec = _premier_hors(e, libs, accepte_masse(vue), exclure_tab)
+        lec = _premier_hors(e, libs, accepte_masse(vue), exclure_tab, partout=True)
         if lec is not None:
             sep, presume = separateur_masse(vue, lec.texte)
             conf = _conf_masse(e, lec, champ_ligne, sep)
@@ -1028,13 +1313,22 @@ def _pied(e: _Etat) -> None:
         ch.nombre_colis = fab.valeur("nombre_colis", lec, type_valeur=TypeValeur.entier)
 
 
-def _premier_hors(e: _Etat, libelles, accepte, exclus) -> Lecture | None:
+def _premier_hors(e: _Etat, libelles, accepte, exclus, *, partout: bool = False) -> Lecture | None:
     for t in chercher(e.vue, libelles):
         if (t.page.numero, t.ligne.rang) in exclus:
             continue
         lec = valeur_apres(e.vue, t, accepte, lignes_dessous=1)
         if lec is not None:
             return lec
+    if partout:
+        # libellé au milieu d'un segment (« Net weight: 1.0 kg Gross weight: 1.2 kg », D-2005) : valeur dans le
+        # reste du segment seulement
+        for t in chercher_partout(e.vue, libelles):
+            if (t.page.numero, t.ligne.rang) in exclus or t.apres == 0:
+                continue
+            lec = valeur_apres(e.vue, t, accepte, droite=False, dessous=False)
+            if lec is not None:
+                return lec
     return None
 
 

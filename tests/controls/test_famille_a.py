@@ -416,6 +416,22 @@ def test_a5_conforme_et_arrondi():
     assert r.attendu == "92.05"  # 92,046 arrondi demi vers le haut
 
 
+def test_a5_ligne_de_pied_convertie_explique_l_ecart():
+    # D-2202 (§8.5.1 condition 7) : facture 12 540,00 USD dont 350,00 USD de fret en pied ; la déclaration
+    # reprend les marchandises seules converties (12 190,00 × 0,92 = 11 214,80 EUR). Écart -322,00 EUR = fret
+    # converti au même taux : à vérifier, jamais certain ; renvoi au déclarant comme pour A4.
+    f = facture(sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "350.00"))])
+    r = un(fa.a5_montant_converti, ctx_de([f, _eur("11214.80")]))
+    assert r.outcome is Outcome.a_verifier
+    c = texte_propre(r)
+    assert RaisonCode.ecart_explique_par_ligne_de_pied in c.raisons
+    assert PHRASE_RENVOI in c.prochaine_action and "lignes de pied" in c.libelle
+    assert c.montant_en_jeu == D("-322.00")
+    # Pied qui n'explique pas l'écart : inchangé (certain).
+    f = facture(sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "100.00"))])
+    assert un(fa.a5_montant_converti, ctx_de([f, _eur("11214.80")])).outcome is Outcome.ecart_certain
+
+
 def test_a5_ecart_certain_sens_lu():
     r = un(fa.a5_montant_converti, ctx_de([facture(), _eur("10950.00")]))
     assert r.outcome is Outcome.ecart_certain

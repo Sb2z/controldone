@@ -51,7 +51,13 @@ def _groupes_milliers_valides(partie_entiere: str, sep: str) -> bool:
     groupes = partie_entiere.split(sep)
     if not groupes[0] or len(groupes[0]) > 3:
         return False
-    return all(len(g) == 3 and g.isdigit() for g in groupes[1:])
+    if all(len(g) == 3 and g.isdigit() for g in groupes[1:]):
+        return True
+    # groupement indien (lakh / crore) : « 1,23,456 », « 12,34,56,789 » — groupes de 2 chiffres puis un
+    # dernier groupe de 3 (D-2006)
+    return (sep == "," and len(groupes) >= 3 and 1 <= len(groupes[0]) <= 2 and groupes[0].isdigit()
+            and all(len(g) == 2 and g.isdigit() for g in groupes[1:-1])
+            and len(groupes[-1]) == 3 and groupes[-1].isdigit())
 
 
 def _lire_noyau(noyau: str, separateur_decimal: str | None, sans_decimales: bool) -> tuple[Decimal, bool] | None:

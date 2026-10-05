@@ -207,7 +207,10 @@ def _dec(x: Any) -> Decimal | None:
 
 def egal(genre: str, vrai: Any, lu: Any) -> bool:
     if genre == "sous_totaux":
-        return {k: _dec(x) for k, x in (vrai or {}).items()} == {k: _dec(x) for k, x in (lu or {}).items()}
+        # lignes de pied hors marchandises (le sous-total des marchandises n'est pas une charge de pied ; certaines
+        # vérités le portent, la lecture ne le compare pas)
+        return ({k: _dec(x) for k, x in (vrai or {}).items() if k != "marchandises"}
+                == {k: _dec(x) for k, x in (lu or {}).items() if k != "marchandises"})
     if vrai is None or vrai == "":
         return lu is None or lu == ""
     if lu is None or lu == "":
@@ -233,7 +236,10 @@ def egal(genre: str, vrai: Any, lu: Any) -> bool:
     if genre in ("bool", "bool_valeur"):
         return bool(vrai) == bool(lu)
     if genre == "sous_totaux":
-        return {k: _dec(x) for k, x in (vrai or {}).items()} == {k: _dec(x) for k, x in (lu or {}).items()}
+        # lignes de pied hors marchandises (le sous-total des marchandises n'est pas une charge de pied ; certaines
+        # vérités le portent, la lecture ne le compare pas)
+        return ({k: _dec(x) for k, x in (vrai or {}).items() if k != "marchandises"}
+                == {k: _dec(x) for k, x in (lu or {}).items() if k != "marchandises"})
     if genre == "ref_transport_support":  # la vérité est la référence maître OU maison
         return any(_ref(vrai) == _ref(x) for x in (lu if isinstance(lu, list) else [lu]))
     if genre == "libelle":
