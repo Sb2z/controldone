@@ -1,7 +1,12 @@
 """Campagne de robustesse : chaque échantillon passe par le pipeline complet, sous surveillance.
 
     python scripts/fuzz/campagne.py var/fuzz/samples var/fuzz/mutations --out var/fuzz/bilan_avant.json \
-        [--paralleles 3] [--delai 900] [--rss-max-mo 6144]
+        [--paralleles 2] [--delai 900] [--rss-max-mo 3000] [--as-max-octets 1500000000]
+
+Garde-fous de la machine qui exécute la campagne (une campagne à 3 cas parallèles sans plafond d'espace d'adressage
+a déjà épuisé la mémoire du conteneur) : chaque cas tourne sous ``RLIMIT_AS`` (``--as-max-octets``, hérité par ses
+processus de pages, qui ne peuvent pas le relever), avec un délai et un plafond de mémoire résidente de l'arbre ;
+au plus 2 cas en parallèle.
 
 Un processus par échantillon (``executer_un.py``) ; on relève toutes les 0,25 s la mémoire résidente du
 processus principal et de toute sa descendance (processus de pages, forkserver) via ``/proc``. Issues :
@@ -69,13 +74,26 @@ def tuer_arbre(pid: int) -> None:
             os.kill(p, 9)
 
 
-def executer(fichier: Path, delai: float, rss_max: int, env: dict[str, str]) -> dict:
+PARALLELES_MAX = 2
+
+
+def _plafond_as(octets: int):
+    def _f():  # dans l'enfant, avant exec : plafond dur, hérité par toute la descendance
+        import resource
+
+        resource.setrlimit(resource.RLIMIT_AS, (octets, octets))
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+
+    return _f
+
+
+def executer(fichier: Path, delai: float, rss_max: int, env: dict[str, str], as_max: int = 1_500_000_000) -> dict:
     with tempfile.TemporaryDirectory(prefix="cdo-camp-") as tmp:
         sortie = Path(tmp) / "bilan.json"
         debut = time.monotonic()
         proc = subprocess.Popen([sys.executable, str(ICI / "executer_un.py"), str(fichier), str(sortie)],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env,
-                                start_new_session=True)
+                                start_new_session=True, preexec_fn=_plafond_as(as_max))
         pic_principal = pic_arbre = 0
         cause = None
         err: list[bytes] = []
@@ -103,6 +121,8 @@ def executer(fichier: Path, delai: float, rss_max: int, env: dict[str, str]) -> 
     bilan.update({"echantillon": str(fichier), "duree_totale_s": round(duree, 2), "code": proc.returncode,
                   "rss_principal_mo": round(pic_principal / 2**20), "rss_arbre_mo": round(pic_arbre / 2**20),
                   "stderr": (b"".join(err)[-1500:]).decode("utf-8", "replace")})
+    if cause is None and bilan.get("exception") == "MemoryError":
+        cause = "memoire"  # plafond d'espace d'adressage atteint dans le processus principal
     bilan["issue"] = cause or classer(bilan)
     return bilan
 
@@ -130,27 +150,29 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("sources", nargs="+")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--paralleles", type=int, default=3)
+    ap.add_argument("--paralleles", type=int, default=2)
     ap.add_argument("--delai", type=float, default=900)
-    ap.add_argument("--rss-max-mo", type=int, default=6144)
+    ap.add_argument("--rss-max-mo", type=int, default=3000)
+    ap.add_argument("--as-max-octets", type=int, default=1_500_000_000)
     ap.add_argument("--filtre", default="")
     a = ap.parse_args(argv)
     fichiers = sorted(p for s in a.sources for p in Path(s).rglob("*") if p.is_file() and a.filtre in str(p))
     env = {k: v for k, v in os.environ.items() if k != "CONTROLDONE_PAGES_CACHE_DIR"}
     env.setdefault("CONTROLDONE_ENV", "dev")
     env["CONTROLDONE_PAGES_PARALLELE"] = "1"
+    env.setdefault("MALLOC_ARENA_MAX", "2")  # espace d'adressage réservé par fil : sans effet sur le résultat
     resultats: list[dict] = []
     verrou = threading.Lock()
 
     def tache(f: Path) -> dict:
-        r = executer(f, a.delai, a.rss_max_mo * 2**20, env)
+        r = executer(f, a.delai, a.rss_max_mo * 2**20, env, a.as_max_octets)
         with verrou:
             resultats.append(r)
             print(f"[{len(resultats):4d}/{len(fichiers)}] {r['issue']:10s} {r['duree_totale_s']:7.1f}s "
                   f"{r['rss_principal_mo']:5d}/{r['rss_arbre_mo']:5d} Mo  {f}", flush=True)
         return r
 
-    with ThreadPoolExecutor(a.paralleles) as ex:
+    with ThreadPoolExecutor(max(1, min(a.paralleles, PARALLELES_MAX))) as ex:
         list(ex.map(tache, fichiers))
     resultats.sort(key=lambda r: r["echantillon"])
     resume = Counter(r["issue"] for r in resultats)

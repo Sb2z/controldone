@@ -781,9 +781,18 @@ def _zip_gen(d: Path, rnd: random.Random) -> None:
     co = io.BytesIO()
     with zipfile.ZipFile(co, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.writestr("alea.bin", alea)
-        z.writestr("zeros.pdf", b"%PDF-1.4\n" + b"\x00" * (200 << 20))
+        with z.open("zeros.pdf", "w", force_zip64=True) as f:  # écrit en flux : jamais 200 Mo en mémoire
+            f.write(b"%PDF-1.4\n")
+            for _ in range(200):
+                f.write(b"\x00" * (1 << 20))
     ecrire(d, "bombe_masquee_par_alea.zip", co.getvalue())
-    petit = _zip([(f"z{i}.pdf", b"\x00" * (20 << 20)) for i in range(10)])
+    co = io.BytesIO()
+    with zipfile.ZipFile(co, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for i in range(10):
+            with z.open(f"z{i}.pdf", "w") as f:  # en flux (jamais 20 Mo en mémoire par entrée)
+                for _ in range(20):
+                    f.write(b"\x00" * (1 << 20))
+    petit = co.getvalue()
     ecrire(d, "bombe_42_reduite.zip", _zip([(f"c{i}.zip", petit) for i in range(10)]))
     # en-tête mensonger : taille annoncée 1 octet, contenu de 60 Mo
     b = bytearray(_zip([("menteur.pdf", b"%PDF-1.4\n" + b"\x00" * (60 << 20))]))
