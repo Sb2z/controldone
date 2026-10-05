@@ -8,7 +8,7 @@
                "injected_errors", "traps", "expected_outcome", "expected_totals"],
   "properties": {
     "schema": {"const": "controldone.bench.truth/1.0.0"},
-    "dossier_id": {"type": "string", "pattern": "^(BX|GX)[0-9]{4}$"},
+    "dossier_id": {"type": "string", "pattern": "^[A-Z]{2}[0-9]{4}$"},
     "split": {"enum": ["dev", "holdout"]},
     "client_id": {"type": "string", "pattern": "^CL[0-9]{2}$"},
     "generator_version": {"type": "string"},

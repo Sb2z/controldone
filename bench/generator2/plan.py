@@ -154,11 +154,15 @@ def resolve(req: dict, rng):
     return opts
 
 
-def plan_corpus(seed: int, count: int) -> list[dict]:
-    ids = [f"GX{i:04d}" for i in range(1, count + 1)]
+def plan_corpus(seed: int, count: int, prefix: str = "GX", all_holdout: bool = False,
+                per_control: int | None = None) -> list[dict]:
+    """prefix : préfixe des identifiants (GX = corpus_g2) ; all_holdout : tous les dossiers en holdout
+    (jeu d'évaluation vierge), sinon règle sha256 % 5 de §19.2."""
+    ids = [f"{prefix}{i:04d}" for i in range(1, count + 1)]
+    sof = (lambda _d: "holdout") if all_holdout else split_of
     rng = rng_for(seed, "plan")
     slots = {d: {"inj": [], "req": {}, "grps": set(), "partner_of": [], "role": None} for d in ids}
-    by_split = {"dev": [d for d in ids if split_of(d) == "dev"], "holdout": [d for d in ids if split_of(d) == "holdout"]}
+    by_split = {"dev": [d for d in ids if sof(d) == "dev"], "holdout": [d for d in ids if sof(d) == "holdout"]}
     clean = set()
     for s, pool in by_split.items():
         p = list(pool)
@@ -169,8 +173,10 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
     # Tâches : (split, code)
     tasks = []
     for s in ("dev", "holdout"):
+        if not by_split[s]:
+            continue
         for ctrl in CONTROLES:
-            n = TARGET[s] + (1 if ctrl in TARGET_EXTRA.get(s, set()) else 0)
+            n = (per_control or TARGET[s]) + (1 if ctrl in TARGET_EXTRA.get(s, set()) else 0)
             codes = CODES_PAR_CONTROLE[ctrl]
             for k in range(n):
                 tasks.append((s, codes[k % len(codes)], k))
@@ -208,7 +214,8 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
         return True
 
     for s, code, k in tasks:
-        extra = {"deg_ok": {True}} if (INJ[code][0] in CERTAIN_ELIGIBLE and k < CERTAIN_FRIENDLY[s]) else None
+        nf = CERTAIN_FRIENDLY[s] if per_control is None else max(1, per_control - 1)
+        extra = {"deg_ok": {True}} if (INJ[code][0] in CERTAIN_ELIGIBLE and k < nf) else None
         pool = [d for d in by_split[s] if d not in clean]
         cand = [d for d in pool if len(slots[d]["inj"]) < maxn[s] and not (code in EXCLUSIVE and slots[d]["inj"])]
         rng.shuffle(cand)
@@ -278,11 +285,11 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
     for d in ids:
         sl = slots[d]
         r = rng_for(seed, "attrs", d)
-        specs.append(choose_attrs(d, sl, r, clean))
+        specs.append(choose_attrs(d, sl, r, clean, sof(d)))
     return specs
 
 
-def choose_attrs(did: str, sl: dict, rng, clean: set) -> dict:
+def choose_attrs(did: str, sl: dict, rng, clean: set, split: str) -> dict:
     req = sl["req"]
     inj = sl["inj"]
     kind = next(iter(req["kind"])) if "kind" in req else ("h7" if rng.random() < 0.10 else "h1")
@@ -369,6 +376,6 @@ def choose_attrs(did: str, sl: dict, rng, clean: set) -> dict:
     deg = rng.choices(["d0", "d1", "d2", "d3"], [0.26, 0.20, 0.31, 0.23])[0]
     if "deg_ok" in req:
         deg = rng.choices(["d0", "d1"], [0.6, 0.4])[0]
-    return {"dossier_id": did, "split": split_of(did), "client_id": cid, "kind": kind, "family": fam, "layout": lay,
+    return {"dossier_id": did, "split": split, "client_id": cid, "kind": kind, "family": fam, "layout": lay,
             "deg": deg, "attrs": attrs, "injections": list(inj), "partners": list(sl["partner_of"]),
             "role": sl["role"], "clean": did in clean and not inj}

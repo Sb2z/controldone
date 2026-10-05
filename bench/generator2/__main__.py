@@ -27,9 +27,10 @@ from .world import CLIENT_FORWARDERS, build_world
 _STATE: dict = {}
 
 
-def build_all(seed: int, count: int, wanted: set | None = None) -> tuple[dict, dict, list]:
+def build_all(seed: int, count: int, wanted: set | None = None, prefix: str = "GX",
+              all_holdout: bool = False, per_control: int | None = None) -> tuple[dict, dict, list]:
     """Construit (sans rendu) les dossiers voulus et leurs partenaires (F2, F3, F5)."""
-    specs = plan_corpus(seed, count)
+    specs = plan_corpus(seed, count, prefix, all_holdout, per_control)
     world = build_world(seed)
     byid = {s["dossier_id"]: s for s in specs}
     reg: dict = {}
@@ -51,9 +52,9 @@ def build_all(seed: int, count: int, wanted: set | None = None) -> tuple[dict, d
     return world, reg, specs
 
 
-def _init_worker(seed, count, wanted):
+def _init_worker(seed, count, wanted, prefix="GX", all_holdout=False, per_control=None):
     _STATE["seed"] = seed
-    _STATE["world"], _STATE["reg"], _ = build_all(seed, count, wanted)
+    _STATE["world"], _STATE["reg"], _ = build_all(seed, count, wanted, prefix, all_holdout, per_control)
 
 
 def _work(args):
@@ -109,12 +110,18 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=777)
     ap.add_argument("--jobs", type=int, default=1)
     ap.add_argument("--ids", default=None, help="liste de dossiers à générer (tests), séparés par des virgules")
+    ap.add_argument("--prefix", default="GX", help="préfixe des identifiants de dossier (2 lettres majuscules)")
+    ap.add_argument("--all-holdout", action="store_true", help="tous les dossiers en holdout (jeu d'évaluation vierge)")
+    ap.add_argument("--per-control", type=int, default=None,
+                    help="erreurs planifiées par contrôle et par split (défaut : 5 dev, 2 holdout)")
     ap.add_argument("--stats-only", action="store_true", help="planification et construction seulement, sans fichiers")
     a = ap.parse_args(argv)
     t0 = time.perf_counter()
     jobs = max(1, min(2, a.jobs))
     # Construction de TOUS les dossiers (rapide, sans rendu) : statistiques et couverture planifiée
-    world, reg_all, specs = build_all(a.seed, a.count)
+    if not (len(a.prefix) == 2 and a.prefix.isalpha() and a.prefix.isupper()):
+        ap.error("--prefix : deux lettres majuscules")
+    world, reg_all, specs = build_all(a.seed, a.count, None, a.prefix, a.all_holdout, a.per_control)
     splits = ["dev", "holdout"] if a.split == "all" else [a.split]
     ids = [s["dossier_id"] for s in specs if s["split"] in splits]
     if a.ids:
@@ -128,7 +135,7 @@ def main(argv=None) -> int:
         write_clients(world, out)
         tasks = [(d, str(out)) for d in ids]
         if jobs == 1:
-            _init_worker(a.seed, a.count, set(ids))
+            _init_worker(a.seed, a.count, set(ids), a.prefix, a.all_holdout, a.per_control)
             for t in tasks:
                 r = _work(t)
                 results.append(r)
@@ -137,7 +144,7 @@ def main(argv=None) -> int:
         else:
             import multiprocessing as mp
             ctx = mp.get_context("fork")
-            with ctx.Pool(jobs, initializer=_init_worker, initargs=(a.seed, a.count, set(ids)), maxtasksperchild=25) as pool:
+            with ctx.Pool(jobs, initializer=_init_worker, initargs=(a.seed, a.count, set(ids), a.prefix, a.all_holdout, a.per_control), maxtasksperchild=25) as pool:
                 for r in pool.imap(_work, tasks, chunksize=1):
                     results.append(r)
                     print(f"{r['dossier_id']} {r['seconds']:6.2f}s  {len(r['files'])} fichier(s)"
@@ -159,7 +166,8 @@ def main(argv=None) -> int:
         manifest = {
             "schema": "controldone.bench.manifest/1.0.0", "generator": "bench.generator2",
             "generator_version": GENERATOR_VERSION, "seed": a.seed, "count": a.count,
-            "split_rule": "holdout si int(sha256(dossier_id)[0:8], 16) % 5 == 0",
+            "split_rule": ("tous les dossiers en holdout (jeu d'évaluation vierge)" if a.all_holdout
+                           else "holdout si int(sha256(dossier_id)[0:8], 16) % 5 == 0"),
             "mention": "DONNÉES FICTIVES",
             "planned": {"dev": sum(1 for s in specs if s["split"] == "dev"),
                         "holdout": sum(1 for s in specs if s["split"] == "holdout")},
@@ -195,7 +203,8 @@ def main(argv=None) -> int:
     print(f"\n{len(results)} dossier(s) générés en {stats['seconds']} s ; {len(problems)} problème(s) d'auto-contrôle.")
     print("Contrôle  dev  holdout(planifié)  certain")
     for c, v in cov.items():
-        flag = "" if (v["dev"] + v["holdout"] >= 6 and v["holdout"] >= 2) or c.startswith("P") else "  <-- couverture insuffisante"
+        need = (a.per_control or 2) if a.all_holdout else 6
+        flag = "" if (v["dev"] + v["holdout"] >= need and v["holdout"] >= 2) or c.startswith("P") else "  <-- couverture insuffisante"
         print(f"  {c:5s} {v['dev']:4d} {v['holdout']:6d} {v['certain']:10d}{flag}")
     for p in problems[:40]:
         print("  !", p)

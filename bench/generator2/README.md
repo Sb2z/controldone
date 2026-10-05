@@ -181,3 +181,17 @@ règle de split). Seuls les dossiers concernés changent (liste dans le compte r
 - **(d) Dossiers appariés F2/F3/F5** : la facture commerciale copiée du dossier partenaire (F5) ou la facture de
   débours d'un autre envoi (F3) pouvait viser une autre entité du groupe que celle du dossier, créant un écart A1
   ou C8 non injecté (ex. GX0001). Le dossier reprend désormais l'entité du dossier partenaire.
+
+## Jeu d'évaluation vierge `corpus_g3` (options `--prefix`, `--all-holdout`, `--per-control`)
+
+```bash
+python -m bench.generator2 --out bench/corpus_g3 --prefix GY --all-holdout --per-control 3 \
+       --count 80 --seed 20261005 --split holdout --jobs 2
+```
+
+- `--prefix` : préfixe des identifiants (deux lettres ; `GX` par défaut, `GY` pour `corpus_g3`) ;
+  `truth.schema.json` accepte `^[A-Z]{2}[0-9]{4}$`.
+- `--all-holdout` : tous les dossiers en `holdout` (aucun dev), au lieu de la règle sha256 % 5.
+- `--per-control` : erreurs planifiées par contrôle (3 pour `corpus_g3`, au lieu de 2 en holdout) ; les
+  `n − 1` premières de chaque contrôle éligible sont placées dans des dossiers d0/d1.
+- Sans ces options, la planification de `corpus_g2` est inchangée (vérifié : mêmes octets).
