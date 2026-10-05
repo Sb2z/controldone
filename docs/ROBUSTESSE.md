@@ -101,8 +101,11 @@ Changements d'issue entre avant et après :
 | `tableur/16384_colonnes_200k_lignes.xlsx`, `derniere_cellule.xlsx` | 93 s / 79 s, 3,2 Go, page illisible au délai | 3 s / 2 s, 0,24 Go, lus (bornés), non reconnus | D-1604 |
 | `xml/texte_30Mo.xml` | 90 s, 3,2 Go, page illisible au délai | 57 s, 0,82 Go, lu | D-1604 |
 
-Après correction de D-1607 (voir § 6) : `extra/xml_49Mo_lignes.xml` passe de 1,4 Go (sous plafond ; 2,6 Go sans
-plafond) et 64 s à 0,39 Go et 8 s dans le processus principal.
+Après D-1607 (voir § 6), nouvelle passe des catégories concernées (`xml`, `csv`, `tableur`, `extra` : 67 cas) :
+issues identiques (12 traités, 18 refusés, 37 non lus, 0 défaut), mais mémoire maximale du processus principal
+1 409 → 471 Mo (`xml_49Mo_lignes.xml` : 1 409 → 330 Mo, 64 → 8 s ; `texte_30Mo.xml` : 747 → 471 Mo, 57 → 13 s),
+arbre ≤ 659 Mo, aucun cas au-delà de 13 s. Le texte extrait des XML hostiles (XXE fichier, paramètre et réseau,
+XInclude, DTD externe, milliard de rires) ne contient aucune entité résolue.
 
 Points vérifiés en particulier :
 
@@ -148,13 +151,37 @@ texte complet reste celui de la page. Mesures (processus principal, sans plafond
 
 ## 7. Endurance (file de jobs, chemin du web)
 
-SOAK_PLACEHOLDER
+`endurance.py` : 5 passages des 202 dossiers de `bench/corpus/dev` = **1 010 dossiers**, chacun déposé par
+`services.depot.deposer` (un client neuf par passage, donc aucun doublon) puis traité par un unique `Worker`
+de longue durée sur la file en base (job `traiter_lot`, base SQLite et coffre chiffré neufs ;
+`CONTROLDONE_PAGES_PARALLELE=2`, processus sous `RLIMIT_AS` 4 Go). Résultat : 1 010 jobs `done`, 0 nouvel
+essai, 0 `dead`, 7 959 s (7,9 s par dossier).
+
+| Dossiers | RSS worker (Mo) | fd ouverts | fils | enfants | fichiers temporaires | base (Mo) | coffre (Mo) | objets Python |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 90 | 7 | 1 | 0 | 0 | 0,5 | 0 | 108 014 |
+| 100 | 163 | 11 | 1 | 2 | 2 | 50 | 262 | 145 278 |
+| 200 | 168 | 11 | 1 | 2 | 2 | 99 | 263 | 145 411 |
+| 300 | 171 | 11 | 1 | 2 | 2 | 144 | 525 | 145 337 |
+| 400 | 168 | 11 | 1 | 2 | 2 | 190 | 527 | 145 247 |
+| 500 | 171 | 11 | 1 | 2 | 2 | 237 | 789 | 145 323 |
+| 600 | 172 | 11 | 1 | 2 | 2 | 283 | 790 | 145 210 |
+| 700 | 174 | 11 | 1 | 2 | 2 | 329 | 1 052 | 145 377 |
+| 800 | 175 | 11 | 1 | 2 | 2 | 375 | 1 053 | 145 283 |
+| 900 | 175 | 11 | 1 | 2 | 2 | 420 | 1 315 | 145 419 |
+| 1 000 | 174 | 11 | 1 | 2 | 2 | 468 | 1 317 | 145 373 |
+
+Lecture : après l'échauffement (imports, forkserver de pages : les 2 « enfants »), mémoire résidente,
+descripteurs, fils, processus enfants, fichiers temporaires et objets Python sont **plats** sur 1 000 dossiers
+(RSS 163 → 174 Mo, oscillation de ±4 Mo sans tendance après 300 dossiers). La base croît linéairement
+(~0,46 Mo par dossier : pages, documents, constats, journal d'audit — données, non fuite) ; le coffre croît par
+marches de 262 Mo à chaque passage (dépôt des fichiers d'un nouveau client), pas pendant le traitement.
 
 ## 8. Non-régression
 
 - Banc dev (`bench_run --split dev --workers 2`) : seuil bloquant **passé**, précision certain 1,000, rappel
   0,813 (inchangés).
-- `pytest -q` : 1 736 tests verts (dont 15 de `tests/ingest/test_ingest_robustesse.py`, un par défaut corrigé,
+- `pytest -q` : 1 866 tests verts (dont 15 de `tests/ingest/test_ingest_robustesse.py`, un par défaut corrigé,
   fixtures minuscules générées dans le test) ; `ruff check src tests scripts` propre.
 
 ## 9. Rejouer
