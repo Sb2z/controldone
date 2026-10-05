@@ -43,7 +43,7 @@ def _scan(im: Image.Image) -> bytes:
 
 
 def test_gris_max_attenue_encre_coloree_garde_le_noir():
-    im = Image.new("RGB", (60, 20), (255, 255, 255))
+    im = Image.new("RGB", (200, 20), (255, 255, 255))  # papier blanc (fond majoritaire)
     d = ImageDraw.Draw(im)
     d.rectangle((0, 0, 9, 19), fill=(0, 0, 0))  # texte noir
     d.rectangle((10, 0, 19, 19), fill=(90, 90, 90))  # texte gris
@@ -59,6 +59,9 @@ def test_gris_max_attenue_encre_coloree_garde_le_noir():
     assert lum.getpixel((25, 10)) < 150 and lum.getpixel((35, 10)) < 130  # la luminance les gardait sombres
     assert px[4] <= 100  # un texte coloré foncé reste du texte
     assert pt.niveaux_de_gris(g) is g
+    # photo de document (fond brun) : luminance, le maximum des canaux effacerait le bord de la page
+    photo = Image.new("RGB", (200, 20), (120, 80, 50))
+    assert pt.niveaux_de_gris(photo).tobytes() == photo.convert("L").tobytes()
 
 
 # --- traits de télécopie (D-2602) -----------------------------------------------------------------------------

@@ -57,7 +57,7 @@ __all__ = [
 ]
 
 #: Version de l'algorithme de pages (entre dans la clé d'idempotence §7 étape 2 avec Tesseract).
-VERSION_PAGES = "1.0.1"
+VERSION_PAGES = "1.1.0"  # 1.1.0 : prétraitement OCR, deux pages par feuille, réessai d'orientation (D-2601 à D-2606)
 
 SEUIL_NATIF = 0.85
 SEUIL_NATIF_FAIBLE = 0.5

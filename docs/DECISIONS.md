@@ -3102,3 +3102,87 @@ reconnue (la tolérance D-2305 exige 6 caractères). GZ0145 : MRN des lignes lus
   (D-2516) ; bande ≥ 0,90 inchangée.
 - Banc dev : g4 84 VP / 0 FP certain (identique à `g4_dev_ctl27`), bruit 289 → 273, violations de pièges
   44 → 40, bruit A1 12 → 4 ; g2 112 → 113 VP / 0 FP ; corpus d'origine 119 / 0, seuil PASSE (identique).
+
+# OCR : pages scannées dégradées (`corpus_g4`, dev seulement)
+
+Nouvelles dégradations de `bench/corpus_g4` (télécopie bruitée, inclinaison + faible contraste, tampons et
+écriture manuscrite colorés, JPEG très compressé, deux pages par feuille, pages retournées). Prétraitement en
+PIL seul (aucune dépendance ajoutée), fonctions pures dans `ingest/pretraitement.py`, appelées par
+`ingest/pages._ocr_image` dans le processus isolé de pages : isolement, plafond mémoire et délais (D-1600+)
+inchangés. `VERSION_PAGES` 1.0.1 -> **1.1.0** (texte OCR modifié : caches de pages et clé d'idempotence de
+l'étape 2 à refaire). Réglages regroupés dans `pages.REGLAGES_OCR` (mesure de variantes ; le pipeline ne les
+modifie jamais). Chaque opération appliquée laisse un avertissement `pretraitement:…` sur la page (traçabilité).
+
+## D-2601 — Gris par maximum des canaux sur un scan couleur sur papier blanc
+
+- Gris = max(R, V, B) au lieu de la luminance : le noir et le gris neutres sont inchangés, un tampon rouge clair
+  (≈ 200,120,120 : luminance 147 -> 200) ou une écriture bleue (≈ 90,120,165 : 122 -> 165) passe au-dessus du
+  seuil de binarisation de Tesseract ; un texte coloré foncé du document (bleu marine) reste du texte.
+- Seulement si le fond (médiane de luminance) est ≥ 215 (papier blanc) : sur une photo de document (fond brun,
+  ombre), le maximum des canaux effaçait le bord de page (facture photographiée G2 : 23 -> 12 valeurs).
+
+## D-2602 — Traits de télécopie effacés ; médian 3 × 3 sur télécopie seulement
+
+- Trait parasite = colonne (rangée) encrée sur ≥ 92 % de la hauteur (largeur), ≤ 12 px d'épaisseur ; profil
+  calculé par réduction BOX. Chaque pixel du trait prend le plus clair de ses deux voisins hors du trait : un
+  caractère traversé garde sa continuité, le reste devient fond. Un filet de tableau ou de cadre s'arrête aux
+  marges et n'est pas touché.
+- Médian 3 × 3 (points isolés, trous dans les traits) seulement sur une **page de télécopie** : peu de
+  demi-teintes parmi les pixels d'encre (< 55 % ; scan en niveaux de gris ≥ 58 %, télécopie rendue 39–50 %) et
+  ≥ 2 000 px de côté. Rejeté : médian sur toute page « bruitée » (taux de points isolés) — l'indicateur ne
+  séparait pas le grain d'un scan du bruit de télécopie, et le médian rongeait les petits caractères et les
+  pointillés de remplissage (scan250j, TIFF fax 200 dpi : -3 à -19 valeurs par document). Évalué avant
+  l'étirement de contraste (demi-teintes d'origine).
+
+## D-2603 — Étirement du contraste d'une page pâle
+
+- Encre (centile 0,5 %) -> 0, fond (médiane) -> 255, si l'encre est plus claire que 140 et l'écart < 150.
+  Les photos (encre 20–80 sur fond gris) et le JPEG très compressé (encre ~100) ne sont pas étirés : l'étirement
+  y amplifiait ombre et artefacts (photo G2 -16 valeurs ; jpegheavy -1,8 point).
+
+## D-2604 — Deux pages par feuille : une page physique, lue moitié par moitié
+
+- Détection (`coupure_deux_pages`) : feuille paysage (largeur ≥ 1,2 × hauteur), gouttière blanche (≥ 1,5 % de la
+  largeur, éventuellement avec un filet séparateur) dans la bande 40–60 %, encre des deux côtés, et dans chaque
+  moitié un profil des rangées plus net que celui des colonnes (une page portrait tournée de 90° n'est pas
+  coupée). Détectée avant l'OSD : seul un retournement de 180° est alors accepté (l'OSD accepte sinon un 90/270
+  peu confiant sur une feuille paysage).
+- Chaque moitié est désinclinée et lue seule ; les lignes de la moitié gauche précèdent celles de la droite et
+  **aucune ligne ne mêle les deux moitiés** (avant : `construire_lignes` fusionnait les lignes de même hauteur des
+  deux pages, « Hop pellets … 12,687.78   Amber glass bottle … »).
+- **Convention de numérotation** : la feuille reste **une** page (`numero` = n° de page physique du fichier,
+  aucun décalage des pages suivantes) ; les boîtes des mots sont normalisées sur la feuille entière (moitié
+  droite : x ≥ abscisse de coupe). Une citation « page n » et son rognage (`rapport/images.py` rend
+  `pdf[numero - 1]` puis découpe la zone) pointent donc au bon endroit de la feuille, et la vérité du banc
+  (pages physiques) reste comparable. Avertissement `deux_pages_par_feuille:<coupe relative>` sur la page : un
+  découpeur qui voudrait traiter les moitiés comme deux pages logiques sait où elles commencent (moitié gauche :
+  lignes de x1 ≤ coupe). Feuille portrait à deux pages empilées : non coupée (Tesseract `psm 3` les lit déjà dans
+  l'ordre, les lignes ne se mêlent pas).
+
+## D-2605 — Réessai d'orientation quand la lecture est mauvaise (suite de D-2113)
+
+- Les autres orientations sont essayées non seulement sans verdict OSD, mais aussi quand la **qualité de
+  lecture** (confiance × `score_texte`) est < 0,40, même après un verdict OSD confiant. Mesure : une page lue
+  à l'envers garde une confiance Tesseract de 0,36–0,43 (le seuil de 0,40 sur la confiance seule, proposé en
+  D-2113, la manquait) mais une qualité de 0,28–0,33 ; une page droite dépasse 0,8. Ordre d'essai 0, 180, 90,
+  270 : Tesseract `psm 3` relit seul une page tournée de 90°, si bien qu'un essai à 90° rendrait la même lecture
+  sous une étiquette fausse. Coût : seulement sur les pages mal lues.
+
+## D-2606 — Mesures (`scripts/mesure_ocr.py`, dev seulement)
+
+Part des valeurs de vérité (montants ≥ 3 chiffres, références ≥ 5 caractères, noms) retrouvées dans le texte des
+pages des documents scannés, après normalisation (séparateurs de milliers, zéros décimaux, casse, accents,
+ponctuation). Avant = code 1.0.1, après = 1.1.0, même machine.
+
+| corpus (pages scannées) | avant | après | modes en hausse |
+|---|---|---|---|
+| `corpus_g4` (384) | 75,0 % | 76,6 % | jpegheavy +6,7, faxtiff +6,8, faxnoise +4,6, fax +3,9, lowcontrast +3,6, twoup +3,6, skewlow +3,0, overlay +2,6 |
+| `corpus_g2` (523) | 78,9 % | 80,4 % | lowcontrast +8,2, fax +5,1, faxtiff +3,0 |
+| `corpus` (652) | 60,0 % | 62,2 % | d3 (télécopie) 17,8 -> 29,7 % |
+
+Scans propres (scan300, scan250j, d1, d2, rotated, skew200, jpeg150, photo) : identiques (±0,1 point) ;
+tiff200 G2 -0,6 (1 valeur). Confiance OCR moyenne 0,838 -> 0,845 (G4), 0,834 -> 0,861 (corpus). Pages
+retournées : aucune page du dev n'a changé d'orientation (les cas G4 « rotated » étaient déjà bien lus) ; le
+réessai est couvert par un test (OSD forcé à 180° sur une page droite). Temps (A/B alterné sur 42 pages des
+trois corpus, un processus) : p50 2,53 -> 2,84 s, p95 4,39 -> 4,52 s, moyenne 2,85 -> 3,02 s par page
+(+6 %). Tests : `tests/ingest/test_ingest_pretraitement.py` (images synthétiques générées dans les tests).

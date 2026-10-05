@@ -42,10 +42,14 @@ ECART_CONTRASTE = 150
 #: mal éclairée (fond gris 180–200, encre 20–80) ou une compression JPEG lourde (encre ~100) ne sont pas
 #: étirées : l'étirement y amplifie l'ombre et les artefacts (mesure D-2603).
 ENCRE_PALE = 140
+#: Gris par maximum des canaux : fond de page (médiane de luminance) au moins aussi clair (papier blanc scanné).
+FOND_PAPIER = 215
 
 
 def niveaux_de_gris(image):
-    """Image ``L`` : maximum des canaux pour une image en couleur (encre colorée atténuée), sinon conversion."""
+    """Image ``L`` : maximum des canaux pour un scan en couleur sur papier blanc (encre colorée atténuée), sinon
+    luminance. Une photo de document (fond gris ou coloré : bureau, ombre ; médiane de luminance < 215) garde la
+    luminance : le maximum des canaux y efface le contraste entre la page et un fond brun (mesure D-2601)."""
     from PIL import ImageChops
 
     if image.mode == "L":
@@ -53,6 +57,9 @@ def niveaux_de_gris(image):
     if image.mode not in ("RGB", "RGBA", "CMYK", "P", "LA", "YCbCr"):
         return image.convert("L")
     rgb = image.convert("RGB")
+    luminance = rgb.convert("L")
+    if _centile(luminance.histogram(), 0.5) < FOND_PAPIER:
+        return luminance
     r, v, b = rgb.split()
     return ImageChops.lighter(ImageChops.lighter(r, v), b)
 
