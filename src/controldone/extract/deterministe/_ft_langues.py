@@ -114,13 +114,13 @@ _MOTS_TITRE = (
     r"factura rectificativa|factuur|voorschotfactuur|creditnota|creditfactuur|duty (?:&|and) tax invoice|"
     # pt / pl / de-CH (D-2501)
     r"fatura|fatura-recibo|nota de credito|faktura(?: vat)?|faktura korygujaca|nota korygujaca|"
-    r"kontoauszug|sammelrechnung"
+    r"kontoauszug|sammelrechnung|nota obciazeniowa|obciazeniowa"
 )
 TITRE = re.compile(rf"^({_MOTS_TITRE})\b")
 TITRE_COMPACT = re.compile(
     r"^(facture|invoice|avoir|creditnote|notedecredit|releve|statement|debitnote|notededebit|rechnung|"
     r"gutschrift|fattura|notadicredito|factura|abono|factuur|voorschotfactuur|creditnota|fatura|faktura|"
-    r"kontoauszug|sammelrechnung)")
+    r"kontoauszug|sammelrechnung|obciazeniowa)")
 
 _NO = r"(?:n°|nº|n\.?º|n\.o\.?|no\.?|n\.|num(?:ero)?\.?|number|nr\.?|nummer|nro\.?)"
 LIB_NUMERO = [re.compile(

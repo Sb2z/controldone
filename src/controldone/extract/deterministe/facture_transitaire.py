@@ -814,7 +814,7 @@ class _Extraction:
         # repli : référence voisine du titre du document
         titres = [(li, s) for li in page.lignes if li.y0 < 0.2 for s in li.segments if _est_titre(s.cle)]
         if not titres:
-            return None
+            return self._numero_titre_interne(page, ok)
         li_t, s_t = titres[0]
         # « FACTURE MDF 84826 » : la référence suit le titre dans le même segment
         mt = _TITRE.match(s_t.cle)
@@ -839,10 +839,32 @@ class _Extraction:
                 if meilleur is None or d < meilleur[0]:
                     meilleur = (d, m, li)
         if meilleur is None or meilleur[0] > 0.35:
-            return None
+            return self._numero_titre_interne(page, ok)
         _, m, li = meilleur
         txt = m.texte.strip(":;,")
         return self._lu_mots([m], page, li, base=C_POSITION, brut=txt if txt != m.texte else None)
+
+    def _numero_titre_interne(self, page: VuePage, ok) -> Lu | None:
+        """Titre imprimé au milieu d'un segment (« Spedycja … FAKTURA — USŁUGI DODATKOWE Nr FV/04948/05/2026 »,
+        « FACTURE COMPLÉMENT DE PRESTATIONS HTD2026-61136 ») : la première référence alphanumérique qui suit le
+        titre dans le même segment, en haut de la première page (D-2511). Valeur de position."""
+        for li in page.lignes:
+            if li.y0 > 0.15:
+                break
+            for k_sg, sg in enumerate(li.segments):
+                cles = [cle_texte(m.texte) for m in sg.mots]
+                debut = next((k for k, c in enumerate(cles) if _TITRE.match(c) or _TITRE_COMPACT.match(c)), None)
+                if debut is None:
+                    continue
+                suite = list(sg.mots[debut + 1:])
+                if len(suite) < 2 and k_sg + 1 < len(li.segments):
+                    suite += list(li.segments[k_sg + 1].mots)  # titre seul dans son segment : segment voisin
+                for m in suite[:8]:
+                    txt = m.texte.strip(":;,")
+                    if ok(txt) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./\-_]*[A-Za-z0-9]", txt) \
+                            and re.search(r"[A-Za-z]", txt) and re.search(r"\d{3}", txt):
+                        return self._lu_mots([m], page, li, base=C_POSITION, brut=txt if txt != m.texte else None)
+        return None
 
     def _date(self, page: VuePage, numero: Lu | None) -> Lu | None:
         for t in chercher(self.vue, _LIB_DATE, pages=[page.numero]):

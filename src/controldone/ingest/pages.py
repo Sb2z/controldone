@@ -4,8 +4,10 @@
   blanc sans fond sombre, micro-police) est retiré du texte de la page et gardé à part pour l'audit
   (§20.2). Qualité : ``natif`` si ≥ 85 % des caractères forment des mots plausibles ou des nombres ;
   sinon OCR et l'on garde la meilleure des deux sources (``natif_faible`` si le natif l'emporte).
-- OCR : rendu pypdfium2 à 300 dpi, orientation (OSD + essai 90/180/270), désinclinaison, Tesseract
-  ``fra+eng``, mots et confiances conservés, ``score_ocr``.
+- OCR : rendu pypdfium2 à 300 dpi, prétraitement (``ingest.pretraitement`` : gris par maximum des canaux, traits
+  de télécopie effacés, contraste étiré, médian sur télécopie), orientation (OSD + essai des autres orientations
+  si la lecture est mauvaise), feuille « deux pages par feuille » lue moitié par moitié, désinclinaison,
+  Tesseract ``fra+eng``, mots et confiances conservés, ``score_ocr`` (D-2601 à D-2606).
 - Images PNG/JPEG/TIFF multipage : OCR de chaque image.
 - Tableurs XLSX/ODS et CSV : une page par feuille, cellules jointes par `` | `` ligne par ligne.
 - XML : une page, texte brut conservé. Corps de courriel : une page de texte.
@@ -789,7 +791,7 @@ REGLAGES_OCR: dict[str, object] = {
     "median": True,  # filtre médian 3 × 3 si bruit impulsionnel (D-2602)
     "contraste": True,  # étirement d'une page pâle (D-2603)
     "deux_pages": True,  # feuille « deux pages par feuille » lue moitié par moitié (D-2604)
-    "seuil_reessai_orientation": 0.40,  # confiance au-dessous de laquelle les autres orientations sont essayées (D-2605)
+    "seuil_reessai_orientation": 0.40,  # qualité de lecture sous laquelle les autres orientations sont essayées (D-2605)
 }
 
 
@@ -824,8 +826,10 @@ def _ocr_oriente(image, opts: OptionsPages, rotation: int | None) -> tuple[list[
 
     ``rotation`` : verdict OSD déjà appliqué (``None`` : pas de verdict). Autres orientations essayées quand l'OSD
     n'a pas de verdict et que la lecture est moyenne (confiance < 0,6 ou moins de 5 mots), ou — même avec un
-    verdict, D-2113/D-2605 — quand la confiance est sous ``seuil_reessai_orientation`` (OSD confiant mais faux).
-    On garde la lecture la meilleure (confiance × plausibilité du texte, avance d'au moins 0,1)."""
+    verdict, D-2113/D-2605 — quand la qualité de lecture (confiance × plausibilité du texte, ``score_texte``) est
+    sous ``seuil_reessai_orientation`` : OSD confiant mais faux. Une page lue à l'envers garde souvent une
+    confiance Tesseract de 0,35–0,45 ; sa qualité tombe à 0,25–0,33 (texte implausible), celle d'une page droite
+    dépasse 0,8. On garde la lecture de meilleure qualité (avance d'au moins 0,1)."""
     from PIL import Image
 
     angle = 0.0
@@ -838,10 +842,10 @@ def _ocr_oriente(image, opts: OptionsPages, rotation: int | None) -> tuple[list[
     mots, score = _ocr_brut(image, opts)
     deja = rotation or 0
     seuil = float(REGLAGES_OCR["seuil_reessai_orientation"] or 0.0)
-    if (rotation is None and (score < 0.6 or len(mots) < 5)) or score < seuil:
+    q_meilleur = _qualite_ocr(mots, score)
+    if (rotation is None and (score < 0.6 or len(mots) < 5)) or q_meilleur < seuil:
         meilleurs = (mots, score, deja, image)
-        q_meilleur = _qualite_ocr(mots, score)
-        for cible in (180, 90, 270, 0):
+        for cible in (0, 180, 90, 270):  # 0 et 180 d'abord : Tesseract (psm 3) relit seul une page à 90°
             if cible == deja:
                 continue
             im2 = image.rotate(-((cible - deja) % 360), expand=True, fillcolor=255)

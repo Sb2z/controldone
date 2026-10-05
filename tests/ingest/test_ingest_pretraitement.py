@@ -9,7 +9,7 @@ import random
 
 import fabriques as fab
 import pytest
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from controldone.ingest import OptionsPages, extraire_pages, ocr_disponible
 from controldone.ingest import pretraitement as pt
@@ -93,21 +93,31 @@ def test_filets_de_tableau_et_page_propre_inchanges():
 # --- bruit impulsionnel, contraste (D-2602, D-2603) -----------------------------------------------------------
 
 
-def test_bruit_impulsionnel_detecte_et_filtre():
-    propre = _page_texte()
-    assert pt.debruiter(propre)[1] is False
+def test_median_sur_telecopie_seulement():
+    """Télécopie : page bitonale agrandie (≥ 2 000 px), points isolés et trous filtrés par le médian. Un scan en
+    niveaux de gris (demi-teintes) ou une image bitonale en basse résolution n'est pas filtré."""
+    propre = _page_texte(2000, 2800, lignes=50)
     bruite = propre.copy()
     rnd = random.Random(7)
     px = bruite.load()
-    for _ in range(25_000):
+    for _ in range(40_000):
         x, y = rnd.randrange(bruite.width), rnd.randrange(bruite.height)
         px[x, y] = 0 if px[x, y] > 128 else 255
-    assert pt.taux_bruit_impulsionnel(bruite) > pt.SEUIL_BRUIT
+    assert pt.page_telecopie(bruite)
     filtre, applique = pt.debruiter(bruite)
     assert applique
-    restants = sum(1 for a, b in zip(filtre.tobytes(), propre.tobytes(), strict=True) if abs(a - b) > 128)
-    avant = sum(1 for a, b in zip(bruite.tobytes(), propre.tobytes(), strict=True) if abs(a - b) > 128)
-    assert restants < avant * 0.2
+
+    def ecarts(a):
+        return sum(1 for u, v in zip(a.tobytes(), propre.tobytes(), strict=True) if abs(u - v) > 128)
+
+    assert ecarts(filtre) < ecarts(bruite) * 0.1
+    # niveaux de gris : bords anticrénelés (demi-teintes) -> pas de médian
+    grain = Image.effect_noise(propre.size, 40)  # scan en niveaux de gris : encre grise et grain
+    gris = ImageChops.add(propre.point(lambda v: 70 if v < 128 else 235), grain, 1.0, -128)
+    assert pt.debruiter(gris) == (gris, False)
+    # bitonale mais en basse résolution (fax TIFF 200 dpi) -> pas de médian
+    petit = bruite.resize((1600, 2240), Image.NEAREST)
+    assert pt.debruiter(petit) == (petit, False)
 
 
 def test_contraste_etire_page_pale_seulement():

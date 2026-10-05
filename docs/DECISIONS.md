@@ -2781,3 +2781,136 @@ déclarations (0 comparaison perdue, +3 / +2 justes, bande ≥ 0,90 inchangée),
 `corpus_g2` F1 0,959 -> 0,965 (incomplets 27 -> 21), corpus d'origine identique (P4 49 -> 47) ; banc corpus
 d'origine : seuil PASSE, 119 VP / 0 FP certain (identique). Tests : `tests/extract/test_declaration_d24.py`,
 `tests/ingest/test_classement_d24.py`, `tests/assembly/test_regroupement_d24.py`.
+
+## D-2501 — Factures de transitaire et commerciales : vocabulaire portugais, polonais et suisse alémanique
+
+- **Constat** (`corpus_g4` dev) : familles G13 (pt), G14 (pl), G15 (de-CH) sans aucune ligne lue (en-têtes de
+  colonnes, totaux et titres inconnus) ; factures commerciales CP (pt) et CL (pl) sans numéro, TVA acheteur, masses
+  ni colis.
+- **Choix** (données seulement, `_ft_langues`, `_fc_langues`, `normalize/natures`, `normalize/units`) : en-têtes
+  « Descrição / Qtd / Preço unit. / Taxa », « Lp. / Nazwa / Ilość / J.m. / Cena jedn. / Wartość netto / Stawka »,
+  « Sendung / MRN … Soll / Haben » ; totaux « Total despesas (suplidos) / Total sem IVA / Total com IVA », « Razem
+  należności / Razem netto / Razem brutto / Do zapłaty », « Total Auslagen / Total netto / Total EUR » (sous-totaux
+  « Razem usługi netto », « Sous-total de l'envoi » ignorés) ; titres « fatura », « nota de crédito », « faktura
+  (VAT, korygująca, eksportowa) », « nota obciążeniowa », « Kontoauszug / Sammelrechnung » (relevé) ; libellés de
+  facture d'origine et de motif (« Fatura de origem », « Faktura pierwotna », « Przyczyna korekty ») ; parties
+  « Nabywca / Odbiorca / Faturar a / Entregar a » ; natures pt/pl (« Desalfandegamento », « Odprawa celna »,
+  « Cło », « Prowizja za kredytowanie », « Obsługa ładunku »…) ; unités « szt., sztuk, kpl, unidades ».
+- `normalize.text.sans_accents` : lettres barrées sans décomposition Unicode (« ł », « ø », « đ ») ramenées à la
+  lettre simple (« usługi » → « uslugi »). Un numéro de ligne collé au libellé (« 1   Cło ») est retiré avant
+  la recherche de nature.
+
+## D-2502 — Lignes « TVA comprise » : on expose ce qui est imprimé ; le HT dérivé est marqué et plafonné
+
+- **Constat** : G13 imprime prix unitaire et total **TVA comprise** par ligne (« Preço unit. c/ IVA », « Total
+  c/ IVA ») ; le HT n'apparaît que dans le tableau récapitulatif de TVA. Avant : le TTC était lu comme HT (faux à
+  0,97) et la TVA de ligne recalculée sur ce faux HT.
+- **Choix** : colonnes `pu_ttc` et `ttc` reconnues ; une ligne sans colonne HT expose `montant_ttc` (imprimé) et
+  son taux. Ligne exonérée (« isento », « exempt », « zw. », taux 0) : `montant_ht` = montant imprimé (confiance
+  ≤ 0,93), taux 0 dérivé de la mention (≤ 0,90). Ligne taxée : `montant_ht` = TTC / (1 + taux) **dérivé**
+  (`methode = derive`, règle `montant_ttc / (1 + taux_tva)`, sources TTC et taux, confiance ≤ 0,60) ; ni prix
+  unitaire HT ni TVA de ligne fabriqués. Les totaux du document restent ceux imprimés.
+- Mesure : avec le HT dérivé, banc g4 rappel 79,8 % / montants justes 95,6 % / bruit 1,99 ; sans, 79,1 % / 93,2 %
+  / 2,37 (les contrôles retombaient sur le TTC comme montant de prestation). La vérité du banc n'ayant pas de HT
+  pour ces lignes, la mesure d'extraction compte ces dérivés « faux » : c'est voulu.
+- Taux lu > 100 (« 2000 », virgule perdue par l'OCR) : écarté.
+
+## D-2503 — MRN d'une ligne : intertitre de section
+
+- Tableau groupé par envoi (« Envoi — MRN 26FR… » juste au-dessus de l'en-tête, G16) : les lignes sans MRN
+  propre reçoivent ce MRN (confiance de rattachement 0,85) ; le tableau est marqué « MRN par ligne », donc ses
+  lignes sans MRN n'en reçoivent pas d'autre. L'intertitre doit porter un seul MRN, des mots et aucun autre
+  nombre, ne pas appartenir à un tableau déjà lu (une rangée « transport / MRN / date » n'en est pas un) ; il
+  n'est pas pris non plus comme « ligne de suite » de la rangée précédente.
+- Une règle plus large (aucun rattachement du MRN unique dès qu'un autre tableau porte une colonne MRN) a été
+  essayée puis retirée : elle suit la convention de vérité de g4 mais contredit celle du corpus d'origine
+  (−131 MRN justes) ; rattacher le MRN unique reste utile aux contrôles.
+
+## D-2504 — Numéro de TVA d'un représentant fiscal
+
+- **Constat** : importateur suisse représenté (« TVA rep. fiscal : FR… » puis le numéro propre du client) : le
+  premier numéro du pavé était pris, faux à 0,97 sur 6 factures de transitaire et 10 factures commerciales.
+- **Choix** (`_mise_en_page.REP_FISCAL`) : un numéro précédé d'un libellé de représentant fiscal n'est retenu
+  pour le client / l'acheteur que s'il n'y en a pas d'autre dans le pavé (FT : aussi juste en dessous, même
+  colonne) ; il est alors plafonné à 0,60. Il n'est jamais pris pour l'émetteur.
+
+## D-2505 — Rangées perdues, avoirs dans un relevé, quantités groupées
+
+- Rangée OCR dont les montants sont illisibles entre deux rangées lisibles : la lecture du tableau continue
+  (avant : arrêt, toutes les rangées suivantes perdues) ; document `partielle`, avertissement
+  `rangee_illisible`, montants de ligne plafonnés à 0,85 (une somme de lignes est alors incomplète).
+- OCR : si la somme des lignes de débours contredit le total des débours imprimé, chaque montant de débours est
+  plafonné à 0,85 (aucune base de commission ou somme par nature ne peut être certaine).
+- Lignes négatives (« Gutschrift zu Rechnung … -25.00 ») : signe imprimé conservé ; les recoupements (somme des
+  lignes = total) se font en valeur signée.
+- Quantité entière à séparateur de milliers (« 3 988 kg ») lue comme quantité (prestations au kg).
+
+## D-2506 — Date de facture de transitaire
+
+- Date seule dans le segment voisin du numéro (« No. PFL/26/60695 | 26 Jun 2026 », texte OCR découpé) : ≤ 0,90.
+- Libellé de date en tête de colonne (« Nr. | Datum | Btw-nr. ») : valeur cherchée jusqu'à trois lignes plus bas
+  (bruit OCR intercalé), même écart vertical maximal.
+- Repli : la seule date distincte du haut de la première page (hors échéance, période, livraison, horodatage de
+  télécopie, tableaux) ; confiance 0,70 (jamais une base d'écart certain). g2 dev : dates 88,2 % → 95,7 %.
+
+## D-2507 — Factures commerciales portugaises et polonaises
+
+- Numéro « Fatura n.º FT PIC2026/6990 », « FAKTURA EKSPORTOWA Faktura nr … » ; date « Data wystawienia » ;
+  devise « Moeda / Waluta » ; « Condições de entrega / Warunki dostawy » ; titres de transport « Carta de porte
+  aéreo / Konosament / Lotniczy list przewozowy » ; masses « Peso líquido / Masa netto / Masa brutto » ; colis
+  « Volumes: / Liczba opakowań » ; sous-totaux « Total mercadorias / Frete / Seguro / Embalagem / Desconto »,
+  « Wartość towarów / Fracht / Ubezpieczenie / Opakowanie / Rabat » ; total « RAZEM DO ZAPŁATY ».
+- Contre-valeur indicative (« Contravalor indicativo », « Równowartość informacyjna ») exclue des totaux.
+
+## D-2508 — Facture commerciale sur plusieurs pages : report jamais compté
+
+- **Constat** (CM, 22 à 45 lignes) : « Brought forward 625.02 » en tête de page 2 lu comme une ligne de
+  marchandise et « INVOICE TOTAL EUR » comme une ligne : total des lignes doublé du report.
+- **Choix** : `lire_tableau(..., est_ignoree=...)` saute les lignes de report (« brought / carried forward »,
+  « report », « Übertrag », « riporto », « z przeniesienia »…) sans finir le tableau ni s'ajouter à une rangée ;
+  « invoice / grand total », « delivery terms », « Page n/m » finissent le tableau. « Page total … carried
+  forward » reste un total de page (jamais le total de la facture). Colis lus aussi au milieu d'une ligne
+  (« … Gross weight: 1,673.406 kg Packages: 41 »).
+
+## D-2509 — Date de facture commerciale à côté du numéro
+
+- « Invoice No. SPT-INV-00608 — 8 Aug 2026 — Page 1/2 » : sans libellé de date, la date qui suit immédiatement le
+  numéro (séparateurs seuls intercalés ; segment voisin en OCR) est retenue, confiance ≤ 0,90 (≤ 0,70 si jour et
+  mois sont inversables).
+
+## D-2510 — Référence de facture d'un document support à préfixe lettré
+
+- « Ref. invoice / facture: FT PIC2026/8089 » : la seconde partie peut commencer par des lettres.
+
+## D-2511 — Numéro de facture après un titre imprimé au milieu de l'en-tête
+
+- « Spedycja … FAKTURA — USŁUGI DODATKOWE Nr FV/04948/05/2026 », « FACTURE | COMPLÉMENT DE PRESTATIONS
+  HTD2026-61136 » : à défaut de libellé, la première référence alphanumérique qui suit un mot-titre dans le même
+  segment (ou le segment voisin si le titre est seul) en haut de la première page ; valeur de position (0,88).
+
+## D-2512 — Mesures (dev seulement)
+
+`scripts/mesure_extraction.py`, `corpus_g4` dev (175 dossiers), avant → après :
+
+| Document | Champs | Avant | Après |
+|---|---|---|---|
+| Facture de transitaire | lignes : libellé / nature / quantité / HT | 46,1 / 47,4 / 50,0 / 58,9 % | 82,0 / 84,2 / 83,7 / 77,2 % |
+| | numéro / TVA client / total débours / HT / TTC | 82,7 / 88,8 / 52,6 / 64,3 / 64,3 % | 96,9 / 95,9 / 83,7 / 92,9 / 95,9 % |
+| | valeurs ≥ 0,90 justes | 99,4 % (17 faux / 2 811) | 99,93 % (3 / 4 369) |
+| Facture commerciale | numéro / date / TVA acheteur / total | 66,4 / 61,6 / 55,9 / 77,7 % | 94,8 / 89,1 / 90,0 / 93,4 % |
+| | masse brute / colis / unité | 77,7 / 45,0 / 67,5 % | 95,3 / 95,7 / 79,3 % |
+| | valeurs ≥ 0,90 justes | 99,4 % (40 faux) | 99,90 % (8 / 8 282) |
+| Avoir | numéro / réf. facture d'origine / nature / total crédité | 71,4 / 73,8 / 42,9 / 40,5 % | 88,1 / 97,6 / 81,0 / 81,0 % |
+| Document support | réf. facture | 82,2 % | 93,3 % |
+
+- Les 3 faux ≥ 0,90 restants des factures de transitaire sont des « 0,00 » de débours **imprimés** que la vérité
+  laisse vides ; les 8 des factures commerciales viennent d'un scan dont la page 1 manque (numéro de ligne
+  illisible, appariement de la mesure décalé), les valeurs lues étant justes pour leur rangée.
+- Les lignes `montant_tva` / `taux_tva` / `prix_unitaire` de G14/G15 sont dérivées (≤ 0,60) alors que la vérité
+  les laisse vides (non imprimés) : baisse de ces champs dans la mesure, sans effet sur les contrôles.
+- Non-régression `corpus_g2` et corpus d'origine (4 types) : aucune valeur juste perdue hors appariement de
+  lignes nouvellement lues ; bande ≥ 0,90 inchangée (g2 FT 3 faux, c1 FT 2 faux, autres 0).
+- Banc complet (code de tous les chantiers en cours) : `corpus_g4` dev rappel 48,7 % → 80,1 %, rappel certain
+  24,2 % → 60,0 %, montants justes 89,9 % → 95,6 %, VP/FP certains 36/3 → 84/5 ; `corpus_g2` dev 112 VP / 1 FP
+  (seuil PASSE) ; corpus d'origine 119 VP / 0 FP, seuil PASSE (identique).
+- Tests : `tests/extract/test_extraction_pt_pl_ch.py` (36 tests, mises en page propres aux tests).

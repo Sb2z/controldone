@@ -8,14 +8,13 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import fixtures_fc as fx
 import pytest
 
 from controldone.model.enums import Methode, NatureLigne, SigneImprime, TypeDocument
 from controldone.normalize import normalize_unit, tva_fr_depuis_siren
 from controldone.normalize.natures import nature_libelle
 from controldone.normalize.text import cle_texte
-
-import fixtures_fc as fx
 
 TVA_EM = tva_fr_depuis_siren("000313131")
 TVA_CL = tva_fr_depuis_siren("000424241")
@@ -465,3 +464,40 @@ def test_support_ref_facture_prefixe_lettre():
     p.t(40, 70, "Transport: 999-16180339")
     r = fx.extraire(fx.pdf([p]), TypeDocument.document_support, sous_type="liste_colisage")
     assert [_v(x) for x in r.champs.refs_facture] == ["FT PGL2026/0042"]
+
+
+# --- numéro après un titre imprimé au milieu de l'en-tête (D-2511) ----------------------------------------------
+
+
+def test_numero_apres_titre_dans_le_segment():
+    p = fx.PagePdf()
+    p.t(40, 40, "Spedycja Urojona Sp. z o.o. FAKTURA — USLUGI DODATKOWE Nr FU/00912/06/2026", gras=True)
+    p.t(330, 60, "Data wystawienia: 21.06.2026")
+    p.t(330, 90, "Nabywca")
+    p.t(330, 104, "Ateliers Chimériques SAS")
+    p.t(330, 118, f"NIP/VAT: {TVA_CL}")
+    p.ligne(170, [(40, "Lp.", False), (60, "Nazwa", False), (360, "Ilosc", True), (450, "Cena jedn.", True),
+                  (540, "Wartosc netto", True)], taille=8)
+    p.ligne(186, [(40, "1", False), (60, "Odprawa celna", False), (360, "1", True), (450, "55,00", True),
+                  (540, "55,00", True)], taille=8)
+    p.ligne(220, [(300, "Razem netto", False), (540, "55,00 EUR", True)])
+    c = _ft(fx.pdf([p])).champs
+    assert _v(c.numero) == "FU/00912/06/2026"
+    assert c.numero.confiance < 0.9  # valeur de position
+
+
+# --- date de repli : seule date du haut de page, confiance plafonnée (D-2506) -------------------------------------
+
+
+def test_date_de_repli_plafonnee():
+    p = fx.PagePdf()
+    p.t(40, 40, "Mirage Freight Ltd", taille=12, gras=True)
+    p.t(400, 40, "INVOICE MFL-26-7781", gras=True)
+    p.t(400, 70, "Lille, 30/06/2026")
+    p.t(330, 100, "Bill to: Ateliers Chimériques SAS")
+    p.ligne(170, [(40, "Description", False), (300, "Qty", True), (450, "Amount", True)], taille=8)
+    p.ligne(186, [(40, "Customs clearance", False), (300, "1", True), (450, "85.00", True)], taille=8)
+    p.ligne(220, [(300, "Total", False), (450, "85.00", True)])
+    c = _ft(fx.pdf([p])).champs
+    assert _v(c.date) == "2026-06-30"
+    assert c.date.confiance < 0.9

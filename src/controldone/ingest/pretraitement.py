@@ -7,7 +7,7 @@ Fonctions pures sur des images PIL, appelées par ``ingest.pages._ocr_image`` da
   encre colorée claire ou moyenne (tampon rouge, écriture bleue) devient claire et tombe du côté du fond à la
   binarisation de Tesseract, alors que la luminance la gardait au niveau du texte ;
 - ``retirer_traits`` : traits parasites rectilignes qui traversent toute la page (bandes de télécopie) ;
-- ``debruiter`` : filtre médian 3 × 3 quand la page porte un bruit impulsionnel (points isolés) ;
+- ``debruiter`` : filtre médian 3 × 3 sur une page de télécopie (bitonale agrandie : points isolés, trous) ;
 - ``etirer_contraste`` : étirement linéaire encre -> noir, fond -> blanc d'une page pâle ;
 - ``coupure_deux_pages`` : feuille paysage portant deux pages portrait côte à côte (« 2 pages par feuille »).
 
@@ -24,8 +24,8 @@ __all__ = [
     "debruiter",
     "etirer_contraste",
     "niveaux_de_gris",
+    "page_telecopie",
     "retirer_traits",
-    "taux_bruit_impulsionnel",
 ]
 
 #: Part minimale de la hauteur (de la largeur) couverte d'encre pour qu'une colonne (une rangée) soit un trait
@@ -33,8 +33,9 @@ __all__ = [
 PART_TRAIT = 0.92
 #: Épaisseur maximale d'un trait parasite (pixels à 300 dpi) ; au-delà : bloc imprimé, laissé tel quel.
 EPAISSEUR_MAX_TRAIT = 12
-#: Bruit impulsionnel : part de points d'encre isolés (effacés par un médian 3 × 3) parmi les pixels d'encre.
-SEUIL_BRUIT = 0.04
+#: Télécopie : part maximale de demi-teintes parmi les pixels d'encre ; côté minimal (pixels) pour le médian.
+PART_DEMI_TEINTES_FAX = 0.55
+TAILLE_MIN_MEDIAN = 2000
 #: Contraste : écart minimal encre/fond au-dessous duquel la page est étirée.
 ECART_CONTRASTE = 150
 
@@ -129,27 +130,28 @@ def retirer_traits(gris) -> tuple[object, int]:
     return sortie, len(verticaux) + len(horizontaux)
 
 
-def taux_bruit_impulsionnel(gris) -> float:
-    """Part des pixels d'encre isolés (effacés par un filtre médian 3 × 3) ; mesure sur la page entière."""
-    from PIL import ImageChops, ImageFilter
+def page_telecopie(gris) -> bool:
+    """Page bitonale agrandie (télécopie rendue à 300 dpi) : peu de demi-teintes parmi les pixels d'encre
+    (bords nets, interpolation seulement) et assez de pixels (≥ 2 000 px de côté) pour que les traits des
+    caractères fassent au moins 3 pixels.
 
-    masque = _masque_encre(gris, _seuil_encre(gris))
-    encre = masque.histogram()[255]
-    if encre == 0:
-        return 0.0
-    median = masque.filter(ImageFilter.MedianFilter(3))
-    isoles = ImageChops.subtract(masque, median).histogram()[255]
-    trous = ImageChops.subtract(median, masque).histogram()[255]
-    return (isoles + trous) / encre
+    Un scan en niveaux de gris a ≥ 58 % de demi-teintes (48–207) parmi ses pixels non blancs (anticrénelage,
+    grain) ; une télécopie rendue ≤ 50 %. Une image bitonale native en basse résolution (TIFF fax à 200 dpi)
+    est exclue par la taille : un médian 3 × 3 y ronge les traits fins (mesure D-2602)."""
+    if min(gris.size) < TAILLE_MIN_MEDIAN:
+        return False
+    h = gris.histogram()
+    encre = sum(h[:208])
+    if encre < 0.002 * gris.size[0] * gris.size[1]:
+        return False
+    return sum(h[48:208]) / encre < PART_DEMI_TEINTES_FAX
 
 
-def debruiter(gris, taux: float | None = None):
-    """Filtre médian 3 × 3 si le bruit impulsionnel dépasse ``SEUIL_BRUIT`` ; sinon l'image inchangée."""
+def debruiter(gris):
+    """Filtre médian 3 × 3 sur une page de télécopie (points isolés, trous dans les traits) ; sinon inchangée."""
     from PIL import ImageFilter
 
-    if taux is None:
-        taux = taux_bruit_impulsionnel(gris)
-    if taux < SEUIL_BRUIT:
+    if not page_telecopie(gris):
         return gris, False
     return gris.filter(ImageFilter.MedianFilter(3)), True
 
