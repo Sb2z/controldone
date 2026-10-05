@@ -18,7 +18,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
+from itertools import pairwise
 
 from controldone.controls import _aides_befg as aides
 from controldone.controls._aides_befg import ZERO
@@ -28,12 +29,14 @@ from controldone.controls._aides_befg import somme as _somme
 from controldone.controls.famille_c import (
     assiette_debours,
     borner,
+    declarations_couvertes,
     declarations_de_ligne,
     dossier_principal,
     excedent_debours,
     grille_pour_facture,
     libelle_facture,
     ligne_evaluee_ici,
+    mrns_cites,
     page_txt,
     reference_declaration,
     unites_c,
@@ -43,6 +46,7 @@ from controldone.controls.framework import (
     Confusion,
     ControlContext,
     arrondi_centime,
+    arrondi_unite,
     cle_unite,
     control,
     preuve,
@@ -50,6 +54,7 @@ from controldone.controls.framework import (
 from controldone.formatage import format_montant, format_nombre, format_pourcentage
 from controldone.model import (
     BasePourcentage,
+    CategorieTaxe,
     Composante,
     Document,
     GrilleTarifaire,
@@ -343,6 +348,10 @@ def _comparer_tarif(
     )
     if ecart <= tol:
         return ctx.conforme(cid, **commun)
+    devise = lr.facture.ft.devise
+    if ctx.utilisable(devise) and devise is not None and (devise.valeur or "").strip().upper() not in ("", "EUR"):
+        # Grille en euros, facture dans une autre devise : la comparaison suppose une conversion (D-2213).
+        raisons = [*raisons, RaisonCode.devise_incertaine]
     classement = ctx.classify(
         cid, ecart=ecart, tolerance=tol, seuil_certitude=seuil,
         valeurs_cles=[*valeurs_cles, *(x for _, x, _ in credits)],
@@ -708,6 +717,82 @@ def _assiette(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, 
     return _somme(v.decimal_signe() for v in vals), ZERO, vals
 
 
+#: Assiettes d'un pourcentage de débours essayées comme explication d'un FAF (D-2213).
+_BASES_ALTERNATIVES = (
+    BasePourcentage.debours_total,
+    BasePourcentage.debours_hors_tva,
+    BasePourcentage.droits,
+    BasePourcentage.droits_et_autres_taxes,
+)
+
+
+def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire
+                            ) -> list[list[Decimal]]:
+    """Autres assiettes plausibles d'un FAF, chacune comme liste de bases **par envoi** (D-2213) : débours
+    refacturés des unités de la ligne selon chaque composante (avec ou sans l'excédent constaté), montants
+    liquidés des déclarations, débours imprimés sur la facture elle-même. Le minimum et le maximum de la
+    grille s'appliquent à la facture (somme) ou à chaque envoi (bases séparées)."""
+    out: list[list[Decimal]] = []
+    decs = ctx.declarations()
+    unites = unites_c(ctx) if decs else []
+    concernees = unites_pour_ligne(ctx, f, ligne, unites) if unites else []
+    if concernees:
+        refs = {d.id: reference_declaration(ctx, d) for d in decs}
+        for b in _BASES_ALTERNATIVES:
+            brutes = [assiette_debours(u, b) for u in concernees]
+            out.append(brutes)
+            exc = [excedent_debours(u, refs, b) for u in concernees]
+            if all(e is not None for e in exc):
+                out.append([x - (e or ZERO) for x, e in zip(brutes, exc, strict=True)])
+        cats = {
+            BasePourcentage.debours_total: list(CategorieTaxe),
+            BasePourcentage.debours_hors_tva: [c for c in CategorieTaxe if c is not CategorieTaxe.tva],
+            BasePourcentage.droits: [CategorieTaxe.droit],
+        }
+        vues: set[str] = set()
+        liquides: dict[BasePourcentage, list[Decimal]] = {b: [] for b in cats}
+        for u in concernees:
+            for d in u.declarations:
+                if d.id in vues:
+                    continue
+                vues.add(d.id)
+                r = refs[d.id]
+                for b, cs in cats.items():
+                    liquides[b].append(_somme(r.liquide.get(c, ZERO) for c in cs))
+        out.extend(v for v in liquides.values() if v)
+    propres = [lg for lg in f.ft.lignes if lg.nature.est_debours and lg.montant_ht is not None]
+    if propres and all(_dec(ctx, lg.montant_ht) is not None for lg in propres):
+        for exclues in ((), (NatureLigne.debours_tva,)):
+            out.append([_somme(lg.montant_ht.decimal_signe() for lg in propres
+                               if lg.nature not in exclues and lg.montant_ht is not None)])
+        out.append([_somme(lg.montant_ht.decimal_signe() for lg in propres
+                           if lg.nature is NatureLigne.debours_droits and lg.montant_ht is not None)])
+    return out
+
+
+def _faf_explique(ctx: ControlContext, p: PosteGrille, facture: Decimal, attendu: Decimal,
+                  alternatives: Sequence[Sequence[Decimal]]) -> str | None:
+    """Motif quand le FAF facturé est le calcul de la grille sur une autre assiette, avec le minimum ou le maximum
+    appliqué par envoi, ou avec un arrondi à l'unité ; ``None`` sinon (D-2213)."""
+    tol = ctx.tol.t_tarif()
+
+    def egal(x: Decimal) -> bool:
+        return abs(facture - x) <= tol or facture == arrondi_unite(x) or facture == x.to_integral_value(rounding=ROUND_CEILING)
+
+    if facture != attendu and egal(attendu):
+        return "arrondi_a_l_unite"
+    assert p.pourcentage is not None
+    for bases in alternatives:
+        candidats = [borner(arrondi_centime(p.pourcentage * sum(bases, ZERO) / _CENT), p.minimum, p.maximum)]
+        if len(bases) > 1:
+            candidats.append(_somme(borner(arrondi_centime(p.pourcentage * x / _CENT), p.minimum, p.maximum)
+                                    for x in bases))
+        for c in candidats:
+            if c != attendu and egal(c):
+                return "autre_assiette_ou_bornes_par_envoi"
+    return None
+
+
 def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControle:
     """Poste en pourcentage (FAF, surcharge) : ``attendu = borner(pourcentage × assiette)``."""
     p = lr.poste
@@ -757,8 +842,20 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
                 deduction_txt = (f", plus {format_montant(deduction)} déjà relevés sur l'excédent de débours "
                                  f"par le contrôle C6")
                 details["deduit_c6"] = str(deduction)
-    return _comparer_tarif(ctx, cid, lr, attendu, calcul_txt, valeurs_cles=[v], deduction=deduction,
-                           deduction_txt=deduction_txt, details=details)
+    raisons: list[RaisonCode] = []
+    cles = [v]
+    calcule = arrondi_centime(p.pourcentage * retenue / _CENT)
+    if cid == "D4" and calcule == attendu:
+        # Ni minimum ni maximum : l'attendu dépend de chaque débours lu de l'assiette (D-2213).
+        cles += [x for x in vals if x is not v]
+    if cid == "D4" and v.decimal_signe() - attendu - deduction > ctx.tol.t_tarif():
+        motif = _faf_explique(ctx, p, v.decimal_signe() - deduction, attendu,
+                              _assiettes_alternatives(ctx, lr.facture, lr.ligne))
+        if motif is not None:
+            raisons.append(RaisonCode.assiette_alternative)
+            details["assiette_alternative"] = motif
+    return _comparer_tarif(ctx, cid, lr, attendu, calcul_txt, valeurs_cles=cles, deduction=deduction,
+                           deduction_txt=deduction_txt, details=details, raisons=raisons)
 
 
 def _d4_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
@@ -786,10 +883,73 @@ def d4_faf_grille(ctx: ControlContext) -> list[ResultatControle]:
 # =====================================================================================================
 
 
+#: Natures facturées par contenant, véhicule ou envoi physique : répétées légitimement pour plusieurs contenants.
+_NATURES_PAR_CONTENANT = frozenset({
+    NatureLigne.transport, NatureLigne.manutention, NatureLigne.magasinage, NatureLigne.surcharge,
+})
+
+
+def _ref_ligne(ctx: ControlContext, lg: LigneFactureTransitaire) -> str:
+    """Référence d'envoi propre à la ligne (MRN, à défaut transport), vide si aucune."""
+    if lg.mrn is not None and lg.mrn.valeur:
+        return "mrn:" + mrn_prefixe(lg.mrn.valeur)
+    if lg.ref_transport is not None and lg.ref_transport.valeur:
+        return "transport:" + (norm_ref_transport(lg.ref_transport.valeur) or norm_ref(lg.ref_transport.valeur))
+    return ""
+
+
+def _envois_de_facture(ctx: ControlContext, f: Document) -> tuple[int, int]:
+    """(nombre de MRN distincts, nombre de références de transport distinctes) cités par la facture. Deux
+    lectures d'un même MRN qui ne diffèrent que par des confusions OCR comptent pour un."""
+    mrns = {cle_confusion_ocr(mrn_prefixe(v.valeur)) for v in mrns_cites(ctx, f) if v.valeur}
+    trs = [v for v in f.ft.refs_transport if v.valeur and ctx.utilisable(v)]
+    trs += [lg.ref_transport for lg in f.ft.lignes if lg.ref_transport is not None and lg.ref_transport.valeur
+            and ctx.utilisable(lg.ref_transport)]
+    transports = {cle_confusion_ocr(norm_ref_transport(v.valeur) or norm_ref(v.valeur)) for v in trs if v.valeur}
+    return len(mrns), len(transports)
+
+
+def _d5_motifs(ctx: ControlContext, f: Document, g: Sequence[LigneRoutee], ref: str, copies: int) -> list[str]:
+    """Pourquoi des lignes identiques ne prouvent pas une prestation facturée deux fois (D-2212) ; liste vide :
+    la répétition est établie.
+
+    1. Aucune référence d'envoi sur les lignes alors que la facture couvre plusieurs envois (plusieurs MRN,
+       titres de transport ou déclarations) : une ligne par envoi est attendue.
+    2. Prestation facturée par contenant (transport, manutention, magasinage, surcharge) sur une facture qui
+       cite au moins autant de titres de transport que de lignes répétées : un par contenant ou livraison.
+    3. Deux lignes consécutives sur deux pages : ligne reportée en haut de la page suivante.
+    4. Le total HT imprimé reprend les lignes **sans** la répétition : elle n'est pas facturée (lecture)."""
+    motifs: list[str] = []
+    n_mrn, n_tr = _envois_de_facture(ctx, f)
+    if not ref and (n_mrn > 1 or n_tr > 1 or len(declarations_couvertes(ctx, f)) > 1):
+        motifs.append("plusieurs_envois_sans_reference_sur_la_ligne")
+    natures = {lr.ligne.nature for lr in g}
+    if natures <= _NATURES_PAR_CONTENANT and n_tr >= copies and not ref.startswith("transport:"):
+        motifs.append("plusieurs_titres_de_transport")
+    idx = sorted(lr.index for lr in g)
+    lignes = f.ft.lignes
+    for a, b in pairwise(idx):
+        va, vb = _montant(ctx, lignes[a]), _montant(ctx, lignes[b])
+        if b == a + 1 and va is not None and vb is not None and va.page and vb.page and va.page != vb.page:
+            motifs.append("ligne_reportee_sur_la_page_suivante")
+            break
+    total = _dec(ctx, f.ft.total_ht)
+    montants = [_dec(ctx, _montant(ctx, lg)) for lg in lignes]
+    if total is not None and montants and all(m is not None for m in montants):
+        somme = _somme(m for m in montants if m is not None)
+        m0 = _dec(ctx, _montant(ctx, g[0].ligne)) or ZERO
+        tol = ctx.tol.t_somme(len(montants))
+        if abs(somme - total) > tol and abs(somme - m0 * (copies - 1) - total) <= tol:
+            motifs.append("repetition_absente_du_total")
+    return motifs
+
+
 @control("D5")
 def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
     """D5 — Deux lignes de prestation de même nature, même libellé normalisé, même montant et même MRN ou
-    référence de transport (ou aucune) sur une même facture. Les débours en double sont comptés par C."""
+    référence de transport (ou aucune) sur une même facture. Les débours en double sont comptés par C.
+    Une ligne annulée par une ligne opposée (même nature, même libellé, montant opposé) ne compte pas ;
+    ``ecart_certain`` seulement si la répétition est établie (``_d5_motifs``, D-2212)."""
     d = _prealable(ctx, "D5")
     if isinstance(d, list):
         return d
@@ -806,42 +966,48 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
             m = _dec(ctx, _montant(ctx, lg))
             if m is None or lg.libelle is None or not lg.libelle.valeur:
                 continue
-            ref = ""
-            if lg.mrn is not None and lg.mrn.valeur:
-                ref = "mrn:" + mrn_prefixe(lg.mrn.valeur)
-            elif lg.ref_transport is not None and lg.ref_transport.valeur:
-                ref = "transport:" + (norm_ref_transport(lg.ref_transport.valeur) or norm_ref(lg.ref_transport.valeur))
-            groupes.setdefault((lg.nature.value, _cle(lg.libelle.valeur), m, ref), []).append(lr)
-        doubles = [g for g in groupes.values() if len(g) > 1]
+            groupes.setdefault((lg.nature.value, _cle(lg.libelle.valeur), m, _ref_ligne(ctx, lg)), []).append(lr)
+        doubles = []
+        for (nature, cle, m, ref), g in groupes.items():
+            # Ligne de correction : même nature, même libellé, montant opposé (une ligne annule l'autre).
+            annulees = len(groupes.get((nature, cle, -m, ref), [])) if m > 0 else 0
+            copies = len(g) - annulees
+            if copies > 1:
+                doubles.append((g, ref, copies))
         if not doubles:
             out.append(ctx.conforme("D5", unite=cle_unite(ft=fid), documents=[fid]))
             continue
-        for g in doubles:
+        for g, ref, copies in doubles:
             unite = cle_unite(ft=fid, lignes=[lr.index for lr in g])
             vals = [x for lr in g for x in (lr.ligne.libelle, _montant(ctx, lr.ligne)) if x is not None]
             m = _montant(ctx, g[0].ligne)
             assert m is not None
-            montant = m.decimal_signe() * (len(g) - 1)
+            montant = m.decimal_signe() * (copies - 1)
             multiple = any(lr.poste is not None and lr.poste.mode in (ModePoste.unitaire, ModePoste.par_jour)
                            for lr in g)
+            motifs = _d5_motifs(ctx, f, g, ref, copies)
+            raisons = [RaisonCode.controle_signal_seulement] if multiple else []
+            if motifs:
+                raisons.append(RaisonCode.doublon_non_etabli)
             classement = ctx.classify(
                 "D5", ecart=montant, tolerance=ctx.tol.t_tarif(), seuil_certitude=ctx.tol.s_tarif(),
-                valeurs_cles=vals, documents=[fid], montant=montant,
-                raisons_supplementaires=[RaisonCode.controle_signal_seulement] if multiple else [],
+                valeurs_cles=vals, documents=[fid], montant=montant, raisons_supplementaires=raisons,
             )
             libelle = (
                 f"{libelle_facture([f])} porte {len(g)} lignes identiques {_libelle_ligne(g[0].ligne)} de "
                 f"{format_montant(m.decimal_signe())} chacune{_par(page_txt(vals))} (même nature, même libellé, "
                 f"même montant, même référence d'envoi)."
             )
+            details: dict = {"lignes": [lr.index for lr in g], "poste_quantite_multiple": multiple}
+            if motifs:
+                details["doublon_non_etabli"] = motifs
             out.append(ctx.constat(
                 "D5", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_D5, montant=montant,
                 composante=Composante.prestation, documents=[fid],
                 preuves=[preuve(_montant(ctx, lr.ligne), RolePreuve.valeur_b) for lr in g],
                 entrees={f"ligne_{lr.index}": _montant(ctx, lr.ligne) for lr in g if _montant(ctx, lr.ligne)},
-                attendu=m.decimal_signe(), constate=m.decimal_signe() * len(g), ecart=arrondi_centime(montant),
-                tolerance=ctx.tol.t_tarif(), seuil_certitude=ctx.tol.s_tarif(),
-                details={"lignes": [lr.index for lr in g], "poste_quantite_multiple": multiple},
+                attendu=m.decimal_signe(), constate=m.decimal_signe() * copies, ecart=arrondi_centime(montant),
+                tolerance=ctx.tol.t_tarif(), seuil_certitude=ctx.tol.s_tarif(), details=details,
             ))
     return out
 

@@ -2091,6 +2091,89 @@ fictif qui échoue avant et passe après.
   bloquant ÉCHOUE → PASSE ; corpus d'origine `c1_dev_b2_base` → `c1_dev_b2` : identique (113 VP, 0 FP, PASSE),
   aucun constat changé.
 
+## D-2211 — C8 : l'entité facturée attestée par un autre document de l'envoi n'est pas un écart certain
+
+- **Constat** (dev seulement ; sur un jeu non ouvert, 2 C8 certains faux sur des pièges « transitaire facturant
+  l'entité importatrice déclarée », comptes agrégés seulement) : `corpus_g2` GX0078 (relevé multi-MRN réparti en
+  cinq dossiers ; la facture est adressée à l'acheteur de la facture commerciale, entité du client, importateur de
+  quatre des cinq déclarations ; la déclaration du dossier principal désigne une société hors du client),
+  GX0230 (même cas sur un envoi, déjà `a_verifier` par la confiance du scan). Le transitaire facture le client ;
+  l'écart est celui de la déclaration (A1, déjà certain), et la prochaine action de C8 (« facture au nom de
+  l'importateur ») demanderait une facture au nom d'un tiers.
+- **Choix** (`famille_c._c8_motifs_non_certain`, raison nouvelle `entite_facturee_attestee`, motifs dans
+  `details.entite_facturee_attestee`) : le constat C8 sur numéro de TVA reste émis mais `a_verifier` quand
+  1. le numéro facturé est l'importateur d'une **autre déclaration citée par la même facture** (dossier frère qui
+     contient la facture) ;
+  2. le numéro facturé est l'acheteur d'une facture commerciale du dossier **et** une entité du client, alors
+     qu'aucun importateur déclaré n'est une entité du client ;
+  3. le numéro facturé est celui de l'émetteur de la facture ou d'un déclarant (bloc d'adresse mal attribué) ;
+  4. même SIREN que l'importateur sous un autre identifiant (clé de TVA, EORI lu à la place de la TVA).
+  Restent certains : facture adressée à une autre entité du groupe quand l'importateur est une entité du client
+  (BX0032, BX0094), facture adressée à une société hors du client (GX0089, BX0136, BX0170).
+- **Conflit de conventions assumé** : le corpus d'origine attend `ecart_certain` pour le cas 2 (BX0009, BX0063,
+  « Conséquence de A1 », importateur « Société Tierce » hors du client) ; `corpus_g2` en fait un piège plafonné à
+  `a_verifier` (GX0078, GX0230). Les deux vérités décrivent la même situation documentaire (vérifié : TVA de
+  l'acheteur = TVA facturée, importateur hors des entités du profil) ; aucune règle générale ne les sépare. La
+  règle suit le jeu le plus récent et la SPEC §12 C8 (« le transitaire a facturé une autre entité ») : ici il a
+  facturé l'entité du client. Coût : 2 C8 certains du corpus d'origine deviennent `a_verifier` (toujours
+  détectés). Retirer le motif 2 rétablit l'ancien comportement.
+
+## D-2212 — D5 : la répétition doit être établie
+
+- **Constat** : bruit `a_verifier` non apparié sur dev (`corpus_g2` GX0120, GX0128, GX0152, GX0164 ×2) :
+  factures de plusieurs envois dont les lignes de prestation ne portent pas de MRN (ou l'OCR ne l'a pas lu) — une
+  ligne « dédouanement » par déclaration, regroupées sous la clé « sans référence ». Sur un jeu non ouvert,
+  2 D5 certains faux. Situations légitimes analysées : plusieurs envois, plusieurs contenants ou livraisons,
+  ligne et sa correction, ligne reportée d'une page à l'autre, même libellé avec références différentes (clé
+  déjà distincte : le libellé normalisé garde les chiffres).
+- **Choix** (`famille_d._d5_motifs`, raison nouvelle `doublon_non_etabli`, motifs dans
+  `details.doublon_non_etabli`) : un D5 n'est certain que si aucun motif ne s'applique :
+  1. lignes sans référence d'envoi alors que la facture cite plusieurs MRN (lectures OCR voisines confondues),
+     plusieurs titres de transport ou couvre plusieurs déclarations ;
+  2. prestation par contenant (transport, manutention, magasinage, surcharge) sur une facture qui cite au moins
+     autant de titres de transport que de lignes répétées ;
+  3. deux lignes consécutives sur deux pages (report en haut de page) ;
+  4. le total HT imprimé reprend toutes les lignes **sauf** la répétition (artefact de lecture).
+  Une ligne de même nature, même libellé et montant opposé annule une copie (correction) : sans copie restante,
+  pas de constat. Montant = (copies − 1) × montant.
+
+## D-2213 — D4 : FAF expliqué par une autre assiette, des bornes par envoi, un arrondi ; devise
+
+- **Constat** : bruit `a_verifier` non apparié sur dev (GX0011, GX0018, GX0154 ; BX0099, BX0156, BX0242) : le
+  FAF facturé est le pourcentage de la grille appliqué à une autre assiette que celle retenue (ligne « droits et
+  taxes » combinée exclue d'une assiette « droits », débours de la facture plutôt que ceux rapprochés…). Sur un
+  jeu non ouvert, 1 D4 certain faux.
+- **Choix** (`famille_d._assiettes_alternatives`, `_faf_explique`, raison nouvelle `assiette_alternative`) :
+  quand le FAF dépasse l'attendu, il est recalculé avec le pourcentage, le minimum et le maximum de la grille
+  sur : débours rapprochés de chaque composante (total, hors TVA, droits, droits et autres taxes ; avec et sans
+  l'excédent constaté), montants liquidés des déclarations (total, hors TVA, droits), débours imprimés sur la
+  facture (total, hors TVA, droits) ; bornes appliquées à la somme ou **par envoi** (Σ bornes) ; égalité à
+  `T_TARIF` près, ou à l'arrondi à l'euro (au plus proche ou supérieur). L'attendu arrondi à l'euro est aussi une
+  explication. Si l'une tient : `a_verifier` (le montant reste l'écart à la grille).
+- Attendu non borné (ni minimum ni maximum atteint) : chaque débours lu de l'assiette devient une valeur clé
+  (confiance, lecture corroborée D-1700) : une ligne de débours mal lue change l'attendu.
+- `_comparer_tarif` (D3, D4, D6, D7) : facture du transitaire dont la devise lue n'est pas l'euro (grille en
+  euros) → raison `devise_incertaine`.
+
+## D-2214 — Mesures (dev seulement)
+
+Tests : `tests/controls/test_precision_c8_d4_d5.py` (17 cas fictifs). Bancs `g2_dev_b2` → `g2_dev_cd`,
+`c1_dev_b2` → `c1_dev_cd` :
+
+| | `corpus_g2` avant | après | corpus d'origine avant | après |
+|---|---|---|---|---|
+| VP / FP certain (global) | 100 / 1 | 100 / 0 | 113 / 0 | 111 / 0 |
+| précision certain | 0,990 | 1,000 | 1,000 | 1,000 |
+| rappel / rappel certain | 0,823 / 0,676 | 0,823 / 0,676 | 0,818 / 0,743 | 0,818 / 0,729 |
+| violations de pièges | 49 | 48 | 36 | 36 |
+| C8 VP / FP certain, violations | 1 / 1, 1 | 1 / 0, 0 | 6 / 0, 0 | 4 / 0, 0 |
+| D4 VP / FP certain | 4 / 0 | 4 / 0 | 2 / 0 | 2 / 0 |
+| D5 VP / FP certain | 3 / 0 | 3 / 0 | 3 / 0 | 3 / 0 |
+
+Seuil bloquant PASSE sur les deux. Aucun autre constat changé hors raisons ajoutées sur des `a_verifier`
+(D4 ×6 et D5 ×5 du bruit ci-dessus, GX0196 D4, GX0230 C8). Seule perte : BX0009 et BX0063 C8 (D-2211, conflit
+de conventions).
+
 # Généralisation : classement et regroupement
 
 Constat : sur `bench/corpus_g2` (dev, 232 dossiers, 1 146 pages ; six langues, douze familles de factures de

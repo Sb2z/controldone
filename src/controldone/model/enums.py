@@ -128,6 +128,10 @@ class RaisonCode(StrEnum):
     avoir_non_ventile = "avoir_non_ventile"
     # Ajout moteur (D-2210) : structure lue du tableau (taxes, masses) non validée pour un écart certain
     structure_non_validee = "structure_non_validee"
+    # Ajouts moteur (D-2211 à D-2213) : preuve insuffisante pour un écart certain C8, D5, D4
+    entite_facturee_attestee = "entite_facturee_attestee"
+    doublon_non_etabli = "doublon_non_etabli"
+    assiette_alternative = "assiette_alternative"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -184,6 +188,20 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
         "à vérifier : la disposition lue du tableau (lignes de taxe ou masses des articles) n'a pas pu être "
         "validée (ligne en double, article sans ligne, ligne de total ambiguë) ; une erreur de lecture pourrait "
         "expliquer l'écart"
+    ),
+    RaisonCode.entite_facturee_attestee: (
+        "à vérifier : l'entité facturée figure aussi sur un autre document de l'envoi (acheteur de la facture "
+        "commerciale, importateur d'une autre déclaration de la même facture) ; la différence peut venir de "
+        "la déclaration plutôt que de la facture du transitaire"
+    ),
+    RaisonCode.doublon_non_etabli: (
+        "à vérifier : les lignes identiques peuvent correspondre à des prestations distinctes (plusieurs envois "
+        "ou contenants, ligne reportée d'une page à l'autre) ; la répétition n'est pas établie"
+    ),
+    RaisonCode.assiette_alternative: (
+        "à vérifier : le montant facturé correspond au calcul de la grille sur une autre assiette (droits seuls, "
+        "débours avec ou sans TVA, montants liquidés) ou avec un autre arrondi ; l'écart dépend de l'assiette "
+        "retenue"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

@@ -100,6 +100,7 @@ __all__ = [
     "libelle_facture",
     "ligne_evaluee_ici",
     "ligne_hors_dossier",
+    "mrns_cites",
     "page_txt",
     "reference_declaration",
     "unites_c",
@@ -537,6 +538,11 @@ def _mrn_cites(ctx: ControlContext, f: Document) -> list[ValeurSourcee]:
     vals = list(ft.refs_mrn) + [t.mrn for t in ft.tableau_mrn if t.mrn is not None]
     vals += [ligne.mrn for ligne in ft.lignes if ligne.mrn is not None]
     return [v for v in vals if ctx.utilisable(v)]
+
+
+def mrns_cites(ctx: ControlContext, f: Document) -> list[ValeurSourcee]:
+    """MRN lisibles cités par la facture du transitaire (en-tête, tableau, lignes)."""
+    return _mrn_cites(ctx, f)
 
 
 def declarations_couvertes(ctx: ControlContext, f: Document) -> list[Document]:
@@ -1697,6 +1703,73 @@ def c8_client_facture(ctx: ControlContext) -> list[ResultatControle]:
     return out
 
 
+def _tva_lue(ctx: ControlContext, v: ValeurSourcee | None) -> str | None:
+    if v is None or not ctx.utilisable(v):
+        return None
+    return normalize_vat(v.valeur) or None
+
+
+def _c8_motifs_non_certain(ctx: ControlContext, groupe: Sequence[Document], cf_tva: ValeurSourcee,
+                           importateurs: Sequence[ValeurSourcee]) -> list[str]:
+    """Pourquoi un numéro de TVA facturé différent de l'importateur ne prouve pas, à lui seul, une facture
+    adressée à la mauvaise entité (D-2211) ; liste vide : l'écart peut être certain.
+
+    1. Le numéro facturé est l'importateur d'une **autre déclaration couverte par la même facture** (relevé
+       multi-MRN réparti entre dossiers) : la facture vise aussi cet envoi.
+    2. Le numéro facturé est l'acheteur de la facture commerciale du dossier et une entité du client, alors que
+       l'importateur déclaré n'est **aucune** entité du client : le transitaire facture le client, l'écart porte
+       sur la déclaration (A1), pas sur la facture du transitaire.
+    3. Le numéro facturé est celui de l'émetteur de la facture ou du déclarant : bloc d'adresse mal attribué."""
+    t = normalize_vat(cf_tva.valeur) or norm_ref(cf_tva.valeur or "")
+    if not t:
+        return []
+    motifs: list[str] = []
+    ids = {f.id for f in groupe}
+    # 1. Déclarations des autres dossiers qui contiennent la même facture, citées par elle.
+    for autre in ctx.autres_dossiers:
+        partage = [autre.documents[i] for i in ids if i in autre.documents]
+        if not partage:
+            continue
+        cites = {mrn_prefixe(v.valeur) for f in partage for v in _mrn_cites(ctx, f)}
+        for d in autre.documents.values():
+            if not _est_declaration(d) or (cites and d.dec.mrn_prefixe not in cites):
+                continue
+            if _tva_lue(ctx, d.dec.importateur.tva) == t:
+                motifs.append("importateur_autre_declaration_de_la_facture")
+                break
+        if motifs:
+            break
+    # 2. Acheteur de la facture commerciale, entité du client ; importateur déclaré hors du client.
+    imp_decl = [v for v in importateurs if v.chemin.startswith("declaration")]
+    acheteurs = {_tva_lue(ctx, fc.fc.acheteur.tva) for fc in ctx.factures_commerciales()}
+    if (imp_decl and t in acheteurs and ctx.entite_par_tva(t) is not None
+            and all(ctx.entite_par_tva(v.valeur) is None for v in imp_decl)):
+        motifs.append("acheteur_facture_commerciale_importateur_hors_client")
+    # 3. Émetteur de la facture ou déclarant.
+    tiers = {_tva_lue(ctx, f.ft.emetteur.tva) for f in groupe}
+    tiers |= {_tva_lue(ctx, d.dec.declarant.tva) for d in ctx.declarations()}
+    if t in tiers:
+        motifs.append("numero_emetteur_ou_declarant")
+    # 4. Même SIREN : même société sous deux identifiants (clé de TVA, numéro EORI lu à la place de la TVA).
+    siren = _siren_fr(t)
+    if siren and any(_siren_fr(normalize_vat(v.valeur) or norm_ref(v.valeur or "")) == siren for v in importateurs):
+        motifs.append("meme_siren")
+    return motifs
+
+
+def _siren_fr(identifiant: str | None) -> str | None:
+    """SIREN d'un identifiant français : TVA ``FR`` + clé (2) + SIREN (9) ; EORI ``FR`` + SIRET (14) ou
+    SIREN (9) suivi de zéros. ``None`` pour un autre format."""
+    if not identifiant or not identifiant.upper().startswith("FR"):
+        return None
+    reste = identifiant[2:]
+    if len(reste) == 11 and reste[2:].isdigit():
+        return reste[2:]
+    if len(reste) in (9, 14) and reste.isdigit():
+        return reste[:9]
+    return None
+
+
 def _c8_ecart_tva(ctx: ControlContext, groupe: Sequence[Document], importateurs: Sequence[ValeurSourcee]
                   ) -> ResultatControle:
     """Constat C8 pour des factures adressées à un même numéro de TVA, différent de celui de l'importateur."""
@@ -1716,8 +1789,12 @@ def _c8_ecart_tva(ctx: ControlContext, groupe: Sequence[Document], importateurs:
         for v in (cf_tva, ref)
     )
     cles = [v for v in tvas if v is not None] + [ref]
+    motifs = _c8_motifs_non_certain(ctx, groupe, cf_tva, importateurs)
     classement = ctx.classify("C8", ecart=None, tolerance=None, seuil_certitude=None,
-                              valeurs_cles=cles, documents=docs, lecture_douteuse=douteuse)
+                              valeurs_cles=cles, documents=docs, lecture_douteuse=douteuse,
+                              raisons_supplementaires=[RaisonCode.entite_facturee_attestee] if motifs else [])
+    if motifs:
+        commun["details"] = {"entite_facturee_attestee": motifs}
     qui = (f"Ce numéro est celui de l'entité {entite.raison_sociale} du client." if entite is not None
            else "Ce numéro ne correspond à aucune entité enregistrée du client.")
     src = "la déclaration" if ref.chemin.startswith("declaration") else "la facture commerciale"
