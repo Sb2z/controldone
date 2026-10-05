@@ -126,6 +126,27 @@ _VOCABULAIRE: frozenset[str] = frozenset(
     w for _, motif in NATURES_LIBELLES for w in re.findall(r"[a-z]{6,}", motif.pattern)
 )
 _RX_MOT = re.compile(r"[a-z0-9]+")
+#: Mots courts du vocabulaire (3 à 5 lettres : « clo », « zoll », « dazi ») ; corrigés seulement par confusion
+#: de glyphes typique de l'OCR (D-2515).
+_VOCABULAIRE_COURT: frozenset[str] = frozenset(
+    w for _, motif in NATURES_LIBELLES
+    for w in re.findall(r"(?<![a-z])[a-z]{3,5}(?![a-z])", re.sub(r"\\[a-z]", " ", motif.pattern))
+)
+#: Classes de glyphes que l'OCR confond (« ł » lu « t », « l » lu « 1 » ou « i »).
+_CLASSES_OCR = ("lti1|!f", "o0", "s5", "b8", "z2", "g9q", "e3")
+
+
+def _meme_classe(a: str, b: str) -> bool:
+    return a == b or any(a in c and b in c for c in _CLASSES_OCR)
+
+
+def _candidat_court(mot: str) -> str | None:
+    """Mot court du vocabulaire dont ``mot`` ne diffère que par des glyphes confondus par l'OCR (une seule
+    différence) ; ``None`` si aucun ou plusieurs."""
+    trouves = {v for v in _VOCABULAIRE_COURT if len(v) == len(mot) and v != mot
+               and sum(x != y for x, y in zip(v, mot, strict=True)) == 1
+               and all(_meme_classe(x, y) for x, y in zip(v, mot, strict=True))}
+    return trouves.pop() if len(trouves) == 1 else None
 
 
 def _une_edition(a: str, b: str) -> bool:
@@ -162,6 +183,8 @@ def _candidat(mot: str) -> str | None:
 def _corriger_ocr(t: str) -> str:
     def remplacer(m: re.Match[str]) -> str:
         mot = m.group(0)
+        if 3 <= len(mot) <= 5 and mot not in _VOCABULAIRE_COURT:
+            return _candidat_court(mot) or mot
         if len(mot) < 6 or mot in _VOCABULAIRE or sum(c.isalpha() for c in mot) < 4:
             return mot
         return _candidat(mot) or mot

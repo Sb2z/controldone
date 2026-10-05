@@ -575,6 +575,7 @@ class _Extraction:
         groupes: dict[str, list[str]] = {}
         for cle in vus:
             groupes.setdefault(cle.translate(_CONFUSION_OCR), []).append(cle)
+        groupes = _fusionner_variantes_ocr(groupes, {c for c, lu in vus.items() if lu.lecture.methode is Methode.ocr})
         self.mrn_variantes: dict[str, Lu] = {}
         out = []
         for membres in groupes.values():
@@ -1897,6 +1898,27 @@ class _Extraction:
 
 
 # --- fonctions auxiliaires -----------------------------------------------------------------------------------------
+
+
+def _fusionner_variantes_ocr(groupes: dict[str, list[str]], lus_ocr: set[str]) -> dict[str, list[str]]:
+    """Deux groupes de lectures d'un MRN dont les formes canoniques ne diffèrent que d'un caractère (« 7 » / « Z »
+    hors table de confusion), l'un au moins lu par OCR, sont une même référence mal lue : réunis, à condition que
+    chacun n'ait que l'autre pour voisin (D-2516). La lecture retenue garde une confiance basse (≤ 0,70)."""
+    cles = list(groupes)
+
+    def voisins(c: str) -> list[str]:
+        return [d for d in cles if d != c and len(d) == len(c) and sum(x != y for x, y in zip(c, d, strict=True)) == 1]
+
+    fusion: dict[str, str] = {}
+    for c in cles:
+        v = voisins(c)
+        if len(v) == 1 and len(voisins(v[0])) == 1 and c < v[0] \
+                and any(m in lus_ocr for m in (*groupes[c], *groupes[v[0]])):
+            fusion[v[0]] = c
+    out: dict[str, list[str]] = {}
+    for c in cles:
+        out.setdefault(fusion.get(c, c), []).extend(groupes[c])
+    return out
 
 
 def _prefixe_valeur():

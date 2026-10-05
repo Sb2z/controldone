@@ -599,7 +599,9 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
         return sortie
     x0 = t.segment.x0
     # largeur de colonne : jusqu'au segment suivant de la ligne du libellé, sinon mi-page
-    suivants = [s for s in t.ligne.segments[t.segment.rang + 1:]]
+    # (bruit OCR isolé — « 7 », « : » — ignoré : il ne borne pas la colonne, D-2513)
+    suivants = [s for s in t.ligne.segments[t.segment.rang + 1:]
+                if not (page.methode is Methode.ocr and all(_BRUIT_OCR.fullmatch(m.texte) for m in s.mots))]
     xmax = suivants[0].x0 - 0.005 if suivants else max(t.segment.x1 + 0.35, 0.5)
     # en-tête à deux colonnes : les lignes de la colonne de droite s'intercalent avec celles du pavé (D-951)
     droite_col = colonne_droite(page, t.ligne, x0, t.segment.x1) if page.geometrie and not suivants else None
@@ -620,9 +622,26 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
         s0 = segs[0]
         if any(mo.match(s0.cle) for mo in fin) or (li.page, li.rang) in exclus:
             break
-        sortie.append((li, [m for s in segs for m in s.mots]))
+        mots = [m for s in segs for m in s.mots]
+        if page.methode is Methode.ocr and all(_BRUIT_OCR.fullmatch(m.texte) for m in mots):
+            continue  # tache, ponctuation isolée lue par l'OCR : ni une ligne du pavé ni sa fin (D-2513)
+        if page.methode is Methode.ocr and sortie and sortie[-1][0] is not t.ligne:
+            li_p, mots_p = sortie[-1]
+            recouvre = min(li.y1, li_p.y1) - max(li.y0, li_p.y0)
+            if recouvre >= 0.5 * min(li.y1 - li.y0, li_p.y1 - li_p.y0) > 0:
+                # une ligne imprimée découpée par l'OCR en deux lignes de même hauteur (« SARL » lu avant
+                # « Utopia Outillage ») : mots réunis dans l'ordre de lecture, bruit isolé écarté (D-2513)
+                tous = sorted([*mots_p, *mots], key=lambda m: m.x0)
+                sortie[-1] = (li_p, [m for m in tous if not _BRUIT_OCR.fullmatch(m.texte)])
+                prec_y = max(prec_y, li.y1)
+                continue
+        sortie.append((li, mots))
         prec_y = li.y1
     return sortie
+
+
+#: Mot de bruit OCR dans un pavé (ponctuation, chiffre isolé : « 7. », « ‘ »).
+_BRUIT_OCR = re.compile(r"[\W_]*\d?[\W_]*")
 
 
 
@@ -695,9 +714,16 @@ def colonne_droite(page: VuePage, ligne: VueLigne, x0: float, x1: float, *, n_li
     debuts: list[float] = []
     voisines = page.lignes[max(0, rang - n_lignes): rang + 1 + n_lignes]
     for li in voisines:
-        if li is ligne or not li.segments:
+        segs = li.segments
+        if page.methode is Methode.ocr:  # bruit OCR isolé (« . », « —* ») : pas une colonne (D-2513)
+            segs = [sg for sg in segs if not all(_BRUIT_OCR.fullmatch(m.texte) for m in sg.mots)]
+        if li is ligne or not segs:
             continue
-        d = li.segments[0].x0
+        d = segs[0].x0
+        if page.methode is Methode.ocr and d <= max(x1 + 0.05, x0 + 0.15):
+            # scan : les deux colonnes lues sur une même ligne ; le segment séparé du pavé par un large blanc
+            # ouvre la colonne de droite
+            d = next((b.x0 for a, b in pairwise(segs) if b.x0 - a.x1 > 0.08), d)
         if d > max(x1 + 0.05, x0 + 0.15):
             debuts.append(d)
     if not debuts:

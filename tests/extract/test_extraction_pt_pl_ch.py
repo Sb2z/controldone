@@ -501,3 +501,64 @@ def test_date_de_repli_plafonnee():
     c = _ft(fx.pdf([p])).champs
     assert _v(c.date) == "2026-06-30"
     assert c.date.confiance < 0.9
+
+
+# --- scans : pavé acheteur, natures courtes, variantes de MRN (D-2513 à D-2516) ----------------------------------
+
+
+def _vue_ocr(lignes_txt: list[tuple[float, list[tuple[float, str]]]]):
+    """Page OCR synthétique : (y, [(x0, mot)]) ; chaque mot fait 0,012 de large par caractère."""
+    from controldone.extract.deterministe._mise_en_page import vue_document
+    from controldone.ingest.texte import Ligne, Mot, PageText
+
+    lignes = []
+    for y, mots in lignes_txt:
+        ms = tuple(Mot(t, x, y, x + 0.012 * len(t), y + 0.01, 0.95, None) for x, t in mots)
+        lignes.append(Ligne(" ".join(m.texte for m in ms), ms))
+    texte = "\n".join(li.texte for li in lignes)
+    return vue_document([PageText(numero=1, texte=texte, lignes=lignes, source="ocr")])
+
+
+def test_pave_ocr_ligne_decoupee_et_bruit():
+    from controldone.extract.deterministe import facture_commerciale as fc
+    from controldone.extract.deterministe._mise_en_page import chercher, pave
+
+    vue = _vue_ocr([
+        (0.150, [(0.06, "Nabywca"), (0.63, "7")]),
+        (0.170, [(0.19, "SARL"), (0.62, "SARL")]),
+        (0.171, [(0.06, "Onirique"), (0.52, "Onirique")]),
+        (0.185, [(0.30, ":")]),
+        (0.195, [(0.06, "12"), (0.10, "rue"), (0.14, "du"), (0.17, "Songe"), (0.52, "12 rue du Songe")]),
+    ])
+    t = chercher(vue, fc.LIB_ACHETEUR)[0]
+    lignes = [" ".join(m.texte for m in ms) for _li, ms in pave(t, fin=fc.LIB_FIN_PAVE)]
+    assert lignes == ["Onirique SARL", "12 rue du Songe"]
+
+
+def test_libelle_acheteur_deforme_par_l_ocr():
+    from controldone.extract.deterministe import facture_commerciale as fc
+
+    vue = _vue_ocr([(0.05, [(0.06, "FACTURE")]), (0.15, [(0.06, "Facuré"), (0.14, "à"), (0.52, "Livré à")]),
+                    (0.17, [(0.06, "Ateliers"), (0.17, "Chimériques")])])
+    trouves = fc._libelles_acheteur_flous(vue)
+    assert [t.segment.texte for t in trouves] == ["Facuré à"]  # ni le titre « FACTURE », ni « Livré à »
+    assert fc._reste_de_libelle([type("M", (), {"texte": "] Buyer"})()])
+    assert not fc._nom_plausible([type("M", (), {"texte": t})() for t in ("21", "boulevard", "du", "Rêve")])
+    assert fc._nom_plausible([type("M", (), {"texte": t})() for t in ("3M", "Chimères", "SAS")])
+
+
+def test_nature_mot_court_lu_par_l_ocr():
+    assert nature_libelle("Cto", tolerant=True) is NatureLigne.debours_droits  # « Cło » : ł lu « t »
+    assert nature_libelle("Cto") is None  # texte natif : aucune correction
+    assert nature_libelle("Cte", tolerant=True) is None  # deux glyphes différents : non
+
+
+def test_variantes_ocr_d_un_mrn_reunies():
+    from controldone.extract.deterministe.facture_transitaire import _fusionner_variantes_ocr
+
+    a, b, c = "26FRMOK30718F2R08K", "26FRMOK3OZ18F2RO8K", "26FRB2D4F6H8J0L2N4"
+    groupes = {"26FRMOK3O7I8FZRO8K": [a], "26FRMOK3OZI8FZRO8K": [b], c: [c]}
+    out = _fusionner_variantes_ocr(groupes, {a, b})
+    assert sorted(sorted(v) for v in out.values()) == sorted([sorted([a, b]), [c]])
+    # lecture native de part et d'autre : deux MRN distincts restent distincts
+    assert len(_fusionner_variantes_ocr(groupes, set())) == 3

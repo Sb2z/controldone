@@ -3053,3 +3053,52 @@ acheteur de la facture commerciale non lu ou réduit à un fragment (« SARL »,
 comportement conforme à SPEC §A1 (« E_f illisible → `a_verifier` »). GZ0144 : « Cło » lu « Cto », nature non
 reconnue (la tolérance D-2305 exige 6 caractères). GZ0145 : MRN des lignes lus 0,49–0,85 et MRN d'en-tête
 « 26FRQOMEJMUA 811764 » (0,20). GX0173 : deux lectures différentes du même MRN sur deux lignes du même envoi.
+
+## D-2513 — Pavés de partie sur un scan : ligne découpée, bruit, colonne de droite
+
+- **Constat** (factures commerciales scannées, g4) : nom de l'acheteur réduit à « SARL » (ligne imprimée lue en
+  deux lignes OCR de même hauteur, « SARL » avant « Utopia Outillage ») ; pavé mêlant les deux colonnes (un « 7 »
+  ou un « . » isolé fixait la largeur de colonne) ; colonne de droite non vue quand l'OCR lit les deux colonnes
+  sur une même ligne.
+- **Choix** (`_mise_en_page.pave`, `colonne_droite`, texte OCR seulement) : deux lignes du pavé qui se recouvrent
+  verticalement d'au moins la moitié de leur hauteur sont réunies dans l'ordre horizontal ; une ligne faite
+  uniquement de bruit (ponctuation, chiffre isolé) est sautée sans clore le pavé ; le bruit ne borne pas la
+  colonne ; un segment séparé du pavé par un blanc de plus de 0,08 ouvre la colonne de droite.
+
+## D-2514 — Pavé acheteur : libellé déformé, nom illisible, suite de libellé
+
+- Libellé OCR déformé (« Facuré à », « Recimungsempfanger », « Billto/Buyer . ») : quand aucun libellé n'est
+  reconnu sur la première page d'un scan, un segment dont le texte (lettres seules) est à une édition (deux au-delà
+  de dix lettres) d'un libellé d'acheteur usuel, et plus loin de tout libellé de livraison, de vendeur ou de titre
+  (« FACTURE » n'est pas « Facturé à »), ouvre le pavé. Valeurs plafonnées : nom et adresse 0,80, TVA 0,85
+  (aucune ne fonde seule un écart certain).
+- « Bill to] Buyer » : la fin déformée du libellé n'est pas prise pour le nom ; une ligne d'adresse (« 21 boulevard
+  du Mirage », nom illisible) n'est jamais un nom ; ponctuation de fin retirée (« … SA - »).
+- Correctif : le test « ligne de TVA » du nom de l'acheteur cherchait « iva » sans frontière de mot à gauche :
+  « Helvetia Fic**tiva** AG » était écarté comme ligne de TVA (16 factures g4, 11 g2) ; désormais `\b(vat|tva|iva)\b`.
+
+## D-2515 — Natures : mot court lu par l'OCR
+
+- « Cło » lu « Cto » : pour un libellé OCR (`tolerant`), un mot de 3 à 5 lettres inconnu est remplacé par
+  l'**unique** mot court du vocabulaire dont il ne diffère que d'un caractère appartenant à une même classe de
+  glyphes confondus (l/t/i/1/|/f, o/0, s/5, b/8, z/2, g/9/q, e/3). Aucun remplacement en texte natif, ni avec
+  deux candidats, ni avec deux différences.
+
+## D-2516 — Variantes d'un même MRN sur une facture de transitaire
+
+- Deux groupes de lectures d'un MRN (après la table de confusion O/0, I/1…) dont les formes ne diffèrent que d'un
+  caractère hors table (« 7 » / « Z », « J » / « I »), l'un au moins lu par OCR, chacun n'ayant que l'autre pour
+  voisin, sont réunis : chaque ligne porte la lecture retenue (la plus fréquente), confiance ≤ 0,70. Deux MRN lus
+  en texte natif ne sont jamais réunis.
+- Limite : quand les deux lectures sont aussi fréquentes, la retenue peut être la mauvaise (g2 GX0196, c1 BX0192 :
+  « J » / « I ») ; elle reste à 0,70 et cohérente sur toute la facture.
+
+## D-2517 — Mesures (dev seulement)
+
+- Factures commerciales, nom / TVA de l'acheteur : g4 77,7 / 90,0 % → 95,7 / 95,7 % ; g2 91,0 / 92,4 % →
+  95,1 / 98,3 % ; corpus d'origine 90,6 / 92,2 % → 91,2 / 94,2 %. Bande ≥ 0,90 inchangée (g4 8 faux sur 8 303,
+  déjà expliqués D-2512 ; g2 et corpus 0).
+- Factures de transitaire : natures g4 84,2 → 84,5 % ; MRN de ligne g2 −5, corpus −1, `refs_mrn` corpus +2
+  (D-2516) ; bande ≥ 0,90 inchangée.
+- Banc dev : g4 84 VP / 0 FP certain (identique à `g4_dev_ctl27`), bruit 289 → 273, violations de pièges
+  44 → 40, bruit A1 12 → 4 ; g2 112 → 113 VP / 0 FP ; corpus d'origine 119 / 0, seuil PASSE (identique).

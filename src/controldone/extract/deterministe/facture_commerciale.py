@@ -681,22 +681,32 @@ def _parties(e: _Etat) -> None:
             break
     bandeaux = lignes_bandeau(vue)
     pavés = chercher(vue, LIB_ACHETEUR, pages=[vue.pages[0].numero] if vue.pages else None)
+    flou = False
+    if not pavés and vue.pages and vue.pages[0].methode is Methode.ocr:
+        # libellé du pavé acheteur déformé par l'OCR (« Facuré à », « Recimungsempfanger », « Billto/Buyer . ») :
+        # reconnu à une ou deux lettres près ; valeurs du pavé plafonnées (D-2514)
+        pavés = _libelles_acheteur_flous(vue)
+        flou = bool(pavés)
     for t in pavés:
         if _sous_champ(t) or (t.page.numero, t.ligne.rang) in bandeaux:
             continue
         lignes = [(li, ms) for li, ms in pave(t, fin=LIB_FIN_PAVE, exclus=e.entetes | bandeaux)]
+        if lignes and lignes[0][0] is t.ligne and _reste_de_libelle(lignes[0][1]):
+            lignes = lignes[1:]  # « Bill to] Buyer » : la fin du libellé déformée n'est pas le nom (D-2514)
         if not lignes:
             continue
         if ch.acheteur.nom is None:
             li0, mots0 = lignes[0]
-            if not re.search(r"(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))) \
+            while len(mots0) > 1 and re.fullmatch(r"[\W_]+", mots0[-1].texte):
+                mots0 = mots0[:-1]  # « Brasserie Chimérique SA - » : ponctuation de fin lue par l'OCR
+            if not re.search(r"\b(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))) \
                     and _nom_plausible(mots0):
                 page = vue.page(li0.page)
                 lec_nom = lecture_mots(mots0, page, li0)
                 ch.acheteur.nom = fab.valeur("acheteur.nom", lec_nom, type_valeur=TypeValeur.texte,
                                              confiance=min(_plafond_nom(t), confiance_mots(lec_nom)))
             adr = [lecture_mots(ms, vue.page(li.page), li) for li, ms in lignes[1:]
-                   if not re.search(r"(vat|tva|iva|eori|siren|siret|tel|phone|fax|e-?mail)\b",
+                   if not re.search(r"\b(vat|tva|iva|eori|siren|siret|tel|phone|fax|e-?mail)\b",
                                     cle_texte(" ".join(m.texte for m in ms)))]
             if adr:
                 ch.acheteur.adresse = fab.valeur("acheteur.adresse", adr[0], type_valeur=TypeValeur.texte)
@@ -724,6 +734,13 @@ def _parties(e: _Etat) -> None:
                 ch.acheteur.tva = ch.acheteur.tva.model_copy(update={"confiance": min(ch.acheteur.tva.confiance, 0.6)})
         if ch.acheteur.nom is not None:
             break
+    if flou:
+        for nom, plafond in (("nom", 0.8), ("adresse", 0.8), ("tva", 0.85), ("eori", 0.8)):
+            v = getattr(ch.acheteur, nom, None)
+            if v is not None and v.confiance > plafond:
+                setattr(ch.acheteur, nom, v.model_copy(update={"confiance": plafond}))
+        if ch.eori_importateur is not None and ch.eori_importateur.confiance > 0.8:
+            ch.eori_importateur = ch.eori_importateur.model_copy(update={"confiance": 0.8})
     for t in chercher(vue, LIB_DESTINATAIRE, pages=[vue.pages[0].numero] if vue.pages else None):
         if _sous_champ(t) or (t.page.numero, t.ligne.rang) in bandeaux:
             continue
@@ -745,10 +762,63 @@ def _parties(e: _Etat) -> None:
     _vendeur(e)
 
 
+#: Libellés usuels d'un pavé acheteur, comparés lettres seules (« Bill to / Buyer » -> « billtobuyer »).
+_LIBELLES_ACHETEUR_LITTERAUX = (
+    "billto", "billtobuyer", "buyer", "soldto", "invoiceto", "customer", "facturea", "factureea", "acheteur",
+    "facturara", "cliente", "rechnungsempfanger", "rechnungsadresse", "fatturaa", "intestatario", "factuuradres",
+    "faturara", "nabywca", "platnik",
+)
+
+
+def _distance(a: str, b: str) -> int:
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cour = [i]
+        for j, cb in enumerate(b, 1):
+            cour.append(min(prec[j] + 1, cour[j - 1] + 1, prec[j - 1] + (ca != cb)))
+        prec = cour
+    return prec[-1]
+
+
+def _libelles_acheteur_flous(e_vue: VueDocument) -> list[Trouve]:
+    """Segments de la première page dont tout le texte (lettres seules) est à une édition (deux au-delà de
+    dix lettres) d'un libellé de pavé acheteur, sans être plus proche d'un libellé de livraison ou de vendeur."""
+    p = e_vue.pages[0]
+    autres = ("shipto", "consignee", "deliverto", "livrea", "lieferadresse", "odbiorca", "entregara", "seller",
+              "shipper", "exporter", "vendeur", "sprzedawca", "consigneeshipto",
+              # titres du document : « FACTURE » n'est pas « Facturé à »
+              "facture", "factura", "fatura", "faktura", "invoice", "rechnung", "fattura", "factuur")
+    out: list[Trouve] = []
+    for li in p.lignes:
+        if li.y0 > 0.45:
+            break
+        for sg in li.segments:
+            compact = re.sub(r"[^a-z]", "", cle_texte(sg.texte))
+            if not 5 <= len(compact) <= 24:
+                continue
+            for lib in _LIBELLES_ACHETEUR_LITTERAUX:
+                d = _distance(compact, lib)
+                if d <= (2 if len(lib) >= 10 else 1) and len(lib) >= 6 \
+                        and all(_distance(compact, x) > d for x in autres):
+                    out.append(Trouve(sg, li, p, len(sg.mots), lib))
+                    break
+    return out[:1]
+
+
+def _reste_de_libelle(mots) -> bool:
+    """Mots restant après un libellé reconnu qui ne sont que la suite du libellé (« ] Buyer », « / Kunde »)."""
+    compact = re.sub(r"[^a-z]", "", cle_texte(" ".join(m.texte for m in mots)))
+    return bool(compact) and any(_distance(compact, x) <= (1 if len(x) >= 5 else 0) for x in (
+        "buyer", "customer", "kunde", "kaufer", "acheteur", "client", "cliente", "comprador", "klant"))
+
+
 def _nom_plausible(mots) -> bool:
-    """Un nom de partie : au moins trois lettres, ni un bandeau, ni un libellé « clé : valeur » d'en-tête."""
+    """Un nom de partie : au moins trois lettres, ni un bandeau, ni un libellé « clé : valeur » d'en-tête, ni une
+    ligne d'adresse (« 21 boulevard du Mirage » : numéro puis mot, nom illisible sur un scan, D-2514)."""
     txt = " ".join(m.texte for m in mots)
     if not re.search(r"[^\W\d_]{3}", txt) or est_bandeau_texte(txt):
+        return False
+    if re.match(r"^\d{1,4}[a-z]?,?\s+[^\W\d_]", txt.strip(" '‘’\"")):
         return False
     return not txt.rstrip().endswith(":")
 
