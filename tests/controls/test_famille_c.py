@@ -654,7 +654,7 @@ def test_c8_client_facture():
     d = dec("doc_dec1", (DROIT, "100.00"))
     ok = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"))
     assert c8_client_facture(contexte([d, ok], entites=entites))[0].outcome is Outcome.conforme
-    ko = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), client_tva=TVA_AUTRE)
+    ko = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), client_tva=TVA_AUTRE, refs_mrn=(MRN_A,))
     r = c8_client_facture(contexte([d, ko], entites=entites))[0]
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu is None
     assert "Société B FICTIVE" in lib(r.constat)

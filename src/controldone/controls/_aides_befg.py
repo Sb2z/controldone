@@ -31,6 +31,7 @@ from controldone.recouvrement.imputation import (
     cle_emetteur,
     emetteurs_compatibles,
     lignes_credit_depuis_avoir,
+    montant_net_ligne,
 )
 
 ZERO = Decimal(0)
@@ -341,7 +342,9 @@ def lignes_ft(doc: Document) -> list[LigneFactureTransitaire]:
 
 
 def montant_ht(ln: LigneFactureTransitaire) -> ValeurSourcee | None:
-    return ln.montant_ht if ln.montant_ht is not None else ln.montant_ttc
+    """Montant hors TVA d'une ligne (D-2701) : un montant TVA comprise, ou un hors-taxe qui en est déduit, est
+    marqué ``montant_tva_comprise`` et ne fonde jamais un écart certain."""
+    return montant_net_ligne(ln)
 
 
 # --- avoirs reçus deux fois (E3) -----------------------------------------------------------------------
@@ -387,7 +390,7 @@ def _qualite_avoir(ctx: ControlContext, doc: Document) -> tuple[int, float]:
     av = doc.av
     ventilees = sum(
         1 for ln in av.lignes
-        if ln.nature is not None and ctx.utilisable(ln.montant_ht if ln.montant_ht is not None else ln.montant_ttc)
+        if ln.nature is not None and ctx.utilisable(montant_net_ligne(ln, ctx.utilisable))
     )
     total = av.total_credite_ttc if av.total_credite_ttc is not None else av.total_credite_ht
     return ventilees, (total.confiance if total is not None else 0.0)

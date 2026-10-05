@@ -61,8 +61,11 @@ def ligne(nature, montant, *, libelle=None, mrn=None, page=1, fid="doc_ft1"):
                                    montant_ht=v("montant_ht", montant), mrn=v("mrn", mrn))
 
 
-def ft(*lignes, fid="doc_ft1", mrns=(MRN_A,), client_tva=TVA_CLIENT, transports=(), devise=None, total_ht=None):
+def ft(*lignes, fid="doc_ft1", mrns=(MRN_A,), client_tva=TVA_CLIENT, transports=(), devise=None, total_ht=None,
+       total_debours=None):
     champs = {}
+    if total_debours:
+        champs["total_debours"] = vs("facture_transitaire.total_debours", total_debours, document_id=fid)
     if devise:
         champs["devise"] = vs("facture_transitaire.devise", devise, document_id=fid)
     if total_ht:
@@ -206,6 +209,7 @@ def test_d5_total_sans_la_repetition():
 
 
 def _d4(faf, *, droits="1000.00", tva="2000.00", **kw):
+    kw.setdefault("total_debours", str(D(droits) + D(tva)))
     f = ft(ligne(N.debours_droits, droits, mrn=MRN_A), ligne(N.debours_tva, tva, mrn=MRN_A),
            ligne(N.frais_avance_fonds, faf, mrn=MRN_A), **kw)
     return resultat([dec(droits=droits, tva=tva), f], "D4")

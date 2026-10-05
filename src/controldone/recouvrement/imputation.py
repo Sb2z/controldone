@@ -45,11 +45,12 @@ from decimal import ROUND_HALF_UP, Decimal
 from types import MappingProxyType
 from typing import Any, TypeVar
 
-from controldone.model.champs import Partie
+from controldone.model.champs import LigneFactureTransitaire, Partie
 from controldone.model.documents import Document
-from controldone.model.enums import Composante, NatureLigne, StatutEcart
+from controldone.model.enums import Composante, Methode, NatureLigne, RaisonCode, StatutEcart
 from controldone.model.recouvrement import EcartARecouvrer
 from controldone.model.referentiel import Transitaire
+from controldone.model.valeur import ValeurSourcee
 from controldone.normalize.fiscal import normalize_vat
 from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import mrn_prefixe, norm_ref, ref_compatibles, ref_transport_egales
@@ -369,6 +370,53 @@ def imputer_avoirs(
     )
 
 
+#: Règle de dérivation du hors-taxe d'une ligne imprimée TVA comprise (extracteur, D-2502).
+REGLE_HT_DEPUIS_TTC = "montant_ttc / (1 + taux_tva)"
+#: Confiance plafond d'un montant de ligne TVA comprise utilisé comme montant hors TVA (D-2701).
+C_TVA_COMPRISE = 0.60
+
+
+def _marquer_tva_comprise(v: ValeurSourcee) -> ValeurSourcee:
+    raisons = list(v.raisons)
+    if RaisonCode.montant_tva_comprise not in raisons:
+        raisons.append(RaisonCode.montant_tva_comprise)
+    return v.model_copy(update={"confiance": min(v.confiance, C_TVA_COMPRISE), "raisons": raisons})
+
+
+def ht_depuis_ttc(ligne: LigneFactureTransitaire) -> bool:
+    """Le hors-taxe de la ligne est déduit de son montant TVA comprise (``montant_ttc / (1 + taux)``)."""
+    ht, ttc = ligne.montant_ht, ligne.montant_ttc
+    if ht is None or ht.methode is not Methode.derive:
+        return False
+    return ht.regle_derivation == REGLE_HT_DEPUIS_TTC or (ttc is not None and ttc.id in ht.derivee_de)
+
+
+def montant_net_ligne(
+    ligne: LigneFactureTransitaire, utilisable: Callable[[ValeurSourcee | None], bool] | None = None
+) -> ValeurSourcee | None:
+    """Montant hors TVA d'une ligne de facture du transitaire ou d'avoir, à comparer à un tarif ou à un montant
+    liquidé (D-2701).
+
+    - ``montant_ht`` lu : tel quel ; déduit du TTC (ligne « TVA comprise », D-2502) : marqué
+      ``montant_tva_comprise`` (jamais la base d'un écart certain) ;
+    - pas de hors-taxe (ou hors-taxe inutilisable) : le TTC n'est un montant net que si la ligne ne porte pas de
+      TVA (taux lu nul, ou TVA de ligne lue nulle) ; sinon il est rendu marqué ``montant_tva_comprise`` et
+      plafonné (un brut comparé à un tarif net ne prouve aucun écart).
+    """
+    ok = utilisable or (lambda v: v is not None and v.est_lisible)
+    ht, ttc = ligne.montant_ht, ligne.montant_ttc
+    if ht is not None and ht_depuis_ttc(ligne):
+        return _marquer_tva_comprise(ht)
+    if ht is not None and (ok(ht) or ttc is None or not ok(ttc)):
+        return ht
+    if ttc is None:
+        return ht
+    sans_tva = any(
+        v is not None and v.est_lisible and v.decimal_ou_none() == 0 for v in (ligne.taux_tva, ligne.montant_tva)
+    )
+    return ttc if sans_tva else _marquer_tva_comprise(ttc)
+
+
 def lignes_credit_depuis_avoir(
     doc: Document, *, emetteur: str | None = None, utilisable: Callable[[Any], bool] | None = None
 ) -> list[LigneCredit]:
@@ -399,7 +447,7 @@ def lignes_credit_depuis_avoir(
     transport_tete = _valeurs_texte(av.refs_transport)
     out: list[LigneCredit] = []
     for i, ligne in enumerate(av.lignes):
-        m = ligne.montant_ht if ligne.montant_ht is not None else ligne.montant_ttc
+        m = montant_net_ligne(ligne, ok)
         montant = m.decimal_ou_none() if m is not None and ok(m) else None
         if montant is None:
             continue

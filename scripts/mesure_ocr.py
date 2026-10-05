@@ -40,7 +40,8 @@ from pathlib import Path
 from typing import Any
 
 RACINE = Path(__file__).resolve().parents[1]
-#: ``MESURE_OCR_SRC`` : autre arbre de sources à mesurer (comparaison avant/après sur une copie de ``src``).
+#: ``MESURE_OCR_SRC`` : autre arbre de sources à mesurer (comparaison avant/après sur une copie de ``src``) ;
+#: implique l'extraction sans processus isolé (le forkserver importerait les sources installées).
 SOURCES = os.environ.get("MESURE_OCR_SRC") or str(RACINE / "src")
 if SOURCES not in sys.path:
     sys.path.insert(0, SOURCES)
@@ -184,8 +185,10 @@ def _centile(v: list[float], q: float) -> float:
 def mesurer(corpus: Path, *, modes=None, dossiers=None, cache=None, jobs=4, isoler=True,
             reglages: dict | None = None) -> dict:
     taches = taches_corpus(corpus, modes, dossiers)
+    # Réglages ou autre arbre de sources : le processus isolé (forkserver) importerait le module installé.
+    isoler = isoler and not reglages and "MESURE_OCR_SRC" not in os.environ
     for t in taches:
-        t["cache"], t["isoler"], t["reglages"] = cache, isoler and not reglages, reglages
+        t["cache"], t["isoler"], t["reglages"] = cache, isoler, reglages
     with ProcessPoolExecutor(max_workers=jobs) as ex:
         resultats = list(ex.map(_mesurer_fichier, taches, chunksize=1))
     docs = []

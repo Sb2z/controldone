@@ -132,6 +132,9 @@ class RaisonCode(StrEnum):
     entite_facturee_attestee = "entite_facturee_attestee"
     doublon_non_etabli = "doublon_non_etabli"
     assiette_alternative = "assiette_alternative"
+    # Ajouts moteur (D-2701, D-2702) : ligne TVA comprise ; rattachement d'une ligne à une déclaration non établi
+    montant_tva_comprise = "montant_tva_comprise"
+    attribution_non_univoque = "attribution_non_univoque"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -202,6 +205,15 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
         "à vérifier : le montant facturé correspond au calcul de la grille sur une autre assiette (droits seuls, "
         "débours avec ou sans TVA, montants liquidés) ou avec un autre arrondi ; l'écart dépend de l'assiette "
         "retenue"
+    ),
+    RaisonCode.montant_tva_comprise: (
+        "à vérifier : la ligne n'imprime que son montant TVA comprise ; le montant hors TVA comparé en est déduit "
+        "(ou n'a pas pu l'être), il ne peut pas fonder un écart certain"
+    ),
+    RaisonCode.attribution_non_univoque: (
+        "à vérifier : une ligne de la facture du transitaire n'a pas pu être rattachée avec certitude à une "
+        "déclaration (référence d'envoi illisible, d'un autre envoi ou absente sur une facture qui couvre plusieurs "
+        "envois)"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

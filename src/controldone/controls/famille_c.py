@@ -66,6 +66,7 @@ from controldone.model import (
 from controldone.normalize.fiscal import normalize_vat
 from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import (
+    cle_confusion_ocr,
     mrn_prefixe,
     norm_ref,
     norm_ref_transport,
@@ -73,7 +74,7 @@ from controldone.normalize.refs import (
     ref_transport_compatibles,
 )
 from controldone.normalize.text import cle_texte
-from controldone.recouvrement.imputation import choisir_par_paliers
+from controldone.recouvrement.imputation import choisir_par_paliers, montant_net_ligne
 
 __all__ = [
     "ACTION_C",
@@ -96,6 +97,7 @@ __all__ = [
     "dossier_principal",
     "dossiers_freres",
     "excedent_debours",
+    "facture_multi_envois",
     "grille_pour_facture",
     "libelle_facture",
     "ligne_evaluee_ici",
@@ -470,6 +472,9 @@ class LigneDebours:
     categorie: CategorieTaxe | None  # None : « droits et taxes » combinés
     raison: RaisonCode | None = None
     allocation: bool = False
+    #: Rattachement de la ligne à la déclaration non établi (MRN de ligne lu à une confusion OCR près, illisible,
+    #: ou absent sur une facture qui couvre d'autres envois) : la comparaison n'est jamais certaine (D-2702).
+    attribution_incertaine: bool = False
 
 
 @dataclass
@@ -492,6 +497,14 @@ class UniteC:
     lignes: list[LigneDebours]
     credits: list[CreditAvoir] = field(default_factory=list)
     ventilation_incomplete: bool = False
+    #: Une ligne de débours d'une facture de l'unité n'a pu être rattachée à aucune déclaration (MRN de ligne
+    #: lu sous la confiance de certitude, inconnu du lot) : elle peut appartenir à cette unité (D-2702).
+    lignes_non_rattachees: bool = False
+
+    @property
+    def attribution_incertaine(self) -> bool:
+        """Le contenu de l'unité dépend d'un rattachement de ligne non établi (D-2702)."""
+        return self.lignes_non_rattachees or any(x.attribution_incertaine for x in self.lignes)
 
     @property
     def cle(self) -> str:
@@ -524,13 +537,9 @@ class UniteC:
 
 
 def _montant_ligne(ctx: ControlContext, ligne: LigneFactureTransitaire) -> ValeurSourcee | None:
-    """Montant d'une ligne : HT, à défaut TTC si aucune TVA n'est portée."""
-    if ctx.utilisable(ligne.montant_ht):
-        return ligne.montant_ht
-    sans_tva = _dec(ctx, ligne.montant_tva) in (None, ZERO)
-    if sans_tva and ctx.utilisable(ligne.montant_ttc):
-        return ligne.montant_ttc
-    return ligne.montant_ht or ligne.montant_ttc
+    """Montant d'une ligne : HT ; à défaut TTC, qui n'est un montant net que si la ligne ne porte pas de TVA.
+    Un TTC comparé comme net, ou un HT déduit du TTC, est marqué ``montant_tva_comprise`` (D-2701)."""
+    return montant_net_ligne(ligne, ctx.utilisable)
 
 
 def _mrn_cites(ctx: ControlContext, f: Document) -> list[ValeurSourcee]:
@@ -538,6 +547,36 @@ def _mrn_cites(ctx: ControlContext, f: Document) -> list[ValeurSourcee]:
     vals = list(ft.refs_mrn) + [t.mrn for t in ft.tableau_mrn if t.mrn is not None]
     vals += [ligne.mrn for ligne in ft.lignes if ligne.mrn is not None]
     return [v for v in vals if ctx.utilisable(v)]
+
+
+def _prefixe_lu(v: ValeurSourcee | None) -> str:
+    """Préfixe MRN de 15 caractères lu (toute confiance), vide sinon."""
+    if v is None or not v.est_lisible or not v.valeur:
+        return ""
+    p = mrn_prefixe(v.valeur)
+    return p if len(p) == 15 else ""
+
+
+def _cles_mrn_lus(ctx: ControlContext, f: Document) -> set[str]:
+    """Clés de confusion des MRN utilisables (``C_MIN_UTILE``) lus sur une facture du transitaire (en-tête,
+    tableau, lignes) : deux lectures d'un même MRN qui ne diffèrent que par des confusions OCR comptent pour un."""
+    ft = f.ft
+    vals = list(ft.refs_mrn) + [t.mrn for t in ft.tableau_mrn if t.mrn is not None]
+    vals += [lg.mrn for lg in ft.lignes if lg.mrn is not None]
+    return {cle_confusion_ocr(p) for v in vals if ctx.utilisable(v) and (p := _prefixe_lu(v))}
+
+
+def facture_multi_envois(ctx: ControlContext, f: Document) -> bool:
+    """La facture du transitaire couvre plusieurs envois : relevé, plusieurs MRN utilisables distincts (aux
+    confusions OCR près), ou un MRN cité qui est celui d'une déclaration d'un autre dossier (D-2702). Un seul MRN
+    cité, même lu autrement que sur la déclaration du dossier, désigne un seul envoi."""
+    cles = _cles_mrn_lus(ctx, f)
+    if f.ft.est_releve or len(cles) > 1:
+        return True
+    autres = {cle_confusion_ocr(p) for p in _prefixes_autres_dossiers(ctx)}
+    ici = {cle_confusion_ocr(d.dec.mrn_prefixe) for d in ctx.declarations(dernieres_versions=False)
+           if d.dec.mrn_prefixe}
+    return bool(cles & (autres - ici))
 
 
 def mrns_cites(ctx: ControlContext, f: Document) -> list[ValeurSourcee]:
@@ -590,6 +629,12 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
 
     explicites: dict[str, list[LigneDebours]] = {d.id: [] for d in decs}
     globales: list[tuple[list[Document], LigneDebours, bool]] = []
+    # Clés de confusion OCR (D-2702) : préfixes du dossier (univoques) et des autres dossiers.
+    cles_dossier: dict[str, list[Document]] = {}
+    for p, d in par_prefixe.items():
+        cles_dossier.setdefault(cle_confusion_ocr(p), []).append(d)
+    cles_autres = {cle_confusion_ocr(p) for p in autres_prefixes}
+    non_rattachees: set[str] = set()
     for f in ctx.factures_transitaires():
         lignes = [(i, lg) for i, lg in enumerate(f.ft.lignes) if lg.nature.est_debours]
         if not lignes:
@@ -597,6 +642,9 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
         couvertes = declarations_couvertes(ctx, f)
         prefixes_cites = {mrn_prefixe(v.valeur) for v in _mrn_cites(ctx, f)}
         hors_dossier = bool(prefixes_cites - set(par_prefixe))
+        # La facture couvre plusieurs envois : MRN distincts (toute confiance, aux confusions OCR près) ou
+        # relevé. Une ligne sans rattachement établi y est alors ambiguë (D-2702).
+        multi_envois = facture_multi_envois(ctx, f)
         for i, lg in lignes:
             v = _montant_ligne(ctx, lg)
             m = _dec(ctx, v)
@@ -624,19 +672,42 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
                 for cible, montant in cibles:
                     explicites[cible.id].append(replace(ld, montant=montant, allocation=True))
                 continue
-            if ctx.utilisable(lg.mrn):
+            p = _prefixe_lu(lg.mrn)
+            if p:
                 assert lg.mrn is not None
-                p = mrn_prefixe(lg.mrn.valeur)
+                k = cle_confusion_ocr(p)
+                sure = ctx.utilisable(lg.mrn)
                 d = par_prefixe.get(p)
                 if d is not None:
+                    # Préfixe identique à celui d'une déclaration du dossier : 15 caractères en grande partie
+                    # aléatoires lus à l'identique confirment la lecture, même sous la confiance de certitude.
                     explicites[d.id].append(ld)
-                elif not f.ft.est_releve and p not in autres_prefixes and len(decs) == 1:
-                    # MRN sans correspondance (sujet de C7) : la seule déclaration du dossier reste la cible.
-                    explicites[decs[0].id].append(ld)
-                continue
+                    continue
+                if p in autres_prefixes or (k in cles_autres and k not in cles_dossier):
+                    # Ligne d'un envoi rangé dans un autre dossier (relevé réparti).
+                    continue
+                proches = cles_dossier.get(k, [])
+                if len(proches) == 1:
+                    # MRN lu à une confusion OCR près (« 26FRIM2… » pour « 26FR1M2… ») : rattaché ; non certain sur
+                    # une facture de plusieurs envois (deux MRN voisins y seraient confondus).
+                    explicites[proches[0].id].append(replace(ld, attribution_incertaine=multi_envois))
+                    continue
+                if sure:
+                    if not f.ft.est_releve and p not in autres_prefixes and len(decs) == 1:
+                        # MRN sans correspondance (sujet de C7) : la seule déclaration du dossier reste la cible.
+                        explicites[decs[0].id].append(replace(ld, attribution_incertaine=multi_envois))
+                    elif multi_envois and lg.mrn.confiance < ctx.profil.c_min_certain:
+                        # MRN inconnu lu sous la confiance de certitude : peut-être un MRN du dossier mal lu.
+                        non_rattachees.add(f.id)
+                    continue
+                # MRN illisible (sous C_MIN_UTILE) : traité comme une ligne sans MRN, rattachement non établi.
+                ld = replace(ld, attribution_incertaine=multi_envois)
             couv = couvertes_prorata or couvertes
             if len(couv) == 1:
-                explicites[couv[0].id].append(ld)
+                # Ligne non ventilée d'une facture qui couvre aussi d'autres envois : la rattacher à la seule
+                # déclaration du dossier est une hypothèse (D-2702).
+                incertaine = ld.attribution_incertaine or (multi_envois and not couvertes_prorata)
+                explicites[couv[0].id].append(replace(ld, attribution_incertaine=incertaine))
             else:
                 globales.append((couv, ld, hors_dossier and f.ft.est_releve))
 
@@ -672,7 +743,8 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
         lignes = sorted(g["lignes"], key=lambda x: (ordre.index(x.facture.id), x.index))
         factures = list({x.facture.id: x.facture for x in lignes}.values())
         unites.append(UniteC(factures=factures, declarations=g["decs"], lignes=lignes,
-                             ventilation_incomplete=g["incomplet"]))
+                             ventilation_incomplete=g["incomplet"],
+                             lignes_non_rattachees=any(x.id in non_rattachees for x in factures)))
     _imputer_avoirs(ctx, unites)
     return unites
 
@@ -850,6 +922,12 @@ def _comparer_composante(
     raisons = []
     if any(cat in refs[d.id].sans_ligne and not refs[d.id].complet_verifie for d in u.declarations):
         raisons.append(RaisonCode.valeur_absente)
+    incertaines = [x.index for x in u.lignes if x.attribution_incertaine and x.categorie in (cat, None)]
+    if incertaines or u.lignes_non_rattachees:
+        # D-2702 : une ligne comparée (ou une ligne non rattachée de la même facture) dépend d'un rattachement
+        # par MRN non établi.
+        raisons.append(RaisonCode.attribution_non_univoque)
+        details["attribution_non_univoque"] = {"lignes": incertaines, "lignes_non_rattachees": u.lignes_non_rattachees}
     incompletes = {d.id: refs[d.id].lecture_incomplete for d in u.declarations if refs[d.id].lecture_incomplete}
     if incompletes:
         # D-902 : la somme des lignes lues n'est pas confirmée par le total imprimé (ou une ligne d'article
@@ -1097,7 +1175,8 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
             valeurs_cles=vals + sources + [c.valeur for c in credits],
             confusion=_confusions(vals, sources, ecart, tol), documents=docs + [c.avoir.id for c in credits],
             explication=_explication_version(ctx, u, refs, total_ref, refact, tol), montant=ecart,
-            raisons_supplementaires=[RaisonCode.valeur_absente] if incompletes else (),
+            raisons_supplementaires=([RaisonCode.valeur_absente] if incompletes else [])
+            + ([RaisonCode.attribution_non_univoque] if u.attribution_incertaine else []),
         )
         composition = []
         for cat in (*CATEGORIES, None):
@@ -1163,6 +1242,16 @@ def excedent_debours(u: UniteC, refs: dict[str, ReferenceDeclaration], base: Bas
     refact = _somme(x.montant for x in u.lignes if x.categorie in cats and x.montant is not None)
     if u.inutilisables(cats):
         return None
+    if None in cats and u.a_combines and not cats >= {*CATEGORIES, None}:
+        # D-2704 : une ligne « droits et taxes » combinée ne se ventile pas par composante (elle peut contenir la
+        # TVA) ; la comparer aux seules composantes de l'assiette ferait de toute la TVA un « excédent ». Seul
+        # l'excédent total (celui de C5) est établi.
+        if u.inutilisables():
+            return None
+        totals = [refs[d.id].liquide_total for d in u.declarations]
+        if any(t is None for t in totals):
+            return None
+        return max(ZERO, u.refacture_total() - _somme(t for t in totals if t is not None))
     if cats >= {*CATEGORIES, None}:
         totals = [refs[d.id].liquide_total for d in u.declarations]
         if any(t is None for t in totals):
@@ -1369,17 +1458,39 @@ def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
                   if lg.nature is NatureLigne.frais_avance_fonds]
     if not lignes_faf:
         return [ctx.non_applicable("C6", RaisonCode.valeur_absente, details={"motif": "aucune_ligne_faf"})]
-    for f, i, lg in lignes_faf:
+    # D-2708 : plusieurs lignes FAF (une par envoi) rapportées à une même unité de débours non ventilée (plusieurs
+    # déclarations comparées sur leur somme) : le FAF de l'unité est leur somme, évalué une fois.
+    regroupees: dict[tuple[str, ...], list[int]] = {}
+    for k, (f, _i, lg) in enumerate(lignes_faf):
+        if not ligne_evaluee_ici(ctx, f, lg):
+            continue
+        conc = unites_pour_ligne(ctx, f, lg, unites)
+        if conc and any(len(u.declarations) > 1 for u in conc):
+            regroupees.setdefault(tuple(sorted(u.cle for u in conc)), []).append(k)
+    groupe_de = {k: g for g in regroupees.values() if len(g) > 1 for k in g}
+    for k, (f, i, lg) in enumerate(lignes_faf):
         unite = cle_unite(ft=f.id, ligne=i)
         if not ligne_evaluee_ici(ctx, f, lg):
             out.append(ctx.non_applicable("C6", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[f.id],
                                           details={"motif": "ligne_evaluee_dans_un_autre_dossier"}))
+            continue
+        groupe = groupe_de.get(k, [k])
+        if groupe[0] != k:
+            f0, i0, _ = lignes_faf[groupe[0]]
+            out.append(ctx.non_applicable("C6", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[f.id],
+                                          details={"motif": "faf_additionnes_par_unite",
+                                                   "regroupe_dans": cle_unite(ft=f0.id, ligne=i0)}))
             continue
         concernees = unites_pour_ligne(ctx, f, lg, unites)
         docs = [f.id] + [x for u in concernees for x in u.document_ids if x != f.id]
         details: dict = {"unites_debours": [u.cle for u in concernees]}
         v_faf = _montant_ligne(ctx, lg)
         faf = _dec(ctx, v_faf)
+        autres_faf = [_montant_ligne(ctx, lignes_faf[j][2]) for j in groupe[1:]]
+        if faf is not None and autres_faf:
+            vals_autres = [_dec(ctx, v) for v in autres_faf]
+            faf = None if any(x is None for x in vals_autres) else faf + _somme(x for x in vals_autres if x is not None)
+            details["faf_additionnes"] = [cle_unite(ft=lignes_faf[j][0].id, ligne=lignes_faf[j][1]) for j in groupe]
         if faf is None:
             out.append(ctx.non_verifiable("C6", ctx.raison_inutilisable(v_faf), unite=unite, documents=docs,
                                           details=details))
@@ -1428,16 +1539,21 @@ def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
             continue
         certain, raisons_dep = _dependance(ctx, concernees)
         assert v_faf is not None
+        raisons_c6 = [] if certain else (raisons_dep or [RaisonCode.confiance_insuffisante])
+        if any(u.attribution_incertaine for u in concernees) or autres_faf:
+            # Débours rattachés sans certitude, ou FAF par envoi comparés à des débours non ventilés (D-2708).
+            raisons_c6 = [*raisons_c6, RaisonCode.attribution_non_univoque]
         classement = ctx.classify(
             "C6", ecart=excedent_faf, tolerance=tol, seuil_certitude=seuil,
-            valeurs_cles=[v_faf] + ([v_taux] if v_taux else []), documents=docs, montant=excedent_faf,
-            raisons_supplementaires=[] if certain else (raisons_dep or [RaisonCode.confiance_insuffisante]),
+            valeurs_cles=[v_faf, *(v for v in autres_faf if v is not None)] + ([v_taux] if v_taux else []),
+            documents=docs, montant=excedent_faf, raisons_supplementaires=raisons_c6,
         )
         source_taux = (f"taux de la grille tarifaire validée {grille.reference}" if v_taux is None and grille
                        else "taux imprimé sur la ligne")
         libelle = (
             f"{libelle_facture([f])} facture {format_montant(faf)} de frais d'avance de fonds"
-            f"{_entre_parentheses(page_txt([v_faf]))}, calculés au {source_taux} ({format_pourcentage(taux)}) "
+            f"{f' ({len(groupe)} lignes, une par envoi)' if autres_faf else ''}"
+            f"{_entre_parentheses(page_txt([v_faf, *autres_faf]))}, calculés au {source_taux} ({format_pourcentage(taux)}) "
             f"sur des débours qui dépassent de {format_montant(arrondi_centime(excedent))} les montants liquidés "
             f"indiqués sur la déclaration. Sur cet excédent seulement, ces frais représentent "
             f"{format_montant(excedent_faf)}."
@@ -1445,7 +1561,8 @@ def c6_faf_sur_excedent(ctx: ControlContext) -> list[ResultatControle]:
         out.append(ctx.constat(
             "C6", classement, libelle=libelle, prochaine_action=ACTION_C6, montant=excedent_faf,
             composante=Composante.prestation,
-            preuves=[preuve(v_faf, RolePreuve.valeur_b)] + ([preuve(v_taux, RolePreuve.operande)] if v_taux else [])
+            preuves=[preuve(x, RolePreuve.valeur_b) for x in (v_faf, *autres_faf) if x is not None]
+            + ([preuve(v_taux, RolePreuve.operande)] if v_taux else [])
             + [preuve(None, RolePreuve.operande,
                       calcul=f"{format_pourcentage(taux)} × {format_montant(arrondi_centime(excedent))}")],
             **commun,
@@ -1758,7 +1875,27 @@ def _c8_motifs_non_certain(ctx: ControlContext, groupe: Sequence[Document], cf_t
     siren = _siren_fr(t)
     if siren and any(_siren_fr(normalize_vat(v.valeur) or norm_ref(v.valeur or "")) == siren for v in importateurs):
         motifs.append("meme_siren")
+    # 5. La facture n'est rattachée à l'envoi du dossier par aucune référence explicite (MRN d'une déclaration du
+    #    dossier, titre de transport d'un document du dossier) : elle peut être celle d'un autre envoi, adressée
+    #    à l'entité concernée par cet envoi (D-2707).
+    if not all(facture_rattachee_a_l_envoi(ctx, f) for f in groupe):
+        motifs.append("facture_non_rattachee_a_l_envoi")
     return motifs
+
+
+def facture_rattachee_a_l_envoi(ctx: ControlContext, f: Document) -> bool:
+    """La facture du transitaire cite le MRN d'une déclaration du dossier (aux confusions OCR près) ou un titre de
+    transport cité par une déclaration, une facture commerciale ou un document support du dossier (D-2707)."""
+    ici = {cle_confusion_ocr(d.dec.mrn_prefixe) for d in ctx.declarations(dernieres_versions=False)
+           if d.dec.mrn_prefixe}
+    if any(cle_confusion_ocr(mrn_prefixe(v.valeur)) in ici for v in _mrn_cites(ctx, f) if v.valeur):
+        return True
+    refs = [v.valeur for v in f.ft.refs_transport if v.valeur and ctx.utilisable(v)]
+    refs += [lg.ref_transport.valeur for lg in f.ft.lignes
+             if lg.ref_transport is not None and lg.ref_transport.valeur and ctx.utilisable(lg.ref_transport)]
+    dossier = [v.valeur for v in _refs_transport_dossier(ctx) if v.valeur and ctx.utilisable(v)]
+    return any(ref_transport_compatibles(a, b) or refs_confondables(norm_ref_transport(a), norm_ref_transport(b))
+               for a in refs for b in dossier)
 
 
 def _siren_fr(identifiant: str | None) -> str | None:

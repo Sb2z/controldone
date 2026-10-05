@@ -2914,3 +2914,142 @@ d'origine : seuil PASSE, 119 VP / 0 FP certain (identique). Tests : `tests/extra
   24,2 % → 60,0 %, montants justes 89,9 % → 95,6 %, VP/FP certains 36/3 → 84/5 ; `corpus_g2` dev 112 VP / 1 FP
   (seuil PASSE) ; corpus d'origine 119 VP / 0 FP, seuil PASSE (identique).
 - Tests : `tests/extract/test_extraction_pt_pl_ch.py` (36 tests, mises en page propres aux tests).
+
+# Contrôles : écarts certains sur `corpus_g4` (dev seulement)
+
+Constat (banc `g4_dev_ctl_base`, même cache de pages) : 84 VP / 5 FP certains (précision 0,944, seuil bloquant
+ÉCHOUE) : C2 GZ0145 ×2, C6 GZ0189 (piège), D2 GZ0048, D4 GZ0144 ; `corpus_g2` : 112 / 1 (D4 GX0173). Règles
+générales seulement ; aucune ne lit un nom de gabarit, de fichier, de client ou de transitaire. Extracteurs non
+modifiés. Tests : `tests/controls/test_precision_d27.py` (19 cas fictifs).
+
+## D-2701 — Ligne TVA comprise : jamais la base d'un écart certain
+
+- **Constat** : les contrôles C, D, E, F, G et l'imputation des avoirs prenaient `montant_ttc` quand `montant_ht`
+  manquait (`_aides_befg.montant_ht`, `famille_d._montant`, `famille_c._montant_ligne`, `lignes_credit_depuis_avoir`) :
+  un brut (G13, « Total c/ IVA ») comparé à un tarif ou à un liquidé net. Le HT déduit du TTC (D-2502) n'était pas
+  distingué d'un HT lu.
+- **Choix** (`recouvrement.imputation.montant_net_ligne`, source unique) : HT lu → tel quel ; HT déduit du TTC
+  (`montant_ttc / (1 + taux_tva)` ou TTC parmi ses sources) → marqué ; pas de HT (ou HT inutilisable) → TTC tel quel
+  seulement si la ligne ne porte pas de TVA (taux ou TVA de ligne lus nuls), sinon TTC marqué. « Marqué » : raison
+  nouvelle `montant_tva_comprise` portée par la valeur (reprise par `classify`, condition 3) et confiance plafonnée
+  à 0,60 (sous `C_LECTURE_CONFIRMABLE` : D-2314 ne la relève pas). Un HT déduit reste préféré au TTC (sinon un
+  `non_verifiable` deviendrait un constat sur le brut).
+
+## D-2702 — Rattachement d'une ligne de débours à une déclaration (C1–C6)
+
+- **Constat** : GZ0145 (relevé mensuel de quatre envois, scan) : la ligne d'autres taxes de l'envoi D, au MRN lu à
+  0,49 (sous `C_MIN_UTILE`), était traitée comme une ligne sans MRN et rattachée à la seule déclaration de chaque
+  dossier du relevé ; C2 certain 413,02 dans deux dossiers. Une ligne au MRN lu « 26FRIM2… » (confusion 1/I) n'était
+  rattachée à rien (l'écart réel de 2,20 était manqué).
+- **Choix** (`famille_c.unites_c`, `LigneDebours.attribution_incertaine`, `UniteC.lignes_non_rattachees`, raison
+  nouvelle `attribution_non_univoque`) : « facture de plusieurs envois » (`facture_multi_envois`) = relevé, ou
+  plusieurs MRN utilisables distincts aux confusions OCR près, ou un MRN cité qui est celui d'une déclaration d'un
+  autre dossier. Pour une ligne qui porte un MRN lu (toute confiance) :
+  1. préfixe identique à une déclaration du dossier → rattachée (15 caractères aléatoires lus à l'identique
+     confirment la lecture, même sous 0,90) ;
+  2. préfixe d'une déclaration d'un autre dossier (identique, ou même clé de confusion sans déclaration du dossier
+     de même clé) → ligne de cet autre dossier, écartée ;
+  3. même clé de confusion qu'une seule déclaration du dossier → rattachée, non certaine sur une facture de
+     plusieurs envois ;
+  4. MRN utilisable inconnu : règle antérieure (seule déclaration, hors relevé) mais non certaine sur une facture de
+     plusieurs envois ; sur une telle facture, s'il est lu sous `C_MIN_CERTAIN`, les unités de la facture sont
+     marquées (la ligne peut être un MRN du dossier mal lu) ;
+  5. MRN illisible, ou pas de MRN : règle antérieure ; rattachement à la seule déclaration du dossier non certain sur
+     une facture de plusieurs envois.
+  C1–C4 : raison ajoutée si une ligne de la composante (ou combinée) est marquée, ou si l'unité a des lignes non
+  rattachées ; C5, C6 : si l'unité est marquée. Le constat reste émis (`a_verifier`, `details.attribution_non_univoque`).
+
+## D-2703 — D4 : assiette complète et rattachée
+
+- **Constat** : GZ0144 (télécopie) : la ligne « Cło » (droits) est lue « Cto » sans nature de débours ; l'assiette
+  ne retient que la TVA (8 708,58) et D4 est certain (85,60) alors que le FAF facturé est 2 % du total des débours
+  imprimé (12 988,58). GX0173 (relevé de cinq envois) : la ligne FAF et la ligne de droits du même envoi portent deux
+  lectures différentes du MRN ; aucune déclaration rapprochée, l'assiette de repli (« même MRN que la ligne ») ne
+  garde que la TVA : D4 certain 59,64.
+- **Choix** (`famille_d._pourcentage`, `_debours_complets`, `_assiette`) : D4 n'est certain que si
+  1. les lignes de débours sont complètes : leur somme redonne le total des débours **imprimé** (`T_SOMME`), à défaut
+     de ce total la somme de toutes les lignes redonne le total HT imprimé ; sinon raison `valeur_absente`, motif
+     `details.assiette_non_confirmee` — sauf attendu au maximum de la grille (une ligne perdue ne peut que
+     l'augmenter) ;
+  2. les débours de l'assiette sont rattachés sans doute : unités C marquées (D-2702), ou assiette de repli sur une
+     facture de plusieurs envois → `attribution_non_univoque`.
+  Explication D-2213 complétée : le total des débours imprimé (avec et sans les lignes de TVA) est une assiette
+  alternative.
+
+## D-2704 — C6 : ligne « droits et taxes » combinée
+
+- **Constat** : GZ0189 (piège « FAF au plafond ») : ligne combinée 10 217,61 (droits **et** TVA) ; l'assiette du FAF
+  est « débours hors TVA » ; l'excédent était calculé contre les seuls droits et autres taxes liquidés, soit
+  8 619,61 (toute la TVA), d'où C6 certain 202,06 alors que l'excédent réel (C5) est 18,75 et que le FAF, au
+  maximum de la grille avant comme après correction, n'en dépend pas.
+- **Choix** (`famille_c.excedent_debours`) : une ligne combinée ne se ventile pas par composante ; quand l'assiette
+  ne couvre pas toutes les composantes et que l'unité porte une ligne combinée, l'excédent retenu est l'excédent
+  total (Σ refacturé − Σ liquidé total). Le minimum et le maximum de la grille restent appliqués aux deux FAF
+  (avant et après correction) : GZ0189 devient `conforme`.
+
+## D-2705 — D2 (et D7 sans poste) : une prestation imprimée deux fois n'est relevée qu'une fois
+
+- **Constat** : GZ0048 : « Kontrola dokumentów » hors grille imprimée deux fois (aussi un D5) : deux D2 certains de
+  25,00 pour une prestation (un FP certain).
+- **Choix** (`famille_d._hors_grille_une_fois`) : lignes de même facture, nature, libellé normalisé, montant et
+  référence d'envoi (clé de D5) : la première porte le constat ; les suivantes sont `non_applicable`
+  (`couvert_par_autre_controle`, `details.couvert_par = D5`, `copie_de_la_ligne`). La répétition reste l'objet de D5.
+
+## D-2706 — D5 : rétablir D-2212 quand le MRN de ligne n'est pas sûr
+
+- **Constat** : GX0120 / GX0128 (`corpus_g2`, relevés de cinq envois) : selon la lecture, le MRN d'un envoi est
+  recopié sur les lignes « Customs clearance » des autres envois (lu 0,75) ; les lignes portent alors « la même
+  référence » et le motif 1 de D-2212 (« lignes sans référence ») ne s'applique plus ; avec D-2316 (libellés
+  identiques qui se confirment), D5 devenait certain (110,00) dans un run antérieur.
+- **Choix** (`famille_d._d5_motifs`) : sur une facture de plusieurs envois, motif 5 `reference_d_envoi_non_etablie`
+  quand la référence commune (MRN ou transport) d'une des lignes répétées est lue sous `C_MIN_CERTAIN` ; motif 6
+  `une_ligne_par_envoi` (en plus de 1 ou 5 seulement) quand les lignes identiques, toutes références confondues,
+  ne dépassent pas le nombre d'envois cités. Deux lignes qui portent le même MRN lu sûrement restent un doublon
+  certain (GX0026, GX0078 inchangés).
+
+## D-2707 — C8 : la facture doit appartenir à l'envoi du dossier
+
+- **Constat** : GZ0197 (piège « facture de débours d'un autre envoi rangée dans ce dossier », PDF fusionné) : la
+  facture de l'autre envoi est adressée à une autre entité du client ; C8 pouvait être certain (seul un lien faible
+  l'en empêchait dans ce run).
+- **Choix** (`famille_c._c8_motifs_non_certain`, motif 5 `facture_non_rattachee_a_l_envoi`,
+  `facture_rattachee_a_l_envoi`) : C8 certain seulement si la facture cite le MRN d'une déclaration du dossier (aux
+  confusions OCR près) ou un titre de transport cité par une déclaration, une facture commerciale ou un document
+  support du dossier (égalité, inclusion ou confusion de lecture). Les C8 certains vrais des trois jeux sont
+  inchangés.
+
+## D-2708 — C6 : un FAF par envoi sur des débours non ventilés
+
+- **Constat** : GX0152 : deux envois, lignes « droits et taxes » sans MRN (unité commune de deux déclarations), un
+  FAF par envoi : chaque FAF était comparé à l'excédent de l'unité entière (10,43 et 153,26, montants faux ; avec
+  D-2704 : `conforme` à tort).
+- **Choix** (`famille_c.c6_faf_sur_excedent`) : les lignes FAF rapportées à une même unité de plusieurs déclarations
+  sont additionnées et évaluées une fois (première ligne ; les autres `non_applicable`, motif
+  `faf_additionnes_par_unite`) ; raison `attribution_non_univoque` (le FAF de chaque envoi n'est pas ventilé).
+  GX0152 : 1,65 `a_verifier`, montant juste.
+
+## D-2709 — Mesures (dev seulement)
+
+Bancs `*_dev_ctl_base` → `*_dev_ctl27` (même cache de pages, code d'extraction du moment) :
+
+| | `corpus_g4` avant | après | `corpus_g2` avant | après | corpus d'origine avant | après |
+|---|---|---|---|---|---|---|
+| VP / FP certain | 84 / 5 | 84 / 0 | 112 / 1 | 112 / 0 | 119 / 0 | 119 / 0 |
+| précision certain | 0,944 | 1,000 | 0,991 | 1,000 | 1,000 | 1,000 |
+| seuil bloquant | ÉCHOUE | PASSE | PASSE | PASSE | PASSE | PASSE |
+| rappel | 0,801 | 0,808 | 0,850 | 0,853 | 0,818 | 0,818 |
+| rappel certain | 0,600 | 0,600 | 0,755 | 0,755 | 0,778 | 0,778 |
+| bruit `a_verifier` par dossier | 1,651 | 1,651 | 1,466 | 1,457 | 1,109 | 1,124 |
+| violations de pièges | 45 | 44 | 33 | 33 | 27 | 28 |
+
+Aucun VP certain perdu. Gains : GZ0145 C2 2,20 et GZ0034 C2 2,20 détectés (`a_verifier`, montant juste), GX0152 C6
+1,65 (montant juste). Coût : corpus d'origine, trois `a_verifier` nouveaux (BX0084 C5, BX0149 C4/C5) : lignes
+désormais rattachées à leur déclaration par la clé de confusion OCR, dont la lecture des taxes est incomplète
+(BX0084 : violation du piège « montant droits et taxes combiné », niveau `a_verifier`).
+
+**Relevé pour l'extraction (non corrigé ici)** : A1 « pavé acheteur ne permet pas d'identifier une entité » sur
+`corpus_g4` (GZ0008, GZ0010, GZ0030, GZ0031, GZ0069, GZ0115 ×3 ; pièges GZ0096, GZ0133 CL15 et GZ0117 CL17) : pavé
+acheteur de la facture commerciale non lu ou réduit à un fragment (« SARL », une ligne d'adresse) sur des scans ;
+comportement conforme à SPEC §A1 (« E_f illisible → `a_verifier` »). GZ0144 : « Cło » lu « Cto », nature non
+reconnue (la tolérance D-2305 exige 6 caractères). GZ0145 : MRN des lignes lus 0,49–0,85 et MRN d'en-tête
+« 26FRQOMEJMUA 811764 » (0,20). GX0173 : deux lectures différentes du même MRN sur deux lignes du même envoi.

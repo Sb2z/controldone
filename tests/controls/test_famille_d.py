@@ -261,7 +261,8 @@ def _dec(montant):
 
 
 def test_d4_faf_contre_grille():
-    f = ft(ligne(N.debours_droits, "1000.00"), ligne(N.frais_avance_fonds, "30.00", libelle="Avance de fonds"))
+    f = ft(ligne(N.debours_droits, "1000.00"), ligne(N.frais_avance_fonds, "30.00", libelle="Avance de fonds"),
+           total_debours="1000.00")
     rs = run([_dec("1000.00"), f], controles=["C1", "C5", "C6", "D4"])
     r = un(rs, "D4")
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("5.00")
