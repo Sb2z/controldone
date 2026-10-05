@@ -41,6 +41,7 @@ def register_fonts():
 
 
 GREY = HexColor("#777777")
+LAST_OVERFLOW: list = []
 LIGHT = HexColor("#e8e8e8")
 
 
@@ -60,6 +61,7 @@ class Pdf:
         self.mark = mark
         self.mark_pos = mark_pos
         self.page_no = 1
+        self.cell_overflow: list = []   # contenus de cellule plus larges que leur colonne (diagnostic)
         self.lang_mark = lang_mark
         self._mark()
 
@@ -180,6 +182,8 @@ class Pdf:
         head_size = head_size or size
         row_h = row_h or size * 1.75
         tw = sum(c[1] for c in cols)
+        if x + tw > self.W - 20 + 0.5 or min(c[1] for c in cols) <= 0:
+            raise ValueError(f"tableau trop large : x={x} largeur={tw} page={self.W}")
 
         def head(yh):
             hh = row_h * (1 + max(str(c[0]).count("\n") for c in cols))
@@ -237,10 +241,14 @@ class Pdf:
                             self.text(cx + 3, yy, ln, size=size, font=cell_font)
                             yy -= size * 1.15
                     elif al == "r":
+                        if self.width(cell, size, font=cell_font) > w - 3:
+                            self.cell_overflow.append(str(cell))
                         self.text(cx + w - 3, y - row_h * 0.68, cell, size=size, align="r", font=cell_font)
                     elif al == "c":
                         self.text(cx + w / 2, y - row_h * 0.68, cell, size=size, align="c", font=cell_font)
                     else:
+                        if self.width(cell, size, font=cell_font) > w - 3:
+                            self.cell_overflow.append(str(cell))
                         self.text(cx + 3, y - row_h * 0.68, cell, size=size, font=cell_font)
                 cx += w
             y -= h
@@ -345,6 +353,7 @@ class Pdf:
         return color
 
     def save(self) -> bytes:
+        LAST_OVERFLOW[:] = self.cell_overflow
         self.c.showPage()
         self.c.save()
         return self.buf.getvalue()

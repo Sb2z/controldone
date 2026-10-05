@@ -154,7 +154,7 @@ def tv_ft(doc):
         vp = _line_vat_printed(doc, ln)
         lines.append({"nature": ln["nature"], "libelle": ln["libelle"], "quantite": _qty(ln["qty"]), "prix_unitaire": _rate(ln["pu"]),
                       "montant_ht": s2(abs(ln["ht"])) if doc["kind"] == "av" else s2(ln["ht"]),
-                      "taux_tva": _rate(ln["vat_rate"]) if vp else None, "montant_tva": s2(ln["vat"]) if vp else None,
+                      "taux_tva": _rate(ln["vat_rate"]) if vp else None, "montant_tva": s2(ln["vat"]) if (vp and doc["family"] not in ("G7", "G8")) else None,
                       "mrn": ln["mrn"] if _line_mrn_printed(doc, ln) else None,
                       "date_debut": ln["date_debut"].isoformat() if ln.get("date_debut") else None,
                       "date_fin": ln["date_fin"].isoformat() if ln.get("date_fin") else None})
@@ -295,7 +295,7 @@ def scenario_tags(dos, present, files):
         t.append("tableur")
     if any(dos.docs[d]["kind"] == "ft" and len(dos.docs[d]["refs_mrn"]) > 1 for d in present):
         t.append("facture_transitaire_multi_mrn")
-    if len([d for d in present if dos.docs[d]["kind"] == "dec"]) > 1:
+    if len([d for d in present if dos.docs[d]["kind"] == "dec" and not d.endswith("_copie")]) > 1:
         t.append("multi_declarations")
     if any(dos.docs[d].get("hidden_instr") for d in present):
         t.append("consigne_cachee")
@@ -358,7 +358,9 @@ def _num_cands(v, decs):
 
 def _cands(kind, val):
     if kind == "amount2":
-        return _num_cands(val, [2])
+        v = D(val)
+        # montant entier imprimé sans décimales (droits arrondis à l'euro, export brut) : même valeur
+        return _num_cands(val, [2, 0] if v == v.to_integral_value() else [2])
     if kind == "amount0":
         return _num_cands(val, [0])
     if kind == "pu":

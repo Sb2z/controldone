@@ -366,7 +366,7 @@ def render_g3(doc, rng):
     y -= 8
     deb, srv = _sections(doc)
     show_mrn = _multi_mrn(doc)
-    cols = [("Pos.", 30, "c"), (lab["desig"], 230 if show_mrn else 330, "l")] + ([("MRN", 100, "l")] if show_mrn else []) + \
+    cols = [("Pos.", 30, "c"), (lab["desig"], 180 if show_mrn else 290, "l")] + ([("MRN", 110, "l")] if show_mrn else []) + \
            [(lab["qty"], 40, "r"), (lab["pu"], 75, "r"), (lab["ht"], 88, "r")]
     pos = 0
     for title, sec in ((lab["deb"], deb), (lab["srv"] + " (MwSt. 20 %)", srv)):
@@ -437,7 +437,7 @@ def render_g4(doc, rng):
         y -= 11
     y -= 6
     show_mrn = _multi_mrn(doc)
-    cols = [(lab["desig"], 210 if show_mrn else 300, "l")] + ([("MRN", 90, "l")] if show_mrn else []) + \
+    cols = [(lab["desig"], 152 if show_mrn else 260, "l")] + ([("MRN", 108, "l")] if show_mrn else []) + \
            [(lab["qty"], 34, "r"), (lab["pu"], 62, "r"), (lab["ht"], 66, "r"), ("Cod. IVA", 46, "c"), (lab["vat"], 55, "r")]
     rows = []
     for ln in doc["lines"]:
@@ -597,8 +597,8 @@ def render_g9(doc, rng):
         y -= 11
     y -= 6
     show_mrn = _multi_mrn(doc)
-    cols = [("Code", 30, "c"), (lab["desig"], 200 if show_mrn else 290, "l")] + ([("MRN", 90, "l")] if show_mrn else []) + \
-           [(lab["qty"], 34, "r"), (lab["pu"], 60, "r"), (lab["ht"], 72, "r"), ("TVA", 40, "c")]
+    cols = [("Code", 30, "c"), (lab["desig"], 117 if show_mrn else 225, "l")] + ([("MRN", 108, "l")] if show_mrn else []) + \
+           [(lab["qty"], 34, "r"), (lab["pu"], 60, "r"), (lab["ht"], 72, "r"), ("TVA", 46, "c")]
     cols.append((lab["vat"], 523 - sum(c[1] for c in cols), "r"))
     rows = []
     for ln in doc["lines"]:

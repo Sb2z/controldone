@@ -455,9 +455,10 @@ class Dossier:
                 dec.setdefault("overrides", {})["type_totals"] = {code: printed}
                 fld = f"{dec['doc_id']}.total_{code}"
             else:
-                amt = -dlt
-                dec.setdefault("overrides", {})["total_a_payer"] = dec["total_a_payer"] - dlt
-                dec["overrides"]["total_droits_taxes"] = dec["total_droits_taxes"] - dlt
+                sign = -1 if dec["total_a_payer"] - dlt > 0 and self.rng.random() < 0.5 else 1
+                amt = sign * dlt
+                dec.setdefault("overrides", {})["total_a_payer"] = dec["total_a_payer"] + amt
+                dec["overrides"]["total_droits_taxes"] = dec["total_droits_taxes"] + amt
                 fld = f"{dec['doc_id']}.total_a_payer"
             recompute_decl_totals(dec)
             self.err("somme_taxes_incoherente", [dec["doc_id"]], amt, [fld], "Total imprimé différent de la somme des taxes.",
