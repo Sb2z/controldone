@@ -38,6 +38,10 @@ PART_DEMI_TEINTES_FAX = 0.55
 TAILLE_MIN_MEDIAN = 2000
 #: Contraste : écart minimal encre/fond au-dessous duquel la page est étirée.
 ECART_CONTRASTE = 150
+#: Contraste : l'encre la plus foncée (centile 0,5 %) doit être plus claire que ce niveau (encre pâle). Une photo
+#: mal éclairée (fond gris 180–200, encre 20–80) ou une compression JPEG lourde (encre ~100) ne sont pas
+#: étirées : l'étirement y amplifie l'ombre et les artefacts (mesure D-2603).
+ENCRE_PALE = 140
 
 
 def niveaux_de_gris(image):
@@ -157,10 +161,11 @@ def debruiter(gris):
 
 
 def etirer_contraste(gris):
-    """Étire une page pâle : encre (centile 0,5 %) -> 0, fond (médiane) -> 255. Inchangée si contrastée."""
+    """Étire une page pâle : encre (centile 0,5 %) -> 0, fond (médiane) -> 255. Inchangée si l'encre est foncée
+    ou la page contrastée."""
     h = gris.histogram()
     encre, fond = _centile(h, 0.005), _centile(h, 0.5)
-    if fond - encre >= ECART_CONTRASTE or fond - encre < 25:
+    if encre < ENCRE_PALE or fond - encre >= ECART_CONTRASTE or fond - encre < 25:
         return gris, False
     lut = [max(0, min(255, round((v - encre) * 255 / (fond - encre)))) for v in range(256)]
     return gris.point(lut), True

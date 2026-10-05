@@ -810,14 +810,14 @@ def _pretraiter(image) -> tuple[object, list[str]]:
         gris, n = pt.retirer_traits(gris)
         if n:
             notes.append(f"pretraitement:traits_effaces:{n}")
+    if r["median"]:  # avant l'étirement : la détection de télécopie lit les demi-teintes d'origine
+        gris, filtre = pt.debruiter(gris)
+        if filtre:
+            notes.append("pretraitement:median")
     if r["contraste"]:
         gris, etire = pt.etirer_contraste(gris)
         if etire:
             notes.append("pretraitement:contraste_etire")
-    if r["median"]:
-        gris, filtre = pt.debruiter(gris)
-        if filtre:
-            notes.append("pretraitement:median")
     return gris, notes
 
 

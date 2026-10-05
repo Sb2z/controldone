@@ -126,6 +126,9 @@ def test_contraste_etire_page_pale_seulement():
     assert ok and min(etiree.tobytes()) == 0 and etiree.getpixel((5, 5)) == 255
     nette = _page_texte()
     assert pt.etirer_contraste(nette) == (nette, False)
+    # photo mal éclairée : fond gris, encre foncée -> pas d'étirement (il amplifierait l'ombre)
+    photo = _page_texte(gris=40).point(lambda v: 190 if v == 255 else v)
+    assert pt.etirer_contraste(photo) == (photo, False)
 
 
 # --- deux pages par feuille (D-2604) --------------------------------------------------------------------------
