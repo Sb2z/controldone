@@ -104,6 +104,59 @@ document.
 - **Banc** : quatre erreurs de vérité ou de notation dans le générateur 2 ont été corrigées par son auteur (D-907,
   version 2.0.1).
 
+## Deuxième cycle : générateur 2.1 et `corpus_g4` (5–6 octobre 2026)
+
+**Nouveau jeu.** `bench/corpus_g4` compte 220 dossiers, 175 de développement et 45 tenus à l'écart. Il a été
+produit par le générateur 2.1 (graine 20261006) avec des éléments jamais vus :
+- quatre familles de transitaires (portugaise à lignes TTC, polonaise au kilo avec page récapitulative,
+  suisse-allemande avec avoirs mêlés, française en paysage par MRN) ;
+- trois mises en page de déclaration (feuillet + annexes, état de liquidation en paysage, XML anglais) ;
+- trois mises en page de facture (portugaise, polonaise, multi-pages avec reports) ;
+- cinq dégradations (fax, tampons et manuscrit, JPEG très compressé, faible contraste, deux pages par feuille) ;
+- quatre situations de clients (importateur suisse avec représentant fiscal, holding, TVA espacée, nom commercial).
+
+93 % des dossiers contiennent au moins un élément nouveau.
+
+**Travail.** Quatre équipes ont travaillé sur les seuls dossiers de développement (D-2301 à D-2711) :
+- lecture des déclarations, classement et regroupement ;
+- lecture des factures ;
+- prétraitement OCR des scans dégradés (`VERSION_PAGES` 1.1.0) ;
+- contrôles.
+
+Les 45 dossiers tenus à l'écart n'ont été ouverts par personne.
+
+| `corpus_g4`, tenu à l'écart (45 dossiers) | Avant | Après |
+|---|---|---|
+| Écarts certains vrais / faux | 8 / 0 | **23 / 1** |
+| Précision des écarts certains | 100 % (8 constats) | **95,8 %** (borne basse de Wilson 79,8 %) |
+| Rappel (toutes erreurs) | 48,0 % | **78,7 %** |
+| Rappel des erreurs attendues « certain » | 13,3 % | 42,2 % |
+| Exactitude des montants | 80,0 % | 94,3 % |
+| Constats « à vérifier » sans erreur, par dossier | 3,07 | 1,04 |
+| Pièges déclenchés | 16 | 4 |
+| Seuil bloquant | passe (8 constats, sans portée) | **échoue d'un seul constat** (D4) |
+
+Non-régression sur les autres jeux tenus à l'écart (même code, OCR 1.1.0) :
+
+| Jeu | Vrais / faux certains | Précision | Rappel | Seuil |
+|---|---|---|---|---|
+| `corpus_g3` (80) | 62 / 0 | 100 % | 85,6 % | passe |
+| `corpus_g2` (68) | 36 / 0 | 100 % | 77,7 % | passe |
+| `corpus_h2` (48) | 45 / 1 (A4) | 97,8 % | 80,4 % | passe |
+| `corpus` (48) | 45 / 0 | 100 % | 84,6 % | passe |
+
+**Lecture honnête.**
+- **Sur des documents vraiment nouveaux**, l'outil trouve maintenant près de 4 erreurs sur 5. Le seuil de
+  précision n'est pas atteint : 1 faux écart certain sur 24, sur la commission d'avance de fonds (D4). L'échantillon
+  est petit ; un faux de moins ferait passer le seuil, un de plus le ferait chuter à 92 %.
+- **Je n'ai consulté que le contrôle en cause**, pas le dossier. Pour le corriger proprement, il faudra le faire sur
+  les jeux de développement puis mesurer sur une graine neuve.
+- **Le rappel des erreurs attendues « certain » reste bas** sur les nouveaux éléments (42 %). Les lectures OCR
+  incertaines maintiennent ces constats en « à vérifier », ce qui est le comportement voulu, mais coûte du temps de
+  validation.
+- **Durée par dossier, OCR 1.1.0 compris** (première passe, sans cache) : 4,6 à 8,8 s en moyenne selon le jeu,
+  p95 entre 12 et 31 s.
+
 ## Reproduire
 
 ```bash
@@ -113,5 +166,5 @@ CONTROLDONE_PAGES_CACHE_DIR=var/cache/g3_pages python -m controldone.bench_run \
 python -m bench.score --corpus bench/corpus_g3 --split holdout --run bench/out/g3 --gate
 ```
 
-Tests : 1 896 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
+Tests : 2 026 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
 (`scripts/demo_complete.sh --sans-serveur`) se termine sans erreur.
