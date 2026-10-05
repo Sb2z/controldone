@@ -2349,3 +2349,9 @@ documents support 74,3 % → 74,3 % (282 / 282 ≥ 0,90) ; avoirs 98,0 % → 98,
 pas une donnée structurée). `DeliveryLocation` reste prioritaire ; un texte qui ne commence pas par le code ne donne
 rien. `corpus_g2` dev : `incoterm_lieu` UBL 0 % -> 100 % (23 valeurs, toutes justes à 0,90) ; aucun autre
 changement sur les deux corpus.
+
+**Mesures D-2113** (`scripts/mesure_classement.py`, avant -> après D-2113) : `corpus_g2` dev pages 99,39 % ->
+99,39 %, regroupement F1 0,959 -> 0,959, liens faibles 33 -> 29, dossiers incomplets 33 -> 28 ; `corpus` dev pages
+97,91 % -> 97,98 % (+2 pages, aucune perdue), F1 0,873 -> 0,873, liens faibles 50 -> 49. Bancs complets
+(`bench/out/g2_dev_grp2`, `bench/out/dev_grp2`, code des autres équipes à date) : G2 faux P1 29 -> 23, P4 30 -> 27 ;
+banc d'origine : seuil PASSE, précision certain 1,000, rappel 0,818, rappel P1 1,0, P4 47 -> 46.
