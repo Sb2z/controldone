@@ -2483,3 +2483,167 @@ d'étiquette que s'il annonce un libellé court suivi de « : ». Mesure sans r�
 classement 0,9939, F1 regroupement 0,959 ; dev corpus : 0,9798, F1 0,873, identiques). Test :
 `test_bon_de_commande_intitule_avec_facture_reste_non_exploitable`. Le défaut a été repéré sur un jeu tenu
 à l'écart : la correction est générale (une règle de syntaxe), et ce jeu n'est plus vierge pour P1.
+
+# Rappel des écarts certains et bruit « à vérifier » (dev seulement)
+
+Constat (bancs `g2_dev_cd`, `c1_dev_cd`) : précision certaine 1,000 sur les deux jeux, mais rappel certain 0,676
+(`corpus_g2`) et 0,729 (corpus d'origine) — 30 et 26 vraies erreurs « certaines » classées `a_verifier`, 15 et 13
+manquées — et bruit `a_verifier` non apparié de 2,09 par dossier sur `corpus_g2` (seuil d'alerte 1,5). Analyse :
+raison de déclassement de chaque erreur sous-classée (valeurs clés et confiances relevées en instrumentant
+`ControlContext.classify`), cause de chaque FN, familles de constats `a_verifier` jamais appariées à une erreur.
+Règles générales seulement ; aucune ne lit un nom de gabarit, de fichier ou de société. Tests :
+`tests/controls/test_rappel_bruit_d23.py`, `tests/extract/test_lectures_corroborees_d23.py`,
+`tests/ingest/test_periode_ligne_d2301.py` (données fictives).
+
+## D-2301 — Période d'une ligne de magasinage : structurée (CII/UBL) ou écrite dans le libellé
+
+- **Constat** : 5 erreurs D6 « franchise facturée » (certaines) manquées sur `corpus_g2` : sans dates lues, D6
+  compare quantité × prix (= montant facturé) et conclut `conforme`. Causes : `BillingSpecifiedPeriod` (CII) et
+  `InvoicePeriod` (UBL) non lus ; période imprimée dans le libellé (« Lagergeld (07/03/2026 – 15/03/2026) »).
+- **Choix** : `ingest/structure` lit BT-134/135 de la ligne (prioritaire sur une note) ; l'extracteur PDF lit la
+  période dans le libellé quand aucune colonne de dates n'est lue : **exactement deux** dates reliées par un
+  séparateur d'intervalle (–, —, -, au, to, bis, al, a, tot, t/m, hasta).
+- Restent manquées : deux factures dont la date d'émission n'est pas lue (OCR) — aucune grille applicable.
+
+## D-2302 — Numéro de TVA lu par OCR dont la clé est juste
+
+La clé française (modulo 97) détecte toute substitution d'un chiffre et toute permutation de deux chiffres
+voisins : elle confirme la lecture des caractères. Pour `client_facture.tva` lu par OCR, clé juste, numéro non
+corrigé, mots OCR ≥ 0,6 : confiance = celle de l'attribution du pavé (0,97 libellé, 0,80 sans libellé),
+plafonnée à `C_OCR_RECOUPEE` (0,92) au lieu du plafond 0,88 d'une lecture OCR isolée. C8 certains : GX0028,
+GX0064, BX0055, BX0235 (sous-classés pour `confiance_insuffisante`). Les motifs de D-2211 restent appliqués.
+
+## D-2303 — Le test de confusion ne vise pas une lecture confirmée par l'arithmétique imprimée
+
+`ControlContext.lecture_douteuse` ignore un candidat **membre direct** (non inerte) d'une identité imprimée de
+son document qui tient (somme, produit, écho ; D-1700) : une autre lecture de ses caractères romprait cette
+identité. La confirmation « par la rangée » (D-1701) ne suffit pas (elle prouve l'emplacement, pas les
+caractères). D3 BX0026, BX0138, D7 BX0028, D4 BX0201, GX0088 deviennent certains.
+
+## D-2304 — Allocations dont dépend la comparaison
+
+Condition 5 de §8.5.1 (« l'allocation éventuelle n'est pas `prorata` ») : `ControlContext.classify` ne retient
+plus toutes les allocations touchant un document, mais celles qui relient **deux documents comparés** (source et
+cible parmi les documents du constat ; un contrôle interne à un document ne dépend d'aucune répartition) ; si
+des lignes de **débours** d'une facture du transitaire sont valeurs clés, seulement les allocations de ces lignes ;
+une ligne répartie au prorata entre déclarations **toutes** comparées ensemble (parts connues, facture ne citant
+aucun MRN hors du dossier) ne dépend pas de la clé de répartition. Une ligne sans MRN d'un relevé multi-MRN (part
+inconnue) reste `prorata`. Une ligne de prestation (C6 : FAF) garde toutes les allocations (sa base en dépend
+indirectement). A4 BX0168, C5 GX0152, GX0164 deviennent certains.
+
+## D-2305 — Nature d'une ligne lue par OCR ; ligne qui renvoie à une annexe
+
+- `nature_libelle(..., tolerant=True)` (nature d'une ligne déjà lue, jamais le repérage des rangées) : si rien
+  n'est reconnu, un mot d'au moins 6 caractères est remplacé par l'**unique** mot (ou radical) du vocabulaire à
+  une édition (« Comisi6n » -> « comision », « dédauanement » -> « dedouanement ») ; deux candidats : rien.
+- Écarté : classer « Suplidos según anexo » en `debours_combines` (essayé) — quand l'annexe est découpée en un
+  second document, ses lignes de détail sont aussi lues : débours comptés deux fois (5 C5 nouveaux, dont 3 sur
+  pièges). Voir D-2306.
+
+## D-2306 — D2 : pas de constat sans libellé, ni pour une ligne qui renvoie à une annexe
+
+`_hors_grille` : ligne sans libellé lu -> `non_verifiable` (`valeur_absente`, motif `libelle_absent`) : le
+poste se reconnaît au libellé, « aucun poste ne correspond » n'est pas établi ; ligne qui reprend le total d'une
+annexe (`renvoie_a_une_annexe` : annexe, anexo, Anlage, allegato, bijlage, appendix…) -> `non_verifiable`
+(motif `renvoi_annexe`). Bruit D2 `corpus_g2` 31 -> 5 (avec D-2305). Les D2 vrais (libellés lus) sont inchangés.
+
+## D-2307 — Somme lue incomplète : B2, B3, B4 (masse brute)
+
+Le nombre d'articles imprimé est lu et des articles n'ont pas été lus, **et** le total imprimé dépasse la somme
+lue (B2, B3) ou la somme des masses brutes lue est inférieure à la masse brute totale (B4 `somme_brute`) : les
+lignes manquantes expliquent l'écart dans le sens observé -> `non_verifiable` (motif `articles_non_lus`) au lieu
+d'un constat. Écart de sens contraire (une ligne manquante ne peut pas l'expliquer) : constat inchangé. Sur les
+deux jeux, aucun constat ainsi retiré n'était apparié à une erreur (B3 GX0005, vrai, a une somme supérieure au
+total : conservé).
+
+## D-2308 — Devise d'une facture commerciale relue à deux endroits (OCR)
+
+D-2003 annonçait 0,90 quand le code ISO est lu en deux endroits distincts (en-tête de colonne et total) ; le
+plafond d'une lecture OCR (0,88) l'empêchait. Retenu : 0,90 si les deux lectures concordent et que les mots OCR
+sont sûrs (`confiance_mots` ≥ 0,65) ; idem pour le code du libellé « devise » relu ailleurs, ou seul code ISO du
+document imprimé sur deux lignes. A3 GX0195, BX0214 deviennent certains.
+
+## D-2309 — A4/A5 : lignes de pied signées
+
+`_explique_par_pied` essaie aussi la somme **signée** (fret, assurance, emballage +, remise −) : « fret +
+assurance − remise » explique l'écart (GX0123 : 485,04 + 23,06 − 112,80 = 395,30). Révélé par D-2308 : la
+devise lue à 0,90 faisait de cet écart expliqué un A4 certain faux.
+
+## D-2310 — Écart expliqué par une confusion de lecture sur des valeurs peu sûres : pas de constat
+
+`ControlContext.constat` : un classement qui porte à la fois `lecture_douteuse` (§8.5.4) et
+`confiance_insuffisante` donne un résultat `non_verifiable` (raison `lecture_douteuse`, motif
+`ecart_explique_par_une_lecture_douteuse`, raisons conservées dans `details`), sans constat. Familles P
+exclues. Sur les deux jeux, aucune erreur réelle parmi ces constats (un seul C5 neutre `doublon_composantes`) ;
+bruit `corpus_g2` 444 -> 388, corpus d'origine 274 -> 245 à cette étape. Une lecture douteuse sur des valeurs
+sûres reste `a_verifier`.
+
+## D-2311 — D1 : confusion sur un facteur de produit ; facteur non imprimé
+
+Le test de confusion d'un opérande de produit (quantité × prix, HT × taux) remplaçait le facteur comme dans une
+somme (`c − d + x`) : il est désormais recalculé `c × x / d`. Une quantité implicite ou un prix déduit (méthode
+`derive`) n'est pas imprimé : pas d'identité à vérifier sur la ligne -> `non_verifiable` (motif
+`facteur_non_imprime`). Bruit D1 `corpus_g2` 39 -> 25 (avec D-2310).
+
+## D-2312 — P4 : un constat par dossier
+
+Plusieurs documents faiblement rattachés au même dossier relèvent d'une même vérification : un seul constat
+P4 les énumère (documents, signaux de chacun dans `details.documents_faibles`) ; les autres liens faibles
+donnent `non_applicable` (`couvert_par_autre_controle`, `regroupe_dans`). Un seul lien faible : libellé
+inchangé. P4 `corpus_g2` 28 -> 21, corpus d'origine 46 -> 34. P1/P2 inchangés.
+
+## D-2313 — C1–C5 : aucune ligne de la composante sur la facture
+
+Aucune ligne de la composante refacturée (ni avoir), écart en faveur du client : le transitaire ne refacture
+pas cette taxe (ou sa ligne n'est pas lue) ; rien n'est refacturé au-delà du liquidé -> `non_verifiable`
+(motif `aucune_ligne_de_la_composante`). Aucune erreur réelle concernée sur les deux jeux.
+
+## D-2314 — Condition de confiance remplie par une identité arithmétique imprimée
+
+`ControlContext._confiance_par_identite` : une valeur clé lue (texte natif, OCR, modèle) sous `C_MIN_CERTAIN`
+mais au moins à `C_LECTURE_CONFIRMABLE` (0,70), membre direct d'une identité imprimée de son document qui tient
+et **qui n'est pas formée des seules valeurs clés** (le calcul contesté ne se prouve pas lui-même), satisfait la
+condition 3 de §8.5.1. Ancrage, rattachement, lecture corroborée (D-1700), structure (D-2210) restent exigés.
+C6 GX0192 devient certain. Effet de bord révélé et corrigé : D-2315.
+
+## D-2315 — Versions d'une déclaration : préfixes MRN égaux aux confusions OCR près
+
+`ControlContext.declarations`, `versions_anterieures`, `version_retenue` comparent les préfixes de 15 caractères
+par `cle_confusion_ocr` (5/S, 0/O, 1/I…) : deux lectures d'un même MRN (version rectificative scannée) ne sont
+plus additionnées. GX0041 : « 26FREMPO5ICM40E… » et « 26FREMPOSICM40E… » sommées par A4 (piège « version
+rectifiée ») devenaient un A4 certain faux avec D-2314. Deux MRN réellement distincts diffèrent sur presque tous
+leurs caractères aléatoires.
+
+## D-2316 — D5 : deux lectures identiques du libellé se confirment
+
+Libellés des lignes répétées identiques caractère pour caractère (texte brut ≥ 8 caractères), lus à deux
+endroits distincts, chacun ≥ 0,80 : la condition de confiance est remplie pour ces libellés (une erreur d'OCR
+ne produit pas deux fois le même libellé). Les motifs de D-2212 restent appliqués. D5 GX0101 devient certain.
+
+## D-2317 — Mesures (dev seulement)
+
+Bancs `g2_dev_cd` -> `g2_dev_rec`, `c1_dev_cd` -> `c1_dev_rec` (même cache de pages) :
+
+| | `corpus_g2` avant | après | corpus d'origine avant | après |
+|---|---|---|---|---|
+| VP / FP certain | 100 / 0 | 110 / 0 | 111 / 0 | 119 / 0 |
+| précision certain | 1,000 | 1,000 | 1,000 | 1,000 |
+| rappel | 0,823 | 0,837 | 0,818 | 0,818 |
+| rappel certain | 0,676 | 0,741 | 0,729 | 0,778 |
+| sous-classements | 30 | 24 | 26 | 19 |
+| FN | 53 | 49 | 67 | 67 |
+| `a_verifier` non appariés (pièges compris) | 485 | 342 | 275 | 226 |
+| bruit par dossier | 2,09 | **1,47** | 1,36 | 1,12 |
+| violations de pièges | 48 | 35 | 36 | 27 |
+| exactitude des montants | 0,963 | 0,964 | 0,966 | 0,966 |
+
+Seuil bloquant PASSE sur les deux ; aucune erreur auparavant détectée n'est perdue ; aucun FP certain. Lecture
+(`scripts/mesure_extraction.py`, factures de transitaire et commerciales, deux corpus) : aucune valeur perdue ;
+`lignes[].nature` `corpus_g2` 85,3 % -> 86,0 % ; bande ≥ 0,90 : 6 334 / 6 331 justes (les 3 fausses préexistent),
+8 142 / 8 140, 6 677 / 6 677, 9 152 / 9 152.
+
+**Restent (relevés, non corrigés)** : B2 « Total A00 EUR … » (totaux par code imprimés sous le tableau des
+taxes) non lus par l'extracteur de déclaration — 3 B2 certains manqués (GX0087, GX0108, GX0246) ; les ajouter
+impose que C (`reference_declaration`) exclue les lignes sans article, sinon double comptage ; date d'émission
+illisible (OCR) sur deux factures de transitaire (aucune grille, D6 manqué) ; F3 `rattachement_faible` (lien du
+dossier frère) ; A6 `devise_incertaine` (taux imprimé lu sous 0,90).

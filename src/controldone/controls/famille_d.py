@@ -967,6 +967,32 @@ def _d5_motifs(ctx: ControlContext, f: Document, g: Sequence[LigneRoutee], ref: 
     return motifs
 
 
+#: Longueur minimale d'un libellé dont deux lectures identiques se confirment (D-2316).
+_LONGUEUR_LIBELLE_CONCORDANT = 8
+#: Confiance minimale de chacune de ces lectures (D-2316).
+C_LIBELLE_CONCORDANT = 0.8
+
+
+def _libelles_concordants(
+    ctx: ControlContext, libelles: Sequence[ValeurSourcee | None], vals: Sequence[ValeurSourcee]
+) -> list[ValeurSourcee]:
+    """D-2316 : les libellés des lignes répétées sont lus **indépendamment** à des endroits distincts de la
+    facture ; s'ils sont identiques caractère pour caractère (texte brut, au moins 8 caractères), chacun lu au
+    moins à 0,80, ces lectures se confirment l'une l'autre (une erreur d'OCR ne produit pas deux fois le même
+    libellé) : la condition de confiance (§8.5.1 condition 3) est remplie pour ces libellés."""
+    lus = [v for v in libelles if v is not None]
+    if len(lus) < 2:
+        return list(vals)
+    textes = {(v.valeur_brute or v.valeur or "").strip() for v in lus}
+    zones = {(v.page, v.zone.y0 if v.zone is not None else None) for v in lus}
+    if (len(textes) != 1 or len(next(iter(textes))) < _LONGUEUR_LIBELLE_CONCORDANT or len(zones) != len(lus)
+            or any(v.confiance < C_LIBELLE_CONCORDANT for v in lus)):
+        return list(vals)
+    seuil = ctx.profil.c_min_certain
+    ids = {v.id for v in lus}
+    return [v.model_copy(update={"confiance": max(v.confiance, seuil)}) if v.id in ids else v for v in vals]
+
+
 @control("D5")
 def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
     """D5 — Deux lignes de prestation de même nature, même libellé normalisé, même montant et même MRN ou
@@ -1003,6 +1029,7 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
         for g, ref, copies in doubles:
             unite = cle_unite(ft=fid, lignes=[lr.index for lr in g])
             vals = [x for lr in g for x in (lr.ligne.libelle, _montant(ctx, lr.ligne)) if x is not None]
+            cles_d5 = _libelles_concordants(ctx, [lr.ligne.libelle for lr in g], vals)
             m = _montant(ctx, g[0].ligne)
             assert m is not None
             montant = m.decimal_signe() * (copies - 1)
@@ -1014,7 +1041,7 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
                 raisons.append(RaisonCode.doublon_non_etabli)
             classement = ctx.classify(
                 "D5", ecart=montant, tolerance=ctx.tol.t_tarif(), seuil_certitude=ctx.tol.s_tarif(),
-                valeurs_cles=vals, documents=[fid], montant=montant, raisons_supplementaires=raisons,
+                valeurs_cles=cles_d5, documents=[fid], montant=montant, raisons_supplementaires=raisons,
             )
             libelle = (
                 f"{libelle_facture([f])} porte {len(g)} lignes identiques {_libelle_ligne(g[0].ligne)} de "

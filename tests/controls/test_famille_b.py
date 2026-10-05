@@ -104,8 +104,17 @@ def test_b2_ecart_certain():
     textes_propres(r)
 
 
-def test_b2_articles_non_tous_lus_reste_a_verifier():
+def test_b2_articles_non_tous_lus_total_superieur_non_verifiable():
+    # D-2307 : des articles imprimés ne sont pas lus et le total dépasse la somme lue : leurs lignes manquent.
     d = dec_b2(tax("100.00"), total="250.00", n_articles=3, articles=2)
+    (r,) = b2_sommes_taxes(contexte([d]))
+    assert r.outcome is Outcome.non_verifiable and r.constat is None
+    assert r.raison_code is RaisonCode.valeur_absente and r.details["motif"] == "articles_non_lus"
+
+
+def test_b2_articles_non_tous_lus_somme_superieure_reste_a_verifier():
+    # Une ligne non lue ne peut pas expliquer une somme lue supérieure au total : le constat reste émis.
+    d = dec_b2(tax("100.00"), tax("200.00"), total="250.00", n_articles=3, articles=2)
     (r,) = b2_sommes_taxes(contexte([d]))
     assert r.outcome is Outcome.a_verifier and RaisonCode.valeur_absente in r.constat.raisons
     assert "une ligne non lue" in r.constat.libelle

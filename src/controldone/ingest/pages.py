@@ -781,16 +781,53 @@ def _ocr_brut(image, opts: OptionsPages) -> tuple[list[Mot], float]:
     return mots, (somme / poids if poids else 0.0)
 
 
-def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
+#: Réglages du prétraitement OCR (D-2601 à D-2606). Un dictionnaire pour que ``scripts/mesure_ocr.py`` puisse
+#: comparer des variantes ; le pipeline n'en modifie jamais les valeurs.
+REGLAGES_OCR: dict[str, object] = {
+    "gris_max": True,  # gris = max(R, V, B) : encre colorée claire atténuée (D-2601)
+    "traits": True,  # traits parasites traversant la page effacés (D-2602)
+    "median": True,  # filtre médian 3 × 3 si bruit impulsionnel (D-2602)
+    "contraste": True,  # étirement d'une page pâle (D-2603)
+    "deux_pages": True,  # feuille « deux pages par feuille » lue moitié par moitié (D-2604)
+    "seuil_reessai_orientation": 0.40,  # confiance au-dessous de laquelle les autres orientations sont essayées (D-2605)
+}
+
+
+def _qualite_ocr(mots: list[Mot], score: float) -> float:
+    return score * score_texte(" ".join(m.texte for m in mots))
+
+
+def _pretraiter(image) -> tuple[object, list[str]]:
+    """Image ``L`` nettoyée avant orientation et OCR (``ingest.pretraitement``) et avertissements de traçabilité."""
+    from . import pretraitement as pt
+
+    r = REGLAGES_OCR
+    gris = pt.niveaux_de_gris(image) if r["gris_max"] else image.convert("L")
+    notes: list[str] = []
+    if r["traits"]:
+        gris, n = pt.retirer_traits(gris)
+        if n:
+            notes.append(f"pretraitement:traits_effaces:{n}")
+    if r["contraste"]:
+        gris, etire = pt.etirer_contraste(gris)
+        if etire:
+            notes.append("pretraitement:contraste_etire")
+    if r["median"]:
+        gris, filtre = pt.debruiter(gris)
+        if filtre:
+            notes.append("pretraitement:median")
+    return gris, notes
+
+
+def _ocr_oriente(image, opts: OptionsPages, rotation: int | None) -> tuple[list[Mot], float, int, float, object]:
+    """Désinclinaison, OCR, puis essai des autres orientations si la lecture est mauvaise.
+
+    ``rotation`` : verdict OSD déjà appliqué (``None`` : pas de verdict). Autres orientations essayées quand l'OSD
+    n'a pas de verdict et que la lecture est moyenne (confiance < 0,6 ou moins de 5 mots), ou — même avec un
+    verdict, D-2113/D-2605 — quand la confiance est sous ``seuil_reessai_orientation`` (OSD confiant mais faux).
+    On garde la lecture la meilleure (confiance × plausibilité du texte, avance d'au moins 0,1)."""
     from PIL import Image
 
-    # Tesseract multi-fils se dégrade fortement sous charge (plusieurs pages en parallèle) : un fil par OCR.
-    os.environ.setdefault("OMP_THREAD_LIMIT", "1")
-
-    image = image.convert("L")
-    rotation = _osd_rotation(image)
-    if rotation:
-        image = image.rotate(-rotation, expand=True, fillcolor=255)
     angle = 0.0
     try:
         angle = _angle_inclinaison(image)
@@ -799,24 +836,85 @@ def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
     if abs(angle) >= 0.3:
         image = image.rotate(angle, resample=Image.BICUBIC, expand=True, fillcolor=255)
     mots, score = _ocr_brut(image, opts)
-    rot_finale = rotation or 0
-    if rotation is None and (score < 0.6 or len(mots) < 5):
-        # OSD sans verdict : essai des trois autres orientations, on garde la meilleure confiance.
-        meilleurs = (mots, score, 0, image)
-        for essai in (180, 90, 270):
-            im2 = image.rotate(-essai, expand=True, fillcolor=255)
+    deja = rotation or 0
+    seuil = float(REGLAGES_OCR["seuil_reessai_orientation"] or 0.0)
+    if (rotation is None and (score < 0.6 or len(mots) < 5)) or score < seuil:
+        meilleurs = (mots, score, deja, image)
+        q_meilleur = _qualite_ocr(mots, score)
+        for cible in (180, 90, 270, 0):
+            if cible == deja:
+                continue
+            im2 = image.rotate(-((cible - deja) % 360), expand=True, fillcolor=255)
             m2, s2 = _ocr_brut(im2, opts)
-            if s2 * score_texte(" ".join(x.texte for x in m2)) > meilleurs[1] * score_texte(
-                    " ".join(x.texte for x in meilleurs[0])) + 0.1:
-                meilleurs = (m2, s2, essai, im2)
-        mots, score, rot_finale, image = meilleurs
-    lignes = construire_lignes(mots)
+            q2 = _qualite_ocr(m2, s2)
+            if q2 > q_meilleur + 0.1:
+                meilleurs, q_meilleur = (m2, s2, cible, im2), q2
+        mots, score, deja, image = meilleurs
+    return mots, score, deja, angle, image
+
+
+def _rotation_deux_pages(rotation: int | None) -> int | None:
+    """Feuille « deux pages » détectée avant l'OSD : seul un retournement (180°) est appliqué."""
+    return rotation if rotation in (0, 180) else None
+
+
+def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
+    from . import pretraitement as pt
+
+    # Tesseract multi-fils se dégrade fortement sous charge (plusieurs pages en parallèle) : un fil par OCR.
+    os.environ.setdefault("OMP_THREAD_LIMIT", "1")
+
+    image, notes = _pretraiter(image)
+    deux_pages = bool(REGLAGES_OCR["deux_pages"]) and pt.coupure_deux_pages(image) is not None
+    rotation = _osd_rotation(image)
+    if deux_pages:
+        rotation = _rotation_deux_pages(rotation)
+    if rotation:
+        image = image.rotate(-rotation, expand=True, fillcolor=255)
+    coupe = pt.coupure_deux_pages(image) if REGLAGES_OCR["deux_pages"] else None
+    if coupe is not None:
+        return _ocr_deux_pages(image, coupe, opts, numero, rotation or 0, notes)
+    mots, score, rot_finale, angle, _ = _ocr_oriente(image, opts, rotation)
+    return _page_ocr(numero, mots, score, rot_finale, angle, notes)
+
+
+def _page_ocr(numero: int, mots: list[Mot], score: float, rotation: int, angle: float, notes: list[str],
+              lignes: list[Ligne] | None = None) -> PageText:
+    lignes = construire_lignes(mots) if lignes is None else lignes
     texte = "\n".join(li.texte for li in lignes)
     qualite = QualiteTexte.ocr
     if not texte.strip() or score < SEUIL_ILLISIBLE_OCR or score_texte(texte) < 0.4:
         qualite = QualiteTexte.illisible
     return PageText(numero=numero, texte=texte, lignes=lignes, qualite=qualite, source="ocr",
-                    score_ocr=round(score, 4), rotation=rot_finale, desinclinaison=angle)
+                    score_ocr=round(score, 4), rotation=rotation, desinclinaison=angle, avertissements=notes)
+
+
+def _ocr_deux_pages(image, coupe: int, opts: OptionsPages, numero: int, rotation: int, notes: list[str]) -> PageText:
+    """Feuille « deux pages par feuille » (D-2604) : chaque moitié est lue seule (désinclinaison, OCR, orientation),
+    puis les lignes de la moitié gauche précèdent celles de la moitié droite.
+
+    Convention de numérotation : la feuille reste **une** page physique (même ``numero``, mêmes citations « page
+    n ») ; les boîtes des mots sont normalisées sur la feuille entière (moitié droite : x ≥ abscisse de coupe),
+    si bien qu'une preuve citée pointe au bon endroit de la feuille. Les lignes ne mêlent jamais les deux
+    moitiés. Avertissement ``deux_pages_par_feuille:<coupe relative>``."""
+    w, h = image.size
+    mots_tous: list[Mot] = []
+    lignes: list[Ligne] = []
+    angles: list[float] = []
+    somme = poids = 0.0
+    for x0, x1 in ((0, coupe), (coupe, w)):
+        mots, score, _rot, angle, _im = _ocr_oriente(image.crop((x0, 0, x1, h)), opts, 0)
+        angles.append(angle)
+        # coordonnées 0–1 de la moitié -> feuille (abscisses décalées et réduites, ordonnées inchangées)
+        places = [replace(m, x0=(x0 + m.x0 * (x1 - x0)) / w, x1=(x0 + m.x1 * (x1 - x0)) / w) for m in mots]
+        mots_tous.extend(places)
+        lignes.extend(construire_lignes(places))
+        n = sum(len(m.texte) for m in mots)
+        somme += score * n
+        poids += n
+    score = somme / poids if poids else 0.0
+    notes = [*notes, f"deux_pages_par_feuille:{coupe / w:.3f}"]
+    return _page_ocr(numero, mots_tous, score, rotation, angles[0] if angles else 0.0, notes, lignes=lignes)
 
 
 def _pages_image(contenu: bytes, opts: OptionsPages) -> list[PageText]:

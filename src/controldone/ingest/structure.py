@@ -549,6 +549,10 @@ def analyser_contenu_structure(contenu: bytes, mime: str | None = None,
             if f.type == "xml" and f.reconnait(xml, MIME_XML):
                 return InfoStructure(format=f.format_id, type=TypeDocument.declaration, sous_type=f.sous_type,
                                      confiance=0.99, xml=xml, fiche=f)
+        fiche = fiche_deduite(racine)
+        if fiche is not None:  # export de déclaration de format inconnu, lu par ses noms d'éléments (D-2401)
+            return InfoStructure(format=fiche.format_id, type=TypeDocument.declaration, sous_type=fiche.sous_type,
+                                 confiance=0.9, xml=xml, fiche=fiche)
         return None
     if code in CODES_AVOIR or (syntaxe == "ubl" and _local(racine.tag) == "CreditNote") or _total_negatif(racine, syntaxe):
         t, st = TypeDocument.avoir, None
@@ -1569,6 +1573,10 @@ class ExtracteurDeclarationExport:
         if contenu is None or mime not in (MIME_XML, MIME_CSV):
             return ExtractionResult(extracteur=info_ex)
         fiche = next((f for f in self.fiches if f.reconnait(contenu, mime)), None)
+        deduite = False
+        if fiche is None and mime == MIME_XML:
+            fiche = fiche_deduite(_xml(contenu))
+            deduite = fiche is not None
         if fiche is None:
             return ExtractionResult(extracteur=info_ex)
         methode = Methode.xml_structure if fiche.type == "xml" else Methode.csv_structure
@@ -1580,11 +1588,62 @@ class ExtracteurDeclarationExport:
         avert: list[str] = []
         try:
             champs = _champs_declaration(c, fiche, contenu, avert)
-        except (ValueError, KeyError) as e:
+        except (ValueError, KeyError, etree.XPathError) as e:
             return ExtractionResult(extracteur=info_ex, avertissements=[f"export_illisible:{type(e).__name__}"],
                                     partielle=True)
+        if deduite:
+            # Correspondance déduite des noms d'éléments (D-2401) : jamais la certitude d'une fiche écrite ;
+            # confiance selon les recoupements internes du fichier.
+            from .structure_deduite import (
+                CONFIANCE_DEDUITE,
+                CONFIANCE_DEDUITE_DOUTEUSE,
+                coherence_declaration,
+                correspondance_confirmee,
+            )
+
+            ok, ko = coherence_declaration(champs)
+            conf = CONFIANCE_DEDUITE if correspondance_confirmee(ok, ko) else CONFIANCE_DEDUITE_DOUTEUSE
+            _plafonner(champs, conf)
+            avert = [a for a in avert if not a.startswith("element_ignore:")]
+            avert.append(f"fiche_deduite:recoupements_ok={ok}:echecs={ko}")
         return ExtractionResult(extracteur=info_ex, champs=champs,
                                 avertissements=[f"fiche:{fiche.format_id}@{fiche.version}", *sorted(set(avert))])
+
+
+def fiche_deduite(racine: etree._Element | None) -> FicheCorrespondance | None:
+    """Fiche déduite des noms d'éléments d'un export XML de déclaration de format inconnu (D-2401), ``None`` si
+    le fichier n'a pas la forme d'une déclaration ou si la fiche déduite est invalide."""
+    from .structure_deduite import deduire_fiche_declaration
+
+    try:
+        d = deduire_fiche_declaration(racine)
+        return FicheCorrespondance.depuis_dict(d, source="deduite") if d is not None else None
+    except (ValueError, etree.XPathError):
+        return None
+
+
+def _plafonner(champs: Any, plafond: float) -> None:
+    """Confiance de toutes les valeurs sourcées de ``champs`` ramenée à ``plafond`` au plus (en place)."""
+    from pydantic import BaseModel
+
+    def visiter(obj: Any) -> None:
+        if isinstance(obj, BaseModel):
+            for nom in type(obj).model_fields:
+                v = getattr(obj, nom)
+                if isinstance(v, ValeurSourcee):
+                    if v.confiance > plafond:
+                        setattr(obj, nom, v.model_copy(update={"confiance": plafond}))
+                else:
+                    visiter(v)
+        elif isinstance(obj, list):
+            for k, v in enumerate(obj):
+                if isinstance(v, ValeurSourcee):
+                    if v.confiance > plafond:
+                        obj[k] = v.model_copy(update={"confiance": plafond})
+                else:
+                    visiter(v)
+
+    visiter(champs)
 
 
 def extracteurs() -> list[Any]:

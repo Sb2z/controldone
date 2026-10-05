@@ -12,9 +12,14 @@ ESPACES = "         　\t"
 _ESPACES_RE = re.compile(r"[\s        　]+")
 
 
+_BARREES = str.maketrans({"ł": "l", "Ł": "L", "ø": "o", "Ø": "O", "đ": "d", "Đ": "D"})
+
+
 def sans_accents(texte: str) -> str:
-    """Supprime les diacritiques (``é`` -> ``e``, ``ç`` -> ``c``) ; ``œ`` -> ``oe``, ``æ`` -> ``ae``."""
+    """Supprime les diacritiques (``é`` -> ``e``, ``ç`` -> ``c``) ; ``œ`` -> ``oe``, ``æ`` -> ``ae`` ; lettres
+    barrées sans décomposition Unicode (polonais ``ł``, ``ø``, ``đ``) -> lettre simple (D-2501)."""
     texte = texte.replace("œ", "oe").replace("Œ", "OE").replace("æ", "ae").replace("Æ", "AE")
+    texte = texte.translate(_BARREES)
     decompose = unicodedata.normalize("NFKD", texte)
     return "".join(c for c in decompose if not unicodedata.combining(c))
 

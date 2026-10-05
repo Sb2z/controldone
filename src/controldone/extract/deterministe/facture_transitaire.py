@@ -129,7 +129,9 @@ def consensus_lectures(membres: Sequence[str], compte: Mapping[str, int], meille
 
 
 _ROLES_TEXTE = {"lib", "libcode", "natflag", "ref", "detail", "transport", "date", "pos"}
-_ROLES_NUM = {"qte", "pu", "ht", "ttc", "tva", "tva_mt", "cat", "taux", "base_droit", "base_tva"}
+_ROLES_NUM = {"qte", "pu", "pu_ttc", "ht", "ttc", "tva", "tva_mt", "cat", "taux", "base_droit", "base_tva"}
+#: Rôles des colonnes dont une valeur fait une rangée du tableau.
+_ROLES_VALEUR = ("qte", "pu", "pu_ttc", "ht", "ttc", "tva", "tva_mt", "taux")
 
 _VOCABULAIRE: dict[str, list[str]] = L.VOCABULAIRE_COLONNES
 _PHRASES: list[tuple[str, tuple[str, ...]]] = sorted(
@@ -206,7 +208,7 @@ def _reconnaitre_entete(li: VueLigne) -> list[ColonneFt] | None:
         return None
     if not any(r in ("lib", "libcode", "ref", "transport") for r in roles):
         return None
-    if not any(r in ("ht", "pu") or r.startswith("nat:") for r in roles):
+    if not any(r in ("ht", "pu", "ttc", "pu_ttc") or r.startswith("nat:") for r in roles):
         return None
     # plusieurs colonnes « montant » (« Montant » … « Total ») : la première est le montant HT, les
     # suivantes un montant TTC (jamais lu comme montant de ligne)
@@ -244,6 +246,9 @@ _MONTANT_RE = re.compile(r"^[(\-−–]?[€$£]?\d{1,3}(?:[ \u00a0\u202f\u2009.
 _ENTIER_RE = re.compile(r"^\d{1,4}$")
 _POURCENT_RE = re.compile(r"^(\d{1,2}(?:[.,]\d{1,2})?)\s*%$")
 _MARQUEUR_RE = re.compile(r"^[A-Z]$")
+#: mention d'exonération imprimée à la place d'un taux de TVA (D-2502)
+_EXONERE_RE = re.compile(r"isento|isenta|exento|exenta|esente|exempt|exempted|exonere|exoneree|exo|zw|"
+                         r"zwolniony|np|steuerfrei|mwst-frei|befreit|vrijgesteld")
 _MRN_RE = re.compile(r"(?<![A-Z0-9])(\d{2}[A-Z]{2}[A-Z0-9]{14})(?![A-Z0-9])")
 #: séparateur entre les deux dates d'une période écrite dans un libellé (D-2301)
 _RX_SEP_PERIODE = re.compile(r"\s*(?:[-–—]{1,2}|au|to|until|bis|al|a|tot|t/m|hasta)\s*", re.IGNORECASE)
@@ -298,8 +303,13 @@ class LigneLue:
     quantite: Lu | None = None
     prix_unitaire: Lu | None = None
     montant_ht: Lu | None = None
+    #: montant TVA comprise imprimé (colonne « TTC », « Total c/ IVA ») et prix unitaire TVA comprise
+    montant_ttc: Lu | None = None
+    pu_ttc: Lu | None = None
     montant_tva: Lu | None = None
     taux_tva: Lu | None = None
+    #: la ligne porte une mention d'exonération (« isento », « exempt », « zw. ») au lieu d'un taux
+    exoneree: bool = False
     marqueur: Lu | None = None
     mrn: Lu | None = None
     ref_transport: Lu | None = None
@@ -338,6 +348,14 @@ class LectureTva:
     ligne: VueLigne
     page: VuePage
     corrigee: bool = False
+    #: numéro libellé comme celui d'un représentant fiscal (« TVA rep. fiscal : FR… ») : pas celui du client
+    representant: bool = False
+
+
+#: Libellé d'un représentant fiscal (D-2504).
+_RX_REP_FISCAL = re.compile(r"\b(rep\.? fiscal|representant fiscal|representante fiscal|fiscal rep(?:resentative)?|"
+                            r"steuervertret\w*|fiskalvertret\w*|rappresentante fiscale|fiscaal vertegenwoordiger|"
+                            r"przedstawiciel podatkowy)\b")
 
 
 # --- extracteur -------------------------------------------------------------------------------------------------
@@ -870,12 +888,23 @@ class _Extraction:
             region = [lt for lt in tvas if lt.page is label.page and label.ligne.y0 - 0.005 <= lt.ligne.y0
                       <= label.ligne.y0 + 0.1 and x0 - 0.03 <= lt.lu.lecture.zone.x0 <= x0 + 0.4]  # type: ignore[union-attr]
             if region:
-                client_tva = region[0]
+                # le numéro du représentant fiscal du client n'est pas celui du client (D-2504)
+                propres = [lt for lt in region if not lt.representant]
+                client_tva = propres[0] if propres else region[0]
+                if client_tva.representant:
+                    # le numéro propre du client est imprimé plus bas dans le même pavé
+                    zr = client_tva.lu.lecture.zone
+                    suite = [lt for lt in tvas if lt.page is client_tva.page and not lt.representant
+                             and zr is not None and lt.lu.lecture.zone is not None
+                             and abs(lt.lu.lecture.zone.x0 - zr.x0) < 0.05
+                             and 0 < lt.ligne.y0 - client_tva.ligne.y0 <= 0.06]
+                    if suite:
+                        client_tva = suite[0]
         ent = [lt for lt in tvas if lt.norm in entites]
         if ent and (client_tva is None or client_tva.norm not in entites):
             client_tva = ent[0]
         autres = [lt for lt in tvas if client_tva is None or lt.norm != client_tva.norm]
-        autres = [lt for lt in autres if lt.norm not in entites]
+        autres = [lt for lt in autres if lt.norm not in entites and not lt.representant]
         siren_pied = _siren_pied(pages)
         emetteur: LectureTva | None = None
         conf_em = C_LIBELLE
@@ -909,6 +938,8 @@ class _Extraction:
             c.definir("emetteur.tva", v)
         if client_tva is not None and not self.avoir:
             conf = conf_client if not client_tva.corrigee else 0.6
+            if client_tva.representant:
+                conf = min(conf, 0.6)
             if client_tva.norm.startswith("FR") and tva_fr_valide(client_tva.norm) is False:
                 conf = min(conf, 0.5)
             lu_cl = Lu(client_tva.lu.lecture, base=conf, brut=client_tva.lu.brut)
@@ -946,7 +977,9 @@ class _Extraction:
                     i, j, norm = r
                     ms = mots[k + i:k + j]
                     brut = " ".join(m.texte for m in ms).strip(":;,()")
-                    out.append(LectureTva(Lu(lecture_mots(ms, p, li), brut=brut), norm, li, p, corrigee))
+                    avant = cle_texte(" ".join(m.texte for m in mots[max(0, k + i - 6):k + i]))
+                    out.append(LectureTva(Lu(lecture_mots(ms, p, li), brut=brut), norm, li, p, corrigee,
+                                          representant=bool(_RX_REP_FISCAL.search(avant))))
                     k += j
         uniques: dict[str, LectureTva] = {}
         for lt in out:
@@ -1050,6 +1083,13 @@ class _Extraction:
                     if any(lg.mrn is not None for lg in lignes) and not any(lg.ref_autre for lg in lignes):
                         for lg in lignes:
                             lg.colonne_mrn = True
+                    elif lignes and len(groupes) == 1:
+                        section = self._mrn_intertitre(p, k)
+                        if section is not None:
+                            # tableau groupé par envoi (« Envoi — MRN 26FR… » au-dessus de l'en-tête, D-2503)
+                            for lg in lignes:
+                                lg.mrn = lg.mrn or section
+                                lg.colonne_mrn = True
                     tables.append(lignes)
                 k = fin
         return tables
@@ -1108,7 +1148,7 @@ class _Extraction:
                 li = VueLigne(page=li.page, rang=li.rang, segments=segs, ligne=li.ligne)
             cellules = _attribuer(li, cols)
             a_valeur = any(_contient_nombre(segs) for role, segs in cellules.items()
-                           if role in ("qte", "pu", "ht", "tva", "tva_mt", "taux") or role.startswith("nat:"))
+                           if role in _ROLES_VALEUR or role.startswith("nat:"))
             gauche = any(s.x0 < debut_num - 0.005 for s in li.segments)
             if not a_valeur or not gauche:
                 mrn_suite = self._mrn_seul(p, li) if lus and gauche and not a_valeur else None
@@ -1129,6 +1169,16 @@ class _Extraction:
                     # intertitre (« PRESTATIONS ») ou suite de libellé entre deux lignes du tableau
                     k += len(groupe)
                     continue
+                if lus and gauche and not a_valeur and p.methode is Methode.ocr \
+                        and (_a_libelle_nature(li) or any(_MRN_RE.search(m.texte) for m in li.mots)) \
+                        and self._rangee_suit(p, k + len(groupe), cols, debut_num, bornes, li, illisible=True):
+                    # rangée OCR dont les montants sont illisibles, entre deux rangées lues : elle est perdue
+                    # (document partiel), mais la lecture du tableau continue (D-2505)
+                    self.partielle = True
+                    if "rangee_illisible" not in self.avertissements:
+                        self.avertissements.append("rangee_illisible")
+                    k += len(groupe)
+                    continue
                 if lus or sautees >= 1:
                     break
                 sautees += 1
@@ -1145,6 +1195,21 @@ class _Extraction:
             k += len(groupe)
         return lignes, k
 
+    def _mrn_intertitre(self, p: VuePage, k_entete: int) -> Lu | None:
+        """MRN d'un intertitre placé juste au-dessus de l'en-tête d'un tableau (« Envoi — MRN 26FR… »,
+        « Shipment 26FR… ») : ligne sans montant qui porte exactement un MRN."""
+        if k_entete == 0:
+            return None
+        li = p.lignes[k_entete - 1]
+        if p.lignes[k_entete].y0 - li.y1 > 3.0 * p.pas_ligne or any(_est_montant_txt(m.texte) for m in li.mots):
+            return None
+        trouves = [m for m in li.mots if _MRN_RE.fullmatch(m.texte.strip(".,;:()[]|"))]
+        if len(trouves) != 1 or len({norm_ref(m.texte) for m in trouves}) != 1:
+            return None
+        m = trouves[0]
+        t = m.texte.strip(".,;:()[]|")
+        return self._lu_mots([m], p, li, base=C_RATTACHEMENT, brut=t if t != m.texte else None)
+
     def _mrn_seul(self, p: VuePage, li: VueLigne) -> Lu | None:
         """MRN d'une ligne sans montant qui ne porte que des références (suite d'une rangée)."""
         trouves = []
@@ -1157,7 +1222,7 @@ class _Extraction:
         return trouves[0] if len({norm_ref(x.texte) for x in trouves}) == 1 else None
 
     def _rangee_suit(self, p: VuePage, k: int, cols: list[ColonneFt], debut_num: float,
-                     bornes: tuple[float, float] | None, prec: VueLigne) -> bool:
+                     bornes: tuple[float, float] | None, prec: VueLigne, *, illisible: bool = False) -> bool:
         """La ligne ``k`` est une rangée du tableau (libellé à gauche, valeur en colonne), proche de ``prec`` :
         la ligne sans valeur qui les sépare est un intertitre ou une suite de libellé."""
         # lignes parasites (taches, tampon lu par l'OCR : « 4 eas », « es ») sautées
@@ -1168,12 +1233,12 @@ class _Extraction:
         li = p.lignes[k] if bornes is None else _restreindre(p.lignes[k], bornes)
         if not li.segments or li.y0 - prec.y1 > max(3.0 * p.pas_ligne, 0.03):
             return False
-        if _FIN_TABLEAU.match(li.cle) or _reconnaitre_entete(li) or any(
-                s.x0 >= debut_num - 0.005 for s in prec.segments):
+        if _FIN_TABLEAU.match(li.cle) or _reconnaitre_entete(li) or (not illisible and any(
+                s.x0 >= debut_num - 0.005 for s in prec.segments)):
             return False
         cellules = _attribuer(li, cols)
         a_valeur = any(_contient_nombre(segs) for role, segs in cellules.items()
-                       if role in ("qte", "pu", "ht", "tva", "tva_mt", "taux") or role.startswith("nat:"))
+                       if role in _ROLES_VALEUR or role.startswith("nat:"))
         return a_valeur and any(s.x0 < debut_num - 0.005 for s in li.segments)
 
     def _rangee(self, p: VuePage, li: VueLigne, cols: list[ColonneFt],
@@ -1275,6 +1340,12 @@ class _Extraction:
                     base.prix_unitaire = lu
                 elif role == "ht" and typ in ("montant",):
                     base.montant_ht = lu
+                elif role == "ttc" and typ == "montant":
+                    base.montant_ttc = lu
+                elif role == "pu_ttc" and typ in ("montant", "nombre") and base.pu_ttc is None:
+                    base.pu_ttc = lu
+                elif role in ("taux", "tva", "cat") and typ == "exonere":
+                    base.exoneree = True
                 elif role == "ht" and typ == "marqueur" and base.marqueur is None:
                     base.marqueur = lu
                 elif role == "base_droit" and typ == "montant":
@@ -1303,7 +1374,7 @@ class _Extraction:
             # montant de la ligne imprimé mais illisible (OCR) : quantité × prix unitaire, valeur déduite
             base.ht_calcule = True
         sorties: list[LigneLue] = []
-        if base.montant_ht is not None or base.ht_calcule:
+        if base.montant_ht is not None or base.ht_calcule or base.montant_ttc is not None:
             sorties.append(base)
         nat_cols = [col for col in cols if col.role.startswith("nat:")]
         nat_vals = []
@@ -1445,15 +1516,21 @@ class _Extraction:
     def _lignes(self, tables: list[list[LigneLue]], mrns: list[Lu], legende: dict, totaux: dict[str, Total]) -> None:
         c = self.champs
         mrn_unique = mrns[0] if len(mrns) == 1 else None
+        if any(lg.colonne_mrn for t in tables for lg in t):
+            # le document attribue le MRN ligne par ligne (colonne ou intertitre) : une ligne d'un autre
+            # tableau (prestations communes) n'en reçoit pas par rattachement (D-2503)
+            mrn_unique = None
         taux_global = totaux["total_tva"].taux if "total_tva" in totaux else None
         lignes = _sans_renvois_annexe([lg for t in tables for lg in t], tables)
         idx = 0
         for lg in lignes:
-            if lg.montant_ht is None and not lg.ht_calcule:
+            if lg.montant_ht is None and not lg.ht_calcule and lg.montant_ttc is None:
                 continue
             pre = f"lignes[{idx}]."
             idx += 1
             vals: dict[str, ValeurSourcee | None] = {}
+            ttc_seul = lg.montant_ht is None and not lg.ht_calcule and lg.montant_ttc is not None
+            vals["montant_ttc"] = self._vs(pre + "montant_ttc", lg.montant_ttc)
             # libellé d'une colonne « par nature » : l'en-tête imprimé de la colonne (« Droits », « Duty »)
             lib = Lu(lg.libelle.lecture, base=0.9, brut=lg.libelle.brut) if lg.libelle and lg.libelle_entete \
                 else lg.libelle
@@ -1470,6 +1547,8 @@ class _Extraction:
                                                   "quantite × prix_unitaire")
             vals["montant_tva"] = self._vs(pre + "montant_tva", lg.montant_tva)
             vals["taux_tva"] = self._vs(pre + "taux_tva", lg.taux_tva, type_valeur=TypeValeur.taux)
+            if ttc_seul:
+                self._ligne_ttc(pre, lg, vals)
             vals["marqueur_tva"] = self._vs(pre + "marqueur_tva", lg.marqueur, type_valeur=TypeValeur.code)
             vals["code_marchandise"] = self._vs(pre + "code_marchandise", lg.code, type_valeur=TypeValeur.code)
             vals["base_droit"] = self._vs(pre + "base_droit", lg.base_droit)
@@ -1490,7 +1569,9 @@ class _Extraction:
             if vals["quantite"] is None:
                 vals["quantite"] = self._derive(pre + "quantite", "1", [], "quantite_non_imprimee", plafond=C_DEDUITE)
                 q = Decimal(1)
-            if vals["prix_unitaire"] is None and ht is not None and q:
+            net_derive = vals["montant_ht"] is not None and vals["montant_ht"].methode is Methode.derive \
+                and vals["montant_ht"].regle_derivation == "montant_ttc / (1 + taux_tva)"
+            if vals["prix_unitaire"] is None and ht is not None and q and not net_derive:
                 pu = ht / q
                 if _arrondi(pu) * q == ht:
                     srcs = [v for v in (vals["montant_ht"], vals["quantite"]) if v is not None]
@@ -1502,7 +1583,7 @@ class _Extraction:
                 taux, srcs, regle = self._taux_deduit(lg, vals, legende, taux_global)
                 if taux is not None:
                     vals["taux_tva"] = self._derive(pre + "taux_tva", _fmt_taux(taux), srcs, regle)
-            if vals["montant_tva"] is None and ht is not None:
+            if vals["montant_tva"] is None and ht is not None and not ttc_seul:
                 tx = _dec(vals["taux_tva"])
                 if tx is not None:
                     srcs = [v for v in (vals["montant_ht"], vals["taux_tva"]) if v is not None]
@@ -1524,6 +1605,35 @@ class _Extraction:
                     v = self._vs(f"tableau_mrn[{k}].{nom}", lu, type_valeur=tv)
                     if v is not None:
                         c.definir(f"tableau_mrn[{k}].{nom}", v)
+
+    def _ligne_ttc(self, pre: str, lg: LigneLue, vals: dict[str, ValeurSourcee | None]) -> None:
+        """Ligne d'un tableau « TVA comprise » (montant et prix unitaire imprimés TTC, D-2502).
+
+        Seul ce qui est imprimé est exposé : ``montant_ttc`` et le taux. Une ligne exonérée (« isento »,
+        « 0 % ») a un montant HT égal au montant imprimé. Pour une ligne taxée, le HT n'est pas imprimé : il
+        est **dérivé** (TTC / (1 + taux)), marqué ``derive`` et plafonné à ``C_DEDUITE`` — jamais lu comme
+        imprimé ; le prix unitaire HT et la TVA de la ligne ne sont pas fabriqués."""
+        ttc = vals["montant_ttc"]
+        taux_lu = _montant_lu(lg.taux_tva) if lg.taux_tva is not None else None
+        if lg.exoneree or (taux_lu is not None and taux_lu == 0):
+            if lg.exoneree and lg.taux_tva is None:
+                vals["taux_tva"] = self._derive(pre + "taux_tva", "0", [], "mention_exoneration_imprimee",
+                                                plafond=0.9)
+            ht_lu = Lu(lg.montant_ttc.lecture, base=min(lg.montant_ttc.base, 0.93), brut=lg.montant_ttc.brut)  # type: ignore[union-attr]
+            vals["montant_ht"] = self._vs(pre + "montant_ht", ht_lu)
+            if vals["prix_unitaire"] is None and lg.pu_ttc is not None:
+                vals["prix_unitaire"] = self._vs(pre + "prix_unitaire",
+                                                 Lu(lg.pu_ttc.lecture, base=min(lg.pu_ttc.base, 0.93),
+                                                    brut=lg.pu_ttc.brut))
+            return
+        ttc_d = _dec(ttc)
+        if ttc is None or ttc_d is None or taux_lu is None or taux_lu not in TAUX_TVA_CONNUS:
+            return
+        srcs = [v for v in (ttc, vals.get("taux_tva")) if v is not None]
+        net = _arrondi(ttc_d * 100 / (100 + taux_lu))
+        vals["montant_ht"] = self._derive(pre + "montant_ht", str(net), srcs, "montant_ttc / (1 + taux_tva)")
+        if ttc.signe_imprime is not None:
+            vals["montant_ht"] = vals["montant_ht"].model_copy(update={"signe_imprime": ttc.signe_imprime})
 
     def _taux_deduit(self, lg: LigneLue, vals: dict, legende: dict, taux_global: Decimal | None):
         ht = _dec(vals["montant_ht"])
@@ -2018,6 +2128,8 @@ def _jetons(segs: list[Segment]) -> list[tuple[str, list[Mot], str | None]]:
             if mc:
                 # code de statut et taux soudés : « 1-20% »
                 out.append(("code_taux", [m], t))
+            elif _EXONERE_RE.fullmatch(cle_texte(t)):
+                out.append(("exonere", [m], t))
             elif _MARQUEUR_RE.fullmatch(t):
                 out.append(("marqueur", [m], t if t != m.texte else None))
             elif _POURCENT_RE.fullmatch(t):
