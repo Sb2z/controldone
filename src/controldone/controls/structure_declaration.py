@@ -25,12 +25,15 @@ Taxes (B2) :
 - un total de catégorie qui imprime une base : base imprimée = Σ bases des lignes (sinon ce n'est pas le
   total de ces lignes).
 
-Masses (B4 au total) : numéros d'articles uniques, articles lus = ``nombre_articles`` imprimé, et
-Σ masses brutes des articles = masse brute totale (les articles sommés et le total sont du même niveau).
+Masses (B4 au total) : numéros d'articles uniques, articles lus = ``nombre_articles`` imprimé (s'il est
+lu), et la masse brute totale est bien du niveau « total » : Σ masses brutes des articles = masse brute
+totale quand toutes sont lues ; sinon, les masses brutes lues ne la dépassent pas et elle ne reprend pas la
+masse brute d'un seul article.
 
 Totaux de catégorie (``totaux_par_categorie``) : une ligne sans article n'est **pas** prise pour le total de
-sa catégorie quand le total des droits et taxes imprimé n'est retrouvé qu'en la comptant comme une ligne
-ordinaire (c'est alors la ligne d'un article dont le numéro n'a pas été lu).
+sa catégorie quand son code n'a pas de ligne pour un article attendu **et** que le total des droits et taxes
+imprimé n'est retrouvé qu'en la comptant comme une ligne ordinaire (c'est alors la ligne de cet article,
+dont le numéro n'a pas été lu).
 """
 
 from __future__ import annotations
@@ -57,8 +60,11 @@ _CENT = Decimal(100)
 Num = Callable[[ValeurSourcee | None], Decimal | None]
 
 
-class _Tol(Protocol):
+class _TolSomme(Protocol):
     def t_somme(self, n: int) -> Decimal: ...
+
+
+class _Tol(_TolSomme, Protocol):
     def taxe_ligne_concorde(self, montant: Decimal, calcul: Decimal) -> bool: ...
     def t_masse(self, a: Decimal, b: Decimal | None = None) -> Decimal: ...
 
@@ -112,7 +118,7 @@ def _sommes_lignes(dec: Document, indices: Sequence[int], num: Num) -> list[Deci
     return [sum(tout, _ZERO), sum(hors, _ZERO)]
 
 
-def _total_retrouve(dec: Document, indices: Sequence[int], num: Num, tol: _Tol) -> bool:
+def _total_retrouve(dec: Document, indices: Sequence[int], num: Num, tol: _TolSomme) -> bool:
     sommes = _sommes_lignes(dec, indices, num)
     if sommes is None:
         return False
@@ -124,13 +130,14 @@ def _total_retrouve(dec: Document, indices: Sequence[int], num: Num, tol: _Tol) 
     return False
 
 
-def totaux_par_categorie(dec: Document, num: Num, tol: _Tol) -> dict[str, tuple[int, list[int]]]:
+def totaux_par_categorie(dec: Document, num: Num, tol: _TolSomme) -> dict[str, tuple[int, list[int]]]:
     """Totaux de catégorie imprimés (D-301) : pour un code de taxe, **une seule** ligne sans article **et** au
     moins une ligne par article -> la ligne sans article est le total imprimé de la catégorie. Retourne
     ``{code: (index_total, [index_lignes_articles])}``.
 
-    D-2210 : un candidat est écarté quand le total des droits et taxes (ou à payer) imprimé n'est retrouvé
-    qu'en le comptant comme une ligne ordinaire (ligne d'article dont le numéro n'a pas été lu)."""
+    D-2210 : un candidat est écarté quand son code n'a pas de ligne pour un article attendu et que le total des
+    droits et taxes (ou à payer) imprimé n'est retrouvé qu'en le comptant comme une ligne ordinaire (c'est la
+    ligne de cet article, dont le numéro n'a pas été lu)."""
     par_code: dict[str, tuple[list[int], list[int]]] = {}
     for i, t in enumerate(dec.dec.taxations):
         code = code_taxe(t)
@@ -146,9 +153,12 @@ def totaux_par_categorie(dec: Document, num: Num, tol: _Tol) -> dict[str, tuple[
     base = [i for i in range(n) if i not in exclus]
     if _total_retrouve(dec, base, num, tol):
         return candidats
+    taxations = dec.dec.taxations
+    attendus = _articles_attendus(dec) | ({numero_article(t.article) for t in taxations} - {""})
     out: dict[str, tuple[int, list[int]]] = {}
     for code, (i_total, avec) in candidats.items():
-        if _total_retrouve(dec, sorted([*base, i_total]), num, tol):
+        couverts = {numero_article(taxations[i].article) for i in avec}
+        if attendus - couverts and _total_retrouve(dec, sorted([*base, i_total]), num, tol):
             continue  # la ligne « sans article » est une ligne ordinaire
         out[code] = (i_total, avec)
     return out
@@ -257,11 +267,15 @@ def motifs_structure_masses(dec: Document, num: Num, tol: _Tol) -> list[str]:
         if n != len(c.articles):
             motifs.append("le nombre d'articles lus diffère du nombre d'articles imprimé")
     brutes = [num(a.masse_brute) for a in c.articles]
+    lues = [b for b in brutes if b is not None]
     vt = num(c.masse_brute_totale)
-    if vt is None or not brutes or any(b is None for b in brutes):
-        motifs.append("masse brute totale non retrouvée par les masses brutes des articles (non lues)")
-    else:
-        s = sum((b for b in brutes if b is not None), _ZERO)
-        if abs(s - vt) > tol.t_masse(vt, s):
-            motifs.append("la masse brute totale diffère de la somme des masses brutes des articles")
+    if vt is not None and lues:
+        s = sum(lues, _ZERO)
+        if len(lues) == len(brutes):
+            if abs(s - vt) > tol.t_masse(vt, s):
+                motifs.append("la masse brute totale diffère de la somme des masses brutes des articles")
+        elif s - vt > tol.t_masse(vt, s):
+            motifs.append("la masse brute totale est inférieure aux masses brutes des articles lus")
+        elif len(brutes) > 1 and vt in lues:
+            motifs.append("la masse brute totale reprend la masse brute d'un seul article")
     return motifs

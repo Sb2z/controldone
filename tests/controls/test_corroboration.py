@@ -85,9 +85,13 @@ def test_b1_separateur_de_milliers_perdu():
         nombre_articles=vs("declaration.nombre_articles", "1", document_id=DEC),
     )
     ctx = contexte([d])
-    for r in _constats(b1_base_taux_montant(ctx)) + _constats(b2_sommes_taxes(ctx)):
+    for r in _constats(b1_base_taux_montant(ctx)):
         assert r.outcome is Outcome.a_verifier
         assert RaisonCode.lecture_non_corroboree in r.constat.raisons
+    for r in _constats(b2_sommes_taxes(ctx)):
+        # B2 : la ligne sommée ne vérifie pas base × taux = montant, la structure n'est pas validée (D-2210).
+        assert r.outcome is Outcome.a_verifier
+        assert {RaisonCode.lecture_non_corroboree, RaisonCode.structure_non_validee} & set(r.constat.raisons)
 
 
 def test_b1_colonne_a_payer_prise_pour_le_montant():

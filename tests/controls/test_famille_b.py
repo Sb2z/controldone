@@ -43,8 +43,10 @@ def art(numero, doc=DEC, **champs):
     )
 
 
-def tax(montant, *, article="1", code="A00", cat=CategorieTaxe.droit, doc=DEC, **kw):
-    return taxation(doc, article=article, type_taxe=code, categorie=cat, base="100", taux="10", montant=montant, **kw)
+def tax(montant, *, article="1", code="A00", cat=CategorieTaxe.droit, doc=DEC, base=None, **kw):
+    # Base cohérente avec le taux (base × 10 % = montant) : la ligne sommée est structurellement valide (D-2210).
+    base = base if base is not None else str(D(montant) * 10)
+    return taxation(doc, article=article, type_taxe=code, categorie=cat, base=base, taux="10", montant=montant, **kw)
 
 
 def dec_b2(*taxes, total=None, total_a_payer=None, n_articles=2, articles=2, doc=DEC, **kw):
@@ -115,7 +117,7 @@ def test_b2_tva_autoliquidee_deux_hypotheses():
     for total in ("100.00", "300.00"):
         (r,) = b2_sommes_taxes(contexte([dec_b2(*taxes, total=total)]))
         assert r.outcome is Outcome.conforme, total
-    (r,) = b2_sommes_taxes(contexte([dec_b2(*taxes, total="150.00")]))
+    (r,) = b2_sommes_taxes(contexte([dec_b2(*taxes, total="150.00", n_articles=1, articles=1)]))
     assert r.outcome is Outcome.ecart_certain
     assert r.details["hypothese"] == "tva_autoliquidee_exclue" and r.constat.montant_en_jeu == D("50.00")
 
@@ -126,7 +128,7 @@ def test_b2_total_a_payer_si_pas_de_total_droits_taxes():
 
 
 def test_b2_total_de_categorie():
-    taxes = [tax("10.00"), tax("20.00", article="2"), tax("35.00", article=None)]
+    taxes = [tax("10.00"), tax("20.00", article="2"), tax("35.00", article=None, base="300")]
     rs = b2_sommes_taxes(contexte([dec_b2(*taxes, total="65.00")]))
     (cat,) = par_sous(rs, "categorie")
     (tot,) = par_sous(rs, "total")

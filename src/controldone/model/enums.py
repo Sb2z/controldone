@@ -126,6 +126,8 @@ class RaisonCode(StrEnum):
     lecture_non_corroboree = "lecture_non_corroboree"
     # Ajout moteur (D-2205) : avoir rattaché à la facture mais non ventilé (non imputable)
     avoir_non_ventile = "avoir_non_ventile"
+    # Ajout moteur (D-2210) : structure lue du tableau (taxes, masses) non validée pour un écart certain
+    structure_non_validee = "structure_non_validee"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -177,6 +179,11 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
     RaisonCode.avoir_non_ventile: (
         "à vérifier : un avoir du même transitaire, rattaché à cette facture, n'a pas pu être ventilé par nature ; "
         "il peut couvrir tout ou partie de l'écart"
+    ),
+    RaisonCode.structure_non_validee: (
+        "à vérifier : la disposition lue du tableau (lignes de taxe ou masses des articles) n'a pas pu être "
+        "validée (ligne en double, article sans ligne, ligne de total ambiguë) ; une erreur de lecture pourrait "
+        "expliquer l'écart"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

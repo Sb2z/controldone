@@ -10,7 +10,7 @@ un contrôle »). B2 à B5 suivent B1 (voir docs/DECISIONS.md, D-301 à D-303).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from decimal import Decimal
 
 from controldone.controls._aides_befg import num as _num
@@ -24,6 +24,12 @@ from controldone.controls.framework import (
     eur_par_devise,
     montant_arithmetique,
     preuve,
+)
+from controldone.controls.structure_declaration import (
+    montant_taxe,
+    motifs_structure_masses,
+    motifs_structure_taxes,
+    totaux_par_categorie,
 )
 from controldone.formatage import format_montant, format_nombre, format_pourcentage
 from controldone.guardrails import PHRASE_RENVOI
@@ -249,35 +255,12 @@ def _confusions_somme(
 # =====================================================================================================
 
 
-def _code_taxe(t: TaxationDeclaration) -> str:
-    return (t.type_taxe.valeur or "").strip().upper() if t.type_taxe is not None and t.type_taxe.valeur else ""
-
-
-def _montant_taxe(t: TaxationDeclaration) -> ValeurSourcee | None:
-    """Montant imprimé de la taxe (à défaut, montant à payer)."""
-    return t.montant if t.montant is not None else t.montant_a_payer
-
-
-def _totaux_par_categorie(dec: Document) -> dict[str, tuple[int, list[int]]]:
-    """Totaux de catégorie imprimés (D-301) : pour un code de taxe, **une seule** ligne de niveau
-    déclaration (sans article) **et** au moins une ligne par article -> la ligne sans article est le
-    total imprimé de la catégorie. Retourne ``{code: (index_total, [index_lignes_articles])}``."""
-    par_code: dict[str, tuple[list[int], list[int]]] = {}
-    for i, t in enumerate(dec.dec.taxations):
-        code = _code_taxe(t)
-        if not code:
-            continue
-        sans, avec = par_code.setdefault(code, ([], []))
-        (avec if t.article is not None and t.article.valeur else sans).append(i)
-    return {code: (sans[0], avec) for code, (sans, avec) in par_code.items() if len(sans) == 1 and avec}
-
-
 def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, lignes: list[int]) -> ResultatControle:
     taxations = dec.dec.taxations
     unite = cle_unite(dec=dec.id, taxe=code)
     details = {"declaration_id": dec.id, "type_taxe": code, "total": i_total, "lignes": lignes}
-    total = _montant_taxe(taxations[i_total])
-    operandes_vs = [_montant_taxe(taxations[i]) for i in lignes]
+    total = montant_taxe(taxations[i_total])
+    operandes_vs = [montant_taxe(taxations[i]) for i in lignes]
     for v in [total, *operandes_vs]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
@@ -292,6 +275,7 @@ def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, l
         ctx, dec, unite=unite, sous_controle="categorie", total=total, v_total=v_total, operandes=operandes,
         somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
         composante=_COMPOSANTE.get(taxations[i_total].categorie),
+        structure=lambda: motifs_structure_taxes(dec, lignes, _num, ctx.tol, i_total=i_total),
     )
 
 
@@ -309,6 +293,7 @@ def _b2_resultat(
     objet: str,
     composante: Composante | None,
     concorde: bool | None = None,
+    structure: Callable[[], list[str]] | None = None,
 ) -> ResultatControle:
     tol = ctx.tol
     n = len(operandes)
@@ -323,6 +308,12 @@ def _b2_resultat(
     if concorde if concorde is not None else abs(ecart) <= t_somme:
         return ctx.conforme("B2", **commun)
     raisons = [] if _articles_tous_lus(dec) else [RaisonCode.valeur_absente]
+    # D-2210 : un écart certain repose sur une structure de tableau validée (doublons, couverture des
+    # articles, lignes cohérentes, total de catégorie non ambigu).
+    motifs = structure() if structure is not None else []
+    if motifs:
+        raisons.append(RaisonCode.structure_non_validee)
+        commun["details"] = {**details, "structure_non_validee": motifs}
     classement = ctx.classify(
         "B2", ecart=ecart, tolerance=t_somme, seuil_certitude=tol.s_calcul_declaration(),
         valeurs_cles=[total, *(v for v, _ in operandes)],
@@ -360,7 +351,7 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
     if not totaux or not indices:
         return ctx.non_applicable("B2", RaisonCode.valeur_absente, unite=unite, sous_controle="total",
                                   documents=[dec.id], details={**details, "motif": "total ou lignes absents"})
-    lignes = [(i, _montant_taxe(c.taxations[i])) for i in indices]
+    lignes = [(i, montant_taxe(c.taxations[i])) for i in indices]
     for v in [*(v for _, v in totaux), *(v for _, v in lignes)]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
@@ -400,6 +391,7 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
     return _b2_resultat(
         ctx, dec, unite=unite, sous_controle="total", total=v_tot, v_total=vt, operandes=ops, somme=s,
         details={**details, "total": nom_total, "hypothese": nom_h}, objet=objet, composante=None,
+        structure=lambda: motifs_structure_taxes(dec, indices, _num, ctx.tol),
     )
 
 
@@ -408,7 +400,7 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
     """B2 — Sommes des taxes (§11), par déclaration (dernière version).
 
     (a) ``sous_controle="categorie"`` : pour chaque code de taxe portant un total de catégorie imprimé
-    (ligne sans article, voir ``_totaux_par_categorie``), Σ montants par article contre ce total ;
+    (ligne sans article, voir ``structure_declaration.totaux_par_categorie``), Σ montants par article contre ce total ;
     (b) ``sous_controle="total"`` : Σ des lignes (hors totaux de catégorie) contre ``total_droits_taxes``
     ou ``total_a_payer``, TVA autoliquidée incluse ou exclue (``conforme`` si une hypothèse concorde).
     Tolérance ``T_SOMME(n)`` ; ``ecart_certain`` si ``|écart| > 1,00 EUR``, tous les articles lus et
@@ -419,7 +411,7 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
         return [ctx.non_verifiable("B2", RaisonCode.document_manquant)]
     resultats: list[ResultatControle] = []
     for dec in declarations:
-        totaux = _totaux_par_categorie(dec)
+        totaux = totaux_par_categorie(dec, _num, ctx.tol)
         for code, (i_total, lignes) in sorted(totaux.items()):
             resultats.append(_b2_categorie(ctx, dec, code, i_total, lignes))
         r = _b2_total(ctx, dec, {i for i, _ in totaux.values()})
@@ -538,6 +530,7 @@ def _kg(x: Decimal) -> str:
 def _b4_nette_brute(
     ctx: ControlContext, dec: Document, *, unite: str, sous_controle: str, nette: ValeurSourcee,
     brute: ValeurSourcee, v_nette: Decimal, v_brute: Decimal, sujet: str, operandes: Sequence[ValeurSourcee] = (),
+    structure: Callable[[], list[str]] | None = None,
 ) -> ResultatControle:
     tol = ctx.tol
     t = tol.t_masse(v_nette, v_brute)
@@ -558,9 +551,13 @@ def _b4_nette_brute(
             confusions.append(Confusion(v_op, accepte=lambda v, x=x: v_nette - x + v - v_brute <= t))
     else:
         confusions.append(Confusion(nette, accepte=lambda v: v - v_brute <= t))
+    # D-2210 : au total, les masses nettes sommées et la masse brute totale doivent être lues au même niveau.
+    motifs = structure() if structure is not None else []
+    if motifs:
+        commun["details"] = {**commun["details"], "structure_non_validee": motifs}
     classement = ctx.classify(
         "B4", ecart=ecart, tolerance=t, seuil_certitude=t, valeurs_cles=[nette, brute, *operandes],
-        confusion=confusions,
+        confusion=confusions, raisons_supplementaires=[RaisonCode.structure_non_validee] if motifs else [],
     )
     libelle = (
         f"{sujet} de {_ref_declaration(dec, brute)}, la masse nette imprimée ({_kg(v_nette)}) est supérieure à "
@@ -630,6 +627,7 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
                 out.append(_b4_nette_brute(
                     ctx, dec, unite=cle_unite(dec=dec.id), sous_controle="nette_total", nette=nettes[0], brute=total,
                     v_nette=somme_n, v_brute=v_total, sujet="Au total", operandes=nettes,
+                    structure=lambda: motifs_structure_masses(dec, _num, ctx.tol),
                 ))
         else:
             out.append(ctx.non_verifiable("B4", RaisonCode.confiance_insuffisante, unite=cle_unite(dec=dec.id),

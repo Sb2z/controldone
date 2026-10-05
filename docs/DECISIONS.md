@@ -2057,6 +2057,40 @@ fictif qui échoue avant et passe après.
   client CL11 (cas « entité du groupe différente », certain possible). Non listé (scénario
   `facture_commerciale_sur_deux_dossiers`).
 
+## D-2210 — B2 et B4 : un « écart certain » repose sur une structure de tableau validée
+
+- **Constat** : sur des mises en page inconnues, B2 et B4 produisaient des `ecart_certain` faux alors que chaque
+  valeur était lue avec une confiance élevée et que chaque ligne vérifiait base × taux = montant (donc
+  « corroborée », D-1700) : c'est l'**assemblage** du tableau qui était faux. Dev `corpus_g2` : GX0055 (ligne
+  B00 de l'article 4 dont le numéro n'est pas lu, prise pour le total de la taxe B00), GX0212 (deux versions d'une
+  déclaration de même MRN fusionnées en un document : lignes et articles en double, B2 au total et B4 au total).
+  Modes décrits sur un autre jeu (non ouvert) : montants de droits rangés sous le code de TVA, lignes d'une seule
+  page sommées contre le total de toutes les pages, masses nettes et brutes prises à deux niveaux.
+- **Choix** (`controls/structure_declaration.py`, raison nouvelle `structure_non_validee`) : un constat B2 ou B4
+  au total qui serait certain devient `a_verifier` quand la forme du tableau lu n'est pas validée ; les règles ne
+  regardent que la forme, jamais un taux ni un code ; un `conforme` n'est jamais changé.
+  - B2 (catégorie et total) : pas deux lignes du même code pour un même article ni deux articles de même numéro ;
+    quand les lignes portent un numéro d'article, chaque article attendu (numéros lus, `1..nombre_articles`) a
+    une ligne (total) ou une ligne de ce code (catégorie) ; chaque ligne sommée dont base et taux sont lus vérifie
+    base × taux = montant (`T_TAXE_LIGNE`) ; un total de catégorie qui imprime une base reprend Σ bases des lignes
+    (`T_SOMME`).
+  - Total de catégorie (D-301 précisée, partagée avec le réseau de corroboration) : la ligne sans article n'est
+    pas un total de catégorie quand son code n'a pas de ligne pour un article attendu **et** que le total des
+    droits et taxes (ou à payer) imprimé n'est retrouvé qu'en la comptant comme ligne ordinaire ; B2 la somme
+    alors avec les autres lignes (GX0055, GX0203 : `conforme`).
+  - B4 `nette_total` : numéros d'articles uniques ; articles lus = `nombre_articles` s'il est lu ; masse brute
+    totale du niveau « total » : Σ masses brutes des articles = masse brute totale quand toutes sont lues
+    (`T_MASSE`), sinon les masses brutes lues ne la dépassent pas et elle ne reprend pas celle d'un seul article.
+    `nette_brute` (même article) inchangé.
+- **Écartés** : seuil de confiance plus haut par ligne (réglage, sans lien avec l'erreur d'assemblage) ; exiger
+  la page du total parmi les pages des lignes (un récapitulatif de dernière page est légitime) ; correction de
+  l'extracteur (numéro d'article déduit de l'alternance des lignes, dédoublonnage de copies) : non générique à ce
+  stade, la segmentation de deux versions de même MRN relève du regroupement.
+- **Mesures** (dev seulement) : `corpus_g2` `g2_dev_b2_base` → `g2_dev_b2` : FP certain 4 → 1 (GX0055 B2, GX0212
+  B2, GX0212 B4 ; reste un piège C8, GX0078, hors périmètre), VP certain 100 → 100, précision certain 0,962 → 0,990, seuil
+  bloquant ÉCHOUE → PASSE ; corpus d'origine `c1_dev_b2_base` → `c1_dev_b2` : identique (113 VP, 0 FP, PASSE),
+  aucun constat changé.
+
 # Généralisation : classement et regroupement
 
 Constat : sur `bench/corpus_g2` (dev, 232 dossiers, 1 146 pages ; six langues, douze familles de factures de

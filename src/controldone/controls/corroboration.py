@@ -42,6 +42,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
+from controldone.controls.structure_declaration import totaux_par_categorie
 from controldone.model.champs import TaxationDeclaration
 from controldone.model.documents import Document
 from controldone.model.enums import (
@@ -159,10 +160,6 @@ def _nature_taux(t: TaxationDeclaration) -> TauxNature | None:
     return None
 
 
-def _code(t: TaxationDeclaration) -> str:
-    return (t.type_taxe.valeur or "").strip().upper() if t.type_taxe is not None and t.type_taxe.valeur else ""
-
-
 def _montant_taxe(t: TaxationDeclaration) -> ValeurSourcee | None:
     return t.montant if t.montant is not None else t.montant_a_payer
 
@@ -191,19 +188,11 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
         calcul = b * tx / _CENT if nature is TauxNature.ad_valorem else b * tx
         out.append(Identite(f"dec:taxe:{i}", "produit", TAXE_LIGNE, t.montant.id, (base.id, t.taux.id),
                             tol.taxe_ligne_concorde(m, calcul)))
-    # Totaux de catégorie imprimés (une ligne sans article, des lignes par article : D-301).
-    par_code: dict[str, tuple[list[int], list[int]]] = {}
-    for i, t in enumerate(c.taxations):
-        code = _code(t)
-        if code:
-            sans, avec = par_code.setdefault(code, ([], []))
-            (avec if t.article is not None and t.article.valeur else sans).append(i)
+    # Totaux de catégorie imprimés (une ligne sans article, des lignes par article : D-301, D-2210).
     exclus: set[int] = set()
-    for code, (sans, avec) in sorted(par_code.items()):
-        if len(sans) != 1 or not avec:
-            continue
-        exclus.add(sans[0])
-        total = _montant_taxe(c.taxations[sans[0]])
+    for code, (i_total, avec) in sorted(totaux_par_categorie(doc, lec.num, tol).items()):
+        exclus.add(i_total)
+        total = _montant_taxe(c.taxations[i_total])
         v_total = lec.num(total)
         ops = [(v, lec.num(v)) for v in (_montant_taxe(c.taxations[i]) for i in avec)]
         if total is None or v_total is None or any(x is None for _, x in ops):
