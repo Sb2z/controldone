@@ -105,7 +105,8 @@ def nature_libelle(libelle: str | None, *, tolerant: bool = False) -> NatureLign
     fois. Aucun remplacement s'il y a deux candidats ou plus."""
     if not libelle:
         return None
-    t = cle_texte(libelle)
+    # numéro de ligne collé au libellé (« 1   Cło », « 3. Dostawa ») : hors du libellé (D-2501)
+    t = re.sub(r"^\d{1,3}[.)]?\s+(?=[^\W\d_])", "", cle_texte(libelle))
     n = _chercher(t)
     if n is not None or not tolerant:
         return n

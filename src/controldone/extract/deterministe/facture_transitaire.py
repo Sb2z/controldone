@@ -44,6 +44,7 @@ from controldone.extract.deterministe import _ft_langues as L
 from controldone.extract.deterministe._ft_nettoyage import retirer_surimpressions
 from controldone.extract.deterministe._mise_en_page import (
     PAYS_TVA,
+    REP_FISCAL,
     Fabrique,
     Lecture,
     Nombre,
@@ -99,6 +100,8 @@ C_DEDUITE = 0.6
 C_OCR_RECOUPEE = 0.92
 #: Plafond d'une valeur OCR qui contredit l'arithmétique du document.
 C_OCR_INCOHERENTE = 0.6
+#: Plafond des montants de ligne d'un tableau dont une rangée illisible a été perdue (D-2505).
+C_RANGEE_PERDUE = 0.85
 
 TAUX_TVA_CONNUS = (Decimal("0"), Decimal("2.1"), Decimal("5.5"), Decimal("8.5"), Decimal("10"), Decimal("20"))
 _CENT = Decimal("0.01")
@@ -273,6 +276,15 @@ def _dec(v: ValeurSourcee | None) -> Decimal | None:
         return None
 
 
+def _dec_signe(v: ValeurSourcee | None) -> Decimal | None:
+    """Valeur avec son signe imprimé (ligne « Gutschrift … -25.00 » d'un relevé, D-2505)."""
+    d = _dec(v)
+    if d is None or v is None:
+        return d
+    return -d if v.signe_imprime is not None and getattr(v.signe_imprime, "value", v.signe_imprime) == "negatif" \
+        else d
+
+
 def _arrondi(d: Decimal) -> Decimal:
     return d.quantize(_CENT, rounding=ROUND_HALF_UP)
 
@@ -353,9 +365,7 @@ class LectureTva:
 
 
 #: Libellé d'un représentant fiscal (D-2504).
-_RX_REP_FISCAL = re.compile(r"\b(rep\.? fiscal|representant fiscal|representante fiscal|fiscal rep(?:resentative)?|"
-                            r"steuervertret\w*|fiskalvertret\w*|rappresentante fiscale|fiscaal vertegenwoordiger|"
-                            r"przedstawiciel podatkowy)\b")
+_RX_REP_FISCAL = REP_FISCAL
 
 
 # --- extracteur -------------------------------------------------------------------------------------------------
@@ -410,7 +420,8 @@ def _est_titre(cle: str) -> bool:
     return bool(_TITRE.match(cle) or (len(cle) <= 40 and _TITRE_COMPACT.match(cle.replace(" ", ""))))
 
 
-_TITRE_RELEVE = re.compile(r"\breleve\b|\bstatement\b|facture mensuelle|monthly invoice|recapitulati")
+_TITRE_RELEVE = re.compile(r"\breleve\b|\bstatement\b|facture mensuelle|monthly invoice|recapitulati|kontoauszug|"
+                           r"sammelrechnung|zestawienie|extrato")
 
 _LIB_NUMERO = L.LIB_NUMERO
 _EXCLURE_NUMERO = re.compile(r"\b(tva|vat|siren|siret|eori|tel|fax|iban|client|customer|commande|order|ust|mwst|"
@@ -433,9 +444,13 @@ _LIB_ORIGINE = [re.compile(
     r"ursprungsrechnung|ursprungliche rechnung|originalrechnung|bezugsrechnung|zu rechnung|"
     r"fattura (?:di )?(?:origine|riferimento|originale|rettificata)|rif\.? fattura|"
     r"factura (?:original|rectificada|de origen|de referencia)|ref\.? factura|"
-    r"oorspronkelijke factuur|originele factuur|oorspr\.? factuur|ref\.? factuur)\b\s*(n°|no\.?|nr\.?|n\.)?\s*:?\s*"
+    r"oorspronkelijke factuur|originele factuur|oorspr\.? factuur|ref\.? factuur|"
+    # pt / pl (D-2501)
+    r"fatura (?:de origem|original|corrigida|retificada)|ref\.? fatura|faktura (?:pierwotna|korygowana|"
+    r"korygujaca do)|dotyczy faktury|korekta (?:do )?faktury)\b\s*(n°|n\.º|no\.?|nr\.?|n\.)?\s*:?\s*"
 )]
-_LIB_MOTIF = [re.compile(r"(motif|reason|objet|raison|grund|begrundung|motivo|causale|reden)\b\s*(/\s*reason)?"
+_LIB_MOTIF = [re.compile(r"(motif|reason|objet|raison|grund|begrundung|motivo|causale|reden|przyczyna korekty|"
+                         r"przyczyna)\b\s*(/\s*reason)?"
                          r"\s*:?\s*")]
 
 _TOTAUX = L.TOTAUX
@@ -506,6 +521,8 @@ class _Extraction:
         for p in self.vue.pages:
             a_tableau = any(_reconnaitre_entete(li) for li in p.lignes)
             a_total = any(_TOTAUX[1][1].match(li.cle) or re.match(r"^(total|net a payer|amount due)", li.cle)
+                          or (_cle_total(li.cle) not in (None, "ignore")
+                              and any(_est_montant_txt(m.texte) for m in li.mots))
                           for li in p.lignes)
             if a_tableau or a_total:
                 out.append(p)
@@ -832,6 +849,11 @@ class _Extraction:
             if t.ligne.y0 > 0.4:
                 continue
             lec = valeur_apres(self.vue, t, _accepte_date, dessous=True, lignes_dessous=1)
+            if lec is None and t.apres >= len(t.segment.mots):
+                # libellé en tête de colonne (« Nr. | Datum | Btw-nr. ») : valeur dessous, au-delà d'un bruit
+                # OCR d'une ligne (« < », « : ») — même écart vertical maximal (D-2506)
+                lec = valeur_apres(self.vue, t, _accepte_date, droite=False, dessous=True, lignes_dessous=3,
+                                   dessous_seul=True)
             if lec is not None:
                 return Lu(lec)
         # date dans le segment du numéro (« N° FB-2610049 - 08/09/2026 »), puis « du 03/09/2026 »
@@ -841,6 +863,12 @@ class _Extraction:
                 r = _accepte_date(seg[0].mots)
                 if r is not None:
                     return self._lu_mots(seg[0].mots[r[0]:r[1]], seg[1], seg[2], base=0.92)
+                # « No. PFL/26/60695 | 26 Jun 2026 » : date seule dans le segment voisin à droite (D-2506)
+                voisins = seg[2].segments[seg[0].rang + 1:seg[0].rang + 2]
+                if voisins and voisins[0].x0 - seg[0].x1 < 0.12:
+                    r = _accepte_date(voisins[0].mots)
+                    if r is not None and r == (0, len(voisins[0].mots)):
+                        return self._lu_mots(voisins[0].mots, seg[1], seg[2], base=0.9)
         for t in chercher(self.vue, _LIB_DU, pages=[page.numero]):
             if t.ligne.y0 > 0.3:
                 continue
@@ -868,7 +896,30 @@ class _Extraction:
                         r = _accepte_date(s2.mots)
                         if r is not None and r == (0, len(s2.mots)):
                             return self._lu_mots(s2.mots[r[0]:r[1]], p, li2, base=C_POSITION)
-        return None
+        return self._date_repli(page)
+
+    def _date_repli(self, page: VuePage) -> Lu | None:
+        """Dernier recours (D-2506) : la seule date du haut de la première page qui n'est ni une échéance, ni une
+        période, ni l'horodatage d'une télécopie, ni dans un tableau. Valeur de position, confiance plafonnée
+        (jamais suffisante pour un écart certain)."""
+        trouvees: dict[str, Lu] = {}
+        for li in page.lignes:
+            if li.y0 > 0.3 or (page.numero, li.rang) in self.consommees:
+                continue
+            if re.search(r"\b(fax|telecopie|p\.\d{2}/\d{2}|echeance|due|faellig|fallig|scadenza|vencimiento|"
+                         r"vervaldatum|vervaldag|termin|vencimento|zahlbar|payable|periode|period|zeitraum|"
+                         r"date de mainlevee|release|livraison|delivery|arrivee|arrival|depart|departure)\b", li.cle):
+                continue
+            for sg in li.segments:
+                dms = list(_DATE_RE.finditer(sg.texte))
+                if len(dms) != 1:
+                    continue
+                ms = _mots_de_sous_chaine(sg.mots, dms[0].start(), dms[0].end())
+                if not ms or parse_date(dms[0].group(0)) is None:
+                    continue
+                trouvees.setdefault(parse_date(dms[0].group(0)).isoformat(),  # type: ignore[union-attr]
+                                    self._lu_mots(ms, page, li, base=0.7, brut=dms[0].group(0)))
+        return next(iter(trouvees.values())) if len(trouvees) == 1 else None
 
     # --- parties (émetteur / client) ---
 
@@ -1083,7 +1134,7 @@ class _Extraction:
                     if any(lg.mrn is not None for lg in lignes) and not any(lg.ref_autre for lg in lignes):
                         for lg in lignes:
                             lg.colonne_mrn = True
-                    elif lignes and len(groupes) == 1:
+                    elif lignes and len(groupes) == 1 and not any(lg.mrn is not None for lg in lignes):
                         section = self._mrn_intertitre(p, k)
                         if section is not None:
                             # tableau groupé par envoi (« Envoi — MRN 26FR… » au-dessus de l'en-tête, D-2503)
@@ -1152,6 +1203,9 @@ class _Extraction:
             gauche = any(s.x0 < debut_num - 0.005 for s in li.segments)
             if not a_valeur or not gauche:
                 mrn_suite = self._mrn_seul(p, li) if lus and gauche and not a_valeur else None
+                if mrn_suite is not None and k + len(groupe) < len(p.lignes) \
+                        and _reconnaitre_entete(p.lignes[k + len(groupe)]):
+                    mrn_suite = None  # intertitre du tableau suivant (« Envoi — MRN … »), pas une suite (D-2503)
                 if mrn_suite is not None and derniers and all(lg.mrn is None for lg in derniers):
                     # ligne de suite qui porte le MRN de la rangée précédente (« [26FR…] » sous le libellé)
                     for lg in derniers:
@@ -1203,8 +1257,16 @@ class _Extraction:
         li = p.lignes[k_entete - 1]
         if p.lignes[k_entete].y0 - li.y1 > 3.0 * p.pas_ligne or any(_est_montant_txt(m.texte) for m in li.mots):
             return None
+        if (p.numero, li.rang) in self.consommees:
+            return None
         trouves = [m for m in li.mots if _MRN_RE.fullmatch(m.texte.strip(".,;:()[]|"))]
-        if len(trouves) != 1 or len({norm_ref(m.texte) for m in trouves}) != 1:
+        if len(trouves) != 1:
+            return None
+        # un intertitre : le MRN accompagné de mots (« Envoi — MRN … »), sans date ni autre référence chiffrée
+        # (une rangée d'un tableau « transport / MRN / date » n'en est pas un)
+        autres = [m for m in li.mots if m is not trouves[0]]
+        if not any(re.fullmatch(r"[^\W\d_]{3,}", m.texte.strip(".,;:()[]|—-")) for m in autres) \
+                or any(re.search(r"\d", m.texte) for m in autres):
             return None
         m = trouves[0]
         t = m.texte.strip(".,;:()[]|")
@@ -1516,10 +1578,6 @@ class _Extraction:
     def _lignes(self, tables: list[list[LigneLue]], mrns: list[Lu], legende: dict, totaux: dict[str, Total]) -> None:
         c = self.champs
         mrn_unique = mrns[0] if len(mrns) == 1 else None
-        if any(lg.colonne_mrn for t in tables for lg in t):
-            # le document attribue le MRN ligne par ligne (colonne ou intertitre) : une ligne d'un autre
-            # tableau (prestations communes) n'en reçoit pas par rattachement (D-2503)
-            mrn_unique = None
         taux_global = totaux["total_tva"].taux if "total_tva" in totaux else None
         lignes = _sans_renvois_annexe([lg for t in tables for lg in t], tables)
         idx = 0
@@ -1547,6 +1605,9 @@ class _Extraction:
                                                   "quantite × prix_unitaire")
             vals["montant_tva"] = self._vs(pre + "montant_tva", lg.montant_tva)
             vals["taux_tva"] = self._vs(pre + "taux_tva", lg.taux_tva, type_valeur=TypeValeur.taux)
+            tx_lu = _dec(vals["taux_tva"])
+            if tx_lu is not None and tx_lu > 100:
+                vals["taux_tva"] = None  # « 2000 » : virgule perdue par l'OCR, pas un taux
             if ttc_seul:
                 self._ligne_ttc(pre, lg, vals)
             vals["marqueur_tva"] = self._vs(pre + "marqueur_tva", lg.marqueur, type_valeur=TypeValeur.code)
@@ -1589,6 +1650,13 @@ class _Extraction:
                     srcs = [v for v in (vals["montant_ht"], vals["taux_tva"]) if v is not None]
                     vals["montant_tva"] = self._derive(pre + "montant_tva", str(_arrondi(ht * tx / 100)), srcs,
                                                        "montant_ht × taux_tva")
+            if "rangee_illisible" in self.avertissements:
+                # une rangée du tableau est perdue : toute somme de lignes est incomplète ; aucun montant de
+                # ligne ne fonde seul un écart certain (D-2505)
+                for k in ("montant_ht", "montant_ttc", "montant_tva"):
+                    v = vals.get(k)
+                    if v is not None and v.confiance > C_RANGEE_PERDUE:
+                        vals[k] = v.model_copy(update={"confiance": C_RANGEE_PERDUE})
             for k, v in vals.items():
                 if v is not None:
                     c.definir(pre + k, v)
@@ -1755,8 +1823,8 @@ class _Extraction:
         tht, ttva, tttc = c.obtenir(cle_ht), c.obtenir("total_tva"), c.obtenir(cle_ttc)
         hts = [lg.montant_ht for lg in lignes if lg.montant_ht is not None]
         if tht is not None and tht.methode is not Methode.derive and hts:
-            s = sum((_dec(v) or Decimal(0)) for v in hts)
-            if abs(s - (_dec(tht) or Decimal(0))) <= _CENT:
+            s = sum((_dec_signe(v) or Decimal(0)) for v in hts)
+            if abs(s - (_dec_signe(tht) or Decimal(0))) <= _CENT:
                 relever([tht, *hts])
             else:
                 abaisser([tht])
@@ -1769,10 +1837,16 @@ class _Extraction:
             td = c.total_debours  # type: ignore[union-attr]
             deb = [lg.montant_ht for lg in lignes if lg.nature.est_debours and lg.montant_ht is not None]
             if td is not None and td.methode is not Methode.derive and deb:
-                if abs(sum((_dec(v) or Decimal(0)) for v in deb) - (_dec(td) or Decimal(0))) <= _CENT:
+                if abs(sum((_dec_signe(v) or Decimal(0)) for v in deb) - (_dec_signe(td) or Decimal(0))) <= _CENT:
                     relever([td, *deb])
                 else:
                     abaisser([td])
+                    if any(ocr(v) for v in (td, *deb)):
+                        # lecture OCR : des lignes de débours manquent ou sont mal lues ; aucune ne fonde seule
+                        # un écart certain (base d'une commission, somme par nature… D-2505)
+                        for v in deb:
+                            if maj.get(v.id) != -2.0:
+                                maj[v.id] = -3.0
             net = c.net_a_payer  # type: ignore[union-attr]
             if net is not None and tttc is not None and net.methode is Methode.ocr \
                     and abs((_dec(net) or 0) - (_dec(tttc) or 0)) <= _CENT:
@@ -1784,8 +1858,13 @@ class _Extraction:
                 continue
             if maj[v.id] == -2.0:
                 nv = v.model_copy(update={"confiance": min(v.confiance, C_OCR_INCOHERENTE)})
+            elif maj[v.id] == -3.0:
+                nv = v.model_copy(update={"confiance": min(v.confiance, C_RANGEE_PERDUE)})
             elif v.type is TypeValeur.montant and _montant_ocr_suspect(v.valeur_brute):
                 continue
+            elif v.type is TypeValeur.montant and chemin_rel.startswith("lignes[") \
+                    and "rangee_illisible" in self.avertissements:
+                continue  # rangée perdue : les montants de ligne restent sous le plafond (D-2505)
             else:
                 ocr_min = _conf_ocr_min(v, self.vue)
                 if ocr_min is None or ocr_min < 0.9:
@@ -2116,6 +2195,9 @@ def _jetons(segs: list[Segment]) -> list[tuple[str, list[Mot], str | None]]:
                 out.append(("code", ms, None))
                 pris.add(n.j)
             elif re.fullmatch(r"\d{1,6}", txt):
+                out.append(("entier", ms, None))
+            elif re.fullmatch(r"\d{1,3}(?:[ \u00a0\u202f\u2009'’]\d{3})+", txt):
+                # quantité entière à séparateur de milliers (« 3 988 kg », « 1'250 ») (D-2505)
                 out.append(("entier", ms, None))
             elif re.fullmatch(r"\d+[.,]\d+", txt):
                 out.append(("nombre", ms, None))

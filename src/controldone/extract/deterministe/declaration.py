@@ -1310,6 +1310,13 @@ class _Lecteur:
                         parts.append([])
                     else:
                         parts[-1].append(t)
+                if len(parts) != len(comps) and len(parts) == 1 and valeurs:
+                    # séparateurs perdus (OCR) : valeurs séparées par un blanc net (« 89,1 kg   6 colis   12 … »)
+                    parts = [[valeurs[0]]]
+                    for prev, t in pairwise(valeurs):
+                        if t.x0 - prev.x1 > max(0.015, 1.5 * t.hx):
+                            parts.append([])
+                        parts[-1].append(t)
                 if len(parts) != len(comps) or any(not p for p in parts):
                     continue
                 lus: dict[str, _Lu] = {}
@@ -1702,7 +1709,17 @@ class _Lecteur:
             lu_num = self.v_petit_entier(self._droite(h)) if h is not None else None
             code = self._code_ancre(h, lu_num) if lu_num is not None else None
         art.code_marchandise = self._vs(f"{base}.code_marchandise", code)
-        art.pays_origine = self._vs(f"{base}.pays_origine", self._lire(["pays_origine"], self.v_pays, lignes=lignes))
+        origine = self._lire(["pays_origine"], self.v_pays, lignes=lignes)
+        if origine is None and code is not None and code.span.toks:
+            # « Article 1   8414598090   US   100 » (libellés des rubriques imprimés à part) : code pays ISO en
+            # capitales juste après le code marchandise sur la ligne d'ancrage, lecture positionnelle pénalisée
+            toks_a = self.lignes[code.span.toks[-1].li].toks
+            k = toks_a.index(code.span.toks[-1]) + 1
+            while k < len(toks_a) and toks_a[k].t in ("—", "–", "-"):
+                k += 1
+            if k < len(toks_a) and toks_a[k].t.strip(".,;") in ISO2 and re.fullmatch(r"[A-Z]{2}", toks_a[k].t.strip(".,;")):
+                origine = _Lu(_Span([toks_a[k]]), toks_a[k].t.strip(".,;"), toks_a[k].t.strip(".,;"), 0.1)
+        art.pays_origine = self._vs(f"{base}.pays_origine", origine)
         art.regime = self._vs(f"{base}.regime",
                               self._lire(["regime"], lambda sp: self._v_motif(sp, r"\d{4}(?: \d{3})?"),
                                          lignes=lignes), type_valeur=TypeValeur.texte)

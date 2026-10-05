@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 from controldone.model.enums import (
     MotifNonExploitable,
@@ -73,12 +74,16 @@ TITRE_FACTURE = _rx(
     # « Voorschotfactuur », « Dienstenfactuur » (mots composés néerlandais et allemands)
     r"\b\w{0,16}rechnung\b", r"\bfattura\b",
     r"\b\w{0,16}factuur\b", r"\bfatura\b", r"\bfaktura\b",
+    # note de débit (refacturation de débours) : une facture (D-2409)
+    r"\bdebit note\b", r"\bnote de debit\b", r"\bnota obciazeniowa\b", r"\bnota de debito\b",
 )
 TITRE_AVOIR = _rx(
     r"\bcredit note\b", r"\bcredit memo\b", r"\bfacture d'avoir\b", r"\bnote de credit\b",
     r"\bnota de credito\b", r"\bfactura rectificativa\b", r"\bavoir\b", r"\babono\b", r"\bcreditnote\b",
     r"\bgutschrift\b", r"\brechnungskorrektur\b", r"\bnota di credito\b", r"\bnota d'accredito\b",
     r"\bcreditnota\b", r"\bcreditfactuur\b", r"\bfactura de abono\b",
+    # pl / pt (D-2406)
+    r"\bfaktura korygujaca\b", r"\bnota korygujaca\b",
 )
 PRO_FORMA = _rx(r"\bpro ?-?forma\b")
 VALEUR_DOUANE = _rx(r"for customs purposes? only", r"valeur (?:en douane|pour la douane) seulement",
@@ -122,6 +127,9 @@ CORPS_DECLARATION = _rx(
     r"\bfecha de admision\b", r"\bdeclarante\b", r"\bimportador\b", r"\baduana de\b",
     r"\bvalor estadistico\b", r"\baangever\b", r"\bgoederencode\b", r"\bdatum van aanvaarding\b",
     r"\bstatistische waarde\b", r"\bdouanekantoor\b",
+    # rubriques d'article d'une annexe (« Masse nette … — masse brute … », « préf. 100 ») (D-2406)
+    r"\bmasse (?:nette|brute)\b", r"\b(?:net|gross) mass\b", r"\bpref\. \d{3}\b", r"\btva a l'importation\b",
+    r"\bdroits et autres taxes\b",
 )
 TYPE_DAU = _rx(r"document administratif unique", r"\b(?:22 monnaie|33 code des marchandises|47 calcul|"
                r"8 destinataire|14 declarant|31 colis)")
@@ -148,6 +156,10 @@ FORTS_TRANSITAIRE = _rx(
     r"\banticipazion[ei]\b", r"\bcommissione (?:di )?anticip\w*", r"\bsdoganamento\b",
     r"\bcomision (?:por|de) anticipo\b", r"\bdespacho (?:de )?aduan\w*", r"\bhonorarios de despacho\b",
     r"\bvoorschot(?:ten|provisie|factuur)?\b", r"\binklaring\b", r"\bdouane-?afhandeling\b",
+    # pl / pt : refacturation des droits, dédouanement, commission d'avance (D-2406)
+    r"\bodprawa celna\b", r"\bnaleznosci celne\b", r"\brefaktura\b", r"\bprowizja za kredytowanie\b",
+    r"\bagencja celna\b", r"\bdesalfandegamento\b", r"\bdespacho aduaneiro\b", r"\bdespesas adiantadas\b",
+    r"\bcomissao de adiantamento\b", r"\bhonorarios de despacho\b",
 )
 CORPS_TRANSITAIRE = _rx(
     r"\bdedouanement\b", r"\bcustoms clearance\b", r"\bdroits de douane\b", r"\bdroits et taxes\b",
@@ -160,6 +172,8 @@ CORPS_TRANSITAIRE = _rx(
     r"\bmovimentazione\b", r"\bspese di pratica\b", r"\baranceles?\b", r"\biva (?:de )?importacion\b",
     r"\balmacenaje\b", r"\bmanipulacion\b", r"\binvoerrechten\b", r"\bbtw bij invoer\b",
     r"\bopslag\b", r"\bbehandeling\b", r"\bbezorging\b",
+    r"\bc[lł]o\b", r"\bvat z tytulu importu\b", r"\bsk[lł]adowanie\b", r"\bkontrola dokumentow\b", r"\buslugi\b",
+    r"\bdireitos aduaneiros\b", r"\biva (?:de )?importacao\b", r"\barmazenagem\b", r"\bmanuseamento\b",
 )
 CORPS_FACTURE_COMMERCIALE = _rx(
     r"\bhs ?code\b", r"\bcode (?:sh|nc|douanier)\b", r"\btariff code\b", r"\bcountry of origin\b",
@@ -217,6 +231,9 @@ LETTRE = _rx(
     r"cordiali saluti", r"distinti saluti", r"\bin allegato\b", r"\boggetto ?:", r"\badjunt[oa]s?\b",
     r"\basunto ?:", r"\bun saludo\b", r"\bgeachte\b", r"met vriendelijke groet", r"\bbijgaand\b",
     r"\bin de bijlage\b", r"\bonderwerp ?:",
+    # pt / pl
+    r"\bexm[oa]s?\.? senhor", r"\bjunto enviamos\b", r"\bmelhores cumprimentos\b", r"\bassunto ?:",
+    r"\bszanowni panstwo\b", r"\bz powazaniem\b", r"\bw zalaczeniu\b", r"\btemat ?:",
 )
 CG_CORPS = _rx(r"\barticle \d+", r"\bart\. \d+", r"\bclause \d+", r"\bresponsabilite\b", r"\bliability\b",
                r"\bjuridiction\b", r"\bjurisdiction\b", r"\btribunal\b", r"\bforce majeure\b")
@@ -261,7 +278,8 @@ _A_PAYER_POSITIF = re.compile(
     r"total factura|totaal incl\.? btw)\b[a-z :€$£.]{0,25}?(?<![\w.,/-])(?<!- )(?<!\()\d", re.MULTILINE)
 _TOTAL_NEGATIF = re.compile(
     r"(?<!sous-)(?<!sous )(?<!sub-)(?<!sub )(?<!sub)\b(?:total|net a payer|amount due|montant (?:total|du)|"
-    r"importe total|total general|grand total|balance due|a payer|to pay)\b[a-z :€$£.]{0,25}?"
+    r"importe total|total general|grand total|balance due|a payer|to pay|razem(?: brutto| netto)?|do zaplaty)\b"
+    r"[a-z :€$£.]{0,25}?"
     r"(?:(?<![\w.,/])-\s?\d|\(\s?\d[\d .,']*\)|\d[\d.,']*-[ \t]*$)",
     re.MULTILINE,
 )
@@ -275,8 +293,12 @@ _SUITE_PHRASE = re.compile(r"\.\s+\w")
 _SUITE_CITATION = re.compile(r"\.\s+\w|\s*(?:currency|value|amount|total)\b")
 #: Un « mot » compte s'il porte une lettre ou un chiffre (« / », « — », « | » ne comptent pas).
 _MOT = re.compile(r"[a-z0-9]")
+#: Forme sociale qui termine un nom de société imprimé sur la même ligne que l'intitulé, sans blanc de colonne.
+_FORME_SOCIALE = re.compile(r"sas|sarl|sa|gmbh|ag|ltd|lda|o\.o|0\.0|srl|spa|bv|nv|inc|llc|plc|kg|sl|s\.a")
 #: Mot qui, juste avant un libellé de titre, en fait une référence citée (« Ref. invoice », « Réf. facture »).
-_CITATION_AVANT = re.compile(r"(?:ref|refs|reference|your|votre|vtre|uw|ihre|vostra|su)[.:]?")
+_CITATION_AVANT = re.compile(r"(?:ref|refs|reference|your|votre|vtre|uw|ihre|vostra|su|"
+                             # « Montant facturé », « Mt facturé », « Total facturé » : rubrique (D-2406)
+                             r"montant|mt|total|valeur|amount|importe|importo|bedrag|betrag)[.:]?")
 
 _PAGE_N = re.compile(r"\b(?:page|pag|pagina|seite|blatt|blad|p\.)\s*[:.]?\s*(\d{1,3})\s*(?:/|of|sur|de|von|di|van)\s*"
                      r"(\d{1,3})\b")
@@ -285,7 +307,8 @@ _PAGE_SEULE = re.compile(r"^[ \t]*(?:page|seite|pagina|pag\.?|blad|blatt)[ \t]*[
 _SUITE = re.compile(r"\b(?:suite|continued|continuation|a reporter|report|carried forward|(?:\(|-)\s?cont|"
                     r"fortsetzung|ubertrag|seguito|riporto|continuacion|suma y sigue|vervolg)\b")
 _NUM_FACTURE = re.compile(
-    r"(?:invoice|facture|factura|avoir|credit note|nota de credito|note de credit|inv)\.?[ \t]*"
+    r"(?:invoice|facture|factura|avoir|credit note|nota de credito|note de credit|inv|faktura|fattura|fatura|"
+    r"rechnung|factuur|debit note|note de debit|nota obciazeniowa(?: \([a-z]+\))?)\.?[ \t]*(?:(?:vat|korygujaca|uzupelniajaca|complementaire|correctiva)[ \t]+)?"  # D-2409
     r"(?:(?:no|n\.?\s?°|n\.?\s?º|n o|nr|num(?:ero|ber)?|#|ref)\.?[ \t]*(?:de facture)?[ \t]*[:#]?|[:#])[ \t]*"
     r"([a-z0-9][a-z0-9\-/_.]{2,30})"
 )
@@ -442,6 +465,8 @@ class _Titres:
                     continue
                 if len(avant) <= 1 or len(mots) <= 4:
                     return True
+                if _FORME_SOCIALE.fullmatch(avant[-1].strip(".,")) and len(mots) - len(avant) <= 6:
+                    return True  # « Société X Sp. z o.o. FAKTURA KORYGUJĄCA Nr … » : nom de société collé (D-2406)
             return False
 
         def ok(li: str) -> bool:
@@ -468,7 +493,22 @@ class _Titres:
         return None
 
 
-def _segments(ligne: Ligne, ecart: float = 0.02) -> list[tuple[str, float | None, float]]:
+def _demeler(ligne: Ligne) -> list[list]:
+    """Texte natif : deux suites de mots de corps différents imprimées l'une sur l'autre (nom de société en grand
+    corps et intitulé, mots entrelacés dans l'ordre des abscisses) sont séparées en deux suites, chacune dans
+    l'ordre de lecture (D-2409). Sans chevauchement : la ligne telle quelle."""
+    mots = list(ligne.mots)
+    chevauche = any(b.x0 < a.x1 - 0.002 and a.taille and b.taille and a.taille != b.taille
+                    for a, b in pairwise(mots))
+    if not chevauche:
+        return [mots]
+    par_corps: dict[float, list] = {}
+    for m in mots:
+        par_corps.setdefault(round(m.taille or 0.0, 1), []).append(m)
+    return [sorted(v, key=lambda m: m.x0) for _k, v in sorted(par_corps.items(), key=lambda kv: -kv[0])]
+
+
+def _segments(ligne: Ligne, ecart: float = 0.02, *, corps: bool = False) -> list[tuple[str, float | None, float]]:
     """Segments d'une ligne séparés par un blanc de colonne : (texte, taille médiane des mots, y0).
 
     Un intitulé aligné à droite sur la ligne du nom de société (« SOCIÉTÉ X      PACKING LIST ») forme son
@@ -482,14 +522,19 @@ def _segments(ligne: Ligne, ecart: float = 0.02) -> list[tuple[str, float | None
             taille = tailles[len(tailles) // 2] if tailles else None
             sortie.append((" ".join(m.texte for m in courant), taille, min(m.y0 for m in courant)))
 
-    prec = None
-    for m in ligne.mots:
-        if prec is not None and m.x0 - prec.x1 > ecart:
-            fermer()
-            courant = []
-        courant.append(m)
-        prec = m
-    fermer()
+    for suite in (_demeler(ligne) if corps else [list(ligne.mots)]):
+        prec = None
+        for m in suite:
+            change_corps = bool(corps and prec is not None and prec.taille and m.taille
+                                and max(prec.taille, m.taille) > 1.15 * min(prec.taille, m.taille))
+            if prec is not None and (m.x0 - prec.x1 > ecart or change_corps):  # blanc de colonne ou changement
+                # de corps (nom de société en grand corps suivi de l'intitulé, sans blanc : D-2406)
+                fermer()
+                courant = []
+            courant.append(m)
+            prec = m
+        fermer()
+        courant = []
     return sortie
 
 
@@ -512,13 +557,14 @@ def _titres(page: PageText) -> _Titres:
     entete: list[str] = []
     grandes: list[str] = []
     for li in haut:
-        for texte, _taille, _y0 in _segments(li):
+        for texte, _taille, _y0 in _segments(li, corps=page.source == "natif"):
             entete.append(_norm(texte))
-    lignes_haut = [_norm(li.texte) for li in haut]
+    lignes_haut = [_norm("   ".join(" ".join(m.texte for m in suite) for suite in _demeler(li)))
+                   if page.source == "natif" else _norm(li.texte) for li in haut]
     for li in lignes:
         if li.y0 > 0.5:
             continue
-        for texte, taille, _y0 in _segments(li):
+        for texte, taille, _y0 in _segments(li, corps=page.source == "natif"):
             if mediane and taille and taille >= 1.3 * mediane and len(texte.split()) <= 8:
                 grandes.append(_norm(texte))
     return _Titres(grandes=grandes, entete=entete, lignes=lignes_haut)
@@ -572,6 +618,11 @@ def classer_page(
 
     tt = _titres(page)
     entete = tt.texte_entete
+    if not refs.numero_facture:  # intitulé entrelacé avec le nom de société (texte natif) : relu démêlé
+        n2 = extraire_refs("\n".join(tt.lignes)).numero_facture
+        if n2:
+            refs = RefsPage(mrns=refs.mrns, numero_facture=n2, page_n=refs.page_n, page_total=refs.page_total)
+            base["refs"] = refs
     indices: list[str] = []
 
     n_facture, pos_facture = tt.rang(TITRE_FACTURE, exclure_suite=_SUITE_CITATION)
@@ -670,7 +721,11 @@ def classer_page(
         return res(TypeDocument.document_support, SousTypeSupport.lettre_accompagnement.value,
                    0.72 + 0.04 * min(5, lettre))
 
-    # 5. Avoir : intitulé, ou intitulé de facture avec total négatif.
+    # 5. Avoir : intitulé, ou intitulé de facture avec total négatif. Un intitulé de facture imprimé plus haut, à
+    #    niveau égal ou supérieur, l'emporte sur un avoir cité dans le corps (« Gutschrift zu Rechnung … ») (D-2406).
+    if n_avoir and n_facture and not negatif and (n_facture > n_avoir or (
+            n_facture == n_avoir and pos_facture < pos_avoir)):
+        n_avoir = 0
     if n_avoir or (n_facture and negatif):
         indices.append("avoir_intitule" if n_avoir else "avoir_total_negatif")
         return res(TypeDocument.avoir, None, 0.9 if n_avoir else 0.8)
@@ -685,7 +740,8 @@ def classer_page(
             st_fc = SousTypeFactureCommerciale.valeur_douane_seulement
         elif SANS_VALEUR.search(texte):
             st_fc = SousTypeFactureCommerciale.sans_valeur_commerciale
-        transitaire = (f_ft >= 1 and (f_ft * 2 + c_ft) >= c_fc * 0.5) or (c_ft >= 4 and c_ft > c_fc + 1)
+        transitaire = (f_ft >= 1 and (f_ft * 2 + c_ft) >= c_fc * 0.5) or (c_ft >= 4 and c_ft > c_fc + 1) or (
+            c_ft >= 3 and c_fc == 0 and n_mrn > 0)  # MRN cité, frais douaniers, aucune rubrique de marchandise
         # Le sous-type « sans valeur / valeur douane » vient de mentions de corps (« free of charge ») : il ne
         # retient pas en facture commerciale une page de débours et de prestations (seul « pro forma » le fait).
         if transitaire and st_fc is not SousTypeFactureCommerciale.pro_forma:

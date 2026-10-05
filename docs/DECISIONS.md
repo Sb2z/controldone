@@ -2647,3 +2647,137 @@ taxes) non lus par l'extracteur de déclaration — 3 B2 certains manqués (GX00
 impose que C (`reference_declaration`) exclue les lignes sans article, sinon double comptage ; date d'émission
 illisible (OCR) sur deux factures de transitaire (aucune grille, D6 manqué) ; F3 `rattachement_faible` (lien du
 dossier frère) ; A6 `devise_incertaine` (taux imprimé lu sous 0,90).
+
+# Généralisation : déclarations, classement et regroupement sur `corpus_g4` (dev seulement)
+
+Constat : sur `bench/corpus_g4` (générateur 2.1, split `dev`, 175 dossiers), trois présentations de déclaration
+étaient illisibles (M7 feuillet d'en-tête + annexes à deux tableaux de taxes côte à côte, 24 % des champs
+obligatoires ; M8 « état de liquidation » en un seul tableau, 31 % ; M9 export XML anglais à taxes hors des
+articles, 10 %, classé `inconnu`), les annexes et pages de suite étaient prises pour des factures (« Montant
+facturé »), les factures et avoirs de transitaire polonais pour des factures commerciales, et le regroupement
+produisait 150 dossiers incomplets (147 faux P1) et 91 liens faibles. Règles générales seulement : vocabulaire,
+structure du texte, recoupements ; aucun nom de fichier, code de gabarit ni nom fictif. Le texte des documents
+reste une donnée.
+
+## D-2401 — Export XML de déclaration de format inconnu : fiche déduite des noms d'éléments
+
+`ingest/structure_deduite.py` : quand aucune fiche `config/mappings` ne reconnaît un XML, une fiche **en mémoire**
+est déduite des noms d'éléments et d'attributs, comparés à des listes fermées de synonymes (fr/en/de/it/es) :
+articles = éléments répétés portant un code marchandise ; taxations = éléments portant un code de taxe et un
+montant (article par attribut « item/article/position » ou par l'article ancêtre) ; documents = code « N380 » +
+référence ; en-tête = feuilles hors de ces groupes ; parties (importateur, déclarant, représentant fiscal) par
+l'élément parent. Catégorie d'une taxe d'après le libellé imprimé dans le fichier (« Flat-rate duty (low value) »
+-> forfait), modes de paiement de la nomenclature de l'Union. Pas de MRN, ou ni article ni taxation : pas de fiche
+(un XML quelconque reste inconnu). Le fichier est alors classé `declaration/export_xml` (confiance 0,90) et lu par
+le chemin habituel des fiches. **Confiance** : une correspondance déduite n'a pas la certitude d'une fiche écrite
+— 0,95 si les recoupements internes tiennent (somme des taxes = total, base × taux = montant au centime ou à
+l'euro, nombre d'articles), 0,85 sinon ; « tiennent » tolère une anomalie isolée (≤ 1 échec, ou ≤ ¼ des
+recoupements) : une erreur de la déclaration elle-même doit rester un écart que les contrôles relèvent, une
+correspondance fausse fait échouer la plupart des recoupements.
+
+## D-2402 — Rubriques composées « A / B / C »
+
+« Colis / articles … 7 / 12 », « LRN / rang … LRN… / 1 », « Masse brute / colis / articles 3 649,3 kg — 60 colis —
+4 article(s) » : libellés enchaînés par « / » suivis d'autant de valeurs séparées par « / » ou « — » (à défaut,
+OCR, par un blanc net) ; chaque valeur passe le validateur de son libellé, sinon rien n'est retenu. Ces lectures
+priment sur la lecture libellé par libellé, qui prenait « articles » pour la valeur du nombre de colis. Un libellé
+après un « / » isolé est crédible (seconde partie de la rubrique). Vocabulaire ajouté : « Rang » (version),
+« Livraison » (Incoterm), « Facturation » (monnaie et montant facturé), « Préf. », « Quantité » (unités
+supplémentaires d'un bloc d'article).
+
+## D-2403 — Blocs d'article sans libellé de code ; taux de change sans libellé ; récapitulatif « type / libellé »
+
+- « Article 1 — 2102109000 — origine CN — … » : un bloc d'article est ouvert quand le mot qui suit le numéro est un
+  code de 8 ou 10 chiffres imprimés tels quels (ou par groupes) ; le code est lu là. OCR : le code pays ISO en
+  capitales qui suit le code sur cette ligne est l'origine (pénalité 0,10) quand le libellé « origine » est
+  imprimé ailleurs.
+- « 1 EUR = 0,92905 CHF » imprimé seul dans l'en-tête : taux et sens, si l'expression est unique et que l'euro est
+  l'une des devises (pénalité 0,02).
+- Tableau « Type | Libellé | Montant » : « FPE Droit forfaitaire petits envois 6,00 » donne le libellé du code
+  (catégorie forfait). Le récapitulatif « Total A00 : 54,62 Total B00 : 513,53 TOTAL DROITS ET TAXES … » ne
+  donne plus « 513,53 TOTAL DROITS ET TAXES » pour libellé de B00 (B00 était classé « droit »).
+
+## D-2404 — Deux tableaux de taxes côte à côte ; intitulé de colonne d'un seul tenant
+
+« Taxe Base Taux Montant MP | Taxe Base Taux Montant MP » (droits à gauche, TVA à droite) : un en-tête dont la
+première colonne se répète est coupé en groupes de colonnes ; chaque moitié de ligne est lue avec ses colonnes,
+de gauche à droite. Un intitulé de colonne en plusieurs mots est d'un seul tenant : « Taxe   Base » séparés par
+un blanc de colonne ne sont plus lus « Tax base ».
+
+## D-2405 — Tableau mixte article + taxation (« état de liquidation »)
+
+Un tableau d'articles dont l'en-tête porte aussi les colonnes de taxation (type, base, montant) est lu comme
+tableau d'articles : la taxation de la ligne de l'article, puis les sous-lignes « B00 222,94 20,0 % 44,59 … »
+rattachées à l'article courant ; une ligne de suite de la désignation (mots tous dans la colonne de la
+désignation, sans montant décimal) ne ferme pas le tableau.
+
+## D-2406 — Classement : rubriques citées, polonais et portugais, avoir cité dans le corps
+
+- « Montant facturé », « Mt facturé », « Total facturé » : rubrique, pas un intitulé de facture (les annexes de
+  déclaration et pages de suite d'un état de liquidation étaient des « factures commerciales »). Rubriques d'article
+  d'annexe ajoutées au vocabulaire de déclaration (« masse nette / brute », « préf. 100 », « TVA à
+  l'importation », « droits et autres taxes »).
+- Vocabulaire pl/pt : débours refacturés (« należności celne », « refaktura », « odprawa celna », « prowizja za
+  kredytowanie », « desalfandegamento »…), prestations (« cło », « składowanie », « usługi »), avoirs (« faktura
+  korygująca »), totaux négatifs (« razem », « do zapłaty »), lettres (« Exmos. Senhores », « Junto enviamos »…).
+- Facture citant des MRN et des frais douaniers sans aucune rubrique de marchandise (≥ 3 indices de transitaire)
+  : facture de transitaire.
+- Un intitulé de facture imprimé plus haut, à niveau égal ou supérieur, l'emporte sur un avoir cité dans le corps
+  (« Gutschrift zu Rechnung … ») sauf total négatif.
+- Texte natif : un changement de corps sépare deux segments (nom de société en grand corps collé à l'intitulé) ;
+  un intitulé précédé d'une forme sociale (« … Sp. z o.o. FAKTURA ») reste un intitulé. OCR : pas de coupure sur
+  la hauteur des mots (variable selon les lettres).
+
+## D-2407 — Regroupement : lien de déclaration corroboré par un document du dossier
+
+Une déclaration rattachée sans référence explicite (même dossier source, TVA et codes) reçoit `mrn_cite`
+(forte pour une déclaration) quand une facture de transitaire du **même dossier**, elle-même rattachée à la
+facture commerciale par une référence explicite, cite son MRN ; `ref_transport` quand un document support ainsi
+rattaché porte un titre de transport qu'elle cite. Rien n'est déplacé : seuls les signaux d'un lien existant sont
+complétés (moins de P4 sur des liens réellement établis).
+
+## D-2408 — Sous-dossiers frères réunis par une référence explicite commune
+
+Les pièces d'un même envoi rangées dans des sous-dossiers mixtes ne se rejoignaient jamais (frontière dure).
+Comme pour deux courriels, deux sous-dossiers frères se rejoignent sur une référence explicite commune : MRN,
+titre de transport, ou numéro de facture cité tel quel (forme normalisée égale). Un dossier de la même frontière
+qui porte la même référence l'emporte (deux envois au même numéro restent séparés, test
+`test_frontiere_dure_entre_sous_dossiers`) ; une référence propre au dossier rejoint (MRN d'une facture mensuelle)
+garde le rattachement multiple.
+
+## D-2409 — Découpage : numéros de facture multilingues, versions rectificatives, intitulés entrelacés
+
+- Numéro lu après « faktura / fattura / fatura / rechnung / factuur » (avec « VAT », « korygująca »,
+  « uzupełniająca », « complémentaire »), et après « note de débit / debit note / nota obciążeniowa » (intitulés
+  de facture) : les deux pages d'une facture (page de récapitulatif « PODSUMOWANIE ») forment un document.
+- Une page intitulée qui porte un autre MRN complet (même préfixe de 15 : version rectificative) commence une
+  nouvelle déclaration (deux versions dans un même PDF étaient fusionnées, sommes doublées en B3).
+- Texte natif où le nom de société et l'intitulé, de corps différents, se chevauchent (mots entrelacés) : chaque
+  suite est relue dans son ordre (intitulé et numéro reconnus).
+
+Non fait (relevé) : totaux par code (« Total A00 : … ») sous le tableau des taxes — le modèle n'a pas de champ de
+totaux de catégorie ; les poser en lignes sans article impose que C (`reference_declaration`) les exclue
+(`structure_declaration.totaux_par_categorie` sait les reconnaître) ; laissé à l'équipe des contrôles. Scans
+« deux pages par feuille » (3 documents) : à traiter à l'ingestion des pages (découpe de l'image).
+
+## D-2410 — Mesures (dev seulement)
+
+`scripts/mesure_extraction.py --type declaration`, `scripts/mesure_classement.py`, bancs complets (même cache) :
+
+| `corpus_g4` dev | avant | après |
+|---|---|---|
+| déclarations : champs obligatoires / champs clés | 61,5 % / 73,7 % | 90,5 % / 92,3 % |
+| M7 d0 / M8 d0 / M9 (champs obligatoires) | 24,2 % / 31,2 % / 10,2 % | 100 % / 100 % / 100 % |
+| valeurs de confiance ≥ 0,90 fausses | 14 / 9 170 | 1 / 13 965 (préexistante, M1 scan) |
+| classement des pages | 0,840 | 0,991 |
+| regroupement F1 (paires) ; dossiers incomplets ; liens faibles | 0,874 ; 150 ; 91 | 0,952 ; 15 ; 46 |
+| banc : rappel / rappel certain | 0,487 / 0,242 | 0,801 / 0,600 |
+| banc : bruit `a_verifier` par dossier ; FP P1 ; P1 manqués | 3,42 ; 147 ; 1 | 1,65 ; — ; 0 |
+
+Les 5 FP certains restants du banc g4 ne viennent pas de la lecture des déclarations : C2 GZ0145 (lignes d'autres
+taxes d'une facture mensuelle multi-MRN additionnées), C6 GZ0189 (piège FAF au minimum), D2/D4 sur des lignes
+polonaises de factures de transitaire. Non-régression : `corpus_g2` et corpus d'origine, lecture des
+déclarations (0 comparaison perdue, +3 / +2 justes, bande ≥ 0,90 inchangée), classement inchangé, regroupement
+`corpus_g2` F1 0,959 -> 0,965 (incomplets 27 -> 21), corpus d'origine identique (P4 49 -> 47) ; banc corpus
+d'origine : seuil PASSE, 119 VP / 0 FP certain (identique). Tests : `tests/extract/test_declaration_d24.py`,
+`tests/ingest/test_classement_d24.py`, `tests/assembly/test_regroupement_d24.py`.

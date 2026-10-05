@@ -103,6 +103,9 @@ POIDS_SIGNAL: dict[TypeDocument, dict[SignalLien, ForceLien]] = {
         SignalLien.tva: _f,  # TVA importateur + codes SH6 communs : faible (un seul poids pour le couple)
         SignalLien.nom_fichier: _f,
         SignalLien.meme_dossier_source: _M,
+        # MRN de la déclaration cité par une facture de transitaire elle-même rattachée au dossier par une
+        # référence explicite (corroboration, D-2407)
+        SignalLien.mrn_cite: _F,
     },
     TypeDocument.facture_transitaire: {
         SignalLien.mrn_cite: _F,
@@ -402,6 +405,7 @@ class _Regroupeur:
                 out.add("mrn:" + p)
             for r in _refs_documents_declaration(d):
                 out.add("tr:" + norm_ref_transport(r))
+                out.add("fac:" + norm_ref(r))
         elif d.type is TypeDocument.facture_transitaire:
             out |= {"mrn:" + mrn_prefixe(m) for m in _mrns_ft(d)}
             out |= {"tr:" + norm_ref_transport(r) for r in _transports_ft(d)}
@@ -412,23 +416,30 @@ class _Regroupeur:
             r = _txt(d.fc.ref_transport)
             if r:
                 out.add("tr:" + norm_ref_transport(r))
+            if _numero(d):
+                out.add("fac:" + norm_ref(_numero(d)))  # numéro de la facture, cité tel quel (D-2408)
         elif d.type is TypeDocument.document_support:
             out |= {"tr:" + norm_ref_transport(r) for r in _transports_support(d)}
         return {x for x in out if len(x) > 4}
 
     def _compatible(self, d: Document, g: _Groupe) -> bool:
-        """Frontière dure (§7.5 étape 1) entre un document et un dossier en construction."""
-        if not _frontieres_compatibles(self.front[d.id], g.frontiere):
-            return False
-        c = self._courriel(d)
-        if c == g.courriel:
+        """Frontière dure (§7.5 étape 1) entre un document et un dossier en construction. Deux sous-dossiers
+        frères ne se rejoignent que sur une référence explicite commune (MRN, titre de transport), comme deux
+        courriels (D-2408) : les pièces d'un même envoi rangées au hasard de sous-dossiers mixtes."""
+        if self._meme_frontiere(d, g):
             return True
-        # Courriels différents (ou courriel / dépôt) : seulement sur référence explicite commune.
+        # Courriels différents (ou courriel / dépôt), sous-dossiers frères : seulement sur référence explicite
+        # commune.
         refs_d = self._refs_explicites(d)
+        if not refs_d:
+            return False
         refs_g: set[str] = set()
         for mid in g.membres:
             refs_g |= self._refs_explicites(self.par_id[mid])
         return bool(refs_d & refs_g)
+
+    def _meme_frontiere(self, d: Document, g: _Groupe) -> bool:
+        return _frontieres_compatibles(self.front[d.id], g.frontiere) and self._courriel(d) == g.courriel
 
     def _nouveau_groupe(self, d: Document) -> _Groupe:
         g = _Groupe(graine=d.id, frontiere=self.front[d.id], courriel=self._courriel(d))
@@ -617,6 +628,25 @@ class _Regroupeur:
         candidats à égalité."""
         if len(retenus) <= 1:
             return retenus
+        # Un dossier rejoint hors de la frontière par une référence commune s'efface devant un dossier de la même
+        # frontière qui porte la même référence (référence ambiguë : deux envois au même numéro). Une référence
+        # propre à ce dossier (MRN d'une facture mensuelle) le garde (D-2408).
+        natifs = {gi for gi in retenus if self._meme_frontiere(d, self.groupes[gi])}
+        if natifs and len(natifs) < len(retenus):
+            refs_d = self._refs_explicites(d)
+            refs_natifs = {r for gi in natifs for m in self.groupes[gi].membres
+                           for r in self._refs_explicites(self.par_id[m])}
+
+            def garder(gi: int) -> bool:
+                if gi in natifs:
+                    return True
+                communes = refs_d & {r for m in self.groupes[gi].membres for r in self._refs_explicites(self.par_id[m])}
+                valeurs_natives = {r.split(":", 1)[1] for r in refs_natifs}
+                return any(r.split(":", 1)[1] not in valeurs_natives for r in communes)
+
+            retenus = {gi: v for gi, v in retenus.items() if garder(gi)}
+            if len(retenus) == 1:
+                return retenus
         explicites = {gi: v for gi, v in retenus.items() if set(v[1]) & SIGNAUX_FORTS}
         if explicites:
             return explicites
@@ -784,6 +814,7 @@ class _Regroupeur:
         # 7 bis. fusion des dossiers incomplets avec l'unique dossier complet de leur frontière
         if self.options.meme_source:
             self._consolider()
+        self._corroborer()
         # doublons : suivent leur original
         for d in self.docs:
             if not d.doublon_de:
@@ -820,6 +851,51 @@ class _Regroupeur:
                 self._ajouter(g, d.id, score, sig)
             elif orphelin_dossier:
                 self._nouveau_groupe(d)
+
+    def _corroborer(self) -> None:
+        """Déclaration rattachée sans référence explicite à la facture (même dossier source, TVA et codes) : une
+        facture de transitaire ou un document support du **même dossier**, lui-même rattaché à la facture
+        commerciale par une référence explicite (facture citée, transport), qui cite le MRN de la déclaration ou un
+        titre de transport qu'elle cite, apporte la référence manquante (``mrn_cite`` / ``ref_transport``) :
+        le lien n'est plus faible (D-2407). Rien n'est réuni ni déplacé ; seuls les signaux d'un lien existant
+        sont complétés."""
+        for g in self.groupes:
+            fcs = [self.par_id[m] for m in g.membres if self.par_id[m].type is TypeDocument.facture_commerciale
+                   and _exploitable(self.par_id[m])]
+            if not fcs:
+                continue
+            relais: list[Document] = []
+            for mid in g.membres:
+                m = self.par_id[mid]
+                if not _exploitable(m) or m.doublon_de:
+                    continue
+                if m.type is TypeDocument.facture_transitaire:
+                    sig = {x for fc in fcs for x in self.signaux_ft(m, fc)}
+                elif m.type is TypeDocument.document_support:
+                    sig = {x for fc in fcs for x in self.signaux_support(m, fc)}
+                else:
+                    continue
+                if sig & SIGNAUX_FORTS:
+                    relais.append(m)
+            if not relais:
+                continue
+            for mid, (score, sig) in list(g.membres.items()):
+                d = self.par_id[mid]
+                if mid == g.graine or d.type is not TypeDocument.declaration or not _exploitable(d) or (
+                        set(sig) & SIGNAUX_FORTS):
+                    continue
+                mrn = _txt(d.dec.mrn)
+                refs = _refs_documents_declaration(d)
+                ajout: set[SignalLien] = set()
+                for r in relais:
+                    if r.type is TypeDocument.facture_transitaire:
+                        if mrn and any(mrn_egaux(x, mrn) for x in _mrns_ft(r)):
+                            ajout.add(SignalLien.mrn_cite)
+                    elif any(ref_transport_compatibles(a, b) for a in _transports_support(r) for b in refs):
+                        ajout.add(SignalLien.ref_transport)
+                if ajout:
+                    nouveaux = sorted(set(sig) | ajout, key=_ORDRE_SIGNAUX.index)
+                    g.membres[mid] = (max(score, self._score(TypeDocument.declaration, nouveaux)), nouveaux)
 
     def _complet(self, g: _Groupe) -> bool:
         types = {self.par_id[m].type for m in g.membres if _exploitable(self.par_id[m])}

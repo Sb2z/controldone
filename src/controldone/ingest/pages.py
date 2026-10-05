@@ -865,13 +865,14 @@ def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
     os.environ.setdefault("OMP_THREAD_LIMIT", "1")
 
     image, notes = _pretraiter(image)
-    deux_pages = bool(REGLAGES_OCR["deux_pages"]) and pt.coupure_deux_pages(image) is not None
+    coupe = pt.coupure_deux_pages(image) if REGLAGES_OCR["deux_pages"] else None
     rotation = _osd_rotation(image)
-    if deux_pages:
+    if coupe is not None:
         rotation = _rotation_deux_pages(rotation)
     if rotation:
         image = image.rotate(-rotation, expand=True, fillcolor=255)
-    coupe = pt.coupure_deux_pages(image) if REGLAGES_OCR["deux_pages"] else None
+        if REGLAGES_OCR["deux_pages"]:
+            coupe = pt.coupure_deux_pages(image)
     if coupe is not None:
         return _ocr_deux_pages(image, coupe, opts, numero, rotation or 0, notes)
     mots, score, rot_finale, angle, _ = _ocr_oriente(image, opts, rotation)

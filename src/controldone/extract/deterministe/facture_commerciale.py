@@ -44,6 +44,7 @@ from controldone.extract.deterministe._fc_regles import (
     scinder_mots_colles,
 )
 from controldone.extract.deterministe._mise_en_page import (
+    REP_FISCAL,
     Colonne,
     Fabrique,
     Lecture,
@@ -258,7 +259,9 @@ _FIN_TABLEAU = re.compile(
     r"freight|fret|flete|insurance|assurance|seguro|packing|emballage|embalaje|discount|remise|descuento|"
     r"(?:total\s*)?gross|(?:total\s*)?net\s*(?:weight|wt)|(?:total\s*)?poids|(?:total\s*)?peso|number of|"
     r"nombre de|numero de|n\.o de bultos|we hereby|nous certifions|certificamos|declaration|amount due|"
-    r"montant total|importe total|valor total|value for customs|valeur pour|valor para|" + _L.FIN_TABLEAU + ")"
+    r"montant total|importe total|valor total|value for customs|valeur pour|valor para|"
+    r"(?:invoice|grand|net)\s*total|total\s*(?:invoice|amount)|delivery\s*terms|terms\s*of\s*delivery|"
+    r"page\s*\d+\s*(?:/|of)\s*\d+\s*$|" + _L.FIN_TABLEAU + ")"
 )
 
 # --- compléments multilingues (de, it, nl ; D-2001) -----------------------------------------------------------
@@ -559,6 +562,8 @@ def _entete(e: _Etat) -> None:
         if d is not None and d.ambigu and not re.search(r"\b(facture|factura|fecha)\b", cle_texte(vue.texte)):
             conf = min(conf, 0.7)
         ch.date = fab.valeur("date", lec, confiance=conf)
+    elif ch.numero is not None:
+        _date_pres_du_numero(e)
     lec = _premier(vue, LIB_INCOTERM, _accepte_incoterm)
     if lec is not None:
         code = Lecture(lec.mots[:1], lec.page, lec.methode, contexte=lec.contexte)
@@ -576,6 +581,50 @@ def _entete(e: _Etat) -> None:
     lec = _premier(vue, LIB_TRANSPORT, accepte_reference)
     if lec is not None:
         ch.ref_transport = fab.valeur("ref_transport", lec, confiance=_conf_ref(lec))
+
+
+def _date_pres_du_numero(e: _Etat) -> None:
+    """Date sans libellé imprimée à la suite du numéro (« Invoice No. SPT-INV-00608 — 8 Aug 2026 — Page 1/2 »,
+    D-2509) : seuls des séparateurs (tiret, « of », « du », « z ») s'intercalent ; confiance ≤ 0,90."""
+    num = e.champs.numero
+    if num is None or num.page is None:
+        return
+    for p in e.vue.pages:
+        if p.numero != num.page:
+            continue
+        for li in p.lignes:
+            for sg in li.segments:
+                cle = cle_texte(" ".join(m.texte for m in sg.mots))
+                if num.valeur_brute is None or cle_texte(num.valeur_brute) not in cle:
+                    continue
+                k = next((i for i, m in enumerate(sg.mots) if cle_texte(m.texte).strip(":;,")
+                          == cle_texte(num.valeur_brute.split()[-1])), None)
+                if k is None:
+                    continue
+                suites = [list(sg.mots[k + 1:])]
+                voisin = li.segments[sg.rang + 1:sg.rang + 2]
+                if voisin and voisin[0].x0 - sg.x1 < 0.15:
+                    suites.append(list(voisin[0].mots))  # segment voisin (texte OCR découpé)
+                lec = None
+                for mots in suites:
+                    j = 0
+                    while j < len(mots) and cle_texte(mots[j].texte) in ("-", "—", "–", "/", "|", ",", "of", "du",
+                                                                        "z", "de", "del", "vom", "dated"):
+                        j += 1
+                    r = _accepte_date(mots[j:])
+                    if r is not None:
+                        lec = lecture_mots(mots[j + r[0]:j + r[1]], p, li)
+                        break
+                    if mots[j:]:
+                        break  # autre chose suit le numéro : pas une date voisine
+                if lec is None:
+                    continue
+                d = parse_date_detail(lec.texte)
+                conf = min(0.9, confiance_mots(lec))
+                if d is not None and d.ambigu:
+                    conf = min(conf, 0.7)
+                e.champs.date = e.fab.valeur("date", lec, confiance=conf)
+                return
 
 
 def _accepte_numero(mots) -> tuple[int, int] | None:
@@ -651,10 +700,14 @@ def _parties(e: _Etat) -> None:
                                     cle_texte(" ".join(m.texte for m in ms)))]
             if adr:
                 ch.acheteur.adresse = fab.valeur("acheteur.adresse", adr[0], type_valeur=TypeValeur.texte)
+        rep_fiscal = None
         for li, ms in lignes:
             if ch.acheteur.tva is None:
                 r = lire_tva_ocr(ms)
-                if r is not None:
+                if r is not None and REP_FISCAL.search(cle_texte(" ".join(m.texte for m in ms[:r[0]]))):
+                    # numéro du représentant fiscal : celui du client est cherché d'abord (D-2504)
+                    rep_fiscal = rep_fiscal or (li, ms, r)
+                elif r is not None:
                     _tva_partie(e, "acheteur", lecture_mots(ms[r[0]:r[1]], vue.page(li.page), li),
                                 corrigee=r[2] if r[3] else None)
             if ch.acheteur.eori is None:
@@ -663,6 +716,12 @@ def _parties(e: _Etat) -> None:
                     lec = lecture_mots(ms[eo[0]:eo[1]], vue.page(li.page), li)
                     ch.acheteur.eori = fab.valeur("acheteur.eori", lec, confiance=_conf_ref(lec))
                     ch.eori_importateur = fab.valeur("eori_importateur", lec, confiance=_conf_ref(lec))
+        if ch.acheteur.tva is None and rep_fiscal is not None:
+            li, ms, r = rep_fiscal
+            _tva_partie(e, "acheteur", lecture_mots(ms[r[0]:r[1]], vue.page(li.page), li),
+                        corrigee=r[2] if r[3] else None)
+            if ch.acheteur.tva is not None:
+                ch.acheteur.tva = ch.acheteur.tva.model_copy(update={"confiance": min(ch.acheteur.tva.confiance, 0.6)})
         if ch.acheteur.nom is not None:
             break
     for t in chercher(vue, LIB_DESTINATAIRE, pages=[vue.pages[0].numero] if vue.pages else None):
@@ -862,6 +921,18 @@ def _est_fin(li: VueLigne) -> bool:
     return any(_FIN_TABLEAU.match(s.cle) for s in li.segments)
 
 
+#: Report d'une page précédente en tête de tableau (« Brought forward 625.02 », « Report »,
+#: « Übertrag ») : ni une ligne de marchandise ni la fin du tableau (D-2508).
+_REPORT = re.compile(r"^(?:brought\s*forward|b/f\b|carried\s*forward|report(?:\s*de\s*la\s*page)?\b|"
+                     r"a\s*reporter|suma\s*anterior|suma\s*y\s*sigue|transporte\b|ubertrag|uebertrag|riporto|"
+                     r"van\s*vorige|z\s*przeniesienia|do\s*przeniesienia|transporte\s*da\s*pagina)")
+
+
+def _est_report(li: VueLigne) -> bool:
+    return any(_REPORT.match(s.cle) for s in li.segments) and not any(
+        re.fullmatch(r"\d{1,3}\.?", s.texte) for s in li.segments[:1])
+
+
 def _tableau(e: _Etat) -> None:
     vue = e.vue
     colonnes_prec: list[Colonne] | None = None
@@ -873,7 +944,7 @@ def _tableau(e: _Etat) -> None:
         li, cols = trouve
         e.entetes.add((p.numero, li.rang))
         colonnes_prec = cols
-        rs, fin = lire_tableau(p, li.rang, cols, est_debut=_est_debut, est_fin=_est_fin)
+        rs, fin = lire_tableau(p, li.rang, cols, est_debut=_est_debut, est_fin=_est_fin, est_ignoree=_est_report)
         rs = _recoller_montants(rs)
         e.fin_tableau[p.numero] = fin
         for r in rs:
@@ -1325,7 +1396,7 @@ def _pied(e: _Etat) -> None:
             if presume:
                 conf = min(conf, 0.7)
             setattr(ch, chemin, fab.valeur(chemin, lec, confiance=conf, separateur=sep))
-    lec = _premier_hors(e, LIB_COLIS, accepte_entier, exclure_tab)
+    lec = _premier_hors(e, LIB_COLIS, accepte_entier, exclure_tab, partout=True)
     if lec is None:
         # libellé nu, seul dans son segment (« Packages   12 ») : valeur à droite seulement (D-950)
         for t in chercher(e.vue, LIB_COLIS_NU):

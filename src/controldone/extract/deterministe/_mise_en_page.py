@@ -790,6 +790,13 @@ FORMATS_TVA: dict[str, str] = {
 }
 
 
+#: Libellé d'un numéro de TVA de représentant fiscal (« TVA rep. fiscal : FR… ») : ce n'est pas le numéro de la
+#: partie représentée (D-2504).
+REP_FISCAL = re.compile(r"\b(rep\.? fiscal|representant fiscal|representante fiscal|fiscal rep(?:resentative)?|"
+                        r"steuervertret\w*|fiskalvertret\w*|rappresentante fiscale|fiscaal vertegenwoordiger|"
+                        r"przedstawiciel podatkowy)\b")
+
+
 def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
     """Numéro de TVA dans une suite de mots : (i, j, forme normalisée). Le pays doit être un code TVA
     européen et la suite respecter le format national ; les chiffres peuvent être répartis sur plusieurs
@@ -1001,9 +1008,11 @@ def lire_tableau(
     page: VuePage, rang_entete: int, colonnes: Sequence[Colonne], *,
     est_debut: Callable[[dict[str, list[Mot]]], bool],
     est_fin: Callable[[VueLigne], bool],
+    est_ignoree: Callable[[VueLigne], bool] | None = None,
 ) -> tuple[list[RangeeTableau], int]:
     """Lit les lignes sous l'en-tête jusqu'à une ligne de fin (ou un grand blanc). Retourne les rangées et
-    le rang de la première ligne après le tableau."""
+    le rang de la première ligne après le tableau. ``est_ignoree`` : ligne sautée sans finir le tableau ni
+    s'ajouter à une rangée (report « Brought forward » d'une page précédente, D-2508)."""
     rangees: list[RangeeTableau] = []
     pas = page.pas_ligne
     prec_y = page.lignes[rang_entete].y1
@@ -1013,6 +1022,10 @@ def lire_tableau(
         li = page.lignes[k]
         if est_fin(li):
             break
+        if est_ignoree is not None and est_ignoree(li):
+            prec_y = li.y1
+            k += 1
+            continue
         ecart = li.y0 - prec_y
         if rangees:
             pitchs = [b.lignes[0].y0 - a.lignes[-1].y0 for a, b in pairwise(rangees)]

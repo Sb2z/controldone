@@ -131,6 +131,8 @@ class _EnCours:
     pages: list[int] = field(default_factory=list)
     numero_facture: str | None = None
     mrn_prefixes: list[str] = field(default_factory=list)
+    #: MRN complets lus sur la première page de la déclaration (versions rectificatives d'un même préfixe, D-2409)
+    mrns: list[str] = field(default_factory=list)
     page_total: int | None = None
     langues: list[str] = field(default_factory=list)
 
@@ -194,6 +196,9 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
     if r.page_n and r.page_n > 1 and (not cur.page_total or not r.page_total or r.page_total == cur.page_total):
         return True
     if cur.type is TypeDocument.declaration:
+        if c.intitulee and r.mrns and cur.mrns and not any(_proches(r.mrns[0], m) for m in cur.mrns) \
+                and not _suite_de_declaration(cur, c):
+            return False  # nouvelle page de tête d'un autre MRN complet (version rectificative du même préfixe)
         return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes)) \
             or _suite_de_declaration(cur, c)
     if cur.type in _FACTURES:
@@ -225,6 +230,8 @@ def _absorber(e: _EnCours, c: ClassementPage) -> None:
     for p in c.refs.mrn_prefixes:
         if e.type is TypeDocument.declaration and p not in e.mrn_prefixes and not e.mrn_prefixes:
             e.mrn_prefixes.append(p)
+    if e.type is TypeDocument.declaration and not e.mrns:
+        e.mrns.extend(c.refs.mrns[:1])
     if c.refs.page_total and not e.page_total:
         e.page_total = c.refs.page_total
     if c.langue:

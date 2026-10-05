@@ -26,7 +26,9 @@ for _code, _libelles in {
     "C62": "pcs pc pce pces piece pieces pieza piezas pza pzas u un ud uds unit units unite unites unidad unidades ea each "
     "nr nbr nb stk st qty c62 h87 nar item items article articles p/st "
     # de, it, nl (D-2006)
-    "stuck stueck stck stk. pz pz. pezzo pezzi unita stuks stuk",
+    "stuck stueck stck stk. pz pz. pezzo pezzi unita stuks stuk "
+    # pl, pt (D-2507)
+    "szt szt. sztuk sztuki sztuka unidade",
     "KGM": "kg kgs kilo kilos kilogramme kilogrammes kilogram kilograms kilogramo kilogramos kgm",
     "GRM": "g gr grs gramme grammes gram grams gramo gramos grm",
     "TNE": "t to tonne tonnes ton tons tonelada toneladas tne",
@@ -37,12 +39,12 @@ for _code, _libelles in {
     "MTQ": "m3 m³ cbm mtq metre cube metres cubes cubic meter cubic meters",
     "CMT": "cm centimetre centimetres centimeter centimeters cmt",
     "PR": "pr prs pa pair pairs paire paires par pares paar paare paia paio",
-    "SET": "set sets jeu jeux ensemble ensembles juego juegos",
+    "SET": "set sets jeu jeux ensemble ensembles juego juegos kpl komplet komplety zestaw zestawy jogo jogos",
     "DZN": "dz dzn doz dozen dozens douzaine douzaines docena docenas",
     "CT": "ctn ctns carton cartons caja cajas",
     "BX": "box boxes boite boites",
     "PK": "pk pkg pkgs pack packs paquet paquets package packages colis",
-    "RO": "roll rolls rouleau rouleaux rollo rollos",
+    "RO": "roll rolls rouleau rouleaux rollo rollos rolka rolki rolo rolos",
     "KWH": "kwh",
 }.items():
     _UNITES[_code.lower()] = _code

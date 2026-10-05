@@ -420,9 +420,10 @@ def _refs_facture(vue: VueDocument, fab: Fabrique, ch: ChampsSupport) -> None:
 
 
 def _accepte_ref_facture(mots: Sequence[Mot]) -> tuple[int, int] | None:
-    # numéro en deux mots : préfixe de 2 à 4 capitales puis partie chiffrée (« FT 4800/2026 », D-2010)
+    # numéro en deux mots : préfixe de 2 à 4 capitales puis partie chiffrée (« FT 4800/2026 », D-2010),
+    # éventuellement préfixée de lettres (« FT PIC2026/8089 », D-2510)
     if len(mots) >= 2 and re.fullmatch(r"[A-Z]{2,4}", mots[0].texte) and re.fullmatch(
-            r"\d[A-Za-z0-9/\-_.]*\d", mots[1].texte.strip(":;,()")):
+            r"[A-Z]{0,4}\d[A-Za-z0-9/\-_.]*\d", mots[1].texte.strip(":;,()")):
         return 0, 2
     for k, m in enumerate(mots[:2]):
         t = m.texte.strip(":;,.()")
