@@ -142,7 +142,7 @@ class Dossier:
         sector = self.client["secteur"]
         n_ship = 1
         if a["structure"] == "statement":
-            n_ship = rng.choice([2, 3])
+            n_ship = rng.choice([3, 4, 4, 5])      # relevé : souvent plus d'une page (reports « carried forward »)
         self.shipments = []
         for k in range(n_ship):
             self.shipments.append(self._make_shipment(k, d_ci if k == 0 else add_days(d_ci, rng.randint(-20, 10)), sector, h7))

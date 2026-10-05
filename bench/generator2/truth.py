@@ -152,7 +152,9 @@ def tv_ft(doc):
     lines = []
     for ln in doc["lines"]:
         vp = _line_vat_printed(doc, ln)
-        lines.append({"nature": ln["nature"], "libelle": ln["libelle"], "quantite": _qty(ln["qty"]), "prix_unitaire": _rate(ln["pu"]),
+        pu_printed = doc["family"] not in ("G2", "G10")      # G2, G10 : quantité et montant net seulement
+        lines.append({"nature": ln["nature"], "libelle": ln["libelle"], "quantite": _qty(ln["qty"]),
+                      "prix_unitaire": _rate(ln["pu"]) if pu_printed else None,
                       "montant_ht": s2(abs(ln["ht"])) if doc["kind"] == "av" else s2(ln["ht"]),
                       "taux_tva": _rate(ln["vat_rate"]) if vp else None, "montant_tva": s2(ln["vat"]) if (vp and doc["family"] not in ("G7", "G8")) else None,
                       "mrn": ln["mrn"] if _line_mrn_printed(doc, ln) else None,
@@ -243,6 +245,9 @@ def build_truth(dos, files, seed) -> dict:
         docs = [d for d in t["docs"] if d in present]
         if not docs:
             continue
+        # un piège ne doit pas contredire une erreur injectée appariable (même contrôle accepté, mêmes documents)
+        if any(t["ctrl"] in e["accepted_control_ids"] and set(docs) & set(e["documents"]) for e in errors):
+            continue
         traps.append({"trap_id": f"{dos.did}-T{i}", "control_id": t["ctrl"], "max_level": t["max"], "documents": docs,
                       "description": t["desc"]})
     if any(e["control_id"] == "P1" for e in errors):
@@ -255,7 +260,7 @@ def build_truth(dos, files, seed) -> dict:
         outcome = "conforme"
     fts = [dos.docs[d] for d in present if dos.docs[d]["kind"] == "ft"]
     decs = [dos.docs[d] for d in present if dos.docs[d]["kind"] == "dec"]
-    tags = list(dict.fromkeys(dos.tags + scenario_tags(dos, present, files)))
+    tags = list(dict.fromkeys(["avoirs" if x == "avoir" else x for x in dos.tags] + scenario_tags(dos, present, files)))
     return {
         "schema": "controldone.bench.truth/1.0.0",
         "dossier_id": dos.did, "split": sp["split"], "client_id": sp["client_id"],

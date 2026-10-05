@@ -267,7 +267,7 @@ def render_g2(doc, rng):
         rows.append([ln["mrn"] or "", _lib(ln, num), F.qty(ln["qty"], num), code, "EUR " + _neg(ln["ht"], num, "paren", av)])
 
     # rendu manuel pour gérer les reports de page
-    rh = 21
+    rh = 23
     tw = sum(c[1] for c in cols)
 
     def head(yh):

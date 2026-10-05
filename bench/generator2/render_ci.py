@@ -4,6 +4,7 @@ un tableur (CK) et une facture UBL 2.1 (CU)."""
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 from decimal import Decimal as D
 
@@ -463,7 +464,12 @@ def normalize_zip(data: bytes) -> bytes:
             zi = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
             zi.compress_type = zipfile.ZIP_DEFLATED
             zi.external_attr = 0o644 << 16
-            dst.writestr(zi, src.read(name))
+            content = src.read(name)
+            if name == "docProps/core.xml":
+                # openpyxl impose l'heure courante comme date de modification : on la fige
+                content = re.sub(rb"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)",
+                                 rb"\g<1>2026-01-01T00:00:00Z\g<2>", content)
+            dst.writestr(zi, content)
     return out.getvalue()
 
 

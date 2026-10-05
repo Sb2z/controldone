@@ -75,7 +75,7 @@ INJ = {
     "forfait_base_x_taux_faux": ("G1", {**H7}, {"fdecl"}),
     "forfait_base_differente": ("G2", {**H7}, {"fdecl", "fcodes"}),
     "forfait_codes_distincts": ("G3", {**H7}, {"fcodes"}),
-    "forfait_surfacture": ("G4", {**H7, **FT}, {"fft"}),
+    "forfait_surfacture": ("G4", {**H7, **FT, "cap_ventile": {True}}, {"fft"}),
     "forfait_unites_au_lieu_articles": ("G5", {**H7, **FT, "cap_forfait_base": {True}}, {"fft"}),
     "forfait_hors_periode": ("G6", {**H7}, {"fdate"}),
     "facture_manquante": ("P1", {**H1}, {"P"}),
@@ -93,6 +93,11 @@ EXCLUSIVE = {"facture_manquante", "declaration_manquante", "faux_document_factur
 # Cible : erreurs par contrôle et par split (avant les erreurs induites)
 TARGET = {"dev": 5, "holdout": 2}
 TARGET_EXTRA = {"holdout": {"C6", "E5", "G5", "F3", "F5", "A15", "D8"}}
+# Contrôles éligibles à « ecart_certain » (Annexe A) : les premières erreurs de chacun sont placées
+# dans des dossiers peu dégradés (d0/d1) pour garantir au moins 3 erreurs attendues « ecart_certain ».
+CERTAIN_ELIGIBLE = {"A1", "A3", "A4", "A5", "A6", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4", "C5", "C6", "C8",
+                    "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D9", "F3", "G1", "G2", "G4", "G5"}
+CERTAIN_FRIENDLY = {"dev": 4, "holdout": 1}
 P_TARGET = {"dev": 2, "holdout": 1}
 
 LAYOUTS = list(LAYCAP)
@@ -168,10 +173,10 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
             n = TARGET[s] + (1 if ctrl in TARGET_EXTRA.get(s, set()) else 0)
             codes = CODES_PAR_CONTROLE[ctrl]
             for k in range(n):
-                tasks.append((s, codes[k % len(codes)]))
+                tasks.append((s, codes[k % len(codes)], k))
         for k in range(P_TARGET[s]):
-            tasks.append((s, ["facture_manquante", "declaration_manquante"][k % 2]))
-            tasks.append((s, "faux_document_facture"))
+            tasks.append((s, ["facture_manquante", "declaration_manquante"][k % 2], k))
+            tasks.append((s, "faux_document_facture", k))
 
     def contrainte(code):
         req = INJ[code][1]
@@ -202,7 +207,8 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
         sl["inj"].append(code)
         return True
 
-    for s, code in tasks:
+    for s, code, k in tasks:
+        extra = {"deg_ok": {True}} if (INJ[code][0] in CERTAIN_ELIGIBLE and k < CERTAIN_FRIENDLY[s]) else None
         pool = [d for d in by_split[s] if d not in clean]
         cand = [d for d in pool if len(slots[d]["inj"]) < maxn[s] and not (code in EXCLUSIVE and slots[d]["inj"])]
         rng.shuffle(cand)
@@ -217,10 +223,10 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
                 ok = False
                 for p in partners:
                     snapshot = ({k: set(v) for k, v in slots[d]["req"].items()}, set(slots[d]["grps"]), list(slots[d]["inj"]))
-                    if not try_assign(d, code):
+                    if not try_assign(d, code, extra):
                         break
                     # le partenaire partage client et famille ; F5 : facture en EUR, structure simple
-                    preq = {"kind": {"h1"}, "has_ft": {True}}
+                    preq = {"kind": {"h1"}, "has_ft": {True}, **(extra or {})}
                     if code == "facture_sur_deux_declarations":
                         preq.update({"foreign": {False}, "structure": {"simple"}})
                         if "val" in slots[p]["grps"]:
@@ -255,13 +261,13 @@ def plan_corpus(seed: int, count: int) -> list[dict]:
                     done = True
                     break
             else:
-                if try_assign(d, code):
+                if try_assign(d, code, extra):
                     done = True
                     break
         if not done:
             # en dernier recours : un dossier « propre » du même split
             for d in [x for x in by_split[s] if x in clean and not slots[x]["inj"] and slots[x]["role"] is None]:
-                if code not in PAIRS and try_assign(d, code):
+                if code not in PAIRS and try_assign(d, code, extra):
                     clean.discard(d)
                     done = True
                     break
@@ -360,7 +366,9 @@ def choose_attrs(did: str, sl: dict, rng, clean: set) -> dict:
     if attrs["devise"] == "EUR":
         attrs["foreign"] = False
         attrs["decl_mode"] = "same"
-    deg = rng.choices(["d0", "d1", "d2", "d3"], [0.40, 0.25, 0.20, 0.15])[0]
+    deg = rng.choices(["d0", "d1", "d2", "d3"], [0.26, 0.20, 0.31, 0.23])[0]
+    if "deg_ok" in req:
+        deg = rng.choices(["d0", "d1"], [0.6, 0.4])[0]
     return {"dossier_id": did, "split": split_of(did), "client_id": cid, "kind": kind, "family": fam, "layout": lay,
             "deg": deg, "attrs": attrs, "injections": list(inj), "partners": list(sl["partner_of"]),
             "role": sl["role"], "clean": did in clean and not inj}
