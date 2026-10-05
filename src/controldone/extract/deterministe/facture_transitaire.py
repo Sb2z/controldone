@@ -6,10 +6,10 @@ est une ``ValeurSourcee`` (page, valeur brute telle qu'imprimée, zone, ancrage,
 
 Règles générales (aucune règle propre à un gabarit de transitaire) :
 
-- **en-tête** par libellés multilingues (fr/en) : numéro (libellé « N° / No. », sinon référence voisine du
-  titre du document), date, références de transport (LTA, AWB, BL…), MRN (motif à 18 caractères, OCR
-  tolérant mais confiance basse si corrigé), factures commerciales citées, facture d'origine et motif
-  (avoir) ;
+- **en-tête** par libellés multilingues (fr, en, de, it, es, nl : ``_ft_langues``) : numéro (libellé
+  « N° / No. / Nr. », sinon référence voisine du titre du document), date, références de transport (LTA,
+  AWB, BL…), MRN (motif à 18 caractères, OCR tolérant mais confiance basse si corrigé), factures
+  commerciales citées, facture d'origine et motif (avoir) ;
 - **parties** : le numéro de TVA du client est celui du pavé « client facturé / bill to » (ou d'une entité
   du client) ; celui de l'émetteur est celui de l'en-tête du transitaire (recoupé avec le SIREN du pied de
   page). Les deux ne sont jamais intervertis : en cas de doute la confiance baisse ;
@@ -24,6 +24,9 @@ Règles générales (aucune règle propre à un gabarit de transitaire) :
 - valeurs non imprimées mais déductibles (taux de TVA d'après la légende des codes, quantité implicite,
   prix unitaire = montant / quantité, TVA = base × taux) : valeurs ``derive`` à confiance plafonnée.
 
+Avant lecture, les glyphes de tampon, de filigrane et d'annotation manuscrite superposés au texte natif sont
+retirés (``_ft_nettoyage``). Généralisation à des mises en page inconnues : D-1901 à D-1907.
+
 Une valeur fausse à confiance ≥ 0,90 crée un faux « écart certain » : en OCR, la confiance suit le minimum
 des confiances des mots lus, plafonnée sauf recoupement arithmétique (quantité × prix = montant, somme des
 lignes = total).
@@ -37,6 +40,8 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from controldone.extract.base import ExtractionContext, ExtractionResult
+from controldone.extract.deterministe import _ft_langues as L
+from controldone.extract.deterministe._ft_nettoyage import retirer_surimpressions
 from controldone.extract.deterministe._mise_en_page import (
     PAYS_TVA,
     Fabrique,
@@ -122,48 +127,18 @@ def consensus_lectures(membres: Sequence[str], compte: Mapping[str, int], meille
         for i in range(n))
 
 
-_ROLES_TEXTE = {"lib", "libcode", "natflag", "ref", "detail", "transport", "date"}
-_ROLES_NUM = {"qte", "pu", "ht", "tva", "tva_mt", "cat", "taux", "base_droit", "base_tva"}
+_ROLES_TEXTE = {"lib", "libcode", "natflag", "ref", "detail", "transport", "date", "pos"}
+_ROLES_NUM = {"qte", "pu", "ht", "ttc", "tva", "tva_mt", "cat", "taux", "base_droit", "base_tva"}
 
-_VOCABULAIRE: dict[str, list[str]] = {
-    "libcode": ["hs code / item", "hs code", "code sh", "code sh / article", "nc / article", "code / item"],
-    "lib": ["designation / description", "designation", "description", "libelle", "libelle / description",
-            "prestation", "prestations", "item", "intitule", "nature de la prestation", "service", "services"],
-    "natflag": ["nat", "nat."],
-    "ref": ["mrn", "ref", "ref / ref", "reference", "references", "reference / detail", "mrn / detail",
-            "ref / detail", "mrn / details", "ref / details", "reference / details", "dossier", "ref."],
-    "detail": ["detail", "details", "periode", "period", "base de calcul", "calcul"],
-    "transport": ["transport", "lta", "awb", "lta / bl", "awb / bl", "lta / awb", "bl", "connaissement",
-                  "ref transport", "lta/awb"],
-    "date": ["date", "date de mainlevee", "date mainlevee", "release date"],
-    "qte": ["qte", "qty", "qte/qty", "qte / qty", "quantite", "quantity", "nb", "nombre", "qte/qte"],
-    "pu": ["pu", "pu ht", "puht", "pu/unit", "pu / unit", "unit price", "prix unitaire", "prix unit", "p.u", "p.u.",
-           "pu/unit price", "unit", "prix"],
-    "ht": ["montant", "montant ht", "montantht", "amount", "ht", "net", "ht/net", "ht / net", "total ht", "total",
-           "montant net", "net amount", "amount excl. vat", "montant hors taxes"],
-    "tva_mt": ["mt tva", "montant tva", "vat amount", "mt. tva"],
-    "tva": ["tva", "vat", "tva/vat", "tva / vat"],
-    "cat": ["cat. tva", "cat tva", "c", "code tva", "vat code", "statut", "status", "cat", "categorie tva"],
-    "taux": ["%", "taux", "rate", "taux tva", "vat rate", "vat %", "tva %"],
-    "base_droit": ["duty base", "base droits", "base droit", "base des droits", "valeur en douane",
-                   "customs value", "base"],
-    "base_tva": ["vat base", "base tva"],
-    "nat:debours_droits": ["droits", "duty", "duties", "droits de douane", "customs duty", "droit"],
-    "nat:debours_autres_taxes": ["autres tx", "autres taxes", "other taxes", "other duties", "autres tx."],
-    "nat:debours_tva": ["tva import", "import vat", "tva import.", "tva a l'import", "tva imp"],
-    "nat:debours_combines": ["droits et taxes", "duties and taxes", "droits & taxes"],
-    "nat:frais_dedouanement": ["dedouan", "dedouanement", "clearance", "customs clearance", "dedouan."],
-    "nat:frais_ligne_supplementaire": ["lignes sup", "lignes sup.", "ligne sup", "additional lines",
-                                       "add. lines", "lignes supp"],
-    "nat:frais_avance_fonds": ["av. fonds", "av fonds", "avance de fonds", "adv. fee", "disbursement fee"],
-    "nat:magasinage": ["magasinage", "storage"],
-    "nat:transport": ["livraison", "delivery"],
-    "nat:manutention": ["manutention", "handling"],
-}
+_VOCABULAIRE: dict[str, list[str]] = L.VOCABULAIRE_COLONNES
 _PHRASES: list[tuple[str, tuple[str, ...]]] = sorted(
     ((role, tuple(p.split())) for role, ps in _VOCABULAIRE.items() for p in ps),
     key=lambda x: -sum(len(w) for w in x[1]),
 )
+
+
+#: Mots qui qualifient l'en-tête de colonne qui les précède (« P.U. HT », « Prix (EUR) »).
+_QUALIFICATIFS = {"ht", "h.t", "net", "netto", "eur", "€", "(eur)", "(€)", "excl", "hors taxes", "(ht)"}
 
 
 def _cle_mot(t: str) -> str:
@@ -193,6 +168,15 @@ def _reconnaitre_entete(li: VueLigne) -> list[ColonneFt] | None:
     k = 0
     while k < len(mots):
         trouve = None
+        if cols and cles[k] in _QUALIFICATIFS and mots[k].x0 - cols[-1].x1 < 0.012 \
+                and cols[-1].role not in ("ht", "tva", "tva_mt"):
+            # « P.U. HT », « Prix (EUR) » : qualificatif accolé à la colonne précédente, pas une colonne
+            c = cols[-1]
+            c.x1 = max(c.x1, mots[k].x1)
+            c.libelle = f"{c.libelle} {mots[k].texte}"
+            c.mots = (*c.mots, mots[k])
+            k += 1
+            continue
         for role, phr in _PHRASES:
             n = len(phr)
             if k + n > len(mots):
@@ -223,21 +207,47 @@ def _reconnaitre_entete(li: VueLigne) -> list[ColonneFt] | None:
         return None
     if not any(r in ("ht", "pu") or r.startswith("nat:") for r in roles):
         return None
-    # une colonne « Droits » seule dans un tableau à libellé est un montant HT (pas une colonne par nature)
+    # plusieurs colonnes « montant » (« Montant » … « Total ») : la première est le montant HT, les
+    # suivantes un montant TTC (jamais lu comme montant de ligne)
+    hts = [c for c in cols if c.role == "ht"]
+    for c in hts[1:]:
+        if not _deux_tableaux(cols):
+            c.role = "ttc"
     return cols
+
+
+def _deux_tableaux(cols: list[ColonneFt]) -> bool:
+    """En-tête de deux tableaux côte à côte (« Item Qty Amount | Item Qty Amount »)."""
+    return len(_groupes_colonnes(cols)) > 1
+
+
+def _groupes_colonnes(cols: list[ColonneFt]) -> list[list[ColonneFt]]:
+    """Colonnes regroupées par tableau : un nouveau tableau commence à chaque colonne de libellé répétée,
+    à condition que chaque groupe ait sa colonne de montant."""
+    groupes: list[list[ColonneFt]] = []
+    for c in cols:
+        if c.role in ("lib", "libcode") and groupes and any(x.role in ("lib", "libcode") for x in groupes[-1]):
+            groupes.append([c])
+        elif groupes:
+            groupes[-1].append(c)
+        else:
+            groupes.append([c])
+    if len(groupes) > 1 and all(any(x.role in ("ht", "pu") for x in g) for g in groupes):
+        return groupes
+    return [cols]
 
 
 # --- reconnaissance des jetons -------------------------------------------------------------------------------
 
-_MONTANT_RE = re.compile(r"^[(\-−–]?\d{1,3}(?:[ \u00a0\u202f\u2009.,'’]?\d{3})*[.,]\d{2}\)?-?$")
+_MONTANT_RE = re.compile(r"^[(\-−–]?[€$£]?\d{1,3}(?:[ \u00a0\u202f\u2009.,'’]?\d{3})*[.,]\d{2}\)?-?€?$")
 _ENTIER_RE = re.compile(r"^\d{1,4}$")
 _POURCENT_RE = re.compile(r"^(\d{1,2}(?:[.,]\d{1,2})?)\s*%$")
 _MARQUEUR_RE = re.compile(r"^[A-Z]$")
 _MRN_RE = re.compile(r"(?<![A-Z0-9])(\d{2}[A-Z]{2}[A-Z0-9]{14})(?![A-Z0-9])")
 _DATE_RE = re.compile(
     r"\b(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}|\d{4}-\d{2}-\d{2}|"
-    r"(?:jan|feb|fev|mar|apr|avr|may|mai|jun|juin|jul|juil|aug|aou|sep|oct|nov|dec)[a-zéû]*\.? \d{1,2},? \d{4}|"
-    r"\d{1,2} (?:jan|fev|feb|mar|avr|apr|mai|may|juin|jun|juil|jul|aou|aug|sep|oct|nov|dec)[a-zéû]*\.? \d{4})",
+    rf"(?:{L.MOTS_MOIS}|fév|aoû|déc)[a-zéûä]*\.? \d{{1,2}},? \d{{4}}|"
+    rf"\d{{1,2}}\.? (?:de )?(?:{L.MOTS_MOIS}|märz|mär|fév|aoû|déc)[a-zéûä]*\.? (?:de |del )?\d{{4}})",
     re.IGNORECASE,
 )
 
@@ -296,6 +306,12 @@ class LigneLue:
     date_debut: Lu | None = None
     date_fin: Lu | None = None
     natflag: str | None = None
+    #: la ligne appartient à un tableau dont une colonne est réservée au MRN de chaque ligne
+    colonne_mrn: bool = False
+    #: la colonne de références de la ligne porte autre chose qu'un MRN
+    ref_autre: bool = False
+    #: montant HT illisible : déduit de quantité × prix unitaire
+    ht_calcule: bool = False
 
 
 @dataclass
@@ -353,7 +369,8 @@ class ExtracteurFactureTransitaire:
         if not utiles:
             return ExtractionResult(extracteur=info, champs=None, avertissements=["aucune_page_lisible"],
                                     partielle=True)
-        vue = vue_document([_nettoyer(_page_texte(p)) for p in utiles], separateur_decimal=context.separateur_decimal)
+        vue = vue_document([_nettoyer(retirer_surimpressions(_page_texte(p))) for p in utiles],
+                           separateur_decimal=context.separateur_decimal)
         td = TypeDocument(document.type)
         ex = _Extraction(td, document.id, info, vue, context)
         champs = ex.executer()
@@ -363,12 +380,8 @@ class ExtracteurFactureTransitaire:
 
 # --- cœur de l'extraction -----------------------------------------------------------------------------------------
 
-_TITRE = re.compile(
-    r"^(facture|invoice|avoir|credit note|note de credit|releve|statement|facture de debours|"
-    r"facture de prestations?|facture / invoice|avoir / credit note|debit note|note de debit)\b"
-)
-_TITRE_COMPACT = re.compile(r"^(facture|invoice|avoir|creditnote|notedecredit|releve|statement|debitnote|"
-                            r"notededebit)")
+_TITRE = L.TITRE
+_TITRE_COMPACT = L.TITRE_COMPACT
 
 
 def _est_titre(cle: str) -> bool:
@@ -378,24 +391,14 @@ def _est_titre(cle: str) -> bool:
 
 _TITRE_RELEVE = re.compile(r"\breleve\b|\bstatement\b|facture mensuelle|monthly invoice|recapitulati")
 
-_LIB_NUMERO = [re.compile(
-    r"(?:(?:facture|invoice|avoir|credit note|note de credit|releve|statement)\s+)?"
-    r"(?:n°|nº|no\.?|num(?:ero)?\.?|number|nr\.?)(?:\s*/\s*(?:n°|nº|no\.?|number))?\s*:?\s*"
-)]
-_EXCLURE_NUMERO = re.compile(r"\b(tva|vat|siren|siret|eori|tel|fax|iban|client|customer|commande|order)\b")
-_LIB_DATE = [re.compile(
-    r"date(?: de (?:la )?facture| du releve| de l'avoir| d'emission| of invoice| of issue| facture| invoice)?"
-    r"\s*:?\s*"
-)]
-_LIB_DU = [re.compile(r"du\s+(?=\d)")]
-_LIB_CLIENT = [re.compile(
-    r"(client factur[ee]|client / bill to|bill to|billed to|invoice to|facture a|factur[ee] a|customer|"
-    r"client|destinataire de la facture|sold to)\b\s*:?\s*"
-)]
-_LIB_TRANSPORT = [re.compile(
-    r"(lta\s*/\s*awb|awb\s*/\s*bl|lta\s*/\s*bl|lta\s*/\s*bl\s*/\s*cmr|hawb|mawb|awb|lta|b/l|bl|bol|cmr|"
-    r"connaissement|bill of lading|ref\.? transport|transport ref\.?|n° lta|n° awb)\b\s*(n°|no\.?)?\s*:?\s*"
-)]
+_LIB_NUMERO = L.LIB_NUMERO
+_EXCLURE_NUMERO = re.compile(r"\b(tva|vat|siren|siret|eori|tel|fax|iban|client|customer|commande|order|ust|mwst|"
+                             r"iva|btw|nif|cif|kunde|kunden|cliente|klant|auftrag|ordine|pedido|bestelling|"
+                             r"partita|steuer|codice|kvk|rcs|account|seite|page|pagina|blatt)\b")
+_LIB_DATE = L.LIB_DATE
+_LIB_DU = L.LIB_DU
+_LIB_CLIENT = L.LIB_CLIENT
+_LIB_TRANSPORT = L.LIB_TRANSPORT
 _LIB_FOURNISSEUR = [re.compile(
     r"(fact\.? fournisseur|facture fournisseur|factures? fournisseurs?|fact\.? fourn\.?|supplier inv(?:oice)?s?\.?|"
     r"commercial inv(?:oice)?s?\.?|facture commerciale|fact\.? commerciale|ref\.? facture fournisseur|"
@@ -404,31 +407,18 @@ _LIB_FOURNISSEUR = [re.compile(
 _LIB_ORIGINE = [re.compile(
     r"(facture d'origine|facture origine|facture initiale|original invoice|invoice ref\.?|credited invoice|"
     r"invoice credited|ref\.? facture|facture concernee|facture creditee|related invoice|"
-    r"facture d'origine / original invoice)\b\s*(n°|no\.?)?\s*:?\s*"
+    r"facture d'origine / original invoice|"
+    # de / it / es / nl
+    r"ursprungsrechnung|ursprungliche rechnung|originalrechnung|bezugsrechnung|zu rechnung|"
+    r"fattura (?:di )?(?:origine|riferimento|originale|rettificata)|rif\.? fattura|"
+    r"factura (?:original|rectificada|de origen|de referencia)|ref\.? factura|"
+    r"oorspronkelijke factuur|originele factuur|oorspr\.? factuur|ref\.? factuur)\b\s*(n°|no\.?|nr\.?|n\.)?\s*:?\s*"
 )]
-_LIB_MOTIF = [re.compile(r"(motif|reason|objet|raison)\b\s*(/\s*reason)?\s*:?\s*")]
+_LIB_MOTIF = [re.compile(r"(motif|reason|objet|raison|grund|begrundung|motivo|causale|reden)\b\s*(/\s*reason)?"
+                         r"\s*:?\s*")]
 
-_TOTAUX: list[tuple[str, re.Pattern[str]]] = [
-    ("ignore", re.compile(r"^(total|sous-total|subtotal) (des )?(prestations|services|frais|fees)\b")),
-    ("total_debours", re.compile(
-        r"^(total (des )?debours|total disbursements?|debours / disbursements|total debours / disbursements|"
-        r"debours|disbursements|total customs disbursements)\b")),
-    ("total_ht", re.compile(
-        r"^(total ht|total h\.t\.?|total excl\.? vat|total net|total hors taxes?|montant ht|total before vat|"
-        r"total credited excl\.? vat|net credited|total net credited|subtotal|sous-total ht)\b")),
-    ("acomptes", re.compile(r"^(acomptes?|deja regle|deposit|already paid|advance payment|paiement recu)\b")),
-    ("net_a_payer", re.compile(
-        r"^(net a payer|amount due|reste a payer|balance due|net to pay|montant a payer|total due)\b")),
-    ("total_ttc", re.compile(
-        r"^(total ttc|total t\.t\.c\.?|total incl\.? vat|ttc|total gross|gross|total credited|"
-        r"total a payer|total general|grand total|montant ttc)\b")),
-    ("total_tva", re.compile(r"^(total tva|total vat|tva|vat|montant tva|vat amount)\b")),
-]
-_FIN_TABLEAU = re.compile(
-    r"^(total|sous-total|subtotal|net a payer|amount due|debours / disbursements|tva \d|vat \d|ttc|"
-    r"codes? tva|vat status|conditions|montants? negatifs?)"
-)
-
+_TOTAUX = L.TOTAUX
+_FIN_TABLEAU = L.FIN_TABLEAU
 
 class _Extraction:
     def __init__(self, td: TypeDocument, document_id: str, info: ExtracteurInfo, vue: VueDocument,
@@ -597,10 +587,8 @@ class _Extraction:
         for t in chercher(self.vue, _LIB_TRANSPORT, pages=pnums):
             if (t.page.numero, t.ligne.rang) in self.consommees:
                 continue
-            lec = valeur_apres(self.vue, t, _accepte_ref_transport, dessous=False)
-            if lec is None:
-                continue
-            refs_transport.setdefault(norm_ref_transport(lec.texte), Lu(lec))
+            for lu in self._refs_transport(t):
+                refs_transport.setdefault(norm_ref_transport(lu.texte), lu)
         for lu in self._transports_tableaux:
             refs_transport.setdefault(norm_ref_transport(lu.texte), lu)
         for lu in refs_transport.values():
@@ -678,6 +666,39 @@ class _Extraction:
             if _TITRE_RELEVE.search(haut) or len(self._releve) >= 2:
                 c.est_releve = True  # type: ignore[union-attr]
 
+    def _refs_transport(self, t) -> list[Lu]:
+        """Références de transport après un libellé (« LTA / B/L / CMR: X », « AWB / B/L: X, Y ») ; libellé
+        seul dans son segment : en-tête d'une colonne de références (lignes alignées en dessous)."""
+        mots = [m for m in t.segment.mots[t.apres:] if m.texte not in (":",)]
+        if not mots:
+            droite = t.ligne.segments[t.segment.rang + 1:t.segment.rang + 2]
+            if droite and droite[0].x0 - t.segment.x1 < 0.6 and re.search(r"\d", droite[0].mots[0].texte):
+                mots = list(droite[0].mots)
+        out: list[Lu] = []
+        if mots:
+            for groupe in _groupes_virgule(mots):
+                r = _accepte_ref_transport(groupe)
+                if r is not None:
+                    ms = groupe[r[0]:r[1]]
+                    out.append(self._lu_mots(ms, t.page, t.ligne, brut=" ".join(m.texte for m in ms).strip(",;")))
+            return out[:10]
+        # colonne : références alignées sous le libellé, ligne après ligne
+        p = t.page
+        prec = t.ligne
+        for li in p.lignes[t.ligne.rang + 1:t.ligne.rang + 40]:
+            if li.y0 - prec.y1 > 3.0 * p.pas_ligne + 0.01:
+                break
+            segs = [s for s in li.segments if abs(s.x0 - t.segment.x0) < 0.03]
+            if not segs:
+                break
+            r = _accepte_ref_transport(segs[0].mots)
+            if r is None or r[0] != 0:
+                break
+            ms = segs[0].mots[r[0]:r[1]]
+            out.append(self._lu_mots(ms, p, li, base=0.95))
+            prec = li
+        return out[:30]
+
     def _liste_refs(self, t) -> list[Lu]:
         """Références (une ou plusieurs, séparées par « ; » ou « , ») après un libellé."""
         mots = list(t.segment.mots[t.apres:])
@@ -722,7 +743,11 @@ class _Extraction:
                 continue
             if t.ligne.y0 > 0.35:
                 continue
-            for m_k, m in enumerate(t.segment.mots[t.apres:t.apres + 2]):
+            suite = t.segment.mots[t.apres:t.apres + 3]
+            pref = _prefixe_numero(suite)
+            if pref is not None:
+                return self._lu_mots(pref, t.page, t.ligne, brut=" ".join(m.texte.strip(":;,") for m in pref))
+            for m_k, m in enumerate(suite[:2]):
                 txt = m.texte.strip(":;,")
                 if ok(txt) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./\-_]*", txt):
                     return self._lu_mots([m], t.page, t.ligne, brut=txt if txt != m.texte else None)
@@ -735,11 +760,31 @@ class _Extraction:
                     txt = m.texte.strip(":;,")
                     if ok(txt):
                         return self._lu_mots([m], t.page, t.ligne, brut=txt if txt != m.texte else None)
+                if not droite or droite[0].x0 - t.segment.x1 >= 0.15:
+                    # libellé en tête de colonne (« Nr. | Datum | Btw-nr. ») : la valeur est juste dessous
+                    for li in page.lignes[t.ligne.rang + 1:t.ligne.rang + 2]:
+                        if li.y0 - t.ligne.y1 > 0.03:
+                            break
+                        for sg in li.segments:
+                            if sg.x1 < t.segment.x0 - 0.01 or sg.x0 > t.segment.x1 + 0.02:
+                                continue
+                            m = sg.mots[0]
+                            txt = m.texte.strip(":;,")
+                            if ok(txt) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./\-_]*", txt):
+                                return self._lu_mots([m], page, li, base=0.93,
+                                                     brut=txt if txt != m.texte else None)
         # repli : référence voisine du titre du document
         titres = [(li, s) for li in page.lignes if li.y0 < 0.2 for s in li.segments if _est_titre(s.cle)]
         if not titres:
             return None
-        _, s_t = titres[0]
+        li_t, s_t = titres[0]
+        # « FACTURE MDF 84826 » : la référence suit le titre dans le même segment
+        mt = _TITRE.match(s_t.cle)
+        if mt is not None:
+            pos = len(s_t.cle[:mt.end()].split())
+            pref = _prefixe_numero(s_t.mots[pos:pos + 3])
+            if pref is not None and ok(" ".join(m.texte for m in pref)):
+                return self._lu_mots(pref, page, li_t, base=C_POSITION, brut=" ".join(m.texte for m in pref))
         cx, cy = (s_t.x0 + s_t.x1) / 2, (s_t.y0 + s_t.y1) / 2
         meilleur = None
         for li in page.lignes:
@@ -781,6 +826,27 @@ class _Extraction:
             lec = valeur_apres(self.vue, t, _accepte_date, droite=False, dessous=False)
             if lec is not None:
                 return Lu(lec, base=0.92)
+        # « Lyon, le 22/08/2026 » : préposition de date au milieu d'un segment de l'en-tête
+        for t in chercher(self.vue, _LIB_DU, pages=[page.numero], debut_segment=False):
+            if t.ligne.y0 > 0.3 or (t.page.numero, t.ligne.rang) in self.consommees:
+                continue
+            lec = valeur_apres(self.vue, t, _accepte_date, droite=False, dessous=False)
+            if lec is not None:
+                return Lu(lec, base=C_POSITION)
+        # date seule juste sous le numéro de la facture
+        if numero is not None and numero.lecture.mots:
+            info = self.index.get(id(numero.lecture.mots[0]))
+            if info is not None:
+                seg, p, li = info
+                for li2 in p.lignes[li.rang + 1:li.rang + 3]:
+                    if li2.y0 - li.y1 > 0.03:
+                        break
+                    for s2 in li2.segments:
+                        if s2.x1 < seg.x0 - 0.02 or s2.x0 > seg.x1 + 0.02:
+                            continue
+                        r = _accepte_date(s2.mots)
+                        if r is not None and r == (0, len(s2.mots)):
+                            return self._lu_mots(s2.mots[r[0]:r[1]], p, li2, base=C_POSITION)
         return None
 
     # --- parties (émetteur / client) ---
@@ -791,7 +857,9 @@ class _Extraction:
         entites = {normalize_vat(e.tva) for e in self.ctx.entites if e.tva}
         entites.discard(None)
         label = next((t for t in chercher(self.vue, _LIB_CLIENT, pages=[premiere.numero])
-                      if t.ligne.y0 < 0.45 and not re.match(r"client (n°|no|code|ref)", t.segment.cle)), None)
+                      if t.ligne.y0 < 0.45 and not re.match(
+                          r"(client|cliente|customer|kunde|klant|account)\.? ?(n°|no|nr|code|ref|number|id|nummer|"
+                          r"holder|codice|codigo)", t.segment.cle)), None)
         client_tva: LectureTva | None = None
         conf_client = C_LIBELLE
         if label is not None:
@@ -955,15 +1023,35 @@ class _Extraction:
             k = 0
             while k < len(p.lignes):
                 cols = _reconnaitre_entete(p.lignes[k])
+                if p.methode is Methode.ocr:
+                    # en-tête découpé par l'OCR sur deux lignes voisines (« Désignation » un peu plus bas)
+                    fus = _entete_deux_lignes(p, k)
+                    if fus is not None and (cols is None or len(fus[0]) > len(cols)):
+                        cols = fus[0]
+                        self.consommees.add((p.numero, k))
+                        k = fus[1]
                 if cols is None:
                     k += 1
                     continue
                 self.consommees.add((p.numero, k))
-                lignes, k = self._lire_rangees(p, k, cols)
-                tables.append(lignes)
+                groupes = _groupes_colonnes(cols)
+                fin = k + 1
+                for i, g in enumerate(groupes):
+                    # deux tableaux côte à côte : chacun lit les segments de sa bande horizontale
+                    bornes = None if len(groupes) == 1 else (
+                        g[0].x0 - 0.02, groupes[i + 1][0].x0 - 0.01 if i + 1 < len(groupes) else 1.01)
+                    lignes, k_fin = self._lire_rangees(p, k, g, bornes)
+                    fin = max(fin, k_fin)
+                    # un tableau qui imprime le MRN sur ses lignes : une ligne sans MRN n'en a pas
+                    if any(lg.mrn is not None for lg in lignes) and not any(lg.ref_autre for lg in lignes):
+                        for lg in lignes:
+                            lg.colonne_mrn = True
+                    tables.append(lignes)
+                k = fin
         return tables
 
-    def _lire_rangees(self, p: VuePage, k_entete: int, cols: list[ColonneFt]) -> tuple[list[LigneLue], int]:
+    def _lire_rangees(self, p: VuePage, k_entete: int, cols: list[ColonneFt],
+                      bornes: tuple[float, float] | None = None) -> tuple[list[LigneLue], int]:
         lignes: list[LigneLue] = []
         k = k_entete + 1
         prec_y = p.lignes[k_entete].y1
@@ -973,8 +1061,24 @@ class _Extraction:
         # lignes physiques très proches (scan incliné, cellule découpée par l'OCR) : une seule rangée
         seuil_fusion = min(0.45 * pas, 0.009) if p.methode is Methode.ocr else 0.0
         sautees = 0
+        lus = 0  # rangées lues (même illisibles : montant brouillé par l'OCR)
+        derniers: list[LigneLue] = []
         while k < len(p.lignes):
             li = p.lignes[k]
+            if bornes is not None:
+                li = _restreindre(li, bornes)
+                if not li.segments:
+                    break
+            if p.methode is Methode.ocr and _ligne_parasite(li) and not re.search(r"\d", li.texte):
+                k += 1  # tache, point, trait lus par l'OCR entre deux rangées : ignorés
+                continue
+            if L.REPORT.search(li.cle) and not _a_libelle_nature(li):
+                # « Carried forward / Brought forward », « Übertrag », « Riporto » : report de page, ni
+                # ligne ni fin de tableau
+                self.consommees.add((p.numero, li.rang))
+                prec_y = li.y1
+                k += 1
+                continue
             ecart = li.y0 - prec_y
             ref = max(pitchs) if pitchs else 2.5 * pas
             if ecart > max(2.2 * ref, 3.0 * pas, 0.03):
@@ -1003,7 +1107,25 @@ class _Extraction:
                            if role in ("qte", "pu", "ht", "tva", "tva_mt", "taux") or role.startswith("nat:"))
             gauche = any(s.x0 < debut_num - 0.005 for s in li.segments)
             if not a_valeur or not gauche:
-                if lignes or sautees >= 1:
+                mrn_suite = self._mrn_seul(p, li) if lus and gauche and not a_valeur else None
+                if mrn_suite is not None and derniers and all(lg.mrn is None for lg in derniers):
+                    # ligne de suite qui porte le MRN de la rangée précédente (« [26FR…] » sous le libellé)
+                    for lg in derniers:
+                        lg.mrn = mrn_suite
+                    for g in groupe:
+                        self.consommees.add((p.numero, g.rang))
+                    prec_y = max(g.y1 for g in groupe)
+                    k += len(groupe)
+                    continue
+                # (une ligne chiffrée sans montant lisible — « 2,5 % x 376,64 » — est une rangée illisible :
+                # on ne lit pas au-delà, sauf bruit OCR)
+                if lus and gauche and not a_valeur and (not re.search(r"\d", li.texte) or _ligne_parasite(li)) \
+                        and self._rangee_suit(p, k + len(groupe), cols, debut_num,
+                                                                             bornes, li):
+                    # intertitre (« PRESTATIONS ») ou suite de libellé entre deux lignes du tableau
+                    k += len(groupe)
+                    continue
+                if lus or sautees >= 1:
                     break
                 sautees += 1
                 k += len(groupe)
@@ -1012,10 +1134,43 @@ class _Extraction:
                 pitchs.append(li.y0 - lignes[-1].y)
             for g in groupe:
                 self.consommees.add((p.numero, g.rang))
-            lignes.extend(self._rangee(p, li, cols, cellules))
+            derniers = self._rangee(p, li, cols, cellules)
+            lus += 1
+            lignes.extend(derniers)
             prec_y = max(g.y1 for g in groupe)
             k += len(groupe)
         return lignes, k
+
+    def _mrn_seul(self, p: VuePage, li: VueLigne) -> Lu | None:
+        """MRN d'une ligne sans montant qui ne porte que des références (suite d'une rangée)."""
+        trouves = []
+        for m in li.mots:
+            t = m.texte.strip(".,;:()[]|")
+            if _MRN_RE.fullmatch(t):
+                trouves.append(self._lu_mots([m], p, li, brut=t if t != m.texte else None))
+            elif re.search(r"\d", t) and not _DATE_RE.search(m.texte):
+                return None
+        return trouves[0] if len({norm_ref(x.texte) for x in trouves}) == 1 else None
+
+    def _rangee_suit(self, p: VuePage, k: int, cols: list[ColonneFt], debut_num: float,
+                     bornes: tuple[float, float] | None, prec: VueLigne) -> bool:
+        """La ligne ``k`` est une rangée du tableau (libellé à gauche, valeur en colonne), proche de ``prec`` :
+        la ligne sans valeur qui les sépare est un intertitre ou une suite de libellé."""
+        # lignes parasites (taches, tampon lu par l'OCR : « 4 eas », « es ») sautées
+        while k < len(p.lignes) and _ligne_parasite(p.lignes[k]):
+            k += 1
+        if k >= len(p.lignes):
+            return False
+        li = p.lignes[k] if bornes is None else _restreindre(p.lignes[k], bornes)
+        if not li.segments or li.y0 - prec.y1 > max(3.0 * p.pas_ligne, 0.03):
+            return False
+        if _FIN_TABLEAU.match(li.cle) or _reconnaitre_entete(li) or any(
+                s.x0 >= debut_num - 0.005 for s in prec.segments):
+            return False
+        cellules = _attribuer(li, cols)
+        a_valeur = any(_contient_nombre(segs) for role, segs in cellules.items()
+                       if role in ("qte", "pu", "ht", "tva", "tva_mt", "taux") or role.startswith("nat:"))
+        return a_valeur and any(s.x0 < debut_num - 0.005 for s in li.segments)
 
     def _rangee(self, p: VuePage, li: VueLigne, cols: list[ColonneFt],
                 cellules: dict[str, list[Segment]]) -> list[LigneLue]:
@@ -1025,6 +1180,11 @@ class _Extraction:
 
         y = li.y0
         lib_segs = cellules.get("lib", []) + cellules.get("libcode", [])
+        col_lib = next((c for c in cols if c.role in ("lib", "libcode")), None)
+        if col_lib is not None and len(lib_segs) > 1:
+            # code d'une colonne sans en-tête reconnu (« A », « E » : code TVA) imprimé avant le libellé
+            lib_segs = [sg for sg in lib_segs if not (sg.x1 < col_lib.x0 - 0.003
+                                                      and re.fullmatch(r"[A-Z0-9]{1,2}", sg.texte))]
         lib_txt = " ".join(s.texte for s in lib_segs).strip()
         code: Lu | None = None
         lib: Lu | None = None
@@ -1033,7 +1193,12 @@ class _Extraction:
             code = lu_segs(lib_segs)
         elif mots_lib:
             # un MRN collé au libellé (« Désignation   26FR… ») n'en fait pas partie
-            mots_lib = [m for m in mots_lib if not _MRN_RE.fullmatch(m.texte.strip(".,;"))]
+            mots_lib = [m for m in mots_lib if not _MRN_RE.fullmatch(m.texte.strip(".,;:()[]|"))]
+            # signes isolés en bout de libellé (« Droits de douane : » lu par l'OCR) : hors libellé
+            while mots_lib and not re.search(r"\w", mots_lib[-1].texte):
+                mots_lib.pop()
+            while mots_lib and not re.search(r"\w", mots_lib[0].texte):
+                mots_lib.pop(0)
             lib = self._lu_mots(mots_lib, p, li) if mots_lib else None
         natflag = " ".join(s.texte for s in cellules.get("natflag", [])).strip() or None
         # MRN, transport, dates, pourcentage sur toute la rangée (colonnes texte)
@@ -1055,13 +1220,6 @@ class _Extraction:
                         ms = _mots_de_sous_chaine(s.mots, dm.start(), dm.end())
                         if ms:
                             dates.append(self._lu_mots(ms, p, li, brut=dm.group(0)))
-                    mx = re.search(r"(?<![\d%.,])(\d{1,6}[.,]\d{2})\s*[x×]\s*(\d{1,4})(?![\d.,])", s.texte)
-                    if mx and pu_detail is None:
-                        ms_pu = _mots_de_sous_chaine(s.mots, mx.start(1), mx.end(1))
-                        ms_q = _mots_de_sous_chaine(s.mots, mx.start(2), mx.end(2))
-                        if ms_pu and ms_q:
-                            pu_detail = self._lu_mots(ms_pu, p, li, base=0.93, brut=mx.group(1))
-                            qte_detail = self._lu_mots(ms_q, p, li, base=0.93, brut=mx.group(2))
                     pm = re.search(r"(\d{1,2}(?:[.,]\d{1,2})?)\s*%\s*(x|×|\*|sur|of|de)\b", s.texte)
                     if pm and pourcentage is None:
                         ms = _mots_de_sous_chaine(s.mots, pm.start(1), pm.end(1))
@@ -1075,12 +1233,27 @@ class _Extraction:
                     r = _accepte_date(s.mots)
                     if r is not None:
                         date_rel = self._lu_mots(s.mots[r[0]:r[1]], p, li)
+        # colonne de références qui porte autre chose qu'un MRN (détail de calcul, référence interne)
+        ref_autre = any(re.search(r"[A-Za-z0-9]", m.texte) and not _MRN_RE.fullmatch(m.texte.strip(".,;:()[]|"))
+                        for s in cellules.get("ref", []) for m in s.mots)
+        # « 3,00 x 7 » (détail, libellé ou base de calcul) : prix unitaire × quantité, retenus plus bas
+        # seulement s'ils redonnent le montant de la ligne
+        for role in ("ref", "detail", "date", "lib", "libcode", "base_droit"):
+            for s in cellules.get(role, []):
+                mx = re.search(r"(?<![\d%.,])(\d{1,6}[.,]\d{2})\s*[x×]\s*(\d{1,4})(?![\d.,])", s.texte)
+                if mx and pu_detail is None:
+                    ms_pu = _mots_de_sous_chaine(s.mots, mx.start(1), mx.end(1))
+                    ms_q = _mots_de_sous_chaine(s.mots, mx.start(2), mx.end(2))
+                    if ms_pu and ms_q:
+                        pu_detail = self._lu_mots(ms_pu, p, li, base=0.93, brut=mx.group(1))
+                        qte_detail = self._lu_mots(ms_q, p, li, base=0.93, brut=mx.group(2))
         if transport is not None:
             self._transports_tableaux.append(transport)
         if transport is not None or (date_rel is not None and mrn is not None):
             self._releve.append(EntreeReleve(transport, mrn, date_rel))
 
-        base = LigneLue(page=p, y=y, libelle=lib, mrn=mrn, code=code, pourcentage=pourcentage, natflag=natflag)
+        base = LigneLue(page=p, y=y, libelle=lib, mrn=mrn, code=code, pourcentage=pourcentage, natflag=natflag,
+                        ref_autre=ref_autre)
         if len(dates) == 2:
             base.date_debut, base.date_fin = dates
         # colonnes numériques
@@ -1119,8 +1292,12 @@ class _Extraction:
             pu_d, q_d, ht_d = (_montant_lu(x) for x in (pu_detail, qte_detail, base.montant_ht))
             if None not in (pu_d, q_d, ht_d) and _arrondi(pu_d * q_d) == ht_d:  # type: ignore[operator]
                 base.prix_unitaire, base.quantite = pu_detail, qte_detail
+        if base.montant_ht is None and base.quantite is not None and base.prix_unitaire is not None and \
+                lib is not None and any(re.search(r"\w", sg.texte) for sg in cellules.get("ht", [])):
+            # montant de la ligne imprimé mais illisible (OCR) : quantité × prix unitaire, valeur déduite
+            base.ht_calcule = True
         sorties: list[LigneLue] = []
-        if base.montant_ht is not None:
+        if base.montant_ht is not None or base.ht_calcule:
             sorties.append(base)
         nat_cols = [col for col in cols if col.role.startswith("nat:")]
         nat_vals = []
@@ -1154,7 +1331,7 @@ class _Extraction:
                 entete = True
             ligne = LigneLue(page=p, y=y, libelle=libelle, libelle_entete=entete, nature=nature,
                              quantite=qte, montant_ht=montant, marqueur=marq or base.marqueur, mrn=mrn,
-                             code=code, natflag=natflag)
+                             code=code, natflag=natflag, ref_autre=ref_autre)
             if nature is NatureLigne.debours_droits and base.base_droit is not None:
                 ligne.base_droit = base.base_droit
             sorties.append(ligne)
@@ -1170,26 +1347,29 @@ class _Extraction:
     def _totaux(self, pages: list[VuePage]) -> dict[str, Total]:
         out: dict[str, Total] = {}
         for p in pages:
-            for li in p.lignes:
+            for k_li, li in enumerate(p.lignes):
                 if (p.numero, li.rang) in self.consommees:
                     continue
+                if L.REPORT.search(li.cle):
+                    continue  # « Carried forward EUR 22 589,44 » : un report, pas un total
                 mots = li.mots
                 nbs = [n for n in _nombres(mots) if not n.tronque and _est_montant_txt(n.texte)]
                 if not nbs:
+                    # bloc de totaux « libellé au-dessus, montant en dessous » (« NET À PAYER » / « 1 695,28 € »)
+                    tot = self._total_dessous(p, k_li, li)
+                    if tot is not None and tot.cle not in out:
+                        out[tot.cle] = tot
                     continue
                 n = nbs[-1]
-                lib_mots = mots[:n.i]
-                # libellé = segment(s) immédiatement à gauche du montant
-                lib_txt = cle_texte(" ".join(m.texte for m in lib_mots))
-                lib_txt = re.sub(r"^.*?(?=(total|sous-total|subtotal|net a payer|amount due|debours|"
-                                 r"disbursements|tva|vat|ttc|gross|acompte|deposit|reste a payer|balance due)\b)",
-                                 "", lib_txt) if lib_mots and lib_mots[0].x0 < 0.5 and len(nbs) == 1 else lib_txt
-                if not lib_txt:
-                    continue
                 cle = None
-                for k, motif in _TOTAUX:
-                    if motif.match(lib_txt):
-                        cle = k
+                lib_txt = ""
+                # libellé : d'abord le texte immédiatement à gauche du montant (bloc de totaux voisin d'un
+                # autre pavé sur la même ligne), puis toute la ligne à gauche du montant
+                for lib_txt in (_libelle_proche(li, mots[n.i]), _libelle_ligne(mots, n, len(nbs))):
+                    if not lib_txt:
+                        continue
+                    cle = _cle_total(lib_txt)
+                    if cle is not None:
                         break
                 if cle is None or cle == "ignore":
                     continue
@@ -1205,16 +1385,45 @@ class _Extraction:
                 out[cle] = Total(cle, lu, taux)
         return out
 
+    def _total_dessous(self, p: VuePage, k_li: int, li: VueLigne) -> Total | None:
+        """Libellé de total seul sur sa ligne, montant seul juste en dessous, aligné sous le libellé ou à sa
+        droite (bloc « à payer » en tête de page)."""
+        if not li.segments:
+            return None
+        s = li.segments[-1]
+        cle_s = cle_texte(s.texte).rstrip(" :")
+        cle = _cle_total(cle_s, complet=True)
+        if cle is None or cle == "ignore":
+            return None
+        for li2 in p.lignes[k_li + 1:k_li + 3]:
+            if li2.y0 - li.y1 > 0.03:
+                break
+            for s2 in li2.segments:
+                if s2.x1 < s.x0 - 0.02 or s2.x0 > s.x1 + 0.25:
+                    continue
+                nbs = [n for n in _nombres(list(s2.mots)) if not n.tronque and _est_montant_txt(n.texte)]
+                pris = {k for n in nbs for k in range(n.i, n.j)}
+                reste = [m for k, m in enumerate(s2.mots) if k not in pris]
+                if len(nbs) != 1 or any(re.search(r"[A-Za-z]{2}", m.texte) and not _est_devise_txt(m.texte)
+                                        for m in reste):
+                    continue
+                if any(t.x1 <= s2.x0 and t.x1 > s.x0 - 0.02 and re.search(r"[A-Za-z]{3}", t.texte)
+                       for t in li2.segments if t is not s2):
+                    continue  # un autre libellé précède le montant sur sa ligne : ce n'est pas notre valeur
+                n = nbs[0]
+                return Total(cle, self._lu_mots(list(s2.mots[n.i:n.j]), p, li2, base=0.93, brut=n.texte))
+        return None
+
     # --- lignes ---
 
     def _lignes(self, tables: list[list[LigneLue]], mrns: list[Lu], legende: dict, totaux: dict[str, Total]) -> None:
         c = self.champs
         mrn_unique = mrns[0] if len(mrns) == 1 else None
         taux_global = totaux["total_tva"].taux if "total_tva" in totaux else None
-        lignes = [lg for t in tables for lg in t]
+        lignes = _sans_renvois_annexe([lg for t in tables for lg in t], tables)
         idx = 0
         for lg in lignes:
-            if lg.montant_ht is None:
+            if lg.montant_ht is None and not lg.ht_calcule:
                 continue
             pre = f"lignes[{idx}]."
             idx += 1
@@ -1226,6 +1435,13 @@ class _Extraction:
             vals["montant_ht"] = self._vs(pre + "montant_ht", lg.montant_ht)
             vals["quantite"] = self._vs(pre + "quantite", lg.quantite, type_valeur=TypeValeur.quantite)
             vals["prix_unitaire"] = self._vs(pre + "prix_unitaire", lg.prix_unitaire)
+            if vals["montant_ht"] is None and lg.ht_calcule:
+                q_vs = self._vs(pre + "quantite", lg.quantite, type_valeur=TypeValeur.quantite)
+                pu_vs = self._vs(pre + "prix_unitaire", lg.prix_unitaire)
+                q_d, pu_d = _dec(q_vs), _dec(pu_vs)
+                vals["montant_ht"] = None if q_d is None or pu_d is None else self._derive(pre + "montant_ht", str(_arrondi(q_d * pu_d)),
+                                                  [v for v in (q_vs, pu_vs) if v is not None],
+                                                  "quantite × prix_unitaire")
             vals["montant_tva"] = self._vs(pre + "montant_tva", lg.montant_tva)
             vals["taux_tva"] = self._vs(pre + "taux_tva", lg.taux_tva, type_valeur=TypeValeur.taux)
             vals["marqueur_tva"] = self._vs(pre + "marqueur_tva", lg.marqueur, type_valeur=TypeValeur.code)
@@ -1239,7 +1455,7 @@ class _Extraction:
                 if canon is not None and norm_ref(canon.texte) != norm_ref(lg.mrn.texte):
                     lg.mrn = Lu(canon.lecture, base=min(canon.base, 0.7), brut=canon.brut)
                 vals["mrn"] = self._vs(pre + "mrn", lg.mrn, type_valeur=TypeValeur.reference)
-            elif mrn_unique is not None:
+            elif mrn_unique is not None and not lg.colonne_mrn:
                 vals["mrn"] = self._vs(pre + "mrn", Lu(mrn_unique.lecture, base=min(mrn_unique.base, C_RATTACHEMENT),
                                                        brut=mrn_unique.brut), type_valeur=TypeValeur.reference)
             ht = _dec(vals["montant_ht"])
@@ -1602,6 +1818,109 @@ def _ressemble_tva(txt: str) -> bool:
     return n[:2] in PAYS_TVA and bool(re.fullmatch(r"[0-9A-Z]{2}\d{7,12}", n[2:]))
 
 
+_PREFIXE_TOTAL = re.compile(
+    r"^.*?(?=(total|totale|totaal|summe|sous-total|subtotal|net a payer|amount due|debours|disbursements|tva|vat|"
+    r"ttc|gross|acompte|deposit|reste a payer|balance due|rechnungsbetrag|nettobetrag|mwst|iva|btw|"
+    r"di cui|base imponible)\b)")
+
+
+def _est_devise_txt(t: str) -> bool:
+    return cle_texte(t).strip(".:") in ("eur", "euro", "euros", "€")
+
+
+def _cle_total(lib_txt: str, *, complet: bool = False) -> str | None:
+    """Clé du total reconnu par son libellé ; ``complet`` : le libellé entier doit être reconnu."""
+    for k, motif in _TOTAUX:
+        m = motif.match(lib_txt)
+        if m and (not complet or len(lib_txt) - m.end() <= 4):
+            return k
+    return None
+
+
+def _libelle_proche(li: VueLigne, mot_nombre: Mot) -> str:
+    """Texte immédiatement à gauche d'un montant : le début de son segment, sinon le segment précédent
+    (et ceux qui le touchent), sans symbole ni code de devise."""
+    segs = li.segments
+    k = next((i for i, s in enumerate(segs) if any(m is mot_nombre for m in s.mots)), None)
+    if k is None:
+        return ""
+    s = segs[k]
+    avant = [m for m in s.mots[:next(i for i, m in enumerate(s.mots) if m is mot_nombre)]
+             if not _est_devise_txt(m.texte)]
+    if avant:
+        return cle_texte(" ".join(m.texte for m in avant))
+    if k == 0:
+        return ""
+    groupe = [segs[k - 1]]
+    for j in range(k - 2, -1, -1):
+        if groupe[0].x0 - segs[j].x1 > 0.03:
+            break
+        groupe.insert(0, segs[j])
+    mots = [m for g in groupe for m in g.mots]
+    if any(_est_montant_txt(m.texte) for m in mots):
+        return ""
+    return cle_texte(" ".join(m.texte for m in mots))
+
+
+def _libelle_ligne(mots: Sequence[Mot], n: Nombre, nb_nombres: int) -> str:
+    """Texte de la ligne à gauche du montant ; préfixe étranger retiré (« Optique SARL   Total HT »)."""
+    lib_mots = mots[:n.i]
+    lib_txt = cle_texte(" ".join(m.texte for m in lib_mots))
+    if lib_mots and lib_mots[0].x0 < 0.5 and nb_nombres == 1:
+        lib_txt = _PREFIXE_TOTAL.sub("", lib_txt)
+    return lib_txt
+
+
+def _sans_renvois_annexe(lignes: list[LigneLue], tables: list[list[LigneLue]]) -> list[LigneLue]:
+    """Une ligne qui renvoie au détail d'une annexe (« Suplidos según anexo », « Disbursements as per
+    annex ») n'est pas une ligne de plus quand ce détail est lu : elle est écartée si son montant est égal à
+    la somme des lignes d'un autre tableau du document (le détail de l'annexe)."""
+    out = []
+    for lg in lignes:
+        lib = cle_texte(lg.libelle.texte) if lg.libelle is not None else ""
+        ht = _montant_lu(lg.montant_ht) if lg.montant_ht is not None else None
+        if ht is not None and L.RENVOI_ANNEXE.search(lib):
+            autres = [t for t in tables if t and all(x is not lg for x in t)]
+            if any(sum((_montant_lu(x.montant_ht) or Decimal(0)) for x in t if x.montant_ht is not None) == abs(ht)
+                   for t in autres):
+                continue
+        out.append(lg)
+    return out
+
+
+def _entete_deux_lignes(p: VuePage, k: int) -> tuple[list[ColonneFt], int] | None:
+    """En-tête de tableau lu par l'OCR sur deux lignes très proches dont les mots ne se recouvrent pas :
+    colonnes de la ligne fusionnée, et rang de la seconde ligne."""
+    if k + 1 >= len(p.lignes):
+        return None
+    a, b = p.lignes[k], p.lignes[k + 1]
+    if abs(b.y0 - a.y0) > min(0.5 * p.pas_ligne, 0.012):
+        return None
+    if any(min(sa.x1, sb.x1) - max(sa.x0, sb.x0) > 0 for sa in a.segments for sb in b.segments):
+        return None
+    segs = sorted([*a.segments, *b.segments], key=lambda sg: sg.x0)
+    cols = _reconnaitre_entete(VueLigne(page=a.page, rang=a.rang, segments=segs, ligne=a.ligne))
+    return (cols, k + 1) if cols is not None else None
+
+
+def _ligne_parasite(li: VueLigne) -> bool:
+    """Ligne faite de fragments courts sans montant (bruit OCR d'un tampon ou d'une tache)."""
+    return bool(li.segments) and all(len(sg.texte) <= 5 for sg in li.segments) and \
+        not any(_est_montant_txt(m.texte) for m in li.mots) and len(li.texte) <= 16
+
+
+def _restreindre(li: VueLigne, bornes: tuple[float, float]) -> VueLigne:
+    """La ligne réduite aux segments dont le début tombe dans la bande ``bornes`` (tableaux côte à côte)."""
+    a, b = bornes
+    segs = [s for s in li.segments if a <= s.x0 < b]
+    return VueLigne(page=li.page, rang=li.rang, segments=segs, ligne=li.ligne)
+
+
+def _a_libelle_nature(li: VueLigne) -> bool:
+    """La ligne porte un libellé de prestation ou de débours reconnu (ce n'est pas un simple report)."""
+    return any(classer_nature(s.texte) is not None for s in li.segments)
+
+
 def _a_libelle(li: VueLigne, debut_num: float) -> bool:
     return any(s.x1 < debut_num and re.search(r"[A-Za-zÀ-ÿ]{3}", s.texte) for s in li.segments)
 
@@ -1664,10 +1983,12 @@ def _jetons(segs: list[Segment]) -> list[tuple[str, list[Mot], str | None]]:
 
 
 def _est_num_segment(s: Segment) -> bool:
-    return all(re.fullmatch(r"[(\-−–]?\d[\d.,'’\u00a0\u202f\u2009]*\)?-?%?|[A-Z]|%|[-–]|\(\d+\)|\d+%", m.texte)
-               for m in s.mots)
+    return all(re.fullmatch(r"[(\-−–]?[€$£]?\d[\d.,'’\u00a0\u202f\u2009]*\)?-?%?€?|[A-Z]|%|[-–]|\(\d+\)|\d+%|€|EUR",
+                            m.texte) for m in s.mots)
 
 
+#: Montant suivi du symbole euro sans espace (« 60,87€ »).
+_NUM_EURO_COLLE = re.compile(r"^[(\-−–]?\d{1,3}(?:[.,'’]?\d{3})*[.,]\d{2}\)?€$")
 _NUM_ESPACE_FINE = re.compile(r"^[(\-−–]?\d{1,3}(?:[\u00a0\u202f\u2009]\d{3})+(?:[.,]\d{1,3})?\)?-?$")
 
 
@@ -1676,15 +1997,44 @@ def _nombres(mots: Sequence[Mot]):
     out = []
     k = 0
     while k < len(mots):
-        if _NUM_ESPACE_FINE.match(mots[k].texte):
+        if _NUM_ESPACE_FINE.match(mots[k].texte) or _NUM_EURO_COLLE.match(mots[k].texte):
             out.append(Nombre(k, k + 1, mots[k].texte))
             k += 1
             continue
         j = k
-        while j < len(mots) and not _NUM_ESPACE_FINE.match(mots[j].texte):
+        while j < len(mots) and not (_NUM_ESPACE_FINE.match(mots[j].texte) or _NUM_EURO_COLLE.match(mots[j].texte)):
             j += 1
         out.extend(Nombre(n.i + k, n.j + k, n.texte, n.tronque) for n in nombres_dans(mots[k:j]))
         k = j
+    return out
+
+
+def _scinder_par_colonne(segments: Sequence[Segment], cols: list[ColonneFt]) -> list[Segment]:
+    """Un segment numérique qui déborde sur plusieurs colonnes (« 95,00 A 20,00% » : montant, code et taux
+    serrés) est découpé mot par mot selon la colonne qui contient chaque mot."""
+    out: list[Segment] = []
+    for s in segments:
+        if len(s.mots) < 2 or not _est_num_segment(s):
+            out.append(s)
+            continue
+
+        def colonne(m: Mot) -> int | None:
+            cx = (m.x0 + m.x1) / 2
+            dedans = [i for i, c in enumerate(cols) if c.x0 - 0.012 <= cx <= c.x1 + 0.012]
+            return dedans[0] if len(dedans) == 1 else None
+
+        idx = [colonne(m) for m in s.mots]
+        if None in idx or len(set(idx)) < 2 or idx != sorted(idx):
+            out.append(s)
+            continue
+        groupes: list[list[Mot]] = []
+        prec = None
+        for m, i in zip(s.mots, idx, strict=True):
+            if i != prec:
+                groupes.append([])
+                prec = i
+            groupes[-1].append(m)
+        out.extend(Segment(tuple(g), s.page, s.ligne, s.rang) for g in groupes)
     return out
 
 
@@ -1692,7 +2042,7 @@ def _attribuer(li: VueLigne, cols: list[ColonneFt]) -> dict[str, list[Segment]]:
     """Attribue chaque segment d'une ligne à une colonne : texte -> colonne dont le bord gauche le précède
     (alignement à gauche) ; nombres / lettres -> colonne de plus grand recouvrement, sinon la plus proche."""
     out: dict[str, list[Segment]] = {}
-    for s in li.segments:
+    for s in _scinder_par_colonne(li.segments, cols):
         if _est_num_segment(s):
             meilleur, score = None, None
             for c in cols:
@@ -1737,6 +2087,34 @@ def _accepte_ref_transport(mots: Sequence[Mot]) -> tuple[int, int] | None:
     if len(re.sub(r"\D", "", txt)) < 5 or _MRN_RE.fullmatch(norm_ref(txt)):
         return None
     return 0, j
+
+
+def _prefixe_numero(mots: Sequence[Mot]) -> list[Mot] | None:
+    """Numéro imprimé en deux mots, préfixe alphabétique court puis partie chiffrée (« RG 2026-46020 »,
+    « MDF 84826 ») ; ``None`` sinon."""
+    if len(mots) < 2:
+        return None
+    a, b = mots[0].texte.strip(":;,"), mots[1].texte.strip(":;,")
+    if re.fullmatch(r"[A-Z]{2,4}", a) and re.fullmatch(r"\d[\dA-Za-z./\-_]{2,}", b) and \
+            mots[1].x0 - mots[0].x1 < 0.02 and not _DATE_RE.fullmatch(b) and not _est_montant_txt(b):
+        return list(mots[:2])
+    return None
+
+
+def _groupes_virgule(mots: Sequence[Mot]) -> list[list[Mot]]:
+    """Mots découpés en groupes aux virgules et points-virgules (« 999-31884510, 999-31884510 »)."""
+    groupes: list[list[Mot]] = [[]]
+    for m in mots:
+        if m.texte in (",", ";", "et", "and", "&", "und", "e", "y", "en"):
+            groupes.append([])
+            continue
+        t = m.texte.rstrip(",;")
+        if t != m.texte:
+            groupes[-1].append(Mot(t, m.x0, m.y0, m.x1, m.y1, m.confiance, m.taille) if t else m)
+            groupes.append([])
+        else:
+            groupes[-1].append(m)
+    return [g for g in groupes if g]
 
 
 def _accepte_motif(mots: Sequence[Mot]) -> tuple[int, int] | None:

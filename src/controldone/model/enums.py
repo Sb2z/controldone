@@ -122,6 +122,8 @@ class RaisonCode(StrEnum):
     erreur_interne = "erreur_interne"
     # Ajout plateforme (D-505) : constat rétrogradé par le fondateur lors de la validation (§7.7)
     retrograde_par_fondateur = "retrograde_par_fondateur"
+    # Ajout moteur (D-1700) : lecture non confirmée par l'arithmétique interne du document
+    lecture_non_corroboree = "lecture_non_corroboree"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -169,6 +171,10 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
     RaisonCode.erreur_interne: "contrôle non réalisé à la suite d'une erreur interne",
     RaisonCode.retrograde_par_fondateur: (
         "à vérifier : classement abaissé lors de la relecture, une valeur reste à confirmer"
+    ),
+    RaisonCode.lecture_non_corroboree: (
+        "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "
+        "document (total, somme des lignes) ; une erreur de lecture pourrait expliquer l'écart"
     ),
 }
 

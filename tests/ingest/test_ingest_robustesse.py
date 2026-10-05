@@ -236,6 +236,56 @@ def test_d1606_lot_sans_dossier_liste_ses_fichiers_non_lus():
     assert _non_lus([], fichiers) == [{"fichier": "envoi/a.pdf", "motif": "aucun_dossier"}]
 
     class Rd:
-        non_lus = [NonLu(fichier="a.pdf", motif="document_non_reconnu"), NonLu(fichier="z", motif="refuse:vide")]
+        def __init__(self):
+            self.non_lus = [NonLu(fichier="a.pdf", motif="document_non_reconnu"),
+                            NonLu(fichier="z", motif="refuse:vide")]
 
     assert _non_lus([Rd(), Rd()], fichiers) == [{"fichier": "a.pdf", "motif": "document_non_reconnu"}]
+
+
+# --- D-1607 : étape 3 bornée sur une page démesurée -----------------------------------------------------------
+
+
+def _decouper(nom: str, contenu: bytes):
+    from controldone.ingest.decoupage import decouper_fichier
+    from controldone.ingest.pages import OptionsPages
+
+    fichier = recevoir_octets([(nom, contenu)]).fichiers[0].fichier
+    return decouper_fichier(fichier, contenu, options=OptionsPages(isoler=False, ocr=False))
+
+
+def test_d1607_xml_a_millions_d_elements_sans_arbre_structure(monkeypatch):
+    from controldone.ingest import decoupage
+
+    appels = []
+    monkeypatch.setattr(decoupage, "analyser_contenu_structure", lambda *a, **k: appels.append(1))
+    monkeypatch.setattr(decoupage, "MAX_BALISES_STRUCTURE", 100)
+    gros = ("<r>" + "".join(f"<l>FICTIF {i}</l>" for i in range(200)) + "</r>").encode()
+    res = _decouper("gros.xml", gros)
+    assert appels == [] and "structure_non_analysee:trop_d_elements" in res.avertissements
+    assert res.documents  # classé comme un XML de format inconnu : listé, jamais perdu
+    _decouper("petit.xml", b"<r><l>FICTIF</l></r>")
+    assert appels == [1]  # XML ordinaire : analyse structurée inchangée
+
+
+def test_d1607_classement_sur_extrait_texte_complet_conserve(monkeypatch):
+    from controldone.ingest import decoupage
+
+    vus = []
+    original = decoupage.classer_page
+
+    def espion(page, **kw):
+        vus.append((len(page.texte), max((len(li.texte) for li in page.lignes), default=0), page.avertissements))
+        return original(page, **kw)
+
+    monkeypatch.setattr(decoupage, "classer_page", espion)
+    monkeypatch.setattr(decoupage, "MAX_CARACTERES_CLASSEMENT", 500)
+    monkeypatch.setattr(decoupage, "MAX_CARACTERES_LIGNE_CLASSEMENT", 100)
+    texte = ("FACTURE FICTIVE " * 400).encode()  # une seule ligne de 6 400 caractères
+    res = _decouper("long.xml", b"<r>" + texte + b"</r>")
+    (n_texte, n_ligne, avert), = vus
+    assert n_texte <= 500 and n_ligne <= 100 and "classement_sur_extrait" in avert
+    assert len(res.textes[1].texte) > 6000  # texte de la page intact
+    vus.clear()
+    _decouper("court.xml", b"<r>FACTURE FICTIVE</r>")
+    assert vus and "classement_sur_extrait" not in vus[0][2]

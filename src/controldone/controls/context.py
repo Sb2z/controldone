@@ -20,7 +20,8 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Any
 
-from controldone.controls.classify import Classement, classify, montant_pour_spec, sens_pour
+from controldone.controls import corroboration as _corroboration
+from controldone.controls.classify import Classement, classify, montant_pour_spec, sens_pour, trier_raisons
 from controldone.controls.confusion import confusion_applicable, confusion_test, confusion_test_fn
 from controldone.controls.specs import ControlSpec, get_spec
 from controldone.controls.tolerances import Tolerances
@@ -132,6 +133,9 @@ class ControlContext:
     ecarts_recouvrement: tuple[EcartARecouvrer, ...] = ()
     execution_id: str | None = None
     ids: IdGenerator = field(default_factory=lambda: IdGenerator.deterministe(0))
+    #: Lecture corroborée exigée pour un ``ecart_certain`` (D-1700). Toujours vrai en production ; faux
+    #: seulement dans les tests unitaires d'un contrôle bâtis sur des documents minimaux sans redondance.
+    exiger_lecture_corroboree: bool = True
     # Résultats des contrôles déjà exécutés (rempli par le moteur, lu via ``anterieurs``).
     _journal: list[ResultatControle] = field(default_factory=list, repr=False, compare=False)
 
@@ -153,6 +157,7 @@ class ControlContext:
         ecarts_recouvrement: Iterable[EcartARecouvrer] = (),
         execution_id: str | None = None,
         ids: IdGenerator | None = None,
+        exiger_lecture_corroboree: bool = True,
     ) -> ControlContext:
         """Copie profonde et indexation. Seuls les documents liés au dossier sont retenus ; les grilles
         non validées sont écartées (§6.2.4)."""
@@ -171,6 +176,7 @@ class ControlContext:
             ecarts_recouvrement=tuple(ecarts_recouvrement),
             execution_id=execution_id,
             ids=ids or IdGenerator.deterministe(0),
+            exiger_lecture_corroboree=exiger_lecture_corroboree,
         )
 
     def __post_init__(self) -> None:
@@ -181,6 +187,8 @@ class ControlContext:
         object.__setattr__(self, "_index_valeurs", MappingProxyType(index))
         object.__setattr__(self, "_tol", Tolerances(self.profil))
         object.__setattr__(self, "_empreinte", self.profil.empreinte())
+        object.__setattr__(self, "_reseaux", {})
+        object.__setattr__(self, "_rangees", {})
 
     # --- accès de base ----------------------------------------------------------------------------
 
@@ -363,6 +371,34 @@ class ControlContext:
                 return True
         return False
 
+    def reseau_identites(self, document: Document) -> tuple[_corroboration.Identite, ...]:
+        """Identités arithmétiques imprimées du document, sur ses valeurs lues (D-1700), mises en cache."""
+        cache: dict[str, tuple[_corroboration.Identite, ...]] = self._reseaux  # type: ignore[attr-defined]
+        if document.id not in cache:
+            cache[document.id] = _corroboration.reseau(document, self.utilisable, self.tol)
+        return cache[document.id]
+
+    def rangees_valeurs(self, document: Document) -> dict[str, str]:
+        """Valeur -> rangée de tableau qui la porte (D-1700), mis en cache."""
+        cache: dict[str, dict[str, str]] = self._rangees  # type: ignore[attr-defined]
+        if document.id not in cache:
+            cache[document.id] = _corroboration.rangees(document)
+        return cache[document.id]
+
+    def lecture_corroboree(
+        self, valeurs_cles: Sequence[ValeurSourcee], *, operandes_non_confirmees_max: int = 0
+    ) -> tuple[bool, list[str]]:
+        """Chaque montant lu des valeurs clés est-il confirmé par une autre identité de son document ?
+        (voir ``controls/corroboration.py``, D-1700)."""
+        return _corroboration.evaluer(
+            valeurs_cles,
+            index=self.valeur,
+            document=self.document,
+            reseau_de=self.reseau_identites,
+            rangees_de=self.rangees_valeurs,
+            operandes_non_confirmees_max=operandes_non_confirmees_max,
+        )
+
     def classify(
         self,
         spec: ControlSpec | str,
@@ -374,13 +410,18 @@ class ControlContext:
         confusion: Iterable[Confusion] = (),
         documents: Iterable[str] = (),
         allocations: Sequence[Allocation] | None = None,
+        operandes_non_confirmees_max: int = 0,
         **kwargs: Any,
     ) -> Classement:
         """``classify`` (§8.5.1) avec collecte automatique :
 
         - des liens des documents des valeurs clés (et de ``documents``) — condition 5 ;
         - des allocations touchant ces documents (sauf si ``allocations`` est fourni) — condition 5 ;
-        - du test de confusion sur ``confusion`` — condition 6.
+        - du test de confusion sur ``confusion`` — condition 6 ;
+        - de la lecture corroborée (D-1700) : un classement qui serait ``ecart_certain`` devient
+          ``a_verifier`` (raison ``lecture_non_corroboree``) si un montant lu d'une valeur clé n'est confirmé
+          par aucune autre identité arithmétique de son document. ``operandes_non_confirmees_max`` : lignes
+          d'une somme contestée admises sans confirmation (B3).
 
         Les autres paramètres (``explication``, ``renvoi``, ``eligible``, ``nature_montant``, ``montant``,
         ``raisons_supplementaires``) sont transmis à ``classify``.
@@ -392,7 +433,7 @@ class ControlContext:
                 for a in self.allocations_pour(i):
                     vues.setdefault(a.id, a)
             allocations = list(vues.values())
-        return classify(
+        classement = classify(
             spec,
             ecart=ecart,
             tolerance=tolerance,
@@ -404,6 +445,14 @@ class ControlContext:
             lecture_douteuse=kwargs.pop("lecture_douteuse", False) or self.lecture_douteuse(confusion),
             **kwargs,
         )
+        if classement.niveau is Niveau.ecart_certain and self.exiger_lecture_corroboree:
+            corroboree, _ = self.lecture_corroboree(
+                valeurs_cles, operandes_non_confirmees_max=operandes_non_confirmees_max
+            )
+            if not corroboree:
+                raisons = trier_raisons([*classement.raisons, RaisonCode.lecture_non_corroboree])
+                return Classement(Niveau.a_verifier, raisons)
+        return classement
 
     # --- constructeurs de résultats ----------------------------------------------------------------
 

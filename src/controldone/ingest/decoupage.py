@@ -22,7 +22,7 @@ from __future__ import annotations
 import hashlib
 from collections import Counter, OrderedDict
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -51,6 +51,15 @@ __all__ = [
 ]
 
 VERSION_DECOUPAGE = f"pages-{VERSION_PAGES}+classement-{VERSION_CLASSIFIEUR}"
+
+#: Bornes de l'étape 3 sur une page démesurée (D-1607), exécutée dans le processus principal (worker) : au-delà,
+#: l'arbre XML d'un fichier de 50 Mo à millions d'éléments pesait ~1 Go (lxml), et le classement de son texte
+#: (normalisation caractère par caractère) ~1 Go de plus. Les documents réels en sont très loin (facture UBL de
+#: 10 000 lignes : ~300 000 balises ; pages du corpus : quelques Ko).
+MAX_BALISES_STRUCTURE = 1_000_000
+MAX_CARACTERES_CLASSEMENT = 1_000_000
+MAX_CARACTERES_LIGNE_CLASSEMENT = 10_000
+MAX_LIGNES_CLASSEMENT = 20_000
 
 _FACTURES = (TypeDocument.facture_commerciale, TypeDocument.facture_transitaire, TypeDocument.avoir)
 
@@ -296,7 +305,9 @@ def decouper_fichier(
     textes = {p.page.numero: p.texte for p in extraites}
     avert = sorted({a for p in extraites for a in p.texte.avertissements})
     info = None
-    if not corps and mime in (MIME_XML, MIME_CSV, MIME_PDF):
+    if not corps and mime == MIME_XML and contenu.count(b"<") > MAX_BALISES_STRUCTURE:
+        avert.append("structure_non_analysee:trop_d_elements")  # XML de format inconnu (D-1607)
+    elif not corps and mime in (MIME_XML, MIME_CSV, MIME_PDF):
         try:
             info = analyser_contenu_structure(contenu, mime, fiches=fiches)
         except Exception:
@@ -317,7 +328,7 @@ def decouper_fichier(
                                  textes=textes, structure=info)
     classements = []
     for p in extraites:
-        c = classer_page(p.texte, numero_dans_fichier=p.page.numero, corps_courriel=corps)
+        c = classer_page(_pour_classement(p.texte), numero_dans_fichier=p.page.numero, corps_courriel=corps)
         if mime == MIME_XML:  # XML de format inconnu : jamais classé avec certitude sur ses balises
             c.confiance = min(c.confiance, 0.6)
             c.indices.append("xml_format_inconnu")
@@ -325,6 +336,19 @@ def decouper_fichier(
     docs = decouper_pages(classements, pages, fichier=fichier, ids=ids)
     return ResultatIngestion(pages=pages, documents=docs, avertissements=avert, textes=textes,
                              classements=classements)
+
+
+def _pour_classement(texte: PageText) -> PageText:
+    """Page bornée à ``MAX_CARACTERES_CLASSEMENT`` pour le classement (D-1607) ; le texte complet reste celui de
+    la page (extraction, preuves). Sans effet sur une page ordinaire."""
+    lmax = MAX_CARACTERES_LIGNE_CLASSEMENT
+    if (len(texte.texte) <= MAX_CARACTERES_CLASSEMENT and len(texte.lignes) <= MAX_LIGNES_CLASSEMENT
+            and all(len(li.texte) <= lmax for li in texte.lignes)):
+        return texte
+    lignes = [li if len(li.texte) <= lmax else Ligne(texte=li.texte[:lmax], mots=li.mots[: lmax // 2])
+              for li in texte.lignes[:MAX_LIGNES_CLASSEMENT]]
+    return replace(texte, texte=texte.texte[:MAX_CARACTERES_CLASSEMENT], lignes=lignes,
+                   avertissements=[*texte.avertissements, "classement_sur_extrait"])
 
 
 class Decoupeur:

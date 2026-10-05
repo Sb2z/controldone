@@ -67,9 +67,28 @@ LIB_ORIGINE = motifs(
 LIB_MOTIF = motifs(r"(?:reason|motif|motivo|objet|raison)\s*(?:/\s*reason)?\s*:?")
 
 
+_MRN = re.compile(r"(?<![A-Z0-9])\d{2}[A-Z]{2}[A-Z0-9]{14}(?![A-Z0-9])")
+
+
+def _signes_transitaire(vue: VueDocument) -> bool:
+    """Un MRN cité, ou une ligne dont le libellé est une prestation ou un débours de transitaire (§5.3.3) :
+    l'avoir est celui d'un transitaire, même si son tableau a l'allure d'un tableau d'articles."""
+    from controldone.normalize.natures import nature_libelle
+
+    for li in vue.lignes():
+        if _MRN.search(li.texte):
+            return True
+        if any(nature_libelle(s.texte) is not None for s in li.segments if len(s.texte) <= 60):
+            return True
+    return False
+
+
 def est_avoir_fournisseur(vue: VueDocument) -> bool:
     """Vrai si le document porte un tableau d'articles de marchandises (quantité, prix ou montant, et
-    description ou code), signe d'un avoir de vendeur plutôt que d'un avoir de transitaire."""
+    description ou code), signe d'un avoir de vendeur plutôt que d'un avoir de transitaire — sauf si le
+    document porte les signes d'un avoir de transitaire (MRN, libellés de prestations ou de débours)."""
+    if _signes_transitaire(vue):
+        return False
     for li in vue.lignes():
         cols = reconnaitre_entete(li, VOCAB_COLONNES)
         if not cols:

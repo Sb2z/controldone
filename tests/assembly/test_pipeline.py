@@ -63,6 +63,8 @@ def fabrique(doc, pages):
                 reference=vs("declaration.documents_references[].reference", "INV-10001", document_id=i))],
             # B1 : 1 000,00 × 5 % = 50,00 ; imprimé 60,00 -> écart de calcul
             taxations=[taxation(i, base="1000.00", taux="5", montant="60.00")],
+            # Total imprimé qui reprend la ligne : lecture corroborée (D-1700).
+            total_a_payer=vs("declaration.total_a_payer", "60.00", document_id=i),
         )
     if doc.type is TypeDocument.facture_transitaire:
         return ChampsFactureTransitaire(

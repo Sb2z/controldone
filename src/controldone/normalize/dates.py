@@ -1,4 +1,4 @@
-"""Lecture des dates (FR, EN, ES, ISO, ``jj.mm.aaaa``) -> ``datetime.date`` (SPEC §5.2)."""
+"""Lecture des dates (FR, EN, ES, DE, IT, NL, ISO, ``jj.mm.aaaa``) -> ``datetime.date`` (SPEC §5.2)."""
 
 from __future__ import annotations
 
@@ -12,18 +12,18 @@ __all__ = ["DateLue", "parse_date", "parse_date_detail"]
 
 _MOIS: dict[str, int] = {}
 for _num, _noms in {
-    1: "janvier janv jan january enero ene",
-    2: "fevrier fevr fev feb february febrero",
-    3: "mars mar march marzo",
-    4: "avril avr apr april abril abr",
-    5: "mai may mayo",
-    6: "juin jun june junio",
-    7: "juillet juil jul july julio",
-    8: "aout aou aug august agosto ago",
-    9: "septembre sept sep september septiembre setiembre set",
-    10: "octobre oct october octubre",
+    1: "janvier janv jan january enero ene januar gennaio gen januari",
+    2: "fevrier fevr fev feb february febrero februar febbraio febr februari",
+    3: "mars mar march marzo marz maart mrt",
+    4: "avril avr apr april abril abr aprile",
+    5: "mai may mayo maggio mag mei",
+    6: "juin jun june junio juni giugno giu",
+    7: "juillet juil jul july julio juli luglio lug",
+    8: "aout aou aug august agosto ago augustus",
+    9: "septembre sept sep september septiembre setiembre set settembre",
+    10: "octobre oct october octubre oktober ottobre ott okt",
     11: "novembre nov november noviembre",
-    12: "decembre dec december diciembre dic",
+    12: "decembre dec december diciembre dic dezember dicembre dez",
 }.items():
     for _n in _noms.split():
         _MOIS[_n] = _num

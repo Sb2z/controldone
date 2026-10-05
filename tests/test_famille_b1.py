@@ -16,10 +16,13 @@ from controldone.model import (
     RolePreuve,
     TauxNature,
 )
-from controldone.testing import contexte, declaration, taxation
+from controldone.testing import contexte, declaration, taxation, vs
 
 
-def _dec(*taxations, **kw):
+def _dec(*taxations, total=None, **kw):
+    """``total`` : total à payer imprimé, qui reprend les lignes (lecture corroborée, D-1700)."""
+    if total is not None:
+        kw["total_a_payer"] = vs("declaration.total_a_payer", total, document_id="doc_dec1")
     return declaration(id="doc_dec1", taxations=taxations, **kw)
 
 
@@ -44,7 +47,7 @@ def test_arrondi_a_l_euro_admis():
 
 
 def test_ecart_certain_exemple_de_la_spec():
-    d = _dec(taxation("doc_dec1", article="3", base="2091.00", taux="2.5", montant="418.20"))
+    d = _dec(taxation("doc_dec1", article="3", base="2091.00", taux="2.5", montant="418.20"), total="418.20")
     r = _un(contexte([d]))
     assert r.outcome is Outcome.ecart_certain
     c = r.constat
@@ -72,7 +75,7 @@ def test_ecart_sous_le_seuil():
 def test_taux_specifique():
     d = _dec(taxation("doc_dec1", base_quantite="120", taux="3.50", montant="420.00", nature=TauxNature.specifique))
     assert _un(contexte([d])).outcome is Outcome.conforme
-    d = _dec(taxation("doc_dec1", base_quantite="120", taux="3.50", montant="480.00", nature=None))
+    d = _dec(taxation("doc_dec1", base_quantite="120", taux="3.50", montant="480.00", nature=None), total="480.00")
     r = _un(contexte([d]))  # nature déduite de la seule base présente
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("60.00")
 
@@ -88,7 +91,7 @@ def test_lecture_ocr_douteuse():
 
 def test_ocr_sans_confusion_possible_reste_certain_si_confiance():
     d = _dec(taxation("doc_dec1", base="2091.00", taux="2.5", montant="418.20", methode="ocr", confiance=0.95),
-             qualite=QualiteTexte.ocr)
+             qualite=QualiteTexte.ocr, total="418.20")
     r = _un(contexte([d]))
     assert r.outcome is Outcome.ecart_certain
 

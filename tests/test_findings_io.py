@@ -21,12 +21,14 @@ from controldone.model import (
     StatutGlobal,
     StatutValidation,
 )
-from controldone.testing import contexte, declaration, taxation
+from controldone.testing import contexte, declaration, taxation, vs
 
 
 def _run(montant="418.20"):
     d = declaration(id="doc_dec", taxations=[taxation("doc_dec", article="3", base="2091.00", taux="2.5",
-                                                     montant=montant)])
+                                                     montant=montant)],
+                    # Total imprimé qui reprend la ligne : lecture corroborée (D-1700).
+                    total_a_payer=vs("declaration.total_a_payer", montant, document_id="doc_dec"))
     ctx = contexte([d])
     rs = run_controls(ctx, controles=["B1"])
     ex = Execution.nouvelle(id="exe_1", empreinte_tolerances=ctx.empreinte_tolerances, duree_s=1.5)

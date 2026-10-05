@@ -491,6 +491,8 @@ def _b3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
         valeurs_cles=valeurs_cles,
         confusion=_confusions_somme(total, v_total, operandes, somme, t_somme),
         raisons_supplementaires=raisons,
+        # L'écart porte sur un article : les autres doivent prouver la lecture de la colonne (D-1700).
+        operandes_non_confirmees_max=1,
     )
     unite_dev = devise or None
     libelle = (
