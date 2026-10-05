@@ -226,13 +226,29 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
                     enregistrer_cout(scope, cout_eur=ex.cout_ia_eur, jetons_entree=ex.jetons_entree,
                                      jetons_sortie=ex.jetons_sortie, modele=ex.modele_llm, lot_id=lot_id,
                                      execution_id=ex.id)
-        non_lus = len(resultats[0].non_lus) if resultats else 0
-        resume = {"dossiers": len(resultats), "constats": n_constats, "non_lus": non_lus,
-                  "llm": plafond.llm_autorise}
+        non_lus = _non_lus(resultats, fichiers)
+        resume = {"dossiers": len(resultats), "constats": n_constats, "non_lus": len(non_lus),
+                  "non_lus_detail": non_lus[:200], "llm": plafond.llm_autorise}
         lot.statut, lot.resume = "traite", resume
         scope.flush()
         ctx.exiger_bail(scope.session)  # jeton de clôture, dans la transaction qui valide les résultats
     return resume
+
+
+def _non_lus(resultats: list[Any], fichiers: list[tuple[str, str, str, str, str]]) -> list[dict[str, str]]:
+    """Fichiers acceptés mais non lus ou non rattachés (chemin et motif technique, sans contenu, §20.8).
+
+    Le pipeline les liste dans ``non_lus`` de chaque dossier ; sans aucun dossier produit (aucun document
+    reconnu, D-1606) la liste serait perdue : chaque fichier accepté du lot y figure alors, motif
+    ``aucun_dossier``. Jamais un fichier déposé qui disparaît sans trace."""
+    if resultats:
+        vus: dict[tuple[str, str], None] = {}
+        for rd in resultats:
+            for n in rd.non_lus:
+                if not str(n.motif).startswith("refuse:"):  # refus de réception : déjà dans ``refuses``
+                    vus[(str(n.fichier), str(n.motif))] = None
+        return [{"fichier": f, "motif": m} for f, m in vus]
+    return [{"fichier": chemin or nom, "motif": "aucun_dossier"} for _fid, chemin, nom, ref, _sha in fichiers if ref]
 
 
 def _tmp(reglages: Any) -> str | None:

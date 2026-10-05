@@ -13,14 +13,20 @@ pièces jointes sont utilisés.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import email
 import email.policy
 import hashlib
 import html
 import io
+import logging
+import lzma
+import quopri
 import re
 import stat
 import zipfile
+import zlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from email.message import EmailMessage
@@ -63,6 +69,18 @@ __all__ = [
 MIME_CORPS_COURRIEL = "text/x-corps-courriel"
 
 _MO = 1024 * 1024
+
+#: pypdf journalise ses avertissements avec des extraits bruts du fichier (octets du document) : jamais dans les
+#: journaux (§20.8, D-1601). La réception tourne dans le processus web.
+logging.getLogger("pypdf").setLevel(logging.CRITICAL)
+log = logging.getLogger("controldone.ingest.reception")
+
+#: Erreurs de décompression d'une entrée d'archive (flux tronqué ou altéré) : entrée « corrompue », jamais une
+#: exception qui ferait perdre tout le lot (D-1600).
+_ERREURS_ENTREE = (zipfile.BadZipFile, OSError, RuntimeError, ValueError, EOFError, NotImplementedError, zlib.error,
+                   lzma.LZMAError, KeyError, TypeError, OverflowError)
+#: Profondeur d'imbrication MIME lue dans un courriel (au-delà : courriel refusé « corrompu »).
+_PROFONDEUR_MIME = 40
 
 
 @dataclass(frozen=True)
@@ -229,15 +247,35 @@ def _verifier_image(contenu: bytes) -> tuple[int | None, MotifRefus | None]:
     return n, None
 
 
-def _verifier_tableur(contenu: bytes, mime: str) -> tuple[int | None, MotifRefus | None]:
+def _motif_conteneur(infos: list[zipfile.ZipInfo], lim: Limites) -> str | None:
+    """Contrôles de §20.3 sur les tailles **annoncées** d'une archive (la lecture en flux de ``zipfile`` ne
+    décompresse jamais au-delà de la taille annoncée d'une entrée)."""
+    if len(infos) > lim.zip_entrees:
+        return "nombre d'entrées au-delà de la limite"
+    total = sum(i.file_size for i in infos)
+    if total > lim.zip_taille_totale:
+        return "taille décompressée au-delà de la limite"
+    compresse = sum(i.compress_size for i in infos)
+    if (compresse and total / max(1, compresse) > lim.zip_ratio) or any(
+            i.compress_size and i.file_size / i.compress_size > lim.zip_ratio and i.file_size > _MO for i in infos):
+        return "taux de compression au-delà de la limite"
+    return None
+
+
+def _verifier_tableur(contenu: bytes, mime: str, lim: Limites | None = None) -> tuple[int | None, MotifRefus | None]:
+    """Classeur XLSX/ODS : une archive ZIP soumise aux mêmes limites qu'un ZIP déposé (bombe de décompression,
+    D-1602) avant tout contrôle d'intégrité."""
     try:
         with zipfile.ZipFile(io.BytesIO(contenu)) as z:
-            if any(i.flag_bits & 0x1 for i in z.infolist()):
+            infos = z.infolist()
+            if _motif_conteneur(infos, lim or Limites()) is not None:
+                return None, MotifRefus.archive_dangereuse
+            if any(i.flag_bits & 0x1 for i in infos):
                 return None, MotifRefus.protege
             if z.testzip() is not None:
                 return None, MotifRefus.corrompu
             noms = z.namelist()
-    except (zipfile.BadZipFile, OSError, RuntimeError, ValueError):
+    except _ERREURS_ENTREE:
         return None, MotifRefus.corrompu
     if mime == MIME_XLSX:
         n = sum(1 for x in noms if re.match(r"xl/worksheets/sheet\d+\.xml$", x))
@@ -278,7 +316,7 @@ def _ajouter(
         elif mime.startswith("image/"):
             nombre_pages, motif = _verifier_image(contenu)
         elif mime.startswith("application/vnd."):
-            nombre_pages, motif = _verifier_tableur(contenu, mime)
+            nombre_pages, motif = _verifier_tableur(contenu, mime, etat.limites)
         elif mime in (MIME_CSV,) and not (decoder_texte(contenu) or "").strip():
             motif = MotifRefus.vide
         if motif is None and nombre_pages is not None and nombre_pages > etat.limites.pages_fichier:
@@ -341,7 +379,12 @@ def _traiter_octets(etat: _Etat, chemin_relatif: str, contenu: bytes, *, profond
         _traiter_zip(etat, chemin_relatif, contenu, profondeur_zip=profondeur_zip + 1, origine=origine)
         return
     if mime == MIME_EML:
-        _traiter_eml_interne(etat, chemin_relatif, contenu, origine=origine)
+        # un courriel joint compte comme un niveau d'imbrication, comme une archive (D-1603)
+        if profondeur_zip + 1 > etat.limites.zip_profondeur:
+            _ajouter(etat, chemin_relatif, None, mime=MIME_EML, motif=MotifRefus.archive_dangereuse,
+                     origine=origine, taille=len(contenu))
+            return
+        _traiter_eml_interne(etat, chemin_relatif, contenu, origine=origine, profondeur=profondeur_zip + 1)
         return
     _ajouter(etat, chemin_relatif, contenu, mime=mime, origine=origine)
 
@@ -382,7 +425,7 @@ def _traiter_zip(etat: _Etat, chemin_relatif: str, contenu: bytes, *, profondeur
     prefixe_origine = f"{origine}!" if origine else ""
     try:
         z = zipfile.ZipFile(io.BytesIO(contenu))
-    except (zipfile.BadZipFile, OSError, ValueError):
+    except _ERREURS_ENTREE:
         _ajouter(etat, chemin_relatif, contenu, mime=MIME_ZIP, motif=MotifRefus.corrompu, origine=origine)
         return
     with z:
@@ -390,18 +433,16 @@ def _traiter_zip(etat: _Etat, chemin_relatif: str, contenu: bytes, *, profondeur
         motif_global: str | None = None
         if profondeur_zip > lim.zip_profondeur:
             motif_global = "archives imbriquées au-delà de la profondeur maximale"
-        elif len(infos) > lim.zip_entrees:
-            motif_global = "nombre d'entrées au-delà de la limite"
         else:
-            total = sum(i.file_size for i in infos)
-            if total > lim.zip_taille_totale:
-                motif_global = "taille décompressée au-delà de la limite"
-            elif (sum(i.compress_size for i in infos) and total / max(1, sum(i.compress_size for i in infos)) > lim.zip_ratio) or any(i.compress_size and i.file_size / i.compress_size > lim.zip_ratio and i.file_size > _MO
-                     for i in infos):
-                motif_global = "taux de compression au-delà de la limite"
+            motif_global = _motif_conteneur(infos, lim)
         if motif_global is not None:
             _ajouter(etat, chemin_relatif, None, mime=MIME_ZIP, motif=MotifRefus.archive_dangereuse,
                      origine=origine, taille=len(contenu))
+            return
+        if not any(not i.is_dir() for i in infos):
+            # archive sans aucun fichier : refusée « vide » (jamais un dépôt qui disparaît en silence, D-1600)
+            _ajouter(etat, chemin_relatif, None, mime=MIME_ZIP, motif=MotifRefus.vide, origine=origine,
+                     taille=len(contenu))
             return
         etat.archives.append((chemin_relatif, _sha(contenu), len(infos)))
         decompresse = 0
@@ -433,7 +474,7 @@ def _traiter_zip(etat: _Etat, chemin_relatif: str, contenu: bytes, *, profondeur
                 _ajouter(etat, chemin_entree, None, mime="application/octet-stream",
                          motif=MotifRefus.archive_dangereuse, origine=orig)
                 return
-            except (zipfile.BadZipFile, OSError, RuntimeError, ValueError, EOFError, NotImplementedError):
+            except _ERREURS_ENTREE:
                 _ajouter(etat, chemin_entree, None, mime="application/octet-stream", motif=MotifRefus.corrompu,
                          origine=orig)
                 continue
@@ -452,11 +493,58 @@ def _texte_html(h: str) -> str:
     return "\n".join(re.sub(r"[ \t]+", " ", ligne).strip() for ligne in h.splitlines()).strip()
 
 
+class _CourrielTropImbrique(Exception):
+    pass
+
+
+def _octets_message_joint(partie: EmailMessage) -> bytes:
+    """Octets d'un ``message/rfc822`` joint. Encodé en base64 ou quoted-printable (non conforme, mais courant),
+    le parseur en fait un sous-message dont le corps est le texte encodé : on le décode ici."""
+    interne = partie.get_payload()
+    sous = interne[0] if isinstance(interne, list) and interne else None
+    if sous is None:
+        return partie.get_payload(decode=True) or b""
+    cte = str(partie.get("Content-Transfer-Encoding", "")).strip().lower()
+    if cte in ("base64", "quoted-printable"):
+        brut = sous.as_bytes().lstrip(b"\r\n")
+        try:
+            return base64.b64decode(brut) if cte == "base64" else quopri.decodestring(brut)
+        except (binascii.Error, ValueError):
+            return b""
+    return sous.as_bytes()
+
+
+def _parties(msg: EmailMessage):
+    """Parcours en profondeur **itératif** et borné (``msg.walk`` est récursif). Un ``message/rfc822`` nommé
+    ou en pièce jointe est une pièce (sous-arbre non parcouru) ; un message transféré en ligne est parcouru."""
+    pile: list[tuple[EmailMessage, int]] = [(msg, 0)]
+    while pile:
+        partie, prof = pile.pop()
+        if prof > _PROFONDEUR_MIME:
+            raise _CourrielTropImbrique
+        yield partie
+        if not partie.is_multipart() or _est_piece(partie):
+            continue
+        enfants = partie.get_payload()
+        if isinstance(enfants, list):
+            pile.extend((e, prof + 1) for e in reversed(enfants) if isinstance(e, email.message.Message))
+
+
+def _est_piece(partie: EmailMessage) -> bool:
+    if partie.get_content_type() != "message/rfc822":
+        return False
+    return bool(partie.get_filename()) or (partie.get_content_disposition() or "").lower() == "attachment"
+
+
 def _corps_et_pieces(msg: EmailMessage) -> tuple[str, list[tuple[str, bytes]]]:
     pieces: list[tuple[str, bytes]] = []
     texte_brut: list[str] = []
     texte_html: list[str] = []
-    for partie in msg.walk():
+    for partie in _parties(msg):
+        if _est_piece(partie):
+            pieces.append((partie.get_filename() or f"piece_jointe_{len(pieces) + 1}.eml",
+                           _octets_message_joint(partie)))
+            continue
         if partie.is_multipart():
             continue
         nom = partie.get_filename()
@@ -484,10 +572,11 @@ def _corps_et_pieces(msg: EmailMessage) -> tuple[str, list[tuple[str, bytes]]]:
     return corps, pieces
 
 
-def _ajouter_courriel(etat: _Etat, base: str, msg: EmailMessage, *, origine: str | None, brut: bytes):
+def _ajouter_courriel(etat: _Etat, base: str, msg: EmailMessage, *, origine: str | None, brut: bytes,
+                      profondeur: int = 0, lu: tuple[str, list[tuple[str, bytes]]] | None = None):
     """Le message lui-même devient le fichier ``<base>.eml`` (sha256 du message ; contenu remis aux pages :
     le texte du corps, décodé) ; les pièces jointes sont rangées sous ``<base>/``."""
-    corps, pieces = _corps_et_pieces(msg)
+    corps, pieces = lu if lu is not None else _corps_et_pieces(msg)
     origine_c = origine or f"courriel:{etat.message_id or ''}"
     # Le corps est une donnée (document_support/courriel) : en-têtes utiles conservés comme texte.
     entete = []
@@ -507,7 +596,7 @@ def _ajouter_courriel(etat: _Etat, base: str, msg: EmailMessage, *, origine: str
             nom_sur = f"{p.stem}_{vus[nom_sur]}{p.suffix}"
         else:
             vus[nom_sur] = 1
-        _traiter_octets(etat, _normaliser_chemin(base, nom_sur), donnees, profondeur_zip=0,
+        _traiter_octets(etat, _normaliser_chemin(base, nom_sur), donnees, profondeur_zip=profondeur,
                         origine=f"{origine_c}!{nom_sur}")
 
 
@@ -515,15 +604,17 @@ def _parser_eml(contenu: bytes) -> EmailMessage:
     return email.message_from_bytes(contenu, policy=email.policy.default)  # type: ignore[return-value]
 
 
-def _traiter_eml_interne(etat: _Etat, chemin_relatif: str, contenu: bytes, *, origine: str | None):
+def _traiter_eml_interne(etat: _Etat, chemin_relatif: str, contenu: bytes, *, origine: str | None,
+                         profondeur: int = 0, lu: tuple[str, list[tuple[str, bytes]]] | None = None):
     """Courriel trouvé dans un dépôt ou une archive : pas de liste blanche (canal de dépôt)."""
     try:
         msg = _parser_eml(contenu)
+        lu = _corps_et_pieces(msg)  # structure lisible et imbrication bornée (avant tout ajout)
     except Exception:
         _ajouter(etat, chemin_relatif, contenu, mime=MIME_EML, motif=MotifRefus.corrompu, origine=origine)
         return
     base = str(PurePosixPath(chemin_relatif).with_suffix(""))
-    _ajouter_courriel(etat, base, msg, origine=origine or chemin_relatif, brut=contenu)
+    _ajouter_courriel(etat, base, msg, origine=origine or chemin_relatif, brut=contenu, profondeur=profondeur, lu=lu)
 
 
 # --- API publique ------------------------------------------------------------------------------------
@@ -556,8 +647,19 @@ def recevoir_octets(
     lot = lot or _nouveau_lot(client_id, canal, ids, None)
     etat = _Etat(client_id, lot, limites or Limites(), ids, deja_recus or {})
     for chemin, contenu in elements:
-        _traiter_octets(etat, _normaliser_chemin(chemin), contenu, profondeur_zip=0, origine=None)
+        _traiter_sur(etat, _normaliser_chemin(chemin), contenu)
     return _fin(etat)
+
+
+def _traiter_sur(etat: _Etat, chemin_relatif: str, contenu: bytes) -> None:
+    """Filet de sécurité (§20.6, D-1600) : une erreur imprévue sur un fichier déposé le refuse « corrompu » ;
+    elle n'interrompt jamais la réception des autres fichiers du lot."""
+    try:
+        _traiter_octets(etat, chemin_relatif, contenu, profondeur_zip=0, origine=None)
+    except Exception as e:  # analyseurs tiers sur contenu hostile
+        log.warning("reception_fichier_en_erreur exception=%s", type(e).__name__)
+        _ajouter(etat, chemin_relatif, None, mime="application/octet-stream", motif=MotifRefus.corrompu,
+                 taille=len(contenu))
 
 
 def recevoir_chemin(
@@ -594,11 +696,17 @@ def recevoir_chemin(
 
 
 def _lire_et_traiter(etat: _Etat, f: Path, rel: str) -> None:
-    taille = f.stat().st_size
-    if taille > etat.limites.taille_fichier:
-        _ajouter(etat, rel, None, mime="application/octet-stream", motif=MotifRefus.trop_gros, taille=taille)
+    try:
+        taille = f.stat().st_size
+        if taille > etat.limites.taille_fichier:
+            _ajouter(etat, rel, None, mime="application/octet-stream", motif=MotifRefus.trop_gros, taille=taille)
+            return
+        contenu = f.read_bytes()
+    except OSError as e:  # fichier illisible (droits, disparu) : refusé, le lot continue
+        log.warning("reception_lecture_impossible exception=%s", type(e).__name__)
+        _ajouter(etat, rel, None, mime="application/octet-stream", motif=MotifRefus.corrompu)
         return
-    _traiter_octets(etat, rel, f.read_bytes(), profondeur_zip=0, origine=None)
+    _traiter_sur(etat, rel, contenu)
 
 
 def recevoir_courriel(
@@ -623,19 +731,21 @@ def recevoir_courriel(
                      (client.expediteurs_autorises if client is not None else []))
     try:
         msg = _parser_eml(contenu)
+        expediteur = parseaddr(str(msg.get("From", "")))[1] or None
+        message_id = str(msg.get("Message-ID", "")).strip() or None
+        lu = _corps_et_pieces(msg)  # structure lisible et imbrication bornée (D-1603)
     except Exception:
         lot = _nouveau_lot(client_id, CanalLot.courriel, ids, None)
         etat = _Etat(client_id, lot, limites or Limites(), ids, deja_recus or {})
         _ajouter(etat, f"{dossier}/message.eml", contenu, mime=MIME_EML, motif=MotifRefus.corrompu)
         return _fin(etat)
-    expediteur = parseaddr(str(msg.get("From", "")))[1] or None
-    message_id = str(msg.get("Message-ID", "")).strip() or None
     lot = _nouveau_lot(client_id, CanalLot.courriel, ids, expediteur)
     etat = _Etat(client_id, lot, limites or Limites(), ids, deja_recus or {}, message_id=message_id)
     if not expediteur_autorise(expediteur, autorises):
         return _fin(etat, quarantaine=True, motif_quarantaine="expediteur_non_autorise")
     ident = hashlib.sha256((message_id or _sha(contenu)).encode()).hexdigest()[:12]
-    _ajouter_courriel(etat, f"{dossier}/{ident}", msg, origine=f"courriel:{message_id or ident}", brut=contenu)
+    _ajouter_courriel(etat, f"{dossier}/{ident}", msg, origine=f"courriel:{message_id or ident}", brut=contenu,
+                      lu=lu)
     return _fin(etat)
 
 

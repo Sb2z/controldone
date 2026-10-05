@@ -61,6 +61,15 @@ SEUIL_NATIF = 0.85
 SEUIL_NATIF_FAIBLE = 0.5
 MIN_CARACTERES_NATIF = 25
 SEUIL_ILLISIBLE_OCR = 0.45
+#: Bornes du texte **positionné** d'une page de texte, de tableur ou de CSV (D-1604) : au-delà, le texte de la
+#: page reste complet mais les mots positionnés s'arrêtent (avertissement ``texte_positionne_tronque``). Un XML ou
+#: un CSV de 50 Mo produisait sinon des millions de mots (plusieurs Go dans le processus de pages, puis dans le
+#: processus principal qui les relit). Les documents réels en sont très loin (corpus : moins de 300 lignes).
+MAX_LIGNES_POSITIONNEES = 50_000
+MAX_MOTS_POSITIONNES = 500_000
+#: Bornes de lecture d'une feuille de tableur (colonnes lues, cellules lues par feuille).
+MAX_COLONNES_TABLEUR = 512
+MAX_CELLULES_FEUILLE = 2_000_000
 
 
 @dataclass(frozen=True)
@@ -890,17 +899,23 @@ def _page_grille(numero: int, lignes_cellules: list[list[str]], *, source: str, 
     nrows = max(1, len(lignes_cellules))
     ncols = max([len(r) for r in lignes_cellules] + [1])
     lignes: list[Ligne] = []
+    textes: list[str] = []
+    n_mots = 0
     for r, cellules in enumerate(lignes_cellules):
-        mots = []
-        for c, val in enumerate(cellules):
-            if not val:
-                continue
-            mots.append(Mot(texte=val, x0=c / ncols, y0=r / nrows, x1=(c + 1) / ncols, y1=(r + 1) / nrows))
-        if mots:
-            lignes.append(Ligne(texte=" | ".join(m.texte for m in mots), mots=tuple(mots)))
-    texte = texte_brut if texte_brut is not None else "\n".join(li.texte for li in lignes)
+        valeurs = [(c, val) for c, val in enumerate(cellules) if val]
+        if not valeurs:
+            continue
+        texte_ligne = " | ".join(v for _c, v in valeurs)
+        textes.append(texte_ligne)
+        if len(lignes) < MAX_LIGNES_POSITIONNEES and n_mots < MAX_MOTS_POSITIONNES:
+            mots = tuple(Mot(texte=val, x0=c / ncols, y0=r / nrows, x1=(c + 1) / ncols, y1=(r + 1) / nrows)
+                         for c, val in valeurs)
+            n_mots += len(mots)
+            lignes.append(Ligne(texte=texte_ligne, mots=mots))
+    texte = texte_brut if texte_brut is not None else "\n".join(textes)
+    avert = ["texte_positionne_tronque"] if len(lignes) < len(textes) else []
     return PageText(numero=numero, texte=texte, lignes=lignes, qualite=QualiteTexte.natif, source=source,
-                    score_natif=1.0, feuille=feuille)
+                    score_natif=1.0, feuille=feuille, avertissements=avert)
 
 
 def _pages_xlsx(contenu: bytes) -> list[PageText]:
@@ -914,12 +929,20 @@ def _pages_xlsx(contenu: bytes) -> list[PageText]:
     try:
         for i, ws in enumerate(wb.worksheets, start=1):
             grille: list[list[str]] = []
-            for row in ws.iter_rows():
+            cellules = 0
+            tronque = False
+            # dimensions annoncées non fiables (« A1:XFD1048576 ») : colonnes et cellules lues bornées (D-1604)
+            for row in ws.iter_rows(max_col=MAX_COLONNES_TABLEUR):
                 grille.append([_cellule_texte(getattr(c, "value", None), getattr(c, "number_format", None))
                                for c in row])
-                if len(grille) > 100_000:
+                cellules += max(1, len(row))
+                if len(grille) > 100_000 or cellules > MAX_CELLULES_FEUILLE:
+                    tronque = True
                     break
-            sortie.append(_page_grille(i, grille, source="tableur", feuille=ws.title))
+            page = _page_grille(i, grille, source="tableur", feuille=ws.title)
+            if tronque:
+                page.avertissements.append("tableur_tronque")
+            sortie.append(page)
     finally:
         wb.close()
     return sortie or [_page_illisible(1, "tableur_vide")]
@@ -997,15 +1020,24 @@ def _page_texte_brut(contenu: bytes, source: str) -> PageText:
     n = max(1, len(lignes_txt))
     largeur_max = max(1, max((len(x) for x in lignes_txt), default=1))  # une fois (D-1401 : était O(n²))
     lignes = []
+    n_mots = 0
+    tronque = False
     for r, li in enumerate(lignes_txt):
+        if len(lignes) >= MAX_LIGNES_POSITIONNEES or n_mots >= MAX_MOTS_POSITIONNES:
+            tronque = True  # texte complet conservé ; positions bornées (D-1604)
+            break
         mots = []
         for m in re.finditer(r"\S+", li):
             mots.append(Mot(texte=m.group(), x0=m.start() / largeur_max, y0=r / n,
                             x1=min(1.0, m.end() / largeur_max), y1=(r + 1) / n))
+            if n_mots + len(mots) >= MAX_MOTS_POSITIONNES:
+                tronque = True
+                break
+        n_mots += len(mots)
         if mots:
             lignes.append(Ligne(texte=li.strip(), mots=tuple(mots)))
     return PageText(numero=1, texte=texte, lignes=lignes, qualite=QualiteTexte.natif, source=source,
-                    score_natif=1.0)
+                    score_natif=1.0, avertissements=["texte_positionne_tronque"] if tronque else [])
 
 
 __all__ += ["Ligne", "Mot", "PageText"]

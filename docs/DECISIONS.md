@@ -1410,3 +1410,107 @@ Temps et mémoire mesurés sur 4 vCPU :
 - `rl_config.useA85 = 0` : les PDF sont environ 17 % plus petits.
 - `generer_rapport` vide le cache `_page_image` à la fin de chaque rapport. Il gardait jusqu'à 64 pages rendues
   d'environ 9 Mo, avec des images de pièces client déchiffrées, dans le processus web.
+
+# Corpus public
+
+Les spécimens publics de factures électroniques (dépôts ZUGFeRD/corpus, CEN eInvoicing-EN16931, OpenPeppol BIS
+Billing 3, akretion/factur-x) ont été passés dans le pipeline complet, du sniff au rapport. Les sources, les
+licences, les exclusions et les mesures sont dans `docs/CORPUS_PUBLIC.md`.
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Exceptions non gérées (859 fichiers) | 1 | 0 |
+| Facture de 26 813 lignes | plus de 15 min | 45 s |
+| Type facture / avoir | 87,4 % | 99,7 % |
+| Total BT-112 | 91,5 % | 99,7 % |
+| TVA vendeur BT-31 | 86,2 % | 99,7 % |
+| ZUGFeRD 1.0 lus | 0/25 | 25/25 |
+
+- Banc dev inchangé : précision 1,000, rappel 0,813, seuil bloquant passé.
+- Tests : `tests/ingest/test_ingest_structure_public.py`, sur des XML fictifs écrits à la main.
+
+## D-1500 — Corpus public hors dépôt, vérité de terrain indépendante
+
+- `scripts/corpus_public.py fetch` clone les quatre dépôts dans `var/corpus_public/`, qui est ignoré par git. Aucun
+  fichier tiers n'est versionné, ni recopié dans les tests.
+- Exclusions :
+  - documents d'apparence réelle : `unstructured/`, `incoming/`, et un PDF partiellement pseudonymisé ;
+  - tests unitaires `testSet` et extraits : comptés pour la robustesse, pas pour l'exactitude.
+- La vérité est lue dans le XML par un lecteur XPath propre au script, en `local-name()`, sans code de
+  `controldone`. La pièce jointe d'un PDF est lue par `pypdf`.
+- Les montants sont comparés en valeur absolue (§5.2).
+
+## D-1501 — Pièce jointe XML d'un PDF hybride : tous les noms, choix par la racine
+
+- `factur-x` (`get_facturx_xml_from_pdf`) ne cherchait que `factur-x.xml` et `zugferd-invoice.xml`. La variante
+  XRechnung embarquée (`xrechnung.xml`) et les noms libres étaient donc ignorés : le PDF passait par la lecture du
+  texte.
+- `piece_xml_facture` lit toutes les pièces jointes `*.xml` avec pypdf, dans cet ordre de préférence :
+  `factur-x.xml`, `zugferd-invoice.xml` (toute casse), `xrechnung.xml`, puis les autres.
+- La première pièce dont la racine est une facture CII, UBL ou ZUGFeRD 1.0 est retenue. Une pièce de plus de 20 Mo
+  décompressés est ignorée.
+- La validité au schéma est jugée ensuite, comme pour un XML seul : 1,0 si le XML est valide, 0,95 sinon.
+
+## D-1502 — ZUGFeRD 1.0 lu (et non refusé)
+
+- Le schéma `urn:ferd:CrossIndustryDocument:invoice:1p0` (2014) reprend les notions du CII avec d'autres chemins
+  (`HeaderExchangedDocument`, `ApplicableSupplyChainTrade*`, `SpecifiedSupplyChainTradeSettlement`).
+- Avant ce lot, ces PDF passaient par la lecture du texte (allemand), et 21 sur 25 n'étaient pas classés.
+- Le lecteur `_lire_zf1` remplit les mêmes champs que le CII. Format `zugferd1` pour un XML seul, `facturx` dans un
+  PDF.
+- Le XML est validé contre le XSD ZUGFeRD 1.0 de la bibliothèque `factur-x` : confiance 1,0 seulement s'il est
+  valide.
+
+## D-1503 — BT-110 dans la devise de facture ; numéro de TVA = schéma VAT
+
+- **Total de TVA.** `TaxTotalAmount` (CII) et `TaxTotal/TaxAmount` (UBL) peuvent être répétés dans la devise de
+  comptabilisation (BT-111). Le premier rencontré n'est pas forcément BT-110. On retient celui dont le `currencyID`
+  est la devise BT-5.
+- **TVA d'une partie en UBL.** Le premier `PartyTaxScheme` peut être une autre immatriculation fiscale (BT-32,
+  schéma `FC`…). On retient le `PartyTaxScheme` de schéma `VAT`, puis, à défaut, celui sans schéma.
+- En CII, `schemeID="VA"` était déjà exigé.
+
+## D-1504 — Facture à total général négatif : avoir
+
+- §5.3.1 : un avoir présenté comme une facture se reconnaît à son total négatif. Une facture structurée (380, 384…)
+  dont BT-112 est négatif est donc classée `avoir`.
+- Ses montants sont stockés en valeur absolue avec `signe_imprime = negatif` (§5.2).
+- 10 spécimens sont concernés : `Rechnungskorrektur`, `negativ_faktura`, factures 380 de correction.
+- Le modèle `avoir` ne portant ni l'acheteur ni les sous-totaux, ces champs deviennent « n/a ». Ce n'est pas une
+  régression de lecture.
+
+## D-1505 — Frais logistiques, codes de motif, lignes de texte seul
+
+- **Frais logistiques.** `SpecifiedLogisticsServiceCharge` (CII EXTENDED, ZUGFeRD 1.0) est un frais de transport.
+  Il est lu comme sous-total `fret`.
+- **Codes de motif.** Les codes UNTDID 7161 d'un frais sans libellé donnent le type de sous-total : `FC` → fret,
+  `IN` → assurance, `PC` et `ABL` → emballage. Les libellés allemands courants (Fracht, Versand, Versicherung,
+  Verpackung) sont aussi reconnus.
+- **Lignes de texte seul.** Une « ligne » qui n'a ni article, ni quantité, ni prix, ni montant (commentaire
+  ZUGFeRD 1.0 ou EXTENDED) n'est pas une ligne de facture. Elle laissait une ligne vide dans le modèle ; elle est
+  maintenant écartée.
+
+## D-1506 — Lecture linéaire des grandes factures
+
+- `_chemin_xpath`, qui produit le `texte_contexte`, recalculait le rang de chaque nœud parmi tous ses frères. Le
+  coût était donc quadratique : plus de 15 minutes pour la facture Qvalia de 26 813 lignes, et des heures pour celle
+  de 63 404 lignes, avant même le refus à la réception.
+- Les rangs sont maintenant calculés une fois par parent, dans un cache propre à la lecture (`_Lecteur.cache`). Les
+  XPath sont compilés une fois par lecture.
+- Résultat : 26 813 lignes en environ 20 s. Le `texte_contexte` est identique.
+
+## D-1507 — Bon de commande structuré : document non exploitable
+
+- Order-X (racine `SCRDMCCBDACIOMessageStructure`) et UBL `Order` ne sont jamais des factures. §5.3.1 : un bon de
+  commande est classé `document_non_exploitable`, avec le motif P2 `bon_commande`.
+- `InfoStructure.motif` est recopié sur le `Document` par `decouper_fichier`.
+
+## D-1508 — Sniff d'un XML à commentaire de tête ; CSV illisible sans exception
+
+- Beaucoup de spécimens (CEN, Order-X) commencent par un commentaire de licence, sans déclaration `<?xml …?>`. Ils
+  étaient pris pour du texte, donc refusés en `non_supporte`, ou pour du CSV quand le commentaire contenait des
+  virgules.
+- `detecter_type` saute maintenant les commentaires, les instructions de traitement et le `DOCTYPE` de tête avant
+  de chercher l'élément racine.
+- Un CSV dont un champ dépasse la limite du module `csv` (ou qui est illisible) levait `_csv.Error`. Il n'est plus
+  reconnu par la fiche de correspondance (`reconnait` → faux), et l'extracteur rend `export_illisible`.

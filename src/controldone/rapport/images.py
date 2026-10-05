@@ -17,6 +17,10 @@ __all__ = ["rogner", "vider_cache", "zone_par_recherche"]
 log = logging.getLogger("controldone.rapport.images")
 
 ECHELLE = 2.0  # 144 dpi
+#: Plafond de pixels d'une page rendue pour un rognage (≈ A3 à 144 dpi) : une page au format aberrant (2 × 5 m,
+#: zone maximale d'un PDF) réclamait sinon un bitmap de plusieurs gigaoctets, gardé de surcroît dans le cache
+#: (D-1605, même défaut que RS-04 pour les vignettes).
+MAX_PIXELS = 2 * 1684 * 2384
 MARGE_VERTICALE = 0.045  # fraction de hauteur au-dessus et au-dessous de la zone
 LARGEUR_MIN = 0.6  # fraction de largeur minimale du rognage
 
@@ -32,11 +36,19 @@ def _page_image(chemin: str, numero: int):
     try:
         page = pdf[numero - 1]
         largeur, hauteur = page.get_size()
-        img = page.render(scale=ECHELLE).to_pil().convert("RGB")
+        img = page.render(scale=_echelle(largeur, hauteur)).to_pil().convert("RGB")
         page.close()
     finally:
         pdf.close()
     return img, largeur, hauteur
+
+
+def _echelle(largeur: float, hauteur: float) -> float:
+    """``ECHELLE``, réduite si la page rendue dépasserait ``MAX_PIXELS``."""
+    surface = max(1.0, float(largeur)) * max(1.0, float(hauteur))
+    if surface * ECHELLE * ECHELLE <= MAX_PIXELS:
+        return ECHELLE
+    return (MAX_PIXELS / surface) ** 0.5 * 0.9  # marge pour les arrondis au pixel
 
 
 def vider_cache() -> None:
@@ -99,6 +111,11 @@ def rogner(
             img = Image.open(chemin)
             if numero > 1:
                 img.seek(numero - 1)
+            if img.width * img.height > MAX_PIXELS:
+                img.draft("RGB", (img.width // 4, img.height // 4))  # JPEG : décodage réduit
+                ratio = (MAX_PIXELS / (img.width * img.height)) ** 0.5 * 0.9
+                img = img.resize((max(1, int(img.width * ratio)), max(1, int(img.height * ratio))),
+                                 reducing_gap=2.0)
             img = img.convert("RGB")
         elif type_mime in (None, "application/pdf"):
             if zone is None and valeur:

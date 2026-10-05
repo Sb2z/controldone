@@ -311,6 +311,7 @@ def decouper_fichier(
             client_id=fichier.client_id, type=info.type, sous_type=info.sous_type,
             pages=[PageRef(fichier_id=fichier.id, numero=p.numero, qualite_texte=p.qualite_texte) for p in pages],
             confiance_classement=info.confiance, identite=fichier.sha256, langue=langue,
+            motif_non_exploitable=info.motif,
         )
         return ResultatIngestion(pages=pages, documents=[doc], avertissements=[*avert, f"structure:{info.format}"],
                                  textes=textes, structure=info)

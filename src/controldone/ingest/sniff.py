@@ -121,6 +121,21 @@ def _est_csv(texte: str) -> bool:
     return largeurs[0] >= 2 and sum(1 for n in largeurs if n == largeurs[0]) >= 0.8 * len(largeurs)
 
 
+_PROLOGUE = re.compile(r"\s*(?:<!--.*?-->|<\?[^>]*\?>|<!DOCTYPE[^>\[]*(?:\[.*?\])?\s*>)", re.DOTALL)
+
+
+def _sans_prologue(debut: str) -> str:
+    """Retire les commentaires, instructions de traitement et DOCTYPE qui précèdent l'élément racine d'un XML
+    sans déclaration ``<?xml …?>`` (un commentaire de tête est courant dans les spécimens publiés)."""
+    echantillon = debut[:8192]
+    for _ in range(20):
+        m = _PROLOGUE.match(echantillon)
+        if not m or not m.group(0):
+            break
+        echantillon = echantillon[m.end():]
+    return echantillon.lstrip()
+
+
 def detecter_type(contenu: bytes, nom: str = "") -> str:
     """Type MIME déduit des octets ; ``application/octet-stream`` si inconnu."""
     tete = contenu[:2048]
@@ -144,7 +159,7 @@ def detecter_type(contenu: bytes, nom: str = "") -> str:
     debut = texte.lstrip("﻿ \t\r\n")
     if re.match(r"<!DOCTYPE\s+html|<html", debut, re.IGNORECASE):
         return "text/html"
-    if debut.startswith("<?xml") or re.match(r"<[A-Za-z_][\w.:-]*[\s>/]", debut):
+    if debut.startswith("<?xml") or re.match(r"<[A-Za-z_][\w.:-]*[\s>/]", _sans_prologue(debut)):
         return MIME_XML
     if len(_ENTETES_EML.findall(contenu[:8192])) >= 2 and re.search(rb"^From:", contenu[:8192], re.I | re.M):
         return MIME_EML

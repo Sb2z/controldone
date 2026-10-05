@@ -1,8 +1,9 @@
 """Extracteurs ``structure`` (SPEC §5.1, §5.3.6, §6.3, D-006) : aucune IA, aucune heuristique de mise en page.
 
-- Factures électroniques : Factur-X (XML CII embarqué dans le PDF, lu par ``facturx``), CII D16B et
-  UBL 2.1 ``Invoice`` / ``CreditNote`` -> ``ChampsFactureCommerciale``, ``ChampsFactureTransitaire`` ou
-  ``ChampsAvoir`` selon le contenu (type de document, libellés des lignes).
+- Factures électroniques : Factur-X / ZUGFeRD / XRechnung (XML embarqué dans le PDF, D-1501), CII D16B,
+  ZUGFeRD 1.0 (D-1502) et UBL 2.1 ``Invoice`` / ``CreditNote`` -> ``ChampsFactureCommerciale``,
+  ``ChampsFactureTransitaire`` ou ``ChampsAvoir`` selon le contenu (type de document, total négatif, libellés des
+  lignes). Un bon de commande structuré (Order-X, UBL ``Order``) est un document non exploitable (D-1507).
 - Exports de déclaration XML / CSV : fiches de correspondance versionnées ``config/mappings/<id>.yaml``
   (§5.3.6) ; l'ajout d'un format ne demande pas de code ; une colonne inconnue est ignorée et journalisée.
 
@@ -19,8 +20,10 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import logging
 import re
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,6 +49,7 @@ from controldone.model.champs import (
 from controldone.model.enums import (
     CategorieTaxe,
     Methode,
+    MotifNonExploitable,
     NatureLigne,
     PaiementNormalise,
     TauxNature,
@@ -93,6 +97,12 @@ NS_UBL = {
     "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
     "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
 }
+#: ZUGFeRD 1.0 (2014) : schéma « CrossIndustryDocument » distinct du CII D16B (mêmes notions, autres chemins).
+NS_ZF1 = {
+    "rsm": "urn:ferd:CrossIndustryDocument:invoice:1p0",
+    "ram": "urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:12",
+    "udt": "urn:un:unece:uncefact:data:standard:UnqualifiedDataType:15",
+}
 _MRN_RE = re.compile(r"\b(\d{2}[A-Z]{2}[A-Z0-9]{14})\b")
 #: Codes de type de document (UNTDID 1001) : avoirs.
 CODES_AVOIR = {"381", "261", "262", "396", "532"}
@@ -117,18 +127,59 @@ def _local(tag: Any) -> str:
 # --- Factur-X -------------------------------------------------------------------------------------------
 
 
-def xml_facturx(pdf: bytes) -> bytes | None:
-    """XML CII (ou autre XML de facture) embarqué dans un PDF Factur-X / ZUGFeRD ; ``None`` sinon."""
+#: Noms de la pièce jointe XML d'une facture hybride, par ordre de préférence : Factur-X / ZUGFeRD 2.x,
+#: ZUGFeRD 1.0 et 2.0 (casse variable), XRechnung embarquée dans un PDF (profil « XRechnung » de ZUGFeRD 2.1+).
+NOMS_PIECE_XML = ("factur-x.xml", "zugferd-invoice.xml", "xrechnung.xml")
+#: Taille maximale d'une pièce jointe XML lue (octets décompressés).
+TAILLE_MAX_PIECE_XML = 20 * 1024 * 1024
+
+
+def syntaxe_facture(racine: etree._Element | None) -> str | None:
+    """``cii`` (CII D16B / D22B), ``ubl`` (Invoice / CreditNote), ``zf1`` (ZUGFeRD 1.0) ou ``None``."""
+    if racine is None or not isinstance(racine.tag, str):
+        return None
+    q = etree.QName(racine.tag)
+    if q.localname == "CrossIndustryInvoice" and q.namespace == NS_CII["rsm"]:
+        return "cii"
+    if q.localname == "CrossIndustryDocument" and q.namespace == NS_ZF1["rsm"]:
+        return "zf1"
+    if (q.localname, q.namespace) in (("Invoice", NS_UBL_INV), ("CreditNote", NS_UBL_CN)):
+        return "ubl"
+    return None
+
+
+def piece_xml_facture(pdf: bytes) -> tuple[str, bytes] | None:
+    """(nom, octets) de la pièce jointe XML de facture d'un PDF hybride, ``None`` sinon.
+
+    Toutes les pièces jointes ``*.xml`` sont examinées (``factur-x.xml``, ``zugferd-invoice.xml`` en toute
+    casse, ``xrechnung.xml``, puis tout autre nom) ; la première dont la racine est une facture CII, UBL ou
+    ZUGFeRD 1.0 est retenue. La validité au schéma est jugée ensuite, pas ici (D-1501)."""
     if b"/EmbeddedFile" not in pdf and b"/AF" not in pdf and b"EmbeddedFiles" not in pdf:
         return None
     try:
-        from facturx import get_facturx_xml_from_pdf
+        from pypdf import PdfReader
 
-        logging.getLogger("factur-x").setLevel(logging.CRITICAL)
-        _nom, xml = get_facturx_xml_from_pdf(pdf, check_xsd=False)
-    except Exception:
+        logging.getLogger("pypdf").setLevel(logging.CRITICAL)
+        pieces = [(a.name or "", a.content) for a in PdfReader(io.BytesIO(pdf)).attachment_list]
+    except Exception:  # PDF illisible, chiffré, pièce jointe corrompue : pas de XML
         return None
-    return xml or None
+
+    def rang(p: tuple[str, bytes]) -> int:
+        n = p[0].lower()
+        return NOMS_PIECE_XML.index(n) if n in NOMS_PIECE_XML else len(NOMS_PIECE_XML)
+
+    for nom, data in sorted(pieces, key=rang):
+        if not nom.lower().endswith(".xml") or not data or len(data) > TAILLE_MAX_PIECE_XML:
+            continue
+        if syntaxe_facture(_xml(data)) is not None:
+            return nom, data
+    return None
+
+
+def xml_facturx(pdf: bytes) -> bytes | None:
+    """XML de facture (CII, UBL ou ZUGFeRD 1.0) embarqué dans un PDF Factur-X / ZUGFeRD ; ``None`` sinon."""
+    p = piece_xml_facture(pdf)
+    return p[1] if p else None
 
 
 def _schema_valide(racine: etree._Element, flavor: str) -> bool:
@@ -286,7 +337,10 @@ class FicheCorrespondance:
         if mime != MIME_CSV:
             return False
         texte = decoder_texte(contenu) or ""
-        entete = self._lire_csv(texte)[0]
+        try:
+            entete = self._lire_csv(texte)[0]
+        except ValueError:
+            return False
         requis = det.get("colonnes_requises") or []
         return bool(entete) and all(c in entete for c in requis) and (
             not det.get("marqueur") or bool(re.search(det["marqueur"], texte[:4096])))
@@ -297,7 +351,10 @@ class FicheCorrespondance:
         colonnes sont notées ``TYPE.col``."""
         sep = self.csv.get("separateur") or ";"
         lignes = texte.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        rangs = list(csv.reader(lignes, delimiter=sep, quotechar=self.csv.get("guillemet", '"')))
+        try:
+            rangs = list(csv.reader(lignes, delimiter=sep, quotechar=self.csv.get("guillemet", '"')))
+        except csv.Error as e:  # champ démesuré, octet nul… : fichier illisible pour cette fiche (D-1508)
+            raise ValueError(f"csv illisible : {type(e).__name__}") from e
         if not rangs:
             return [], [], []
         out: list[dict[str, str]] = []
@@ -362,20 +419,22 @@ def charger_fiches(dossier: str | Path | None = None) -> tuple[FicheCorrespondan
 class InfoStructure:
     """Résultat de l'analyse d'un fichier structuré."""
 
-    format: str  # "cii", "ubl", "facturx" ou format_id d'une fiche
+    format: str  # "cii", "ubl", "zugferd1", "facturx", "commande" ou format_id d'une fiche
     type: TypeDocument
     sous_type: str | None
     confiance: float
     xml: bytes | None = None
     fiche: FicheCorrespondance | None = None
     schema_valide: bool = True
+    #: motif P2 d'un document structuré qui n'est pas une facture (bon de commande Order-X / UBL Order)
+    motif: MotifNonExploitable | None = None
 
 
-def _cii_libelles(racine: etree._Element) -> tuple[list[str], int]:
+def _cii_libelles(racine: etree._Element, ns: dict[str, str] = NS_CII) -> tuple[list[str], int]:
     libs = [_txt(x) for x in racine.xpath(
-        ".//ram:IncludedSupplyChainTradeLineItem/ram:SpecifiedTradeProduct/ram:Name", namespaces=NS_CII)]
+        ".//ram:IncludedSupplyChainTradeLineItem/ram:SpecifiedTradeProduct/ram:Name", namespaces=ns)]
     codes = len(racine.xpath(".//ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode | "
-                             ".//ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID", namespaces=NS_CII))
+                             ".//ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID", namespaces=ns))
     return [x for x in libs if x], codes
 
 
@@ -385,6 +444,30 @@ def _ubl_libelles(racine: etree._Element) -> tuple[list[str], int]:
     codes = len(racine.xpath(".//cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode | "
                              ".//cac:Item/cac:OriginCountry/cbc:IdentificationCode", namespaces=NS_UBL))
     return [x for x in libs if x], codes
+
+
+#: Racines de bons de commande structurés : Order-X (CII « SCRDMCCBDACIOMessageStructure ») et UBL Order.
+_RACINES_COMMANDE = {
+    ("SCRDMCCBDACIOMessageStructure", "urn:un:unece:uncefact:data:SCRDMCCBDACIOMessageStructure:100"),
+    ("Order", "urn:oasis:names:specification:ubl:schema:xsd:Order-2"),
+}
+
+
+def _est_commande(racine: etree._Element) -> bool:
+    q = etree.QName(racine.tag)
+    return (q.localname, q.namespace) in _RACINES_COMMANDE
+
+
+def _total_negatif(racine: etree._Element, syntaxe: str) -> bool:
+    """Total général (BT-112) imprimé négatif : facture valant avoir (§5.3.1, D-1504)."""
+    if syntaxe == "ubl":
+        brut = _txt_first(racine, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount", NS_UBL)
+    elif syntaxe == "zf1":
+        brut = _txt_first(racine, f"{_ZF1_SET}/ram:SpecifiedTradeSettlementMonetarySummation/ram:GrandTotalAmount",
+                          NS_ZF1)
+    else:
+        brut = _txt_first(racine, f"{_CII_SUM}/ram:GrandTotalAmount", NS_CII)
+    return bool(brut) and brut.lstrip().startswith("-") and bool(re.search(r"[1-9]", brut))
 
 
 def est_facture_transitaire(libelles: Sequence[str], nb_codes_marchandise: int) -> bool:
@@ -424,25 +507,35 @@ def analyser_contenu_structure(contenu: bytes, mime: str | None = None,
     racine = _xml(xml)
     if racine is None:
         return None
-    nom = _local(racine.tag)
-    ns = etree.QName(racine.tag).namespace
-    if nom == "CrossIndustryInvoice":
+    syntaxe = syntaxe_facture(racine)
+    if syntaxe == "cii":
         code = _txt_first(racine, "rsm:ExchangedDocument/ram:TypeCode", NS_CII)
         libs, codes = _cii_libelles(racine)
         valide = _schema_valide(racine, "factur-x")
         fmt = fmt or "cii"
-    elif nom in ("Invoice", "CreditNote") and ns in (NS_UBL_INV, NS_UBL_CN):
-        code = "381" if nom == "CreditNote" else (_txt_first(racine, "cbc:InvoiceTypeCode", NS_UBL) or "380")
+    elif syntaxe == "zf1":
+        code = _txt_first(racine, "rsm:HeaderExchangedDocument/ram:TypeCode", NS_ZF1)
+        libs, codes = _cii_libelles(racine, NS_ZF1)
+        valide = _schema_valide(racine, "zugferd")
+        fmt = fmt or "zugferd1"
+    elif syntaxe == "ubl":
+        credit = _local(racine.tag) == "CreditNote"
+        code = (_txt_first(racine, "cbc:CreditNoteTypeCode", NS_UBL) or "381") if credit else (
+            _txt_first(racine, "cbc:InvoiceTypeCode", NS_UBL) or "380")
         libs, codes = _ubl_libelles(racine)
-        valide = _schema_valide(racine, "ubl-2.1-creditnote" if nom == "CreditNote" else "ubl-2.1-invoice")
+        valide = _schema_valide(racine, "ubl-2.1-creditnote" if credit else "ubl-2.1-invoice")
         fmt = fmt or "ubl"
+    elif _est_commande(racine):
+        # Bon de commande structuré (Order-X, UBL Order) : jamais une facture (§5.3.1, P2 ; D-1507).
+        return InfoStructure(format="commande", type=TypeDocument.document_non_exploitable, sous_type=None,
+                             confiance=0.98, xml=xml, motif=MotifNonExploitable.bon_commande)
     else:
         for f in fiches:
             if f.type == "xml" and f.reconnait(xml, MIME_XML):
                 return InfoStructure(format=f.format_id, type=TypeDocument.declaration, sous_type=f.sous_type,
                                      confiance=0.99, xml=xml, fiche=f)
         return None
-    if code in CODES_AVOIR:
+    if code in CODES_AVOIR or (syntaxe == "ubl" and _local(racine.tag) == "CreditNote") or _total_negatif(racine, syntaxe):
         t, st = TypeDocument.avoir, None
     elif est_facture_transitaire(libs, codes):
         t, st = TypeDocument.facture_transitaire, None
@@ -471,7 +564,27 @@ def _txt_first(base: etree._Element, xp: str, ns: dict[str, str]) -> str | None:
     return v or None
 
 
-def _chemin_xpath(el: etree._Element) -> str:
+def _rang_frere(parent: etree._Element, el: etree._Element, cache: dict | None) -> int:
+    """Rang (1-based) de ``el`` parmi les frères de même balise, 0 s'il est seul. Avec ``cache`` (un par
+    lecture de document), chaque parent n'est parcouru qu'une fois : sans lui, une facture de dizaines de
+    milliers de lignes coûtait un temps quadratique (D-1506)."""
+    if cache is None:
+        freres = [x for x in parent if isinstance(x.tag, str) and x.tag == el.tag]
+        return freres.index(el) + 1 if len(freres) > 1 else 0
+    table = cache.get(parent)
+    if table is None:
+        nombre = Counter(x.tag for x in parent if isinstance(x.tag, str))
+        vus: Counter[str] = Counter()
+        table = {}
+        for x in parent:
+            if isinstance(x.tag, str) and nombre[x.tag] > 1:
+                vus[x.tag] += 1
+                table[x] = vus[x.tag]
+        cache[parent] = table
+    return table.get(el, 0)
+
+
+def _chemin_xpath(el: etree._Element, cache: dict | None = None) -> str:
     """Chemin lisible d'un nœud (``/Invoice/InvoiceLine[2]/ID``, noms locaux, rang si répété) pour
     ``texte_contexte``."""
     try:
@@ -481,9 +594,9 @@ def _chemin_xpath(el: etree._Element) -> str:
             nom = _local(courant.tag)
             parent = courant.getparent()
             if parent is not None:
-                freres = [x for x in parent if isinstance(x.tag, str) and x.tag == courant.tag]
-                if len(freres) > 1:
-                    nom = f"{nom}[{freres.index(courant) + 1}]"
+                rang = _rang_frere(parent, courant, cache)
+                if rang:
+                    nom = f"{nom}[{rang}]"
             parties.append(nom)
             courant = parent
         return "/" + "/".join(reversed(parties))
@@ -576,19 +689,24 @@ def _premier(rx: re.Pattern[str], texte: str) -> str | None:
     return next((g for g in m.groups() if g), None)
 
 
-def _sous_total_type(raison: str | None, charge: bool):
+#: Codes de motif de frais (UNTDID 7161) -> type de sous-total.
+_CODES_FRAIS = {"FC": "fret", "IN": "assurance", "PC": "emballage", "ABL": "emballage"}
+
+
+def _sous_total_type(raison: str | None, charge: bool, code: str | None = None):
     from controldone.model.enums import TypeSousTotal
 
     t = _norm(raison or "")
     if not charge or re.search(r"discount|remise|descuento|rabais|allowance", t):
         return TypeSousTotal.remise
-    if re.search(r"freight|fret|flete|transport|shipping", t):
+    if re.search(r"freight|fret|flete|transport|shipping|fracht|versand", t):
         return TypeSousTotal.fret
-    if re.search(r"insurance|assurance|seguro", t):
+    if re.search(r"insurance|assurance|seguro|versicherung", t):
         return TypeSousTotal.assurance
-    if re.search(r"packing|emballage|embalaje|packaging", t):
+    if re.search(r"packing|emballage|embalaje|packaging|verpackung", t):
         return TypeSousTotal.emballage
-    return TypeSousTotal.autre
+    par_code = _CODES_FRAIS.get((code or "").strip().upper())
+    return TypeSousTotal(par_code) if par_code else TypeSousTotal.autre
 
 
 def _champs_notes_fc(c, champs: ChampsFactureCommerciale, notes: list[tuple[str, str]]) -> None:
@@ -606,7 +724,7 @@ def _champs_notes_ligne_fc(c, champs, p: str, notes: list[tuple[str, str]]) -> N
 
 
 def _notes(lec, base, xp: str) -> list[tuple[str, str]]:
-    return [(_txt(e), _chemin_xpath(e)) for e in lec.tous(base, xp) if _txt(e)]
+    return [(_txt(e), _chemin_xpath(e, lec.cache)) for e in lec.tous(base, xp) if _txt(e)]
 
 
 # --- CII ----------------------------------------------------------------------------------------------------
@@ -615,6 +733,11 @@ _CII_HDR = "rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement"
 _CII_DEL = "rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeDelivery"
 _CII_SET = "rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement"
 _CII_SUM = f"{_CII_SET}/ram:SpecifiedTradeSettlementHeaderMonetarySummation"
+_ZF1_TR = "rsm:SpecifiedSupplyChainTradeTransaction"
+_ZF1_HDR = f"{_ZF1_TR}/ram:ApplicableSupplyChainTradeAgreement"
+_ZF1_DEL = f"{_ZF1_TR}/ram:ApplicableSupplyChainTradeDelivery"
+_ZF1_SET = f"{_ZF1_TR}/ram:ApplicableSupplyChainTradeSettlement"
+_ZF1_SUM = f"{_ZF1_SET}/ram:SpecifiedTradeSettlementMonetarySummation"
 
 
 class _Lecteur:
@@ -623,35 +746,62 @@ class _Lecteur:
     def __init__(self, racine: etree._Element, ns: dict[str, str]):
         self.racine = racine
         self.ns = ns
+        #: rangs des nœuds parmi leurs frères, calculés une fois par parent (``_rang_frere``)
+        self.cache: dict[etree._Element, dict[etree._Element, int]] = {}
+        self._compiles: dict[str, etree.XPath] = {}
 
     def un(self, base: etree._Element | None, xp: str) -> tuple[str | None, str | None, etree._Element | None]:
         base = self.racine if base is None else base
-        r = base.xpath(xp, namespaces=self.ns)
+        r = self._xp(xp)(base)
         if not r:
             return None, None, None
         el = r[0]
         if isinstance(el, str):
             parent = getattr(el, "getparent", lambda: None)()
             nom_attr = getattr(el, "attrname", None)
-            ctx_ = f"{_chemin_xpath(parent)}/@{_local(nom_attr) if nom_attr else ''}" if parent is not None else xp
+            ctx_ = (f"{_chemin_xpath(parent, self.cache)}/@{_local(nom_attr) if nom_attr else ''}"
+                    if parent is not None else xp)
             return el.strip() or None, ctx_, None
         v = _txt(el)
-        return (v or None), _chemin_xpath(el), el
+        return (v or None), _chemin_xpath(el, self.cache), el
 
     def tous(self, base: etree._Element | None, xp: str) -> list[etree._Element]:
         base = self.racine if base is None else base
-        return [e for e in base.xpath(xp, namespaces=self.ns) if not isinstance(e, str)]
+        return [e for e in self._xp(xp)(base) if not isinstance(e, str)]
+
+    def _xp(self, xp: str) -> etree.XPath:
+        """XPath compilé une fois par lecture (une grande facture répète les mêmes chemins par ligne)."""
+        f = self._compiles.get(xp)
+        if f is None:
+            f = self._compiles[xp] = etree.XPath(xp, namespaces=self.ns)
+        return f
+
+    def montant_devise(self, base: etree._Element | None, xp: str, devise: str | None
+                       ) -> tuple[str | None, str | None, etree._Element | None]:
+        """Premier montant dont ``currencyID`` est la devise de la facture : le total de TVA (BT-110) peut être
+        répété dans la devise de comptabilisation (BT-111), qui n'est pas celui de la facture (D-1503)."""
+        els = self.tous(base, xp)
+        if not els:
+            return None, None, None
+        el = next((e for e in els if devise and (e.get("currencyID") or "").upper() == devise), None)
+        if el is None:
+            el = next((e for e in els if not e.get("currencyID")), els[0])
+        v = _txt(el)
+        return (v or None), _chemin_xpath(el, self.cache), el
 
 
 def _partie(c: _Constructeur, lec: _Lecteur, champs, prefixe: str, base_xp: str, *, ubl: bool) -> None:
     if ubl:
         noms = ("cac:Party/cac:PartyLegalEntity/cbc:RegistrationName", "cac:Party/cac:PartyName/cbc:Name")
-        tva_xp = "cac:Party/cac:PartyTaxScheme/cbc:CompanyID"
+        # BT-31 / BT-48 : schéma « VAT » ; une autre immatriculation fiscale (BT-32, schéma « FC »…) n'est
+        # pas un numéro de TVA (D-1503).
+        tva_xps = ("cac:Party/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID",
+                   "cac:Party/cac:PartyTaxScheme[not(cac:TaxScheme/cbc:ID)]/cbc:CompanyID")
         adr = "cac:Party/cac:PostalAddress"
         siren_xp = "cac:Party/cac:PartyLegalEntity/cbc:CompanyID"
     else:
         noms = ("ram:Name",)
-        tva_xp = "ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']"
+        tva_xps = ("ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']",)
         adr = "ram:PostalTradeAddress"
         siren_xp = "ram:SpecifiedLegalOrganization/ram:ID"
     bases = lec.tous(None, base_xp)
@@ -663,8 +813,11 @@ def _partie(c: _Constructeur, lec: _Lecteur, champs, prefixe: str, base_xp: str,
         if v:
             _definir(champs, f"{prefixe}.nom", c.vs(f"{prefixe}.nom", v, ctx_))
             break
-    v, ctx_, _ = lec.un(b, tva_xp)
-    _definir(champs, f"{prefixe}.tva", c.vs(f"{prefixe}.tva", v, ctx_))
+    for xp in tva_xps:
+        v, ctx_, _ = lec.un(b, xp)
+        if v:
+            _definir(champs, f"{prefixe}.tva", c.vs(f"{prefixe}.tva", v, ctx_))
+            break
     v, ctx_, _ = lec.un(b, siren_xp)
     if v and re.fullmatch(r"\d{9}|\d{14}", re.sub(r"\s", "", v)):
         _definir(champs, f"{prefixe}.siren", c.vs(f"{prefixe}.siren", v, ctx_))
@@ -673,7 +826,7 @@ def _partie(c: _Constructeur, lec: _Lecteur, champs, prefixe: str, base_xp: str,
         parties = [_txt(x) for x in adresses[0] if _txt(x)]
         if parties:
             _definir(champs, f"{prefixe}.adresse",
-                     c.vs(f"{prefixe}.adresse", ", ".join(parties), _chemin_xpath(adresses[0])))
+                     c.vs(f"{prefixe}.adresse", ", ".join(parties), _chemin_xpath(adresses[0], lec.cache)))
 
 
 def _total_imprime(v: ValeurSourcee | None) -> ValeurSourcee | None:
@@ -702,8 +855,8 @@ def _remplir_fc(c: _Constructeur, champs: ChampsFactureCommerciale, d: dict[str,
     for brut, cx, nom in d["refs_doc"]:
         if brut and champs.ref_transport is None and (not nom or _TRANSPORT_NOMS.search(nom)):
             _definir(champs, "ref_transport", c.vs("ref_transport", brut, cx))
-    for k, (raison, montant, charge, cx_r, cx_m) in enumerate(d["frais"]):
-        champs.definir(f"sous_totaux[{k}].type", _sous_total_type(raison[0] if raison else None, charge))
+    for k, (raison, montant, charge, cx_r, cx_m, code) in enumerate(d["frais"]):
+        champs.definir(f"sous_totaux[{k}].type", _sous_total_type(raison[0] if raison else None, charge, code))
         if raison and raison[0]:
             _definir(champs, f"sous_totaux[{k}].libelle", c.vs(f"sous_totaux[{k}].libelle", raison[0], cx_r))
         _definir(champs, f"sous_totaux[{k}].montant", c.vs(f"sous_totaux[{k}].montant", montant, cx_m, devise=devise))
@@ -734,7 +887,8 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
         "refs_doc": [], "frais": [], "lignes": [],
         "refs_origine": [lec.un(x, ".") for x in lec.tous(None, f"{st}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")],
         "totaux": {
-            "ht": lec.un(None, f"{sm}/ram:TaxBasisTotalAmount"), "tva": lec.un(None, f"{sm}/ram:TaxTotalAmount"),
+            "ht": lec.un(None, f"{sm}/ram:TaxBasisTotalAmount"),
+            "tva": lec.montant_devise(None, f"{sm}/ram:TaxTotalAmount", (devise_lu[0] or "").upper() or None),
             "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
             "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
         },
@@ -744,11 +898,7 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
     for el in lec.tous(None, f"{hdr}/ram:AdditionalReferencedDocument"):
         brut, cx, _ = lec.un(el, "ram:IssuerAssignedID")
         d["refs_doc"].append((brut, cx, lec.un(el, "ram:Name")[0]))
-    for el in lec.tous(None, f"{st}/ram:SpecifiedTradeAllowanceCharge"):
-        charge = (lec.un(el, "ram:ChargeIndicator/udt:Indicator")[0] or "").strip().lower() == "true"
-        raison = lec.un(el, "ram:Reason")
-        montant, cx_m, _ = lec.un(el, "ram:ActualAmount")
-        d["frais"].append((raison, montant, charge, raison[1], cx_m))
+    _frais_cii(lec, d, st)
     for el in lec.tous(None, "rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem"):
         d["lignes"].append({
             "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
@@ -764,6 +914,73 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
                                   "ram:LineTotalAmount"),
             "taux_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent"),
             "marqueur_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"),
+            "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
+        })
+    return d
+
+
+def _frais_cii(lec: _Lecteur, d: dict[str, Any], st: str) -> None:
+    """Remises et frais de pied (BG-20 / BG-21) et frais logistiques (``SpecifiedLogisticsServiceCharge``,
+    EXTENDED et ZUGFeRD 1.0 : des frais, pas une remise ; D-1505)."""
+    for el in lec.tous(None, f"{st}/ram:SpecifiedTradeAllowanceCharge"):
+        charge = (lec.un(el, "ram:ChargeIndicator/udt:Indicator")[0] or "").strip().lower() == "true"
+        raison = lec.un(el, "ram:Reason")
+        montant, cx_m, _ = lec.un(el, "ram:ActualAmount")
+        d["frais"].append((raison, montant, charge, raison[1], cx_m, lec.un(el, "ram:ReasonCode")[0]))
+    for el in lec.tous(None, f"{st}/ram:SpecifiedLogisticsServiceCharge"):
+        raison = lec.un(el, "ram:Description")
+        montant, cx_m, _ = lec.un(el, "ram:AppliedAmount")
+        d["frais"].append((raison, montant, True, raison[1], cx_m, "FC"))
+
+
+def _lire_zf1(lec: _Lecteur) -> dict[str, Any]:
+    """ZUGFeRD 1.0 (``urn:ferd:CrossIndustryDocument:invoice:1p0``) : mêmes notions que le CII, chemins propres
+    (D-1502)."""
+    hdr, dl, st, sm = _ZF1_HDR, _ZF1_DEL, _ZF1_SET, _ZF1_SUM
+    total = lec.un(None, f"{sm}/ram:GrandTotalAmount")
+    if total[0] is None:
+        total = lec.un(None, f"{sm}/ram:DuePayableAmount")
+    devise_lu = lec.un(None, f"{st}/ram:InvoiceCurrencyCode")
+    devise = (devise_lu[0] or "").upper() or None
+    d: dict[str, Any] = {
+        "numero": lec.un(None, "rsm:HeaderExchangedDocument/ram:ID"),
+        "date": lec.un(None, "rsm:HeaderExchangedDocument/ram:IssueDateTime/udt:DateTimeString"),
+        "devise_lu": devise_lu, "devise": devise, "total": total,
+        "incoterm": lec.un(None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:DeliveryTypeCode"),
+        "incoterm_lieu": (None, None, None),
+        "notes": _notes(lec, None, "rsm:HeaderExchangedDocument/ram:IncludedNote/ram:Content"),
+        "refs_doc": [], "frais": [], "lignes": [],
+        "refs_origine": [lec.un(x, ".") for x in lec.tous(
+            None, f"{st}/ram:InvoiceReferencedDocument/ram:ID | {hdr}/ram:InvoiceReferencedDocument/ram:ID")],
+        "totaux": {
+            "ht": lec.un(None, f"{sm}/ram:TaxBasisTotalAmount"),
+            "tva": lec.montant_devise(None, f"{sm}/ram:TaxTotalAmount", devise),
+            "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
+            "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
+        },
+        "vendeur": f"{hdr}/ram:SellerTradeParty", "acheteur": f"{hdr}/ram:BuyerTradeParty",
+        "destinataire": f"{dl}/ram:ShipToTradeParty",
+    }
+    for el in lec.tous(None, f"{hdr}/ram:AdditionalReferencedDocument"):
+        brut, cx, _ = lec.un(el, "ram:ID")
+        d["refs_doc"].append((brut, cx, lec.un(el, "ram:Name")[0]))
+    _frais_cii(lec, d, st)
+    for el in lec.tous(None, f"{_ZF1_TR}/ram:IncludedSupplyChainTradeLineItem"):
+        d["lignes"].append({
+            "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
+            "reference_article": lec.un(el, "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
+            "description": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+            "libelle": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+            "code_marchandise_imprime": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
+            "code_marchandise": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
+            "pays_origine": lec.un(el, "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
+            "quantite": lec.un(el, "ram:SpecifiedSupplyChainTradeDelivery/ram:BilledQuantity"),
+            "prix_unitaire": lec.un(el, "ram:SpecifiedSupplyChainTradeAgreement/ram:NetPriceProductTradePrice/"
+                                        "ram:ChargeAmount"),
+            "montant": lec.un(el, "ram:SpecifiedSupplyChainTradeSettlement/ram:SpecifiedTradeSettlementMonetarySummation/"
+                                  "ram:LineTotalAmount"),
+            "taux_tva": lec.un(el, "ram:SpecifiedSupplyChainTradeSettlement/ram:ApplicableTradeTax/ram:ApplicablePercent"),
+            "marqueur_tva": lec.un(el, "ram:SpecifiedSupplyChainTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"),
             "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
         })
     return d
@@ -787,7 +1004,7 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
         "refs_origine": [lec.un(x, ".") for x in lec.tous(None, "cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")],
         "totaux": {
             "ht": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount"),
-            "tva": lec.un(None, "cac:TaxTotal/cbc:TaxAmount"),
+            "tva": lec.montant_devise(None, "cac:TaxTotal/cbc:TaxAmount", (devise_lu[0] or "").upper() or None),
             "ttc": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"),
             "net": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount"),
             "acomptes": lec.un(None, "cac:LegalMonetaryTotal/cbc:PrepaidAmount"),
@@ -803,7 +1020,7 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
         charge = (lec.un(el, "cbc:ChargeIndicator")[0] or "").strip().lower() == "true"
         raison = lec.un(el, "cbc:AllowanceChargeReason")
         montant, cx_m, _ = lec.un(el, "cbc:Amount")
-        d["frais"].append((raison, montant, charge, raison[1], cx_m))
+        d["frais"].append((raison, montant, charge, raison[1], cx_m, lec.un(el, "cbc:AllowanceChargeReasonCode")[0]))
     for el in lec.tous(None, ligne_xp):
         d["lignes"].append({
             "numero_ligne": lec.un(el, "cbc:ID"),
@@ -823,7 +1040,16 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
     return d
 
 
+def _sans_lignes_de_texte(d: dict[str, Any]) -> dict[str, Any]:
+    """Retire les « lignes » de texte seul (ni article, ni quantité, ni montant ; ZUGFeRD 1.0 et EXTENDED les
+    admettent pour des commentaires) : elles laissaient une ligne vide dans le modèle (D-1505)."""
+    utiles = ("description", "reference_article", "quantite", "prix_unitaire", "montant", "code_marchandise")
+    d["lignes"] = [lg for lg in d["lignes"] if any(lg[k][0] for k in utiles)]
+    return d
+
+
 def _champs_facture(c: _Constructeur, lec: _Lecteur, d: dict[str, Any], type_doc: TypeDocument, *, ubl: bool):
+    d = _sans_lignes_de_texte(d)
     if type_doc is TypeDocument.facture_commerciale:
         champs = ChampsFactureCommerciale()
         _partie(c, lec, champs, "vendeur", d["vendeur"], ubl=ubl)
@@ -941,7 +1167,7 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
             return lec.un(base, src)
 
         def bases_liste(spec) -> list[tuple[Any, str]]:
-            return [(el, _chemin_xpath(el)) for el in lec.tous(None, spec["source"])]
+            return [(el, _chemin_xpath(el, lec.cache)) for el in lec.tous(None, spec["source"])]
 
         connus = _noms_xml_connus(fiche)
         for el in racine.iter():
@@ -1155,7 +1381,7 @@ def _contenu_et_mime(ctx: ExtractionContext) -> tuple[bytes | None, str | None]:
 
 
 class ExtracteurFactureXML:
-    """Factur-X, CII D16B, UBL 2.1 -> facture commerciale, facture de transitaire ou avoir."""
+    """Factur-X, CII D16B, ZUGFeRD 1.0, UBL 2.1 -> facture commerciale, facture de transitaire ou avoir."""
 
     id = "structure_facture_xml"
     version = VERSION_STRUCTURE
@@ -1172,7 +1398,7 @@ class ExtracteurFactureXML:
         if contenu is None or mime not in (MIME_PDF, MIME_XML):
             return ExtractionResult(extracteur=info_ex)
         info = analyser_contenu_structure(contenu, mime, fiches=())
-        if info is None or info.xml is None or info.format not in ("cii", "ubl", "facturx"):
+        if info is None or info.xml is None or info.format not in ("cii", "ubl", "facturx", "zugferd1"):
             return ExtractionResult(extracteur=info_ex)
         racine = _xml(info.xml)
         if racine is None:
@@ -1183,9 +1409,13 @@ class ExtracteurFactureXML:
         type_doc = document.type
         c = _Constructeur(document, type_doc, info_ex, Methode.xml_structure, conf, context)
         nom = _local(racine.tag)
-        if nom == "CrossIndustryInvoice":
+        syntaxe = syntaxe_facture(racine)
+        if syntaxe == "cii":
             lec = _Lecteur(racine, NS_CII)
             champs = _champs_facture(c, lec, _lire_cii(lec), type_doc, ubl=False)
+        elif syntaxe == "zf1":
+            lec = _Lecteur(racine, NS_ZF1)
+            champs = _champs_facture(c, lec, _lire_zf1(lec), type_doc, ubl=False)
         else:
             lec = _Lecteur(racine, {**NS_UBL, "inv": etree.QName(racine.tag).namespace})
             champs = _champs_facture(c, lec, _lire_ubl(lec, credit=(nom == "CreditNote")), type_doc, ubl=True)
