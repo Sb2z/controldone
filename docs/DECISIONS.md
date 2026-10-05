@@ -2355,3 +2355,14 @@ changement sur les deux corpus.
 97,91 % -> 97,98 % (+2 pages, aucune perdue), F1 0,873 -> 0,873, liens faibles 50 -> 49. Bancs complets
 (`bench/out/g2_dev_grp2`, `bench/out/dev_grp2`, code des autres équipes à date) : G2 faux P1 29 -> 23, P4 30 -> 27 ;
 banc d'origine : seuil PASSE, précision certain 1,000, rappel 0,818, rappel P1 1,0, P4 47 -> 46.
+
+### D-2114 — « / » après un intitulé n'en fait pas une étiquette de champ
+
+Constat (mesure finale, second jeu tenu à l'écart `corpus_h2`) : un bon de commande intitulé
+« PURCHASE ORDER / FACTURE » était classé facture commerciale, si bien que l'absence de la vraie facture
+n'était plus signalée (P1). Cause : « / » ajouté aux suites qui font d'un libellé une étiquette de champ
+(pour « AWB / B/L: ») excluait aussi l'intitulé « purchase order ». Règle : « / » ne compte comme suite
+d'étiquette que s'il annonce un libellé court suivi de « : ». Mesure sans régression (dev corpus_g2 :
+classement 0,9939, F1 regroupement 0,959 ; dev corpus : 0,9798, F1 0,873, identiques). Test :
+`test_bon_de_commande_intitule_avec_facture_reste_non_exploitable`. Le défaut a été repéré sur un jeu tenu
+à l'écart : la correction est générale (une règle de syntaxe), et ce jeu n'est plus vierge pour P1.

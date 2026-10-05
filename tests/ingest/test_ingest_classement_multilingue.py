@@ -15,7 +15,7 @@ from controldone.ingest import (
     recevoir_octets,
 )
 from controldone.ingest.texte import PageText
-from controldone.model.enums import QualiteTexte, TypeDocument
+from controldone.model.enums import MotifNonExploitable, QualiteTexte, TypeDocument
 
 LOCAL = OptionsPages(isoler=False)
 
@@ -276,3 +276,13 @@ def test_page_de_suite_d_un_autre_mrn_commence_une_declaration():
     autre_suite = ["Suite déclaration MRN 26FRZZ98YY76XX54W3   page 2/2", *SUITE_ABIMEE[1:]]
     docs = _docs([DECL, autre_suite], ["DÉCLARATION EN DOUANE", None])
     assert len(docs) == 2
+
+
+def test_bon_de_commande_intitule_avec_facture_reste_non_exploitable():
+    # D-2114 : « / » après l'intitulé n'en fait pas une étiquette de champ (« PURCHASE ORDER / FACTURE »)
+    lignes = ["Fournisseur Fictif Ltd (FICTIF)", "Ref. PO-2026-00001   Apr 29, 2026",
+              "Purchase order confirmation - goods to be invoiced upon shipment.",
+              "#   Ref.   Description   Qty", "1   AB-0001   Pompe fictive   18"]
+    c = _classer(lignes, "PURCHASE ORDER / FACTURE")
+    assert c.type is TypeDocument.document_non_exploitable, c.indices
+    assert c.motif_non_exploitable is MotifNonExploitable.bon_commande

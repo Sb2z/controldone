@@ -267,7 +267,9 @@ _TOTAL_NEGATIF = re.compile(
 )
 
 #: Après un libellé de titre : étiquette de champ (« Connaissement n° : X ») ou début de phrase (« Invoice. »).
-_SUITE_CHAMP = re.compile(r"\s*(?:n°|nº|no\b|nr\b|number|numero|#|:|ref|/)")
+#: « / » n'en fait une étiquette que s'il annonce un autre libellé court suivi de « : » (« AWB / B/L: ») ;
+#: « PURCHASE ORDER / FACTURE » reste un intitulé (bon de commande, P2) — D-2114.
+_SUITE_CHAMP = re.compile(r"\s*(?:n°|nº|no\b|nr\b|number|numero|#|:|ref|/(?=\s*[^\s:]{1,8}\s*:))")
 _SUITE_PHRASE = re.compile(r"\.\s+\w")
 #: « Invoice currency / total », « Facture : montant » : rubrique qui cite la facture (déclaration), pas un intitulé.
 _SUITE_CITATION = re.compile(r"\.\s+\w|\s*(?:currency|value|amount|total)\b")
