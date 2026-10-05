@@ -866,7 +866,10 @@ def _remplir_fc(c: _Constructeur, champs: ChampsFactureCommerciale, d: dict[str,
     _definir(champs, "devise", c.vs("devise", *d["devise_lu"][:2]))
     _definir(champs, "total_facture", _total_imprime(c.vs("total_facture", *d["total"][:2], devise=devise)))
     _definir(champs, "incoterm", c.vs("incoterm", *d["incoterm"][:2]))
-    _definir(champs, "incoterm_lieu", c.vs("incoterm_lieu", *d["incoterm_lieu"][:2]))
+    lieu = c.vs("incoterm_lieu", *d["incoterm_lieu"][:2])
+    if lieu is not None and d.get("incoterm_lieu_libre"):  # tiré d'un texte libre : pas une donnée structurée
+        lieu = lieu.model_copy(update={"confiance": min(lieu.confiance, 0.9)})
+    _definir(champs, "incoterm_lieu", lieu)
     for brut, cx, nom in d["refs_doc"]:
         if brut and champs.ref_transport is None and (not nom or _TRANSPORT_NOMS.search(nom)):
             _definir(champs, "ref_transport", c.vs("ref_transport", brut, cx))
@@ -1008,6 +1011,29 @@ def _lire_zf1(lec: _Lecteur) -> dict[str, Any]:
     return d
 
 
+_INCOTERMS_CODES = frozenset("EXW FCA FAS FOB CFR CIF CPT CIP DAP DPU DDP DAT DAF DES DEQ DDU".split())
+
+
+def _lieu_conditions_libres(texte: str | None, code: str | None) -> str | None:
+    """Lieu d'un Incoterm écrit en clair (« DAP Le Havre Incoterms 2020 » -> « Le Havre ») : le code en tête est
+    retiré, la mention de version (« Incoterms… », « (… ») coupe le lieu ; ``None`` si rien ne reste ou si le texte
+    ne commence pas par le code (conditions libres d'une autre nature)."""
+    if not texte:
+        return None
+    mots = texte.split()
+    if not mots or mots[0].strip(",;:").upper() not in _INCOTERMS_CODES:
+        return None
+    if code and mots[0].strip(",;:").upper() != code.strip().upper():
+        return None
+    lieu: list[str] = []
+    for m in mots[1:]:
+        if m.startswith("(") or m.lower().startswith("incoterm"):
+            break
+        lieu.append(m)
+    out = " ".join(lieu).strip(" ,;:-")
+    return out if re.search(r"[^\W\d_]", out) else None
+
+
 def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
     ligne_xp = "cac:CreditNoteLine" if credit else "cac:InvoiceLine"
     qte_xp = "cbc:CreditedQuantity" if credit else "cbc:InvoicedQuantity"
@@ -1035,6 +1061,14 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
         "vendeur": "cac:AccountingSupplierParty", "acheteur": "cac:AccountingCustomerParty",
         "destinataire": None,
     }
+    if d["incoterm_lieu"][0] is None:
+        # lieu écrit seulement dans les conditions en clair (« DAP Le Havre Incoterms 2020 », D-2013)
+        libre, cx_libre, _ = lec.un(None, "cac:DeliveryTerms/cbc:SpecialTerms | "
+                                          "cac:Delivery/cac:DeliveryTerms/cbc:SpecialTerms")
+        lieu = _lieu_conditions_libres(libre, d["incoterm"][0])
+        if lieu:
+            d["incoterm_lieu"] = (lieu, cx_libre, None)
+            d["incoterm_lieu_libre"] = True
     for el in lec.tous(None, "cac:AdditionalDocumentReference"):
         brut, cx, _ = lec.un(el, "cbc:ID")
         nom = lec.un(el, "cbc:DocumentDescription")[0] or lec.un(el, "cbc:DocumentType")[0]

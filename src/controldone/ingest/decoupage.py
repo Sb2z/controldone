@@ -218,6 +218,8 @@ def _nouveau(c: ClassementPage, *, type_=None, conf=None) -> _EnCours:
 
 def _absorber(e: _EnCours, c: ClassementPage) -> None:
     e.pages.append(c.numero)
+    if c.type == e.type and c.intitulee and c.confiance > e.confiance:
+        e.confiance = c.confiance  # première page peu lisible, page suivante intitulée du même type (D-2113)
     if c.refs.numero_facture and not e.numero_facture:
         e.numero_facture = c.refs.numero_facture
     for p in c.refs.mrn_prefixes:

@@ -127,6 +127,25 @@ def test_ubl_facture_et_avoir():
     _provenance_complete(res, doc)
 
 
+def test_ubl_lieu_incoterm_tire_des_conditions_en_clair():
+    """Lieu absent de ``DeliveryLocation`` : tiré de ``SpecialTerms`` (« DAP Le Havre Incoterms 2020 »), confiance
+    0,90 ; un ``DeliveryLocation`` imprimé reste prioritaire ; des conditions qui ne commencent pas par le code ne
+    donnent aucun lieu (D-2013)."""
+    libre = ("<cac:DeliveryTerms><cbc:ID>DAP</cbc:ID><cbc:SpecialTerms>DAP Le Havre Incoterms 2020</cbc:SpecialTerms>"
+             "</cac:DeliveryTerms>")
+    _doc, res = _extraire(fab.ubl(livraison=libre), "ubl.xml")
+    assert res.champs.incoterm.valeur == "DAP"
+    assert res.champs.incoterm_lieu.valeur == "Le Havre" and res.champs.incoterm_lieu.confiance == 0.9
+    lieu = ("<cac:DeliveryTerms><cbc:ID>CIF</cbc:ID><cbc:SpecialTerms>CIF Fos (Incoterms 2020)</cbc:SpecialTerms>"
+            "<cac:DeliveryLocation><cbc:ID>Marseille</cbc:ID></cac:DeliveryLocation></cac:DeliveryTerms>")
+    _doc, res = _extraire(fab.ubl(livraison=lieu), "ubl.xml")
+    assert res.champs.incoterm_lieu.valeur == "Marseille" and res.champs.incoterm_lieu.confiance == 1.0
+    autre = ("<cac:DeliveryTerms><cbc:ID>FOB</cbc:ID><cbc:SpecialTerms>Delivery within 30 days</cbc:SpecialTerms>"
+             "</cac:DeliveryTerms>")
+    _doc, res = _extraire(fab.ubl(livraison=autre), "ubl.xml")
+    assert res.champs.incoterm_lieu is None
+
+
 def test_xml_non_valide_au_schema_confiance_095():
     xml = fab.cii().replace(b"<ram:TypeCode>380</ram:TypeCode>", b"<ram:TypeCode>380</ram:TypeCode><ram:Inconnu/>")
     _doc, res = _extraire(xml, "f.xml")

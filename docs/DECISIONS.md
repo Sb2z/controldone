@@ -2157,16 +2157,23 @@ tronquée par l'OCR, « ODH 2026 ») ne désigne aucun d'eux : `ref_facture_cite
 compatibilité univoque (facture commerciale pour les déclarations, supports et factures de transitaire ;
 facture de transitaire pour les avoirs et lettres).
 
-## D-2113 — Propositions de découpage (non appliquées, `ingest/decoupage.py` hors périmètre)
+## D-2113 — Découpage : relevé sur plusieurs pages, suite de déclaration au MRN abîmé, page de tête illisible
 
-- Relevé de transitaire sur deux pages dont la page 2 répète l'en-tête sans numéro lu (« STATEMENT / INVOICE »
-  puis « Page 2 ») : deux documents `facture_transitaire` au lieu d'un ; absorber une page de même type et même
-  émetteur quand elle ne porte pas de numéro différent et que la précédente annonce une suite.
-- Page de suite de déclaration dont l'OCR a abîmé le MRN au-delà de deux confusions (« 26FRUY… » / « 26FRXX… ») :
-  nouvelle déclaration ; garder la page dans la déclaration en cours si elle porte « suite » / « page 2/2 » et
-  aucun intitulé.
-- Pages retournées ou illisibles (texte OCR inversé) : `inconnu` à 0,30, ce qui est la dégradation prudente
-  attendue (7 pages G2 dev).
+- « Page 2 » seul sur sa ligne (sans total) est lu comme numéro de page (`extraire_refs`) : la page 2 d'un relevé
+  de transitaire qui répète l'en-tête sans numéro de facture lisible rejoint la page 1 (règle « page n > 1 »
+  existante) au lieu de former une seconde facture.
+- `ClassementPage.suite` : le haut de page annonce une suite (« Suite », « page 2/2 », « Fortsetzung »…). Une page
+  de déclaration qui l'annonce reste dans la déclaration en cours quand son MRN, abîmé par l'OCR au-delà de deux
+  confusions, en est **voisin** (même année et pays, au plus 4 caractères différents sur le préfixe de 15) ; deux
+  MRN distincts diffèrent sur presque tous leurs caractères aléatoires, et une page sans « suite » (ou
+  « page 1/n ») commence toujours une nouvelle déclaration.
+- Confiance d'un document : relevée par une page **intitulée** du même type et de plus haute confiance (première
+  page illisible, page 2 « COMMERCIAL INVOICE » lisible) — le document n'est plus `inconnu` à tort.
+- Pages retournées (non appliqué) : l'OSD de Tesseract rend parfois un verdict confiant faux (page G2 lue à 180°,
+  confiance OCR 0,26 après rotation). Proposition : quand la confiance OCR après rotation OSD est < 0,40, essayer
+  aussi les autres orientations (dont 0°). Ce changement de `ingest/pages.py` impose de relever
+  `VERSION_PAGES` (clé du cache et de l'étape 2), donc de refaire l'OCR des deux corpus : non « bon marché », laissé
+  à l'équipe robustesse. Les pages concernées restent `inconnu` (dégradation prudente, 7 pages G2 dev).
 
 **Mesures** (`scripts/mesure_classement.py`, caches `var/cache/g2_pages` et `var/cache/pages` ; regroupement : paires
 de documents de vérité liés par `expected_links`, un document étant dans le groupe des documents qu'il cite) :
@@ -2334,5 +2341,11 @@ Corpus d'origine (dev, non-régression) : facture commerciale 84,0 % → 84,1 % 
 champs clés 93,2 % → 93,2 %, ≥ 0,90 9 111 / 9 111 → 9 128 / 9 128, 0,80–0,90 2 633 / 2 739 → 2 633 / 2 736 ;
 documents support 74,3 % → 74,3 % (282 / 282 ≥ 0,90) ; avoirs 98,0 % → 98,0 % (109 / 109 ≥ 0,90).
 
-Non traité (hors périmètre) : lieu de livraison d'une facture UBL écrit seulement dans `DeliveryTerms/SpecialTerms`
-(`ingest/structure.py`).
+## D-2013 — UBL : lieu de l'Incoterm écrit en clair
+
+`ingest/structure._lire_ubl` : sans `DeliveryTerms/DeliveryLocation`, le lieu est tiré de
+`DeliveryTerms/SpecialTerms` quand ce texte commence par le code Incoterm de `cbc:ID` (« DAP Le Havre Incoterms
+2020 » -> « Le Havre » ; la mention de version et une parenthèse coupent le lieu) ; confiance 0,90 (texte libre,
+pas une donnée structurée). `DeliveryLocation` reste prioritaire ; un texte qui ne commence pas par le code ne donne
+rien. `corpus_g2` dev : `incoterm_lieu` UBL 0 % -> 100 % (23 valeurs, toutes justes à 0,90) ; aucun autre
+changement sur les deux corpus.

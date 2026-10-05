@@ -237,3 +237,42 @@ def test_pdf_fusionne_multilingue_decoupe_par_intitule():
     r = decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, ids=IdGenerator.deterministe(4))
     assert [d.type for d in r.documents] == [TypeDocument.facture_commerciale, TypeDocument.facture_transitaire,
                                              TypeDocument.declaration]
+
+
+# --- découpage (D-2113) -------------------------------------------------------------------------------------
+
+
+def _docs(pages, titres):
+    rec = recevoir_octets([("lot.pdf", fab.pdf(pages, titres=titres))], ids=IdGenerator.deterministe(3))
+    fr = rec.fichiers[0]
+    return decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, ids=IdGenerator.deterministe(4)).documents
+
+
+RELEVE = ["Fictive Freight Ltd (FICTIF)", "No. FFL/26/00001", "MRN   Description   Qty   Net amount",
+          "26FR0000000000AAA1   Customs clearance   1   EUR 59.00", "26FR0000000000BBB2   Delivery   1   EUR 110.00",
+          "Total disbursements   EUR 0.00"]
+
+
+def test_releve_sur_deux_pages_page_n_seule_est_un_document():
+    docs = _docs([[*RELEVE, "Page 1"], [*RELEVE, "Page 2"]], ["STATEMENT / INVOICE", "STATEMENT / INVOICE"])
+    assert [(d.type, [p.numero for p in d.pages]) for d in docs] == [(TypeDocument.facture_transitaire, [1, 2])]
+
+
+DECL = ["MRN 26FRAB12CD34EF56G7", "Code marchandise 8471300000   Régime 4000", "Liquidation",
+        "Droits et taxes   50,00", "Mode de paiement A", "Déclarant: Transitaire Fictif SAS"]
+SUITE_ABIMEE = ["Suite déclaration MRN 26FRAB12XD34EF5RG7   page 2/2", "Article 2   Code marchandise 8471300000",
+                "Liquidation", "Droits et taxes   25,00", "Mode de paiement A", "Régime 4000"]
+AUTRE = ["MRN 26FRZZ98YY76XX54W3", "Code marchandise 8471300000   Régime 4000", "Liquidation",
+         "Droits et taxes   10,00", "Mode de paiement A", "Déclarant: Transitaire Fictif SAS"]
+
+
+def test_suite_de_declaration_au_mrn_abime_reste_dans_la_declaration():
+    docs = _docs([DECL, SUITE_ABIMEE, AUTRE], ["DÉCLARATION EN DOUANE", None, "DÉCLARATION EN DOUANE"])
+    assert [(d.type, [p.numero for p in d.pages]) for d in docs] == [
+        (TypeDocument.declaration, [1, 2]), (TypeDocument.declaration, [3])]
+
+
+def test_page_de_suite_d_un_autre_mrn_commence_une_declaration():
+    autre_suite = ["Suite déclaration MRN 26FRZZ98YY76XX54W3   page 2/2", *SUITE_ABIMEE[1:]]
+    docs = _docs([DECL, autre_suite], ["DÉCLARATION EN DOUANE", None])
+    assert len(docs) == 2

@@ -317,8 +317,9 @@ def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, v
 
 
 def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None, ref_origine: str | None = None,
-        note: str | None = None) -> bytes:
-    """UBL 2.1 Invoice ou CreditNote minimal et valide au schéma. ``lignes`` : (libellé, qté, montant, code SH, origine)."""
+        note: str | None = None, livraison: str = "") -> bytes:
+    """UBL 2.1 Invoice ou CreditNote minimal et valide au schéma. ``lignes`` : (libellé, qté, montant, code SH, origine).
+    ``livraison`` : XML ``cac:DeliveryTerms`` inséré tel quel."""
     lignes = lignes or [("Laptop computer", "10", "12540.00", "847130", "CN")]
     racine = "CreditNote" if avoir else "Invoice"
     ns = f"urn:oasis:names:specification:ubl:schema:xsd:{racine}-2"
@@ -360,7 +361,7 @@ def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None
         f"<cbc:DocumentCurrencyCode>{devise}</cbc:DocumentCurrencyCode>{bill}"
         f"<cac:AccountingSupplierParty>{partie('FICTIF ELECTRONICS CO LTD', 'CN000000000000001')}"
         f"</cac:AccountingSupplierParty><cac:AccountingCustomerParty>{partie('SOCIETE FICTIVE SAS', TVA_CLIENT)}"
-        "</cac:AccountingCustomerParty>"
+        f"</cac:AccountingCustomerParty>{livraison}"
         f"<cac:TaxTotal><cbc:TaxAmount currencyID=\"{devise}\">0.00</cbc:TaxAmount></cac:TaxTotal>"
         f"<cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID=\"{devise}\">{total:.2f}</cbc:LineExtensionAmount>"
         f"<cbc:TaxExclusiveAmount currencyID=\"{devise}\">{total:.2f}</cbc:TaxExclusiveAmount>"
