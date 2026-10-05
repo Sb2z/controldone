@@ -24,7 +24,14 @@ from controldone.model import (
 )
 from controldone.model.enums import RAISON_LIBELLES, Methode
 from controldone.recouvrement.imputation import REGLE_HT_DEPUIS_TTC, montant_net_ligne
-from controldone.testing import declaration, dossier_pour, facture_commerciale, facture_transitaire, taxation, vs
+from controldone.testing import (
+    declaration,
+    dossier_pour,
+    facture_commerciale,
+    facture_transitaire,
+    taxation,
+    vs,
+)
 
 N = NatureLigne
 TVA_TRANSITAIRE = "FR11000555550"  # transitaire FICTIF
