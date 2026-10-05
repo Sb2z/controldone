@@ -36,6 +36,8 @@ Prérequis : Python 3.11, `uv`, Tesseract avec la langue française (`apt instal
 
 ## 2. Résultats du banc d'évaluation sur le corpus tenu à l'écart
 
+> **Mise à jour (5 octobre, tests intensifs) :** un second générateur écrit à l'aveugle (autres transitaires, six langues, nouveaux formats) a fait tomber la précision à 16,7 % sur des mises en page inconnues. Après correction, sur un troisième jeu neuf de 80 dossiers : **50 écarts certains vrais / 1 faux (98,0 %), rappel 85,1 %, seuil passé** ; aucune régression sur les anciens corpus (100 %). Détails, limites et biais de mesure : `docs/TESTS_INTENSIFS.md`.
+
 Le générateur a été écrit par un agent qui n'a jamais vu le code d'extraction ni de contrôle. Le corpus est fictif : 4 clients, 8 gabarits de transitaires, 6 mises en page de déclaration, 4 niveaux de dégradation de scan, 30 % de PDF fusionnés.
 
 **Seuil bloquant retenu : précision des « écarts certains » ≥ 0,97**, et ≥ 0,95 par contrôle dès 10 constats. Un diagnostic contient environ 20 à 40 écarts certains ; à 0,97, on attend moins d'une fausse accusation par diagnostic, que votre validation doit intercepter. À 0,90, on en attendrait 2 à 4, de quoi ruiner la crédibilité du client face à son transitaire. S'y ajoutent : rappel de 100 % sur les documents manquants, aucune formulation interdite et aucun montant sur une note de renvoi (`docs/SPEC.md` §19.7).

@@ -132,6 +132,10 @@ Textes mis à jour en conséquence :
 - pages tarifs, accueil, méthode et experts-comptables (et leur version anglaise) ;
 - offres, registre RGPD, méthode de prospection, séquence d'e-mails, 20 brouillons (dont **les 13 brouillons Gmail**), posts LinkedIn.
 
+## Tests intensifs (après l'audit)
+
+Voir `docs/TESTS_INTENSIFS.md` : corpus public de 859 factures électroniques officielles, second générateur aveugle, campagne de 571 entrées hostiles, endurance de 1 010 dossiers. Sur un jeu vierge de 80 dossiers, la précision des écarts certains est de 98,0 % (50/51) ; la robustesse ne montre aucun plantage.
+
 ## Ce qui reste ouvert
 
 - **Non vérifiés** :
