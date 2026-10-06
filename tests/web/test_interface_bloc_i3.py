@@ -301,7 +301,7 @@ def test_historique_des_notifications(monde, monkeypatch):
     assert r.status_code == 200
     assert "jeton-secret-FICTIF" not in r.text and "hooks.example.test" not in r.text
     assert "1–25 sur 32" in r.text and "Sauvegarde en échec" in r.text and "Tâche morte" in r.text
-    assert "En échec depuis le" in r.text  # courriel : échec après le dernier succès
+    assert "En échec<" in r.text  # courriel : échec après le dernier succès
     assert "Mode test" in r.text  # hors production : rien n'est envoyé
     assert f.get("/admin/notifications?page=2").status_code == 200
     assert f.get("/admin/notifications?tri=-autre").status_code == 400

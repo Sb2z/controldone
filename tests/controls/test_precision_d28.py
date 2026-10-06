@@ -423,7 +423,17 @@ def test_b2_article_au_nombre_de_lignes_inegal_et_ligne_sans_code():
     tx = [taxation("doc_dec", article="1", type_taxe="A00", montant="5.98"),
           taxation("doc_dec", article="1", type_taxe="B00", categorie=CategorieTaxe.tva, montant="33.52"),
           taxation("doc_dec", article="2", type_taxe="", categorie=CategorieTaxe.tva, montant="12.08")]
-    (r,) = _b2(*tx, total="53.17")
+    assert _b2(*tx, total="53.17") == []
+    # D-4208 : la ligne perdue explique l'écart dans ce sens (total > somme lue) : impossible de conclure.
+    from controldone.controls.famille_b import b2_sommes_taxes
+    from controldone.testing import contexte
+
+    d = declaration(id="doc_dec", taxations=tx,
+                    total_droits_taxes=vs("declaration.total_droits_taxes", "53.17", document_id="doc_dec"))
+    (r,) = [x for x in b2_sommes_taxes(contexte([d])) if x.sous_controle == "total"]
+    assert r.outcome is Outcome.non_verifiable and r.details["motif"] == "lignes_possiblement_non_lues"
+    # Écart de sens contraire (total < somme lue) : une ligne non lue ne l'explique pas, le constat reste.
+    (r,) = _b2(*tx, total="41.58")
     assert r.outcome is Outcome.a_verifier and RaisonCode.structure_non_validee in r.constat.raisons
 
 

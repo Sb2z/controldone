@@ -15,7 +15,6 @@ from controldone.web.listes import Param, Requete, contient, montant_dans, trier
 
 __all__ = [
     "ALERTES_GRAVES",
-    "alerte_du_bandeau",
     "FAMILLES",
     "LIBELLES_ALERTES",
     "NIVEAUX_VALIDATION",
@@ -28,6 +27,7 @@ __all__ = [
     "TRIS_JOURNAL",
     "TRIS_REGISTRE",
     "TRIS_VALIDATION",
+    "alerte_du_bandeau",
     "filtrer_dossiers",
     "filtrer_registre",
     "filtrer_validation",

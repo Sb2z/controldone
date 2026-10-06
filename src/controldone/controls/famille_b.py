@@ -39,6 +39,7 @@ from controldone.model import (
     CategorieTaxe,
     Composante,
     Document,
+    Niveau,
     PaiementNormalise,
     RaisonCode,
     ResultatControle,
@@ -426,6 +427,16 @@ def _couverts_par_total(
             if r.id in ids else r for r in par_code]
 
 
+#: Raisons qui disent qu'une lecture ne suffit pas à trancher (D-4208).
+_RAISONS_LECTURE_B2 = frozenset({RaisonCode.confiance_insuffisante, RaisonCode.lecture_non_corroboree,
+                                 RaisonCode.valeur_absente})
+
+
+def _motif_ligne_manquante(motif: str) -> bool:
+    """Motif de structure qui dit qu'une ligne de taxe imprimée a pu échapper à la lecture (D-4208)."""
+    return any(x in motif for x in ("sans ligne de taxe lue", "pas de ligne lue", "ligne sans code"))
+
+
 def _motif_total_negatif(total: Decimal) -> list[str]:
     """Un total de droits et taxes imprimé négatif sur une déclaration d'import est presque toujours un signe mal
     lu (tiret, trait de tableau) : il ne fonde pas un écart certain (D-2711)."""
@@ -478,6 +489,14 @@ def _b2_resultat(
         confusion=_confusions_somme(total, v_total, operandes, somme, t_somme),
         raisons_supplementaires=raisons,
     )
+    if (ecart > 0 and classement.niveau is Niveau.a_verifier and any(_motif_ligne_manquante(m) for m in motifs)
+            and set(classement.raisons) & _RAISONS_LECTURE_B2):
+        # D-4208 : total imprimé supérieur à la somme lue, structure qui signale des lignes non lues (article ou
+        # code sans ligne lue, ligne sans code) et lecture sous le seuil : une ligne non lue explique l'écart dans
+        # ce sens (comme D-2307, D-3703) ; impossible de conclure.
+        return ctx.non_verifiable("B2", RaisonCode.structure_non_validee, unite=unite, sous_controle=sous_controle,
+                                  documents=[dec.id], details={**details, "motif": "lignes_possiblement_non_lues",
+                                                               "structure_non_validee": motifs})
     calcul_txt = (
         f"somme des {n} montants imprimés = {format_montant(arrondi_centime(somme), 'EUR')}"
     )

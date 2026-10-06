@@ -830,7 +830,6 @@ CATALOGUE_EN: dict[str, str] = {
     "Coût des appels au modèle d'extraction ce mois-ci (registre ai_usage). Au plafond, les appels au modèle s'arrêtent pour ce client jusqu'à votre décision.": 'Cost of extraction model calls this month (ai_usage register). At the cap, model calls stop for this client until you decide.',
     'Dernier envoi réussi': 'Last successful send',
     'Dernier échec': 'Last failure',
-    'En échec depuis le {date}': 'Failing since {date}',
     "Enregistrée sur votre compte : elle s'applique à chaque connexion, quel que soit le navigateur. Les rapports, relevés d'écarts et textes des constats restent en français.": 'Saved on your account: it applies at every sign-in, whatever the browser. Reports, discrepancy statements and finding texts remain in French.',
     'Envoyée': 'Sent',
     'Erreur de configuration': 'Configuration error',
@@ -851,7 +850,6 @@ CATALOGUE_EN: dict[str, str] = {
     'Plafond atteint : appels au modèle arrêtés': 'Cap reached: model calls stopped',
     'Sécurité': 'Security',
     'Tout marquer comme lu': 'Mark all as read',
-    'Types notifiés : {types}.': 'Notified types: {types}.',
     'Voir les alertes': 'View alerts',
     'Webhook': 'Webhook',
     'notification': 'notification',
@@ -867,4 +865,6 @@ CATALOGUE_EN: dict[str, str] = {
     'Lecture par modèle de langage désactivée pour ce client.': 'Language-model reading disabled for this client.',
     'Lecture par modèle de langage autorisée pour ce client.': 'Language-model reading allowed for this client.',
     'Lecture par modèle désactivée': 'Model reading disabled',
+    '{n} derniers jours.': 'Last {n} days.',
+    'En échec': 'Failing',
 }

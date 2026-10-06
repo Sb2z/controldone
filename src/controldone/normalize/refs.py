@@ -189,6 +189,34 @@ def mrn_proches(x: str | None, y: str | None) -> bool:
     return distance_bornee(a, b, MRN_DIFFERENCES_PROCHES) <= MRN_DIFFERENCES_PROCHES
 
 
+def ref_compatibles_ocr(x: str | None, y: str | None) -> bool:
+    """``ref_compatibles`` sur les clés de confusion OCR (D-4207) : égales, ou la plus courte (au moins
+    5 caractères, dont un chiffre) contenue dans l'autre. Deux lectures d'une même référence de facture qui ne
+    diffèrent que par des caractères souvent confondus (« 0MS » / « OMS », « G1 » / « GI »)."""
+    if ref_compatibles(x, y):
+        return True
+    a, b = cle_confusion_ocr(x), cle_confusion_ocr(y)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    court, long_ = (a, b) if len(a) <= len(b) else (b, a)
+    return len(court) >= LONGUEUR_MIN_CONTAINMENT and any(c.isdigit() for c in norm_ref(x) + norm_ref(y)) \
+        and court in long_
+
+
+def ref_facture_proches(x: str | None, y: str | None) -> bool:
+    """Deux lectures **OCR** possibles d'une même référence de facture (D-4207) : clés de confusion d'au moins 8
+    caractères à au plus ``max(1, n // 6)`` caractères d'écart (``n`` : longueur la plus courte ; 2 pour 12
+    caractères). À n'employer que si l'une des deux valeurs est lue par OCR."""
+    a, b = cle_confusion_ocr(x), cle_confusion_ocr(y)
+    n = min(len(a), len(b))
+    if n < 8:
+        return False
+    borne = max(1, n // 6)
+    return distance_bornee(a, b, borne) <= borne
+
+
 def ref_transport_proches(x: str | None, y: str | None) -> bool:
     """Deux lectures d'une même référence de transport : compatibles (``ref_transport_compatibles``), ou clés de
     confusion OCR d'au moins 10 caractères à au plus ``max(1, n // 4)`` caractères d'écart (``n`` : longueur

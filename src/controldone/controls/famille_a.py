@@ -44,6 +44,7 @@ from controldone.model import (
     ChampsSupport,
     Composante,
     Document,
+    Methode,
     RaisonCode,
     ResultatControle,
     RolePreuve,
@@ -56,7 +57,13 @@ from controldone.model import (
 )
 from controldone.normalize.countries import country_to_iso2
 from controldone.normalize.incoterms import parse_incoterm
-from controldone.normalize.refs import cle_confusion_ocr, norm_ref, ref_compatibles
+from controldone.normalize.refs import (
+    cle_confusion_ocr,
+    norm_ref,
+    ref_compatibles,
+    ref_compatibles_ocr,
+    ref_facture_proches,
+)
 from controldone.normalize.units import UNITE_INCONNUE, normalize_unit
 
 __all__ = [
@@ -734,9 +741,17 @@ def _a2(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
             details={"motif": "aucune_reference_facture"}, **commun,
         )]
     absents = [(fc, v) for fc, v in zip(c.fcs, numeros, strict=True)
-               if v is not None and not any(ref_compatibles(v.valeur, r.valeur) for r in refs)]
+               if v is not None and not any(ref_compatibles_ocr(v.valeur, r.valeur) for r in refs)]
     if not absents:
         return [ctx.conforme(cid, entrees=entrees, **commun)]
+    # D-4207 : une référence citée lue par OCR qui ne diffère du numéro que d'un ou deux caractères en est
+    # probablement une autre lecture : la lecture ne permet pas de conclure.
+    proches = {id(v): r.valeur for _, v in absents for r in refs
+               if (v.methode is Methode.ocr or r.methode is Methode.ocr) and ref_facture_proches(v.valeur, r.valeur)}
+    if len(proches) == len(absents):
+        return [ctx.non_verifiable(cid, RaisonCode.lecture_douteuse, entrees=entrees,
+                                   details={"motif": "reference_proche", "references": sorted(set(proches.values()))},
+                                   **commun)]
     cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None,
                       valeurs_cles=[v for _, v in absents], documents=c.doc_ids)
     cites = ", ".join(dict.fromkeys(r.valeur or "" for r in refs))
