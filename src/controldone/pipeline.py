@@ -253,6 +253,10 @@ class OptionsPipeline:
     memo: dict[str, Any] | None = None
     racine: Path | None = None
     plafond_ia_dossier_eur: Decimal = Decimal("0.50")
+    #: Plafond IA mensuel du client et coût déjà engagé ce mois (passés par le worker, D-4004) : vérifiés avant
+    #: chaque appel au modèle. ``None`` : pas de plafond mensuel dans ce traitement (banc, outil en ligne de commande).
+    plafond_ia_client_mensuel_eur: Decimal | None = None
+    cout_ia_mois_eur: Decimal = Decimal("0")
     progression: Callable[[str, int, int], None] | None = field(default=None, repr=False, compare=False)
 
 
@@ -424,6 +428,9 @@ def _extraire(
             r.extracteur.type.value == "structure" and r.champs is not None and not r.partielle for r in resultats
         ):
             break  # un export structuré complet fait foi
+        if e.type == "llm":
+            # D-4001 : le modèle n'est appelé que si l'extraction déterministe est faible, et la complète seulement.
+            ctx.options["resultats_precedents"] = list(resultats)
         cle = cle_extraction(doc.identite, e.id, e.version)
         try:
             if memo is not None and cle in memo:
@@ -571,7 +578,10 @@ def _preparer_lot(
     if options.llm:
         from controldone.extract.llm import CostGuard, RegistreCoutsMemoire
 
-        cost_guard = CostGuard(RegistreCoutsMemoire(), plafond_dossier=options.plafond_ia_dossier_eur)
+        mensuel = options.plafond_ia_client_mensuel_eur
+        registre = RegistreCoutsMemoire({profil.client_id: options.cout_ia_mois_eur} if profil.client_id else None)
+        cost_guard = CostGuard(registre, plafond_dossier=options.plafond_ia_dossier_eur,
+                               plafond_client_mensuel=mensuel if mensuel is not None else Decimal("Infinity"))
     extracteurs = [e for e in comp.extracteurs if options.llm or e.type != "llm"]
     cout = CoutExtraction()
     versions: dict[str, str] = {}

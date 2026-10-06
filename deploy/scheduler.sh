@@ -5,18 +5,33 @@
 #   toutes les 15 min   python -m controldone.agents.planificateur      (met en file les jobs d'agents)
 #   toutes les 5 min    controldone alertes notifier                     (notifications poussées, D-3502 :
 #                       sans effet si aucun canal n'est configuré ; une par type d'alerte et par jour)
-#   chaque jour         sauvegarde chiffrée vérifiée (deploy/backup-cron.sh), puis mise en file de purger_retention
+#   deux fois par jour  sauvegarde chiffrée vérifiée (deploy/backup-cron.sh) aux heures de SCHED_BACKUP_HHMM (défaut
+#                       « 0215 1415 » : RPO 12 h, D-4105), puis mise en file de purger_retention (une fois par jour)
 #   chaque mois         mise en file de referentiel_recalculer, à partir du 2 (clé d'idempotence mensuelle :
 #                       rattrapé si le conteneur était arrêté le 2, jamais deux fois dans le mois)
 #
 # Les tâches ne font que mettre en file (clés d'idempotence par période) : c'est le worker qui exécute.
 # Un échec est journalisé et n'arrête jamais la boucle. SIGTERM / SIGINT : arrêt propre.
-# Au démarrage après l'heure prévue, la sauvegarde du jour est faite aussitôt (rattrapage) **si elle n'existe
-# pas déjà** (backup-cron.sh --si-absente : un redémarrage du conteneur ne refait pas la sauvegarde du jour).
-# Heure UTC. Réglages : SCHED_BACKUP_HHMM (défaut 0215), SCHED_TICK_S (défaut 60).
+# Créneau de sauvegarde = la plus récente des heures de SCHED_BACKUP_HHMM déjà passée aujourd'hui. Au démarrage
+# (ou après un arrêt), la sauvegarde du créneau en cours est faite aussitôt (rattrapage) **si elle n'existe pas
+# déjà** (backup-cron.sh --si-absente-depuis HHMM : un redémarrage du conteneur ne la refait pas).
+# Heures UTC. Réglages : SCHED_BACKUP_HHMM (une ou plusieurs heures HHMM séparées par des espaces ou des virgules,
+# défaut « 0215,1415 »), SCHED_TICK_S (défaut 60).
 set -uo pipefail
 
-BACKUP_HHMM="${SCHED_BACKUP_HHMM:-0215}"
+BACKUP_HHMM="${SCHED_BACKUP_HHMM:-0215,1415}"
+CRENEAUX=()
+for h in ${BACKUP_HHMM//,/ }; do
+  if [[ "$h" =~ ^([01][0-9]|2[0-3])[0-5][0-9]$ ]]; then CRENEAUX+=("$h"); else echo "SCHED_BACKUP_HHMM : « $h » ignoré (HHMM attendu)" >&2; fi
+done
+[ "${#CRENEAUX[@]}" -gt 0 ] || CRENEAUX=(0215 1415)
+mapfile -t CRENEAUX < <(printf '%s\n' "${CRENEAUX[@]}" | sort -u)
+
+creneau_courant() {  # creneau_courant <hhmm> : plus récente heure de sauvegarde déjà passée aujourd'hui (ou vide)
+  local c dernier=""
+  for c in "${CRENEAUX[@]}"; do [[ ! "$1" < "$c" ]] && dernier="$c"; done
+  printf '%s' "$dernier"
+}
 TICK="${SCHED_TICK_S:-60}"
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY="${CONTROLDONE_PYTHON:-python}"
@@ -36,8 +51,8 @@ tache() {  # tache <nom> <commande…>
 arret=0
 trap 'arret=1; log "arret_demande"; kill "${dormeur:-0}" 2>/dev/null || true' TERM INT
 
-log "demarrage" "sauvegarde quotidienne a ${BACKUP_HHMM} UTC"
-dernier_releve="" ; dernier_plan="" ; dernier_jour="" ; dernier_mois=""
+log "demarrage" "sauvegardes a ${CRENEAUX[*]} UTC"
+dernier_releve="" ; dernier_plan="" ; dernier_creneau="" ; dernier_mois=""
 
 while [ "$arret" -eq 0 ]; do
   minute=$(date -u +%M); hhmm=$(date -u +%H%M); jour=$(date -u +%Y-%m-%d); mois=$(date -u +%Y-%m); jdm=$(date -u +%d)
@@ -53,12 +68,13 @@ while [ "$arret" -eq 0 ]; do
     dernier_plan="$cle15"
     tache planificateur "$PY" -m controldone.agents.planificateur
   fi
-  if [[ "$jour" != "$dernier_jour" && ! "$hhmm" < "$BACKUP_HHMM" ]]; then
-    dernier_jour="$jour"
+  creneau="$(creneau_courant "$hhmm")"
+  if [[ -n "$creneau" && "${jour}-${creneau}" != "$dernier_creneau" ]]; then
+    dernier_creneau="${jour}-${creneau}"
     # sauvegarde d'abord, purge ensuite : la purge (exécutée par le worker) ne retire pas du coffre, pendant la
     # copie, un contenu que l'instantané de la base référence encore (D-3306). Une purge lancée à la main pendant
     # la copie est reportée par le verrou de maintenance partagé (D-3504).
-    tache sauvegarde "$ICI/backup-cron.sh" --si-absente
+    tache sauvegarde "$ICI/backup-cron.sh" --si-absente-depuis "$creneau"
     tache notifications "$PY" -m controldone.cli alertes notifier   # échec de sauvegarde : notifié aussitôt
     tache purge "$PY" -c "from datetime import date; from controldone.jobs import enqueue; enqueue('purger_retention', {}, f'purger_retention:{date.today()}')"
   fi

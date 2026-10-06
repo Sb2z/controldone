@@ -24,12 +24,16 @@ from decimal import Decimal
 from pathlib import Path
 
 PAGES = [
+    ("client", "/espace"),
     ("client", "/espace/dossiers"),
     ("client", "/espace/dossiers?q=FICTIF-0042"),
     ("client", "/espace/dossiers?statut=ecart_certain&tri=-montant"),
     ("client", "/espace/dossiers?tri=-constats&page=40"),
     ("client", "/espace/recouvrement"),
     ("client", "/espace/recouvrement?statut=ouvert&tri=-montant"),
+    ("fondateur", "/admin/clients/demo_ateliers"),
+    ("fondateur", "/admin/clients/demo_ateliers?q=FICTIF-0042&statut=ecart_certain"),
+    ("fondateur", "/admin"),
     ("fondateur", "/admin/validation"),
     ("fondateur", "/admin/validation?niveau=ecart_certain&min=10"),
     ("fondateur", "/admin/validation?controle=C1&tri=-montant"),

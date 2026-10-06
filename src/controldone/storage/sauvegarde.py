@@ -21,8 +21,8 @@ Voir ``docs/EXPLOITATION.md`` §3 et ``deploy/README.md``.
   absolu, ``..`` ni lien ; seules les entrées attendues sont admises), puis revérifie chaque fichier écrit
   contre le manifeste et ``PRAGMA integrity_check``. Les archives sans manifeste (avant D-3301) et de l'ancien
   format (un seul jeton Fernet) restent restaurables.
-- ``rotation`` : conserve la plus récente de chacun des 7 derniers jours et de chacune des 4 dernières
-  semaines ISO ; supprime les autres (et leurs empreintes), ainsi que les restes d'une sauvegarde interrompue.
+- ``rotation`` : conserve les 4 archives les plus récentes (deux jours à deux sauvegardes par jour, D-4105), la
+  plus récente de chacun des 7 derniers jours et de chacune des 4 dernières semaines ISO ; supprime les autres (et leurs empreintes), ainsi que les restes d'une sauvegarde interrompue.
 - Contrôle approfondi d'un répertoire restauré : ``controldone.storage.controle_restauration``.
 
 Format ``CDSAV2`` (documenté dans ``docs/EXPLOITATION.md`` §3) :
@@ -760,15 +760,17 @@ def derniere_sauvegarde(destination: Path | str) -> Path | None:
     return archives[-1][1] if archives else None
 
 
-def rotation(destination: Path | str, *, jours: int = 7, semaines: int = 4, maintenant: float | None = None
-             ) -> list[Path]:
-    """Applique la politique de conservation ; renvoie les archives supprimées. Supprime aussi leurs
+def rotation(destination: Path | str, *, jours: int = 7, semaines: int = 4, recentes: int = 4,
+             maintenant: float | None = None) -> list[Path]:
+    """Applique la politique de conservation ; renvoie les archives supprimées : les ``recentes`` dernières
+    archives (quel que soit leur jour : plusieurs sauvegardes par jour, D-4105), puis la plus récente de chacun
+    des ``jours`` derniers jours et de chacune des ``semaines`` dernières semaines ISO. Supprime aussi leurs
     empreintes ``.sha256`` et les restes de plus d'un jour d'une sauvegarde ou d'une vérification
     interrompue (``.partiel``, répertoires ``.cd-sauvegarde-*`` / ``.cd-verification-*``, ``.invalide``)."""
     destination = Path(destination)
     sauvegardes = sorted(((d, p) for p in destination.glob("controldone-*.tar.gz.enc")
                           if (d := _date(p)) is not None), reverse=True)
-    garder: set[Path] = set()
+    garder: set[Path] = {p for _, p in sauvegardes[:max(0, recentes)]}
     vus_jours: list[object] = []
     vus_semaines: list[object] = []
     for d, p in sauvegardes:  # du plus récent au plus ancien
@@ -905,6 +907,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--destination", default=None)
         p.add_argument("--jours", type=int, default=int(os.environ.get("BACKUP_JOURS", "7")))
         p.add_argument("--semaines", type=int, default=int(os.environ.get("BACKUP_SEMAINES", "4")))
+        p.add_argument("--recentes", type=int, default=int(os.environ.get("BACKUP_RECENTES", "4")),
+                       help="archives les plus récentes toujours conservées (deux par jour : 4 = deux jours)")
     a = sub.add_parser("alerter", help="enregistre une alerte fondateur (échec signalé par un script hôte)")
     a.add_argument("--kind", required=True, choices=["sauvegarde_echec", "sauvegarde_hors_site_echec",
                                                      "sauvegarde_absente", "sauvegarde_verification_echec"])
@@ -957,7 +961,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         p.rename(p.with_name(p.name + EXT_INVALIDE))
                 return code
         if not args.sans_rotation:
-            for p in rotation(destination, jours=args.jours, semaines=args.semaines):
+            for p in rotation(destination, jours=args.jours, semaines=args.semaines, recentes=args.recentes):
                 print(f"supprimée : {p}")
         return code
     if args.cmd == "verifier":
@@ -1005,7 +1009,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         rapport = controler(Path(args.cible), cles, base_url=args.base_cible)
         print("\n".join(rapport.lignes()))
         return OK if rapport.ok else ECHEC_VERIFICATION
-    for p in rotation(destination, jours=args.jours, semaines=args.semaines):
+    for p in rotation(destination, jours=args.jours, semaines=args.semaines, recentes=args.recentes):
         print(f"supprimée : {p}")
     return OK
 

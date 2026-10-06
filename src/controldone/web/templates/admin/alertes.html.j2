@@ -2,7 +2,8 @@
 {% from "macros.html.j2" import csrf_champ %}
 {% block contenu %}
 <div class="titre-page"><h1>{{ _("Alertes") }}</h1>
-<p class="discret">{{ _("Tâches mortes, sauvegardes, coûts IA, chiffrement, facturation et suivi des écarts. Chaque alerte reste listée après lecture.") }}</p></div>
+<p class="discret">{{ _("Tâches mortes, sauvegardes, coûts IA, chiffrement, facturation et suivi des écarts. Chaque alerte reste listée après lecture.") }}</p>
+<p><a class="petit-lien" href="/admin/notifications">{{ _("Historique des notifications poussées") }}</a></p></div>
 <section class="carte" aria-labelledby="t-alertes">
 <h2 id="t-alertes" class="vh">{{ _("Liste des alertes") }}</h2>
 <div class="defilement">

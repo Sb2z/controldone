@@ -10,7 +10,9 @@ en minuscules en base, libellés (composante, transitaire) rapprochés ici sur l
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import Any
 
 from controldone.model.enums import Composante
 from controldone.rapport.vue import LIBELLES_COMPOSANTE
@@ -20,7 +22,8 @@ from controldone.storage import listes_sql as requetes
 from controldone.storage.scope import TenantScope
 from controldone.web.listes import Page, Requete, normaliser, paginer
 
-__all__ = ["page_dossiers", "page_registre", "totaux_registre", "transitaires_registre"]
+__all__ = ["Indicateurs", "indicateurs", "page_dossiers", "page_registre", "totaux_registre",
+           "transitaires_registre"]
 
 
 def _mots(q: str | None) -> list[str]:
@@ -35,6 +38,38 @@ def page_dossiers(scope: TenantScope, req: Requete) -> tuple[Page, int]:
     client = scope.actor.est_client
     lignes = [ligne_dossier(d, cs, client=client) for d, cs in requetes.lignes_dossiers(scope, ids)]
     return paginer(lignes, req, total=total), total_client
+
+
+@dataclass
+class Indicateurs:
+    """Indicateurs d'un client pour les tableaux de bord (client et fiche du fondateur), calculés sur une lecture
+    en colonnes des constats courants visibles (``storage.listes_sql.constats_indicateurs``). Mêmes règles que
+    ``services.lecture.ligne_dossier`` et le rapport : totaux hors constats exclus (D-1319), montants en
+    ``Decimal``."""
+
+    dossiers: int
+    constats: int  # constats visibles de la version courante (rôle client : publiés)
+    proposes: int
+    certain: Decimal
+    a_verifier: Decimal
+    lignes: list[Any] = field(default_factory=list, repr=False)  # pour les graphiques
+
+
+def indicateurs(scope: TenantScope) -> Indicateurs:
+    lignes = requetes.constats_indicateurs(scope)
+    proposes = 0
+    certain = a_verifier = Decimal(0)
+    for _controle, niveau, statut, nature, montant, exclu, _cree, _tr in lignes:
+        if statut == "propose":
+            proposes += 1
+        if exclu or nature != "recouvrable" or not montant or montant <= 0:
+            continue
+        if niveau == "ecart_certain" and statut == "valide":
+            certain += montant
+        elif niveau == "a_verifier" and statut != "rejete":
+            a_verifier += montant
+    return Indicateurs(dossiers=requetes.compter_dossiers(scope), constats=len(lignes), proposes=proposes,
+                       certain=certain, a_verifier=a_verifier, lignes=lignes)
 
 
 def transitaires_registre(scope: TenantScope) -> dict[str, str]:

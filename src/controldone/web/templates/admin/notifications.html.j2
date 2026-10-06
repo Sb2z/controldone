@@ -1,0 +1,60 @@
+{% extends "base.html.j2" %}
+{% from "listes.html.j2" import nb_resultats, pagination %}
+{% block contenu %}
+<nav class="fil" aria-label="{{ _("Fil d'Ariane") }}"><a href="/admin/alertes">{{ _("Alertes") }}</a> › <span>{{ _("Notifications") }}</span></nav>
+<div class="titre-page"><h1>{{ _("Notifications") }}</h1>
+<p class="discret">{{ _("Alertes poussées hors de l'application (webhook, courriel) : une notification par type d'alerte et par jour. Rien de ce qui part ne vient d'un client : type, nombre, heure et lien vers les alertes.") }}</p></div>
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-config">
+  <h2 id="t-config">{{ _("Configuration") }}</h2>
+  {% if config.actif %}
+  <p><span class="badge b-valide">{{ _("Actives") }}</span> {{ _("Canaux configurés : {canaux}.", canaux=config.canaux|join(", ")) }}</p>
+  {% elif config.mode != "prod" %}
+  <p><span class="badge b-neutre">{{ _("Inactives") }}</span> {{ _("Mode {mode} : aucune notification n'est envoyée hors production.", mode=config.mode) }}</p>
+  {% else %}
+  <p><span class="badge b-alerte">{{ _("Inactives") }}</span> {{ _("Aucun canal configuré (variables CONTROLDONE_NOTIF_*).") }}</p>
+  {% endif %}
+  {% if config.types is not none %}<p class="discret">{{ _("Types notifiés : {types}.", types=config.types|join(", ")) }}</p>{% endif %}
+  {% if config.erreurs %}<ul class="liste-simple">{% for e in config.erreurs %}<li><span class="badge b-alerte">{{ _("Erreur de configuration") }}</span> <span lang="fr">{{ e }}</span></li>{% endfor %}</ul>{% endif %}
+  <p class="discret">{{ _("Configuration lue par le serveur web ; les envois sont faits par le planificateur (commande « controldone alertes notifier »), qui doit avoir les mêmes variables.") }}</p>
+</section>
+<section class="carte" aria-labelledby="t-canaux">
+  <h2 id="t-canaux">{{ _("État des canaux") }}</h2>
+  {% if canaux %}
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Canal") }}</th><th scope="col">{{ _("Dernier envoi réussi") }}</th><th scope="col">{{ _("Dernier échec") }}</th><th scope="col">{{ _("État") }}</th></tr></thead>
+    <tbody>
+    {% for c in canaux %}
+    <tr><th scope="row">{{ _("Webhook") if c.nom == "webhook" else (_("Courriel") if c.nom == "courriel" else c.nom) }}</th>
+      <td>{{ c.dernier_succes|date if c.dernier_succes else "—" }}</td><td>{{ c.dernier_echec|date if c.dernier_echec else "—" }}</td>
+      <td>{% if c.en_echec %}<span class="badge b-alerte">{{ _("En échec depuis le {date}", date=c.dernier_echec|date) }}</span>{% else %}<span class="badge b-valide">{{ _("OK") }}</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="vide">{{ _("Aucune notification envoyée pour l'instant.") }}</p>{% endif %}
+</section>
+</div>
+
+<section class="carte" id="historique" aria-labelledby="t-historique">
+  <h2 id="t-historique">{{ _("Historique") }}</h2>
+  {{ nb_resultats(p, req, _("notification"), _("notifications")) }}
+  <div class="defilement">
+  <table class="donnees">
+    <caption class="vh">{{ _("Historique des notifications") }}, {{ _("page {n} sur {total}", n=p.page, total=p.pages) }}</caption>
+    <thead><tr><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Type") }}</th><th scope="col" class="num">{{ _("Alertes") }}</th><th scope="col">{{ _("Canaux") }}</th><th scope="col">{{ _("État") }}</th><th scope="col" class="num">{{ _("Essais") }}</th></tr></thead>
+    <tbody>
+    {% for n in p.elements %}
+    <tr><td>{{ n.cree_le|date }}</td>
+      <td><span class="badge {{ 'b-alerte' if n.kind in ALERTES_GRAVES else 'b-neutre' }}">{{ _(libelle_alerte(n.kind)) }}</span><br><code class="discret">{{ n.kind }}</code></td>
+      <td class="num">{{ n.nombre }}</td>
+      <td>{% for c in n.canaux %}{{ _("Webhook") if c == "webhook" else (_("Courriel") if c == "courriel" else c) }}{% if not loop.last %}, {% endif %}{% else %}—{% endfor %}</td>
+      <td>{% if n.statut == "envoyee" %}<span class="badge b-valide">{{ _("Envoyée") }}</span> <span class="discret">{{ n.envoyee_le|date if n.envoyee_le else "" }}</span>{% else %}<span class="badge b-alerte">{{ _("Échec") }}</span>{% endif %}</td>
+      <td class="num">{{ n.essais }}</td></tr>
+    {% else %}<tr><td colspan="6" class="vide">{{ _("Aucune notification.") }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {{ pagination(p, req, _("Pages de l'historique des notifications")) }}
+</section>
+{% endblock %}

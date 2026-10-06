@@ -4332,3 +4332,33 @@ mesurer (en totaux).
 7. **Rapports en anglais : non pour l'instant (B).**
 8. **Alertes : notification sur téléphone (B)**, de type ntfy.
 9. **Mise en ligne : procédure pas à pas (A)**, exécutée par le fondateur (`docs/MISE_EN_LIGNE.md`).
+
+### D-4501 — Procédure de mise en ligne pas à pas (décision 9A)
+
+- `docs/MISE_EN_LIGNE.md` : procédure du fondateur, en français, de la commande de la VM jusqu'à l'ouverture. Rien n'a
+  été acheté, créé ni déployé.
+  - Comparatif des hébergeurs relevé le 2026-10-06 sur les pages officielles, sources datées en annexe : Scaleway,
+    OVHcloud, Hetzner et Infomaniak, comparés sur le lieu des données, le DPA, le chiffrement du disque, PostgreSQL
+    géré, les instantanés, le stockage objet et le prix d'une VM 2 vCPU / 4–8 Go. Un chiffre non vérifié est
+    marqué comme tel ; aucun n'est estimé.
+  - DNS : A/AAAA, CAA (Let's Encrypt et ZeroSSL), domaine sans courriel (null MX, SPF `-all`, DMARC `reject`).
+  - Serveur : compte `cdadmin` sans accès root par SSH, pare-feu 22/80/443, `unattended-upgrades` sans redémarrage
+    automatique, volume LUKS (RS-21), Docker depuis le dépôt officiel et désactivé au démarrage.
+  - Application : chaque variable de `.env.prod` expliquée ; service ponctuel `migrer` ; TLS par Caddy ;
+    `creer-fondateur` et TOTP ; contrôles de santé.
+  - Sauvegardes et alertes : exercice `controldone sauvegarde exercice` (équivalent conteneur de
+    `make restauration-test`) ; copie rclone vers Object Storage `fr-par` ; essai ntfy (`alertes essai`).
+  - Stripe en réel, pages juridiques, liste des sous-traitants ultérieurs, liste de contrôle d'ouverture, retour
+    arrière et routine mensuelle.
+- **Recommandation : Scaleway Paris (PAR-1)**, DEV1-M (≈ 14,74 €/mois HT) + volume bloc chiffré par LUKS + Object
+  Storage fr-par, soit de l'ordre de 20 à 25 € HT/mois hors IA.
+  - Pourquoi : données en France chez une société française ; transfert vers l'UE admis pour les clients suisses ;
+    VM, volume, stockage S3 et PostgreSQL géré dans une seule console et sous un seul DPA ; facturation à l'heure.
+  - Alternatives : Infomaniak si la clientèle est surtout suisse ; Hetzner et OVHcloud VPS, moins chers.
+- Données au repos : LUKS par nos soins quel que soit l'hébergeur, avec un fichier conteneur si le VPS n'a pas de
+  volume séparé, et déverrouillage manuel après redémarrage (D-3605 vérifie le chiffrement au démarrage). ntfy
+  ne reçoit aucune donnée client (D-3502) : il figure au registre, pas dans le DPA client.
+- **Écarté** :
+  - fixer un prix non vérifié (IPv4 Scaleway/Hetzner, stockage objet hors Scaleway, entité Stripe) ;
+  - le redémarrage automatique des mises à jour, incompatible avec le déverrouillage manuel du volume ;
+  - `make` et un venv sur le serveur : l'exercice tourne dans l'image.

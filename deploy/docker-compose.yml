@@ -5,8 +5,8 @@
 #   ln -s .env.prod .env                                     # interpolation (domaine, chemins) par compose
 #   docker compose up -d --build
 #
-# Services : web (uvicorn, derrière caddy), worker (file de tâches), scheduler (relevés, agents, purge,
-# sauvegardes), caddy (HTTPS automatique). Seul caddy publie des ports (80, 443).
+# Services : migrer (ponctuel : schéma et migrations, sauvegarde d'abord), web (uvicorn, derrière caddy), worker
+# (file de tâches), scheduler (relevés, agents, purge, sauvegardes), caddy (HTTPS automatique). Seul caddy publie des ports (80, 443).
 # Données : CONTROLDONE_HOST_VAR (base SQLite + coffre chiffré) et CONTROLDONE_HOST_BACKUPS (archives
 # chiffrées), sur le volume chiffré monté en /srv/controldone.
 
@@ -43,6 +43,24 @@ x-app: &app
       max-file: "5"
 
 services:
+  # Service PONCTUEL (D-4102) : crée le schéma d'une base neuve, ou applique les migrations en attente après une
+  # sauvegarde chiffrée vers /backups (abandon si la sauvegarde échoue), puis s'arrête (code 0). web, worker et
+  # scheduler ne démarrent qu'après son succès : plus de redémarrages en boucle pendant une mise à jour. S'il
+  # échoue, « docker compose up » s'arrête avec son message (docker compose logs migrer).
+  migrer:
+    <<: *app
+    command: ["controldone", "migrer"]
+    restart: "no"
+    environment:
+      CONTROLDONE_TMP_DIR: /app/var/tmp
+      TMPDIR: /app/var/tmp
+      BACKUP_DIR: /backups
+    volumes:
+      - ${CONTROLDONE_HOST_VAR:-/srv/controldone/var}:/app/var
+      - ${CONTROLDONE_HOST_BACKUPS:-/srv/controldone/backups}:/backups
+    healthcheck:
+      disable: true
+
   web:
     <<: *app
     command: ["controldone", "serve", "--host", "0.0.0.0", "--port", "8000",
@@ -50,7 +68,12 @@ services:
               "--forwarded-allow-ips", "172.30.57.10"]
     expose:
       - "8000"
-    # Healthcheck hérité de l'image (GET /sante).
+    # Healthcheck hérité de l'image (GET /sante). Migration encore en attente (service migrer lancé à part) :
+    # le web attend sans écouter (sonde « unhealthy », message dans ses journaux), démarre dès la migration
+    # faite, sinon sort une seule fois (code 3) après CONTROLDONE_MIGRATION_ATTENTE_S (600 s).
+    depends_on:
+      migrer:
+        condition: service_completed_successfully
     stop_grace_period: 30s
 
   worker:
@@ -59,8 +82,10 @@ services:
     healthcheck:
       disable: true
     depends_on:
+      migrer:
+        condition: service_completed_successfully   # schéma créé ou migré par le service ponctuel
       web:
-        condition: service_healthy   # le schéma est créé par web (--init-schema)
+        condition: service_healthy
     # Plus long que la durée d'un lot : arrêt propre (SIGTERM) sans job interrompu.
     stop_grace_period: 300s
 
@@ -71,13 +96,15 @@ services:
       CONTROLDONE_TMP_DIR: /app/var/tmp   # (la fusion YAML remplace le bloc « environment » commun)
       TMPDIR: /app/var/tmp
       BACKUP_DIR: /backups
-      SCHED_BACKUP_HHMM: "${SCHED_BACKUP_HHMM:-0215}"
+      SCHED_BACKUP_HHMM: "${SCHED_BACKUP_HHMM:-0215,1415}"
     volumes:
       - ${CONTROLDONE_HOST_VAR:-/srv/controldone/var}:/app/var
       - ${CONTROLDONE_HOST_BACKUPS:-/srv/controldone/backups}:/backups
     healthcheck:
       disable: true
     depends_on:
+      migrer:
+        condition: service_completed_successfully
       web:
         condition: service_healthy
     stop_grace_period: 60s

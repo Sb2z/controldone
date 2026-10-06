@@ -9,7 +9,7 @@ Cycle d'une facture (aucun envoi automatique) :
 3. **Émission** (``emettre``) : numéro suivant de la série (continu, chronologique), TVA, mentions
    obligatoires, XML CII EN 16931 validé par le XSD, PDF/A-3 Factur-X ; la facture est **immuable** ;
 4. **Dépôt** (``deposer``) : envoi de l'action par ``ExpediteurFacture`` = dépôt sur la PA partenaire
-   (bouchon par défaut) et copie dans ``<data_dir>/outbox_envoyee/facture_emise/``.
+   (bouchon par défaut) et copie **chiffrée** dans ``<data_dir>/outbox_envoyee/facture_emise/`` (D-4106).
 
 Une correction passe par un **avoir** (``proposer_avoir`` -> même cycle, série ``AV``).
 """
@@ -88,8 +88,10 @@ class ExpediteurFacture:
 
     nom = "plateforme_agreee"
 
-    def __init__(self, pa: PlateformeAgreee, facture: FactureEmise, dossier_sorties: Path | None) -> None:
+    def __init__(self, pa: PlateformeAgreee, facture: FactureEmise, dossier_sorties: Path | None,
+                 cles: list[bytes] | None = None) -> None:
         self.pa, self.facture, self.dossier_sorties = pa, facture, dossier_sorties
+        self.cles = cles
         self.accuse: AccuseDepot | None = None
 
     def envoyer(self, action: ActionSortante) -> str:
@@ -99,18 +101,21 @@ class ExpediteurFacture:
         self.accuse = self.pa.deposer_facture(FactureADeposer(
             numero=f.numero, facture_id=f.id, siren_acheteur=str((f.contenu.get("acheteur") or {}).get("siren", "")),
             contenu=f.pdf))
-        if self.dossier_sorties is not None:
-            d = Path(self.dossier_sorties) / "facture_emise"
-            d.mkdir(parents=True, exist_ok=True, mode=0o700)
-            (d / f"{_NOM_RE.sub('_', f.numero)}.pdf").write_bytes(f.pdf)
+        if self.dossier_sorties is not None:  # copie locale chiffrée au repos (D-4106) : facture_emise/<n°>.pdf.enc
+            from controldone.storage.traces_envoi import TracesEnvoi
+
+            traces = (TracesEnvoi(self.dossier_sorties, self.cles) if self.cles
+                      else TracesEnvoi.depuis_env(self.dossier_sorties))
+            traces.ecrire("facture_emise", f"{_NOM_RE.sub('_', f.numero)}.pdf", f.pdf)
         return f"pa:{self.pa.nom}:{self.accuse.identifiant_pa}"
 
 
 class ServiceFacturation:
     def __init__(self, db: Database, *, catalogue: CatalogueOffres | None = None, pa: PlateformeAgreee | None = None,
                  paiement: FournisseurPaiement | None = None, dossier_sorties: Path | str | None = None,
-                 prod: bool | None = None) -> None:
+                 prod: bool | None = None, cles_maitresses: list[bytes] | None = None) -> None:
         self.db = db
+        self.cles_maitresses = cles_maitresses  # traces chiffrées (défaut : clés de l'environnement, D-4106)
         self.catalogue = catalogue or charger_offres()
         self.pa = pa or PlateformeAgreeeBouchon()
         self._paiement = paiement
@@ -412,7 +417,7 @@ class ServiceFacturation:
         f = stock.facture_par_outbox(self.db, action_id)
         if f is None:
             raise EmissionRefusee("facture non émise : émettre avant de déposer")
-        exp = ExpediteurFacture(self.pa, f, self.dossier_sorties)
+        exp = ExpediteurFacture(self.pa, f, self.dossier_sorties, self.cles_maitresses)
         envoyee = FileSortante(self.db).envoyer(action_id, exp, acteur)
         if exp.accuse is not None:
             stock.enregistrer_statut_pa(self.db, facture_id=f.id, numero=f.numero, identifiant_pa=exp.accuse.identifiant_pa,

@@ -58,6 +58,11 @@ class FileVault:
         self._cles = list(cles_maitresses)
         self._cache: dict[str, MultiFernet] = {}
 
+    @property
+    def cles_maitresses(self) -> list[bytes]:
+        """Clés maîtresses du coffre (la première chiffre) : mêmes clés pour les traces d'envoi (D-4106)."""
+        return list(self._cles)
+
     @classmethod
     def depuis_env(cls, racine: Path | str | None = None, *, mode: str | None = None) -> FileVault:
         from controldone.config import get_settings

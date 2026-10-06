@@ -11,6 +11,9 @@
 #   séparé de l'étape « build » : aucun téléchargement non vérifié, aucun outil de construction dans l'image.
 # - Système de fichiers en lecture seule possible : seules /app/var (volume), /backups (volume) et /tmp (tmpfs)
 #   sont écrits. Le bytecode est précompilé à la construction.
+# - Pilote PostgreSQL pg8000 (extra « postgres ») figé dans requirements.lock ; client PostgreSQL
+#   (pg_dump / pg_restore, version majeure PG_CLIENT_MAJOR, défaut 16) pour la sauvegarde PostgreSQL (D-4101) :
+#   docker build --build-arg PG_CLIENT_MAJOR=17 … pour un serveur 17.
 # - Installation « éditable » volontaire : config/ et ref/ sont lus relativement à la racine du dépôt
 #   (controldone.config.RACINE_DEPOT), ici /app.
 
@@ -60,11 +63,28 @@ LABEL org.opencontainers.image.title="ControlDOne" \
       org.opencontainers.image.version="2.0.0" \
       org.opencontainers.image.description="Contrôle de cohérence des documents d'import (web, worker, planificateur)"
 
-# OCR : tesseract + langues fra, eng et osd (orientation). Aucune recommandation, listes apt supprimées.
+# Version majeure du client PostgreSQL (pg_dump / pg_restore) : celle du SERVEUR de production (pg_dump refuse
+# un serveur plus récent que lui). Vide = image sans client PostgreSQL (SQLite seulement). Paquet du dépôt officiel
+# PGDG (apt.postgresql.org), authentifié par sa clé versionnée dans deploy/pgdg.asc (empreinte vérifiée
+# B97B 0AFC AA1A 47F0 44F2 44A0 7FCC 7D46 ACCC 4CF8) : aucune clé téléchargée à la construction (D-4101).
+ARG PG_CLIENT_MAJOR=16
+COPY deploy/pgdg.asc /usr/share/keyrings/pgdg.asc
+
+# OCR : tesseract + langues fra, eng et osd (orientation) ; client PostgreSQL (sauvegarde, D-3501).
+# Aucune recommandation, listes apt supprimées.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-osd \
         tini ca-certificates \
+ && if [ -n "${PG_CLIENT_MAJOR}" ]; then \
+        . /etc/os-release \
+     && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+          > /etc/apt/sources.list.d/pgdg.list \
+     && apt-get update \
+     && apt-get install -y --no-install-recommends "postgresql-client-${PG_CLIENT_MAJOR}" \
+     && ln -s "/usr/lib/postgresql/${PG_CLIENT_MAJOR}/bin" /usr/lib/postgresql/client-bin \
+     && /usr/lib/postgresql/client-bin/pg_dump --version; \
+    fi \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* \
  && python -m pip uninstall -y -q setuptools wheel pip
 # (pip, setuptools et wheel de l'interpréteur de base retirés : aucun gestionnaire de paquets Python à l'exécution,
@@ -89,6 +109,8 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     CONTROLDONE_DATA_DIR=/app/var \
     CONTROLDONE_DATABASE_URL=sqlite:////app/var/controldone.db \
     CONTROLDONE_PYTHON=/opt/venv/bin/python \
+    CONTROLDONE_PG_DUMP=/usr/lib/postgresql/client-bin/pg_dump \
+    CONTROLDONE_PG_RESTORE=/usr/lib/postgresql/client-bin/pg_restore \
     BACKUP_DIR=/backups
 
 WORKDIR /app

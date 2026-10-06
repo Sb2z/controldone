@@ -55,8 +55,10 @@ def test_cycle_complet_approbation_et_envoi(monde, file, expediteur):
         file.approuver(a.id, FONDATEUR)
     a = file.envoyer(a.id, expediteur, FONDATEUR)
     assert a.statut is StatutAction.envoye and a.reference_envoi.startswith("fichier:")
-    fichiers = list(expediteur.racine.glob("rapport_publication/*.json"))
-    assert len(fichiers) == 1 and json.loads(fichiers[0].read_text())["payload"] == PROPRE
+    fichiers = list(expediteur.racine.glob("rapport_publication/*"))
+    assert len(fichiers) == 1 and fichiers[0].name.endswith(".json.enc")  # chiffrée au repos (D-4106)
+    assert b"Rapport de diagnostic" not in fichiers[0].read_bytes()
+    assert json.loads(expediteur.traces.lire(fichiers[0]))["payload"] == PROPRE
     with pytest.raises(TransitionInterdite):
         file.envoyer(a.id, expediteur, FONDATEUR)  # pas de double envoi
     assert _audits(monde) == ["outbox_proposer", "outbox_approuver", "outbox_envoyer"]
@@ -84,7 +86,7 @@ def test_correction_passe_les_garde_fous(monde, file, expediteur):
     assert a.statut is StatutAction.corrige and a.payload == INTERDIT and a.payload_corrige == corrige
     assert a.motif_blocage is None
     a = file.envoyer(a.id, expediteur, FONDATEUR)
-    envoye = json.loads(next(expediteur.racine.glob("**/*.json")).read_text())
+    envoye = json.loads(expediteur.traces.lire(next(expediteur.racine.glob("**/*.json.enc"))))
     assert envoye["payload"] == corrige and envoye["corrige"] is True
 
 
@@ -167,7 +169,7 @@ def test_garde_fous_reverifies_a_l_envoi(monde, file, expediteur, monkeypatch):
     monkeypatch.setattr(svc, "verifier_textes", lambda contenu: ["liste enrichie entre-temps"])
     with pytest.raises(ActionBloquee):
         file.envoyer(a.id, expediteur, FONDATEUR)
-    assert not expediteur.racine.exists() or not list(expediteur.racine.glob("**/*.json"))
+    assert not expediteur.racine.exists() or not list(expediteur.racine.glob("**/*.json*"))
 
 
 def test_aucun_envoi_reel_dans_le_code():

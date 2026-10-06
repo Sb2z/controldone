@@ -25,6 +25,7 @@ __all__ = [
     "changer_mot_de_passe",
     "cle_api_par_prefixe",
     "creer_utilisateur",
+    "definir_langue",
     "desactiver_utilisateur",
     "enregistrer_totp",
     "marquer_connexion",
@@ -45,6 +46,7 @@ class CompteInfo:
     totp_secret_chiffre: str | None
     totp_dernier_pas: int | None
     actif: bool
+    langue: str | None = None
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,7 @@ class CleApiInfo:
 
 def _info(u: User) -> CompteInfo:
     return CompteInfo(u.id, u.email, u.role, u.mot_de_passe_hash, u.totp_secret_chiffre, u.totp_dernier_pas,
-                      u.actif)
+                      u.actif, u.langue)
 
 
 def _email(email: str) -> str:
@@ -167,6 +169,27 @@ def changer_mot_de_passe(db: Database, user_id: str, nouveau_hash: str, *, acteu
         u.mot_de_passe_hash = nouveau_hash
         journaliser(s, actor=acteur.id, role=acteur.role.value, action="changer_mot_de_passe",
                     tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip)
+
+
+#: Langues de l'interface acceptées pour un compte (``web.i18n.LANGUES``).
+LANGUES_COMPTE = ("fr", "en")
+
+
+def definir_langue(db: Database, user_id: str, langue: str | None, *, acteur: Acteur) -> None:
+    """Langue préférée de l'interface (``None`` : aucune préférence) : l'utilisateur lui-même seulement."""
+    if acteur.id != user_id:
+        raise AccesRefuse("préférence de langue : modification refusée")
+    if langue is not None and langue not in LANGUES_COMPTE:
+        raise ValueError("langue inconnue")
+    with db.transaction_systeme() as s:
+        u = s.get(User, user_id)
+        if u is None:
+            raise AccesRefuse("introuvable")
+        if u.langue != langue:
+            u.langue = langue
+            journaliser(s, actor=acteur.id, role=acteur.role.value, action="choisir_langue",
+                        tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip,
+                        details={"langue": langue})
 
 
 def desactiver_utilisateur(db: Database, user_id: str, *, acteur: Acteur, actif: bool = False) -> None:

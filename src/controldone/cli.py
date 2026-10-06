@@ -89,8 +89,9 @@ def _serve(args: argparse.Namespace) -> int:
         plateforme.db.creer_schema(migrer=False)
     from controldone.storage import SchemaPerime
 
-    try:  # colonnes ajoutées par une version plus récente sans migration : arrêt explicite (D-1322)
-        plateforme.db.exiger_schema_a_jour()
+    try:  # colonnes ajoutées par une version plus récente sans migration : arrêt explicite (D-1322) ; migration
+        # en attente en production : attente du service « migrer », puis arrêt unique (D-4102)
+        plateforme.db.attendre_schema_a_jour(journal=lambda m: print(f"ControlDOne : {m}", file=sys.stderr, flush=True))
     except SchemaPerime as exc:
         print(f"ControlDOne : {exc}", file=sys.stderr)
         return 3
@@ -256,6 +257,51 @@ def _alertes(args: argparse.Namespace) -> int:
     return 1 if rapport.echecs else 0
 
 
+def _llm(args: argparse.Namespace) -> int:
+    """État de la lecture par modèle de langage (D-4006). ``verifier`` : clé présente ? puis **un** appel minimal
+    (quelques jetons, < 0,01 EUR) seulement si la clé est présente et sans ``--sans-appel``. ``couts`` : coût du
+    mois et plafond de chaque client (fondateur). La clé n'est jamais affichée."""
+    from controldone.config import get_settings
+    from controldone.extract.llm import verifier_cle
+
+    s = get_settings()
+    if args.action == "verifier":
+        etat = verifier_cle(s, appel=not args.sans_appel)
+        print(f"clé Anthropic : {'présente' if etat['cle_presente'] else 'absente'}"
+              + ("" if etat["cle_presente"] else " (ANTHROPIC_API_KEY ou CONTROLDONE_ANTHROPIC_API_KEY dans .env) "
+                 "— extraction 100 % déterministe"))
+        print(f"modèle : {etat['modele']} ; effort : {etat['effort']} ; tarifs du {etat['date_tarifs']}"
+              + ("" if etat["tarif_connu"] else " (modèle absent de config/llm_tarifs.yaml : tarif le plus élevé)"))
+        appel = etat["appel"]
+        if appel is None:
+            print("appel de test : non effectué")
+            return 0 if etat["cle_presente"] or args.sans_appel else 1
+        if not appel["ok"]:
+            print(f"appel de test : ÉCHEC ({appel.get('erreur') or appel.get('stop_reason')}"
+                  + (f", HTTP {appel['statut']}" if appel.get("statut") else "") + ")")
+            return 1
+        print(f"appel de test : OK — modèle servi {appel['modele_servi']}, {appel['jetons_entree']} + "
+              f"{appel['jetons_sortie']} jetons, {appel['cout_eur']} EUR, {appel['duree_s']} s")
+        return 0
+    from controldone.auth.roles import Acteur, Role
+    from controldone.jobs.couts import etat_plafond, mois_courant
+    from controldone.storage.db import Database
+
+    db = Database()
+    try:
+        with db.operateur(Acteur("cli:llm_couts", Role.fondateur)) as op:  # lecture transversale journalisée
+            clients = op.lister_clients()
+        print(f"mois {mois_courant()} — clé {'présente' if s.llm_disponible else 'absente'}")
+        for t in clients:
+            e = etat_plafond(t.id, db=db)
+            etat = "désactivé (client)" if e.desactive else ("ARRÊT 100 %" if e.arret else
+                                                             ("alerte 80 %" if e.alerte else "actif"))
+            print(f"  {t.id} : {e.cout} / {e.plafond} EUR — {etat}")
+    finally:
+        db.fermer()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="controldone", description="ControlDOne — contrôle technique de cohérence "
                                  "des documents d'import.")
@@ -320,6 +366,12 @@ def main(argv: list[str] | None = None) -> int:
     al = sous.add_parser("alertes", help="notifications poussées des alertes : notifier | essai | etat")
     al.add_argument("action", choices=["notifier", "essai", "etat"])
     al.set_defaults(fn=_alertes)
+
+    ll = sous.add_parser("llm", help="lecture par modèle de langage : verifier (clé + un appel minimal) | couts")
+    ll.add_argument("action", choices=["verifier", "couts"])
+    ll.add_argument("--sans-appel", dest="sans_appel", action="store_true",
+                    help="verifier : seulement la présence de la clé, aucun appel")
+    ll.set_defaults(fn=_llm)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s")

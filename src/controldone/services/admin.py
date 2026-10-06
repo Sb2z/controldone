@@ -14,6 +14,7 @@ import io
 import json
 import re
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -320,7 +321,11 @@ def tableau_de_bord(plateforme: Plateforme, fondateur: Acteur) -> dict[str, Any]
     return {"mois": mois, "clients": lignes, "totaux": totaux, "alertes": alertes_l}
 
 
-def fiche_client(plateforme: Plateforme, fondateur: Acteur, tenant_id: str) -> dict[str, Any]:
+def fiche_client(plateforme: Plateforme, fondateur: Acteur, tenant_id: str, *,
+                 lire_dossiers: Callable[[TenantScope], Any] | None = None) -> dict[str, Any]:
+    """Fiche d'un client (une seule ouverture journalisée du périmètre). ``lire_dossiers`` : lecture des dossiers
+    faite dans ce même périmètre (l'interface y passe sa page et ses indicateurs calculés en SQL, bloc I3) ;
+    défaut : liste complète (``lister_dossiers``)."""
     _fondateur(fondateur)
     with plateforme.db.operateur(fondateur) as op:
         scope = op.client(tenant_id, "consultation de la fiche client", lecture=True)
@@ -330,7 +335,7 @@ def fiche_client(plateforme: Plateforme, fondateur: Acteur, tenant_id: str) -> d
         transitaires = scope.lister(Transitaire, ordre=Transitaire.nom)
         grilles = scope.lister(Grille, ordre=Grille.grille_id)
         cles = scope.lister(CleApi, ordre=CleApi.cree_le)
-        dossiers = lister_dossiers(scope)
+        dossiers = lire_dossiers(scope) if lire_dossiers is not None else lister_dossiers(scope)
         lots = lister_lots(scope, limite=20)
         cout = scope.cout_ia(mois=mois_courant())
         plafond = etat_plafond(scope).plafond

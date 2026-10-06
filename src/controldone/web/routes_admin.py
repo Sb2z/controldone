@@ -32,6 +32,7 @@ from controldone.web.graphes import donnees_fondateur
 from controldone.web.i18n import N_
 from controldone.web.i18n import traduire as _
 from controldone.web.listes import decalage, lire_requete, paginer
+from controldone.web.listes_sql import indicateurs, page_dossiers
 from controldone.web.listes_vues import (
     NIVEAUX_VALIDATION,
     PARAMS_DOSSIERS,
@@ -41,7 +42,7 @@ from controldone.web.listes_vues import (
     TRIS_JOBS,
     TRIS_JOURNAL,
     TRIS_VALIDATION,
-    filtrer_dossiers,
+    alerte_du_bandeau,
     libelles_controles,
     params_jobs,
     params_journal,
@@ -89,7 +90,31 @@ def tableau(request: Request) -> Response:
     donnees = svc_admin.tableau_de_bord(pf, f)
     graphes = donnees_fondateur({c.id: c.stats for c in donnees["clients"]})
     return page(request, "admin/tableau.html.j2", titre="Tableau de bord", nav="tableau", d=donnees,
-                graphes=graphes, traitements=_traitements(pf), demo=any(c.demo for c in donnees["clients"]))
+                graphes=graphes, traitements=_traitements(pf), demo=any(c.demo for c in donnees["clients"]),
+                bandeau=_bandeau(pf, f))
+
+
+def _bandeau(pf: Plateforme, f: Acteur) -> list[dict[str, Any]]:
+    """Alertes graves non lues (sauvegardes, volume non chiffré, plafond IA, tâche morte), une ligne par type :
+    nombre et date de la plus récente ; disparaît quand elles sont marquées lues (bloc I3)."""
+    with pf.db.operateur(f) as op:
+        groupes = op.alertes_non_lues_par_type()
+    lignes = [{"kind": k, "nombre": n, "dernier": dernier} for k, (n, dernier) in groupes.items()
+              if alerte_du_bandeau(k)]
+    return sorted(lignes, key=lambda x: (not x["kind"].startswith("sauvegarde_"), x["kind"]))
+
+
+@routeur.post("/alertes/bandeau/lues")
+def bandeau_lu(request: Request) -> Response:
+    """« Marquer comme lu » du bandeau : un type (``kind``) ou tous les types du bandeau (``kind`` = ``tous``)."""
+    f = _fondateur(request)
+    form = formulaire_sync(request)
+    kind = _s(form, "kind", 64)
+    with _pf(request).db.operateur(f) as op:
+        presents = [k for k in op.alertes_non_lues_par_type() if alerte_du_bandeau(k)]
+        cibles = presents if kind == "tous" else [k for k in presents if k == kind]
+        n = op.marquer_alertes_lues(cibles)
+    return redirection(request, "/admin", message="{n} alerte(s) marquée(s) comme lue(s).", n=n)
 
 
 # --- clients ------------------------------------------------------------------------------------------------
@@ -117,13 +142,21 @@ def creer_client(request: Request) -> Response:
 def _fiche(request: Request, f: Acteur, tenant_id: str, **extra: Any) -> Response:
     pf = _pf(request)
     req = lire_requete(request, PARAMS_DOSSIERS, TRIS_DOSSIERS, "reference", ancre="#dossiers")
-    d = svc_admin.fiche_client(pf, f, tenant_id)
-    p = paginer(filtrer_dossiers(d["dossiers"], req), req)
+    # dossiers : page filtrée en SQL et indicateurs agrégés, dans le périmètre ouvert par la fiche (bloc I3)
+    d = svc_admin.fiche_client(pf, f, tenant_id,
+                               lire_dossiers=lambda scope: (page_dossiers(scope, req)[0], indicateurs(scope)))
+    p, ind = d["dossiers"]
     sorties = FileSortante(pf.db).lister(f, tenant_id=tenant_id)
     return page(request, "admin/client.html.j2", titre=d["info"]["raison_sociale"], nav="clients", c=d, p=p, req=req,
-                statuts=STATUTS_DOSSIER,
+                ind=ind, ratio_ia=_ratio(d["cout_ia"], d["plafond"]), statuts=STATUTS_DOSSIER,
                 sorties=list(reversed(sorties))[:30], libelles_sortie=LIBELLES_SORTIE, libelles_lot=LIBELLES_LOT,
                 demo=d["info"]["demo"], **extra)
+
+
+def _ratio(cout: Decimal, plafond: Decimal) -> int:
+    """Part du plafond IA consommée, en pour cent entiers ; plafond nul : 100 (aucun appel autorisé, comme
+    ``jobs.couts.EtatPlafond.arret``)."""
+    return int(cout / plafond * 100) if plafond > 0 else 100
 
 
 @routeur.get("/clients/{tenant_id}")
@@ -626,6 +659,20 @@ def alertes(request: Request) -> Response:
         liste = [{"id": a.id, "kind": a.kind, "tenant_id": a.tenant_id, "message": a.message, "cree_le": a.cree_le,
                   "lue_le": a.lue_le} for a in op.alertes(non_lues=False)]
     return page(request, "admin/alertes.html.j2", titre="Alertes", nav="alertes", alertes=list(reversed(liste)))
+
+
+@routeur.get("/notifications")
+def notifications(request: Request) -> Response:
+    """Historique des notifications poussées (une par type d'alerte et par jour) et état des canaux (bloc I3)."""
+    from controldone.web import notifications_vues as nv
+
+    f = _fondateur(request)
+    pf = _pf(request)
+    req = lire_requete(request, {}, ("-date",), "-date", ancre="#historique")
+    liste, total = _page_sql(req, lambda dec: nv.historique(pf, f, decalage=dec, limite=req.taille))
+    recentes, _total = nv.historique(pf, f, decalage=0, limite=200)
+    return page(request, "admin/notifications.html.j2", titre="Notifications", nav="alertes", req=req,
+                p=paginer(liste, req, total=total), canaux=nv.etat_canaux(recentes), config=nv.resume_config())
 
 
 @routeur.post("/alertes/{alerte_id}/lue")

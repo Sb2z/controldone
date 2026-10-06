@@ -69,7 +69,10 @@ def test_rotation_7_jours_4_semaines(tmp_path):
     supprimes = rotation(tmp_path)
     restants = sorted(p.name for p in tmp_path.glob("controldone-*"))
     jours = {n[12:20] for n in restants}
-    assert len(restants) <= 11 and len(supprimes) == 60 - len(restants)
+    assert len(restants) <= 13 and len(supprimes) == 60 - len(restants)
+    # deux sauvegardes par jour (D-4105) : les 4 plus récentes (deux jours) sont toutes conservées
+    assert {f"controldone-{(debut - timedelta(hours=12 * i)).strftime('%Y%m%dT%H%M%SZ')}.tar.gz.enc"
+            for i in range(4)} <= set(restants)
     assert {(debut - timedelta(days=i)).strftime("%Y%m%d") for i in range(7)} <= jours
     semaines = {datetime.strptime(n[12:20], "%Y%m%d").isocalendar()[:2] for n in restants}
     assert len(semaines) >= 4

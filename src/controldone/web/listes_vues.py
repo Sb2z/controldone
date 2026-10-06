@@ -15,6 +15,7 @@ from controldone.web.listes import Param, Requete, contient, montant_dans, trier
 
 __all__ = [
     "ALERTES_GRAVES",
+    "alerte_du_bandeau",
     "FAMILLES",
     "LIBELLES_ALERTES",
     "NIVEAUX_VALIDATION",
@@ -126,6 +127,15 @@ LIBELLES_ALERTES = {
 ALERTES_GRAVES = frozenset({"job_mort", "cout_ia_plafond", "sauvegarde_echec", "sauvegarde_verification_echec",
                             "sauvegarde_absente", "sauvegarde_hors_site_echec", "volume_non_chiffre",
                             "paiement_echoue"})
+
+
+#: Alertes affichées en bandeau sur le tableau de bord du fondateur tant qu'elles ne sont pas lues (bloc I3) :
+#: sauvegardes (tout type ``sauvegarde_*``), volume non chiffré, plafond IA atteint, tâche morte.
+ALERTES_BANDEAU = frozenset({"volume_non_chiffre", "cout_ia_plafond", "job_mort"})
+
+
+def alerte_du_bandeau(kind: str) -> bool:
+    return kind.startswith("sauvegarde_") or kind in ALERTES_BANDEAU
 
 
 def libelle_alerte(kind: str) -> str:

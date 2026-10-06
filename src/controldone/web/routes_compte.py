@@ -1,5 +1,9 @@
-"""Compte de l'utilisateur connecté : sessions actives (« fermer mes autres sessions », D-3804) et langue de
-l'interface (D-3803).
+"""Compte de l'utilisateur connecté : page « Mon compte » (langue de l'interface enregistrée sur le compte, bloc
+I3), sessions actives (« fermer mes autres sessions », D-3804) et choix de langue (D-3803).
+
+Langue : le cookie ``cd_langue`` reste la préférence du navigateur (pages sans session, connexion) ; pour un
+utilisateur connecté, le choix est **aussi** enregistré sur le compte (``users.langue``) et reposé dans le cookie à
+chaque connexion, donc suivi d'un navigateur à l'autre.
 
 Les sessions viennent de l'API du bloc sécurité (``GestionnaireSessions.sessions_actives``,
 ``fermer_session``, ``fermer_autres_sessions``, D-3603). Une session est désignée dans la page par une
@@ -17,9 +21,10 @@ from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import Response
 
+from controldone.storage.comptes import definir_langue, utilisateur
 from controldone.web.i18n import COOKIE_LANGUE, LANGUES
 from controldone.web.rendu import page, redirection, retour_sur
-from controldone.web.securite import EtatSecurite, acteur_de, formulaire_sync
+from controldone.web.securite import EtatSecurite, NonConnecte, acteur_de, formulaire_sync
 
 routeur = APIRouter()
 
@@ -92,18 +97,69 @@ def fermer_une(request: Request, ref: str) -> Response:
     return redirection(request, "/compte/sessions", message="Session fermée.")
 
 
+def poser_langue(request: Request, reponse: Response, langue: str) -> None:
+    """Cookie de préférence de langue (un an, ``__Host-`` en production) ; la réponse en cours (message flash)
+    suit déjà la langue choisie."""
+    request.state.langue = langue
+    etat = _etat(request)
+    nom = ("__Host-" if etat.prod else "") + COOKIE_LANGUE
+    reponse.set_cookie(nom, langue, max_age=DUREE_LANGUE_S, httponly=True, secure=etat.cookie["secure"],
+                       samesite="lax", path="/")
+
+
+def langue_du_compte(request: Request, user_id: str) -> str | None:
+    """Langue enregistrée sur le compte (``None`` : aucune préférence ; lue à la connexion)."""
+    compte = utilisateur(request.app.state.plateforme.db, user_id)
+    lg = compte.langue if compte is not None else None
+    return lg if lg in LANGUES else None
+
+
+def _enregistrer(request: Request, langue: str) -> bool:
+    """Enregistre la langue sur le compte connecté ; ``False`` sans session valide."""
+    if getattr(request.state, "session", None) is None:
+        return False
+    try:
+        acteur = acteur_de(request)
+    except NonConnecte:
+        return False
+    definir_langue(request.app.state.plateforme.db, acteur.id, langue, acteur=acteur)
+    return True
+
+
 @routeur.post("/preferences/langue")
 def choisir_langue(request: Request) -> Response:
-    """Langue de l'interface (cookie de préférence) ; formulaire avec jeton CSRF, connecté ou non."""
+    """Langue de l'interface (bouton FR/EN de l'en-tête) ; formulaire avec jeton CSRF, connecté ou non. Connecté :
+    le choix est aussi enregistré sur le compte."""
     form = formulaire_sync(request)
     langue = form.get("langue")
     retour = retour_sur(form.get("retour"), "/")
     if not isinstance(langue, str) or langue not in LANGUES:
         return redirection(request, retour)
+    _enregistrer(request, langue)
     request.state.langue = langue  # message dans la langue choisie
-    etat = _etat(request)
     rep = redirection(request, retour)
-    nom = ("__Host-" if etat.prod else "") + COOKIE_LANGUE
-    rep.set_cookie(nom, langue, max_age=DUREE_LANGUE_S, httponly=True, secure=etat.cookie["secure"],
-                   samesite="lax", path="/")
+    poser_langue(request, rep, langue)
+    return rep
+
+
+@routeur.get("/compte")
+def compte(request: Request) -> Response:
+    acteur = acteur_de(request)
+    info = utilisateur(request.app.state.plateforme.db, acteur.id)
+    return page(request, "compte/compte.html.j2", titre="Mon compte", nav="compte",
+                email=info.email if info else "", langue_compte=info.langue if info else None)
+
+
+@routeur.post("/compte/langue")
+def langue_compte(request: Request) -> Response:
+    """Langue de l'interface enregistrée sur le compte (page « Mon compte »)."""
+    acteur_de(request)
+    form = formulaire_sync(request)
+    langue = form.get("langue")
+    if not isinstance(langue, str) or langue not in LANGUES:
+        return redirection(request, "/compte", erreur="Langue inconnue.")
+    _enregistrer(request, langue)
+    request.state.langue = langue
+    rep = redirection(request, "/compte", message="Langue de l'interface enregistrée.")
+    poser_langue(request, rep, langue)
     return rep

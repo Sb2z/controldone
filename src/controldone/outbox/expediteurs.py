@@ -1,12 +1,11 @@
-"""Expéditeurs (``Expediteur``) : le seul livré écrit des fichiers dans ``var/outbox_envoyee/`` —
-**aucun envoi réel** (courriel, réseau social, plateforme) n'existe dans le code."""
+"""Expéditeurs (``Expediteur``) : le seul livré écrit des fichiers **chiffrés** dans ``var/outbox_envoyee/``
+(``storage.traces_envoi``, D-4106) — **aucun envoi réel** (courriel, réseau social, plateforme) n'existe dans le
+code."""
 
 from __future__ import annotations
 
-import json
-import os
 import re
-import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -27,29 +26,23 @@ class Expediteur(Protocol):
 
 
 class ExpediteurFichier:
-    """Écrit ``<racine>/<kind>/<id>.json`` (idempotent : réécrit le même fichier au même endroit)."""
+    """Écrit ``<racine>/<kind>/<id>.json.enc`` : JSON chiffré par la clé dérivée ``outbox_envoyee`` de la clé
+    maîtresse (idempotent : réécrit la même trace au même endroit). ``cles`` : clés maîtresses (défaut : celles
+    de l'environnement)."""
 
     nom = "fichier"
 
-    def __init__(self, racine: Path | str | None = None) -> None:
-        if racine is None:
-            from controldone.config import get_settings
+    def __init__(self, racine: Path | str | None = None, *, cles: Sequence[bytes] | None = None) -> None:
+        from controldone.storage.traces_envoi import TracesEnvoi, racine_par_defaut
 
-            racine = Path(get_settings().data_dir) / "outbox_envoyee"
-        self.racine = Path(racine)
+        self.racine = Path(racine) if racine is not None else racine_par_defaut()
+        self.traces = TracesEnvoi(self.racine, cles) if cles else TracesEnvoi.depuis_env(self.racine)
 
     def envoyer(self, action: ActionSortante) -> str:
-        dossier = self.racine / _NOM_RE.sub("_", action.kind.value)
-        dossier.mkdir(parents=True, exist_ok=True, mode=0o700)
-        cible = dossier / f"{_NOM_RE.sub('_', action.id)}.json"
         contenu = {
             "id": action.id, "kind": action.kind.value, "tenant_id": action.tenant_id,
             "statut_avant_envoi": action.statut.value, "decide_par": action.decide_par,
             "payload": action.payload_effectif, "corrige": action.payload_corrige is not None,
         }
-        fd, tmp = tempfile.mkstemp(dir=dossier, prefix=".tmp-")
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(contenu, f, ensure_ascii=False, indent=2, default=str)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, cible)
+        cible = self.traces.ecrire_json(_NOM_RE.sub("_", action.kind.value), _NOM_RE.sub("_", action.id), contenu)
         return f"fichier:{cible}"

@@ -1,0 +1,29 @@
+# Tarifs du modèle de langage (lecture des documents, D-4002). Lu par controldone.extract.llm.charger_tarifs().
+# USD par million de jetons, chaînes décimales exactes. Le coût d'un appel est calculé à partir de l'usage renvoyé
+# par l'API (jetons d'entrée, de sortie, d'écriture et de lecture du cache de prompt), converti en EUR au taux
+# CONTROLDONE_USD_EUR. Un modèle absent de cette table est compté au tarif le plus élevé (prudence).
+#
+# Source : documentation Claude API (compétence « claude-api », table des modèles mise en cache le 2026-09-25 ;
+# tarifs publics Anthropic, API directe). Lecture du cache : 0,05 × l'entrée pour Opus 5.5, 0,20 $ pour Sonnet 5.5,
+# 0,1 × ailleurs ; écriture du cache (durée 5 minutes) : 1,25 × l'entrée.
+# À vérifier et redater à chaque changement de modèle ou de tarif : https://www.anthropic.com/pricing
+version: 1
+date_tarifs: "2026-09-25"
+source: "Claude API — table des modèles et tarifs (compétence claude-api, 2026-09-25)"
+devise: USD
+modeles:
+  claude-opus-5-5:
+    entree: "4.00"
+    sortie: "20.00"
+    lecture_cache: "0.20"
+    ecriture_cache: "5.00"
+  claude-sonnet-5-5:
+    entree: "2.00"
+    sortie: "10.00"
+    lecture_cache: "0.20"
+    ecriture_cache: "2.50"
+  claude-haiku-4-5:
+    entree: "1.00"
+    sortie: "5.00"
+    lecture_cache: "0.10"
+    ecriture_cache: "1.25"

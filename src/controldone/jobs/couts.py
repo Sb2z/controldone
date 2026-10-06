@@ -4,7 +4,8 @@
 - plafond mensuel : ``reglages["plafond_cout_ia_mensuel_eur"]`` du client, sinon la colonne
   ``plafond_cout_ia_mensuel_eur`` (défaut 8 EUR) ;
 - à 80 % : alerte au fondateur (une par client et par mois) ; à 100 % : alerte et arrêt des appels au modèle
-  pour ce client (``llm_autorise = False``) jusqu'à décision du fondateur (relèvement du plafond).
+  pour ce client (``llm_autorise = False``) jusqu'à décision du fondateur (relèvement du plafond) ;
+- opt-out du client : ``reglages["llm_desactive"] = true`` -> ``llm_autorise = False`` (D-4007).
 - ``RegistreCoutsDB`` : implémentation en base du protocole ``extract.llm.RegistreCouts`` (pour
   ``CostGuard``).
 """
@@ -27,6 +28,7 @@ __all__ = [
     "cout_mensuel",
     "enregistrer_cout",
     "etat_plafond",
+    "llm_desactive",
     "mois_courant",
 ]
 
@@ -46,6 +48,9 @@ class EtatPlafond:
     mois: str
     cout: Decimal
     plafond: Decimal
+    #: Le client a désactivé la lecture par modèle de langage (``reglages["llm_desactive"]``, D-4007) : aucun
+    #: document de ce client n'est envoyé au fournisseur du modèle.
+    desactive: bool = False
 
     @property
     def ratio(self) -> Decimal:
@@ -61,7 +66,7 @@ class EtatPlafond:
 
     @property
     def llm_autorise(self) -> bool:
-        return not self.arret
+        return not self.arret and not self.desactive
 
 
 def _plafond(scope: TenantScope) -> Decimal:
@@ -70,8 +75,17 @@ def _plafond(scope: TenantScope) -> Decimal:
     return Decimal(str(brut)) if brut is not None else Decimal(t.plafond_cout_ia_mensuel_eur)
 
 
+def llm_desactive(reglages: dict[str, Any] | None) -> bool:
+    """Opt-out du client (D-4007) : ``reglages["llm_desactive"]`` vrai (booléen ou « oui »/« true »/« 1 »)."""
+    v = (reglages or {}).get("llm_desactive")
+    if isinstance(v, str):
+        return v.strip().lower() in {"1", "true", "oui", "yes", "vrai"}
+    return bool(v)
+
+
 def _etat(scope: TenantScope, mois: str) -> EtatPlafond:
-    return EtatPlafond(scope.tenant_id, mois, scope.cout_ia(mois=mois), _plafond(scope))
+    return EtatPlafond(scope.tenant_id, mois, scope.cout_ia(mois=mois), _plafond(scope),
+                       desactive=llm_desactive(scope.client().reglages))
 
 
 def cout_mensuel(tenant: str | TenantScope, *, db: Database | None = None, mois: str | None = None) -> Decimal:

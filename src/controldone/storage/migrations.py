@@ -138,6 +138,12 @@ def _m0004_sessions_actives(conn: Connection) -> None:
     Base.metadata.tables["sessions_actives"].create(conn, checkfirst=True)
 
 
+def _m0005_langue_utilisateur(conn: Connection) -> None:
+    """``users.langue`` : langue de l'interface choisie par le compte (bloc I3 ; nulle : cookie du navigateur, puis
+    ``Accept-Language``, puis français)."""
+    _ajouter_colonne(conn, "users", "langue")
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "socle", "tables manquantes (débit, sessions, facturation, notifications)", _m0001_socle),
     Migration(2, "index_journal_taches", "index du journal et des tâches", _m0002_index_journal_taches),
@@ -145,6 +151,8 @@ MIGRATIONS: tuple[Migration, ...] = (
               _m0003_alertes_notifiees),
     Migration(4, "sessions_actives", "table sessions_actives (sessions ouvertes par compte, D-3603)",
               _m0004_sessions_actives),
+    Migration(5, "langue_utilisateur", "colonne users.langue (langue de l'interface par compte)",
+              _m0005_langue_utilisateur),
 )
 
 

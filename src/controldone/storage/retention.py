@@ -214,31 +214,32 @@ def _purger_expires(db: Database, vault: FileVault, now: datetime | None) -> Rap
     return rapport
 
 
-def _supprimer_traces_envoi(dossier: Path, tenant_id: str) -> int:
-    """Traces en clair de l'expéditeur fichier (``<dossier>/<kind>/<id>.json``, champ ``tenant_id``)."""
-    n = 0
-    if not dossier.is_dir():
-        return 0
-    for p in dossier.glob("*/*.json"):
-        try:
-            if json.loads(p.read_text(encoding="utf-8")).get("tenant_id") != tenant_id:
-                continue
-            p.unlink()
-            n += 1
-        except (OSError, ValueError, AttributeError):
-            continue
-    return n
+#: Attente du verrou de maintenance par l'effacement d'un client (une sauvegarde en cours dure quelques minutes :
+#: l'effacement est alors refusé, à relancer ensuite).
+ATTENTE_VERROU_EFFACEMENT_S = 10.0
 
 
 def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, motif: str, *,
-                     dossier_sorties: Path | str | None = None) -> dict[str, int]:
-    """Efface toutes les données d'un client (base + coffre + traces des envois mis à disposition, écrites en
-    clair par l'expéditeur fichier dans ``dossier_sorties``, défaut ``<data_dir>/outbox_envoyee``). Réservé au
-    fondateur ; motif obligatoire."""
+                     dossier_sorties: Path | str | None = None,
+                     attente_verrou_s: float = ATTENTE_VERROU_EFFACEMENT_S) -> dict[str, int]:
+    """Efface toutes les données d'un client (base + coffre + traces des envois mis à disposition, chiffrées dans
+    ``dossier_sorties``, défaut ``<data_dir>/outbox_envoyee``). Réservé au fondateur ; motif obligatoire.
+
+    Sous le verrou de maintenance (D-3504, D-4103), partagé avec la sauvegarde, la purge et la restauration :
+    attente courte (``attente_verrou_s``), puis ``VerrouOccupe`` (« sauvegarde en cours depuis … ») sans rien
+    avoir effacé — une sauvegarde ne copie jamais un client à moitié effacé."""
     if not peut(acteur, Action.supprimer_client, Ressource("client", tenant_id)):
         raise AccesRefuse("effacement réservé au fondateur")
     if not (motif and motif.strip()):
         raise ValueError("motif obligatoire")
+    from controldone.storage.verrou import verrou_maintenance
+
+    with verrou_maintenance(vault.racine.parent, "effacement_client", attente_s=attente_verrou_s):
+        return _supprimer_client(db, vault, tenant_id, acteur, motif, dossier_sorties)
+
+
+def _supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, motif: str,
+                      dossier_sorties: Path | str | None) -> dict[str, int]:
     comptes: dict[str, int] = {}
     with db.transaction_systeme(effacement=True) as s:
         if s.get(Tenant, tenant_id) is None:
@@ -267,7 +268,9 @@ def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Act
         from controldone.config import get_settings
 
         dossier_sorties = Path(get_settings().data_dir) / "outbox_envoyee"
-    comptes["traces_envoi"] = _supprimer_traces_envoi(Path(dossier_sorties), tenant_id)
+    from controldone.storage.traces_envoi import TracesEnvoi
+
+    comptes["traces_envoi"] = TracesEnvoi(Path(dossier_sorties), vault.cles_maitresses).supprimer_client(tenant_id)
     return comptes
 
 

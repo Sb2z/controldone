@@ -993,6 +993,30 @@ class OperatorScope:
             journaliser(s, actor=self.actor.id, role=self.actor.role.value, action="alerte_lue",
                         target=f"alertes:{alerte_id}", ip=self.actor.ip)
 
+    def alertes_non_lues_par_type(self) -> dict[str, tuple[int, datetime]]:
+        """Alertes non lues groupées par type (``GROUP BY`` en base) : ``{kind: (nombre, plus récente)}`` —
+        bandeau du tableau de bord du fondateur (bloc I3). Types et compteurs seulement."""
+        q = (select(Alerte.kind, func.count(), func.max(Alerte.cree_le)).where(Alerte.lue_le.is_(None))
+             .group_by(Alerte.kind))
+        return {k: (int(n), dernier) for k, n, dernier in self.session.execute(q)}
+
+    def marquer_alertes_lues(self, kinds: Iterable[str]) -> int:
+        """Marque lues toutes les alertes non lues des types ``kinds`` (bandeau « Marquer comme lu ») ; une entrée
+        du journal par alerte, comme ``marquer_alerte_lue``. Renvoie le nombre d'alertes marquées."""
+        from controldone.storage.alertes import marquer_lue
+
+        kinds = sorted(set(kinds))
+        if not kinds:
+            return 0
+        with self.db.transaction_systeme() as s:
+            ids = list(s.execute(select(Alerte.id).where(Alerte.lue_le.is_(None), Alerte.kind.in_(kinds))
+                                 .order_by(Alerte.id)).scalars())
+            for aid in ids:
+                marquer_lue(s, aid)
+                journaliser(s, actor=self.actor.id, role=self.actor.role.value, action="alerte_lue",
+                            target=f"alertes:{aid}", ip=self.actor.ip)
+        return len(ids)
+
     def alertes(self, *, non_lues: bool = True, limite: int = 500) -> list[Alerte]:
         """Les ``limite`` alertes les plus récentes, en ordre chronologique."""
         q = select(Alerte).order_by(Alerte.id.desc()).limit(limite)

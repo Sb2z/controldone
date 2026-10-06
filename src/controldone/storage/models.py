@@ -113,6 +113,8 @@ class User(Base):
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
     cree_le: Mapped[datetime] = mapped_column(default=maintenant)
     derniere_connexion: Mapped[datetime | None] = mapped_column(default=None)
+    #: Langue préférée de l'interface (``fr`` | ``en``), ``None`` : pas de choix enregistré (migration 5, bloc I3).
+    langue: Mapped[str | None] = mapped_column(String(8), default=None)
 
 
 class AutonomieSortie(Base):

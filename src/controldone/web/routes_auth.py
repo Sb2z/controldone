@@ -16,6 +16,7 @@ from controldone.auth.roles import Acteur, Role
 from controldone.auth.service import acteur_client, verifier_mot_de_passe_compte, verifier_second_facteur
 from controldone.storage.comptes import changer_mot_de_passe, utilisateur
 from controldone.web.rendu import page, redirection
+from controldone.web.routes_compte import langue_du_compte, poser_langue
 from controldone.web.securite import EtatSecurite, acteur_de, formulaire_sync
 
 routeur = APIRouter()
@@ -34,6 +35,9 @@ def _ouvrir_session(request: Request, acteur, *, deux_facteurs: bool) -> Respons
     rep = redirection(request, "/admin" if acteur.role is Role.fondateur else "/espace")
     etat.ouvrir_session(request, rep, acteur, deux_facteurs=deux_facteurs)  # enregistrée (sessions actives)
     etat.effacer_2fa(rep)
+    langue = langue_du_compte(request, acteur.id)  # préférence du compte, reposée dans ce navigateur (bloc I3)
+    if langue is not None:
+        poser_langue(request, rep, langue)
     return rep
 
 

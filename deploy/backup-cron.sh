@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Sauvegarde ControlDOne pour la production. Deux modes :
 #
-#   deploy/backup-cron.sh [--si-absente] (dans le conteneur, appelé chaque jour par deploy/scheduler.sh ;
-#                                        --si-absente : rien si l'archive du jour existe déjà)
+#   deploy/backup-cron.sh [--si-absente | --si-absente-depuis HHMM]
+#       (dans le conteneur, appelé deux fois par jour par deploy/scheduler.sh, D-4105 ; --si-absente : rien si
+#        l'archive du jour existe déjà ; --si-absente-depuis HHMM : rien si une archive du jour date de HHMM ou après)
 #       -> scripts/backup.sh --destination "$BACKUP_DIR" : archive chiffrée (clé dérivée de
 #          CONTROLDONE_MASTER_KEY) de la base (SQLite : copie en ligne ; PostgreSQL : pg_dump sur instantané),
 #          du coffre et des traces d'envoi, avec
 #          manifeste (SHA-256 de chaque fichier) et empreinte .sha256 ; relecture complète de l'archive créée ;
-#          restauration d'essai complète le jour BACKUP_VERIFICATION_PROFONDE_JOUR ; puis rotation 7 j / 4 sem.
+#          restauration d'essai complète le jour BACKUP_VERIFICATION_PROFONDE_JOUR (une fois ce jour-là) ; puis
+#          rotation : 4 plus récentes, 7 j, 4 sem.
 #          Une archive dont la relecture échoue est renommée « .invalide » (le rattrapage la refait).
 #
 #   deploy/backup-cron.sh --hors-site   (sur l'hôte, crontab root, après la sauvegarde du jour)
@@ -16,7 +18,7 @@
 #          (ex. Scaleway Object Storage fr-par, Hetzner Object Storage fsn1, OVHcloud gra) et rclone check.
 #          Les archives sont déjà chiffrées : le stockage objet ne voit jamais de données en clair.
 #          Exemple de crontab hôte :
-#            45 2 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes BACKUP_ALERTE_COMPOSE=/srv/controldone/app/deploy/docker-compose.yml /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
+#            45 2,14 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes BACKUP_ALERTE_COMPOSE=/srv/controldone/app/deploy/docker-compose.yml /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
 #
 # Codes de retour (D-3303) : 0 succès ; 1 création en échec ; 2 configuration (clé, pg_dump absent, rclone,
 # distant) ; 3 vérification en échec (archive illisible, altérée, empreinte) ; 4 aucune sauvegarde récente ;
@@ -27,7 +29,8 @@
 #     en mode --hors-site, par « docker compose exec scheduler … alerter » si BACKUP_ALERTE_COMPOSE est défini ;
 #   - hors de l'application (recommandé : détecte aussi une sauvegarde qui ne tourne plus du tout) :
 #     BACKUP_PING_URL (sonde « homme mort » type Healthchecks, auto-hébergeable) reçoit <url>/0 en cas de
-#     succès et <url>/<code> en cas d'échec ; sans signal pendant 26 h, la sonde alerte par courriel.
+#     succès et <url>/<code> en cas d'échec ; période 12 h, grâce 2 h (deux sauvegardes par jour) : sans signal
+#     pendant 14 h, la sonde alerte.
 #
 # Restauration : docs/DEPLOIEMENT.md (§ Test de restauration), docs/EXPLOITATION.md § 3.2, deploy/README.md.
 set -euo pipefail
@@ -45,7 +48,7 @@ signaler() {  # signaler <code> : sonde externe facultative (ne fait jamais éch
 
 if [ "${1:-}" = "--hors-site" ]; then
   SOURCE="${BACKUP_HOST_DIR:-/srv/controldone/backups}"
-  AGE_MAX_H="${BACKUP_AGE_MAX_H:-26}"
+  AGE_MAX_H="${BACKUP_AGE_MAX_H:-14}"   # deux sauvegardes par jour (RPO 12 h, D-4105) + 2 h de marge
   echec() {  # echec <code> <message> <kind>
     echo "$(horodatage) ÉCHEC hors site (code $1) : $2" >&2
     if [ -n "${BACKUP_ALERTE_COMPOSE:-}" ]; then
@@ -85,18 +88,35 @@ fi
 
 DEST="${BACKUP_DIR:-$RACINE/var/sauvegardes}"
 mkdir -p "$DEST"
-# --si-absente (planificateur) : rien à faire si l'archive du jour (UTC) existe déjà (rattrapage au redémarrage)
+# --si-absente (planificateur) : rien à faire si l'archive du jour (UTC) existe déjà (rattrapage au redémarrage).
+# --si-absente-depuis HHMM (planificateur, plusieurs sauvegardes par jour, D-4105) : rien à faire si une archive
+# a été créée aujourd'hui (UTC) à HHMM ou après (créneau déjà couvert).
 if [ "${1:-}" = "--si-absente" ]; then
   if compgen -G "$DEST/controldone-$(date -u +%Y%m%d)T*.tar.gz.enc" >/dev/null; then
     echo "$(horodatage) sauvegarde du jour déjà présente : rien à faire"
     exit 0
   fi
   shift
+elif [ "${1:-}" = "--si-absente-depuis" ]; then
+  CRENEAU="${2:-}"
+  [[ "$CRENEAU" =~ ^[0-2][0-9][0-5][0-9]$ ]] || { echo "--si-absente-depuis HHMM attendu" >&2; exit 2; }
+  SEUIL="controldone-$(date -u +%Y%m%d)T${CRENEAU}00Z.tar.gz.enc"
+  for archive in "$DEST"/controldone-"$(date -u +%Y%m%d)"T*.tar.gz.enc; do
+    [ -e "$archive" ] || continue
+    nom="$(basename "$archive")"
+    if [[ ! "$nom" < "$SEUIL" ]]; then
+      echo "$(horodatage) sauvegarde du créneau ${CRENEAU} déjà présente ($nom) : rien à faire"
+      exit 0
+    fi
+  done
+  shift 2
 fi
 # Restauration d'essai complète un jour par semaine (1 = lundi … 7 = dimanche ; 0 = jamais ; « tous »).
 OPTIONS=()
 JOUR_PROFOND="${BACKUP_VERIFICATION_PROFONDE_JOUR:-7}"
-if [ "$JOUR_PROFOND" = "tous" ] || [ "$JOUR_PROFOND" = "$(date -u +%u)" ]; then
+# (le jour venu, seulement la première sauvegarde du jour : deux sauvegardes par jour, D-4105)
+if [ "$JOUR_PROFOND" = "tous" ] || { [ "$JOUR_PROFOND" = "$(date -u +%u)" ] \
+     && ! compgen -G "$DEST/controldone-$(date -u +%Y%m%d)T*.tar.gz.enc" >/dev/null; }; then
   OPTIONS+=(--verification-profonde)
 fi
 echo "$(horodatage) sauvegarde -> $DEST ${OPTIONS[*]:-}"

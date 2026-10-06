@@ -228,6 +228,9 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
         options = options_cls(llm=plafond.llm_autorise)
         if hasattr(options, "plafond_ia_dossier_eur"):
             options.plafond_ia_dossier_eur = reglages.llm_plafond_dossier_eur
+        if hasattr(options, "plafond_ia_client_mensuel_eur"):  # D-4004 : plafond mensuel vérifié avant chaque appel
+            options.plafond_ia_client_mensuel_eur = plafond.plafond
+            options.cout_ia_mois_eur = plafond.cout
         resultats = _executer_pipeline(ctx, pipeline, racine, profil, grilles, options)
     ctx.heartbeat()
     ctx.exiger_bail()

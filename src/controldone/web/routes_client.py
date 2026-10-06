@@ -3,7 +3,6 @@ route ne reçoit d'identifiant de client. Un rôle client ne voit que les consta
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter
@@ -16,11 +15,9 @@ from controldone.outbox import TypeAction
 from controldone.services import depot, publication, reclamations
 from controldone.services.lecture import (
     client_info,
-    constats_courants,
     detail_dossier,
     job_du_lot,
     lire_lot,
-    lister_dossiers,
     lister_lots,
 )
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
@@ -28,8 +25,14 @@ from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.graphes import donnees_client
 from controldone.web.i18n import traduire as _
-from controldone.web.listes import lire_requete
-from controldone.web.listes_sql import page_dossiers, page_registre, totaux_registre, transitaires_registre
+from controldone.web.listes import Requete, lire_requete
+from controldone.web.listes_sql import (
+    indicateurs,
+    page_dossiers,
+    page_registre,
+    totaux_registre,
+    transitaires_registre,
+)
 from controldone.web.listes_vues import (
     PARAMS_DOSSIERS,
     STATUTS_DOSSIER,
@@ -67,28 +70,23 @@ def _contexte(acteur: Acteur) -> dict[str, Any]:
 def tableau(request: Request) -> Response:
     a = _client(request)
     pf = _pf(request)
+    # indicateurs agrégés en lecture de colonnes, 8 derniers dossiers par la liste paginée en SQL (bloc I3) :
+    # aucune relecture de tous les dossiers et constats du client
+    derniers = Requete(filtres={}, brut={}, tri="-date", tri_defaut="-date", page=1, taille=8)
     with pf.db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
-        dossiers = lister_dossiers(scope)
+        ind = indicateurs(scope)
+        dossiers = page_dossiers(scope, derniers)[0].elements
         lots = lister_lots(scope, limite=5)
-        registre = reclamations.registre(scope)
-        nb_constats = len(constats_courants(scope))
-        graphes = donnees_client(scope)
+        totaux, _n = totaux_registre(scope)
+        graphes = donnees_client(scope, ind.lignes)
     for lot_ in lots:
         lot_["suivi"] = etat_traitement(lot_["statut"], job_du_lot(pf.db, a.tenant_id, lot_["id"]))
     rapports = publication.actions_client(pf, a, TypeAction.rapport_publication)
-    par_statut: dict[str, int] = {}
-    for d in dossiers:
-        par_statut[d.statut] = par_statut.get(d.statut, 0) + 1
-    kpi = {
-        "dossiers": len(dossiers), "constats": nb_constats,
-        "certain": sum((d.recouvrable_certain for d in dossiers), Decimal(0)),
-        "a_verifier": sum((d.recouvrable_a_verifier for d in dossiers), Decimal(0)),
-        "reste": sum((x.reste for x in registre if x.statut_code not in ("credite", "abandonne")), Decimal(0)),
-        "credite": sum((x.montant_credite for x in registre), Decimal(0)),
-    }
+    kpi = {"dossiers": ind.dossiers, "constats": ind.constats, "certain": ind.certain, "a_verifier": ind.a_verifier,
+           "reste": totaux["reste"], "credite": totaux["credite"]}
     return page(request, "client/tableau.html.j2", titre="Tableau de bord", nav="tableau", info=info,
-                dossiers=dossiers[:8], lots=lots, kpi=kpi, par_statut=par_statut, rapports=rapports[-3:],
+                dossiers=dossiers, lots=lots, kpi=kpi, rapports=rapports[-3:],
                 graphes=graphes, demo=info["demo"], **_contexte(a))
 
 

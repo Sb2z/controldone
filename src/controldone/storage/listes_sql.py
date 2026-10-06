@@ -17,10 +17,11 @@ from typing import Any
 
 from sqlalchemy import Numeric, case, cast, func, or_, select
 
-from controldone.storage.models import Constat, Dossier, Ecart, Transitaire
-from controldone.storage.scope import TenantScope
+from controldone.storage.models import Constat, Dossier, Ecart, NotificationAlerte, Transitaire
+from controldone.storage.scope import OperatorScope, TenantScope
 
-__all__ = ["CLES_DOSSIER", "dossiers_page", "ecarts_page", "lignes_dossiers", "totaux_ecarts", "transitaires_ecarts"]
+__all__ = ["CLES_DOSSIER", "compter_dossiers", "constats_indicateurs", "dossiers_page", "ecarts_page",
+           "lignes_dossiers", "notifications_page", "totaux_ecarts", "transitaires_ecarts"]
 
 _EN_CONSTATS = ("ecart_certain", "a_verifier")
 CLES_DOSSIER = ("num_facture_transitaire", "ref_transport", "mrn", "num_facture_commerciale")
@@ -92,6 +93,26 @@ def dossiers_page(scope: TenantScope, *, statut: str | None, mots: Sequence[str]
     ordre = [cle.desc() if tri.startswith("-") else cle.asc(), reference, Dossier.id]
     lignes, total = _page(scope, q, ordre, page, taille)
     return [r[0] for r in lignes], total, total_client
+
+
+def compter_dossiers(scope: TenantScope) -> int:
+    """Nombre de dossiers du client (``COUNT`` en base)."""
+    return _compter(scope, scope.requete(Dossier))
+
+
+def constats_indicateurs(scope: TenantScope) -> list[Any]:
+    """Constats visibles de la **version courante** de leur dossier, lus **colonne par colonne** (jamais le JSON
+    ``contenu`` entier) pour les indicateurs et graphiques des tableaux de bord (bloc I3) : ``(controle_id,
+    niveau, statut_validation, nature_montant, montant_en_jeu, hors_totaux, dossier.cree_le,
+    dossier.transitaire_id)``. Rôle client : constats publiés seuls (``TenantScope.requete``). Montants en
+    ``Decimal`` (colonne), additionnés par l'appelant."""
+    d = scope.requete(Dossier).subquery("d")
+    q = (scope.requete(Constat)
+         .with_only_columns(Constat.controle_id, Constat.niveau, Constat.statut_validation, Constat.nature_montant,
+                            Constat.montant_en_jeu, Constat.contenu["hors_totaux"].as_string(), d.c.cree_le,
+                            d.c.contenu["transitaire_id"].as_string())
+         .join(d, (d.c.id == Constat.dossier_id) & (d.c.version == Constat.dossier_version)))
+    return scope.executer_lecture(q)
 
 
 def lignes_dossiers(scope: TenantScope, ids: Sequence[str]) -> list[tuple[Any, list[Constat]]]:
@@ -181,3 +202,21 @@ def ecarts_page(scope: TenantScope, *, statut: str | None, transitaire: str | No
     ordre = [cle.is_(None), cle.desc() if desc else cle.asc(), Ecart.modifie_le, Ecart.id]
     lignes, total = _page(scope, q, ordre, page, taille)
     return [r[0] for r in lignes], total
+
+
+# --- historique des notifications poussées (fondateur) -----------------------------------------------------------
+
+
+def notifications_page(op: OperatorScope, *, decalage: int, limite: int) -> tuple[list[dict[str, Any]], int]:
+    """Notifications poussées (``notifications_alertes``, D-3502), plus récentes d'abord : ``(lignes, total)``.
+    Aucune donnée client dans cette table (type, nombre, canaux, état, essais, horodatages).
+
+    Interface mince de l'interface (bloc I3) en attendant l'API de lecture du bloc production : seule
+    ``web/notifications_vues.py`` l'appelle."""
+    total = int(op.session.execute(select(func.count()).select_from(NotificationAlerte)).scalar() or 0)
+    q = (select(NotificationAlerte).order_by(NotificationAlerte.cree_le.desc(), NotificationAlerte.id.desc())
+         .offset(max(0, decalage)).limit(limite))
+    lignes = [{"id": n.id, "kind": n.kind, "nombre": n.nombre, "canaux": [c for c in (n.canaux or "").split(",") if c],
+               "statut": n.statut, "essais": n.essais, "cree_le": n.cree_le, "envoyee_le": n.envoyee_le}
+              for n in op.session.execute(q).scalars()]
+    return lignes, total

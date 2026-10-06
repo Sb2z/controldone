@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import io
 import random
+import struct
 
 import pypdfium2 as pdfium
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageFont
@@ -302,7 +303,65 @@ def images_to_tiff(pages: list, dpi: int) -> bytes:
     else:
         imgs = [im.convert("L") for im in imgs]
         imgs[0].save(buf, format="TIFF", save_all=True, append_images=imgs[1:], compression="tiff_lzw", dpi=(dpi, dpi))
-    return buf.getvalue()
+    return tiff_canonique(buf.getvalue())
+
+
+# Taille en octets d'une valeur TIFF, par type de champ (TIFF 6.0, § 2).
+_TIFF_TAILLES = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4}
+# Décalages et longueurs des bandes (273/279) et des tuiles (324/325).
+_TIFF_BLOCS = ((273, 279), (324, 325))
+
+
+def tiff_canonique(data: bytes) -> bytes:
+    """TIFF à l'octet près reproductible, pixels inchangés (D-4402).
+
+    libtiff (via Pillow) aligne le répertoire et les valeurs hors ligne sur un mot en sautant un octet qu'il
+    n'initialise pas : deux écritures des mêmes pixels pouvaient différer de cet octet. Tout octet que la
+    structure ne référence pas (en-tête, répertoires, valeurs hors ligne, bandes ou tuiles), ainsi que la fin
+    inutilisée d'une valeur en ligne, est mis à zéro. Aucun lecteur ne lit ces octets : les pixels décodés et
+    les étiquettes sont identiques.
+    """
+    if data[:4] not in (b"II*\x00", b"MM\x00*"):
+        raise ValueError("TIFF classique attendu")
+    bo = "<" if data[:2] == b"II" else ">"
+    out = bytearray(len(data))
+    out[:8] = data[:8]
+
+    def garder(debut: int, fin: int) -> None:
+        if not 0 <= debut <= fin <= len(data):
+            raise ValueError("TIFF : référence hors du fichier")
+        out[debut:fin] = data[debut:fin]
+
+    ifd, vus = struct.unpack(bo + "I", data[4:8])[0], set()
+    while ifd:
+        if ifd in vus:
+            raise ValueError("TIFF : répertoires en boucle")
+        vus.add(ifd)
+        (n,) = struct.unpack(bo + "H", data[ifd:ifd + 2])
+        garder(ifd, ifd + 2)
+        valeurs: dict[int, tuple] = {}
+        for i in range(n):
+            e = ifd + 2 + 12 * i
+            etiquette, typ, nb = struct.unpack(bo + "HHI", data[e:e + 8])
+            taille = _TIFF_TAILLES[typ] * nb
+            garder(e, e + 8)
+            if taille <= 4:
+                garder(e + 8, e + 8 + taille)  # reste du champ de 4 octets : zéro
+                zone = data[e + 8:e + 8 + taille]
+            else:
+                (vo,) = struct.unpack(bo + "I", data[e + 8:e + 12])
+                garder(e + 8, e + 12)
+                garder(vo, vo + taille)
+                zone = data[vo:vo + taille]
+            if typ in (3, 4):
+                valeurs[etiquette] = struct.unpack(bo + ("H" if typ == 3 else "I") * nb, zone)
+        for t_off, t_nb in _TIFF_BLOCS:
+            for debut, longueur in zip(valeurs.get(t_off, ()), valeurs.get(t_nb, ()), strict=True):
+                garder(debut, debut + longueur)
+        fin = ifd + 2 + 12 * n
+        garder(fin, fin + 4)
+        (ifd,) = struct.unpack(bo + "I", data[fin:fin + 4])
+    return bytes(out)
 
 
 def degrade_doc(pdf_bytes: bytes, mode: str, rng: random.Random, fax_header=""):

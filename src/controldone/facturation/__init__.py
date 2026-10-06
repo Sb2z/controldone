@@ -51,6 +51,7 @@ def service_pour(plateforme: Any) -> ServiceFacturation:
     data = Path(get_settings().data_dir)
     service = ServiceFacturation(plateforme.db, pa=PlateformeAgreeeBouchon(data / "pa_bouchon"),
                                  paiement=fournisseur_depuis_env(racine_bouchon=data / "paiement_bouchon"),
-                                 dossier_sorties=getattr(plateforme, "dossier_sorties", None))
+                                 dossier_sorties=getattr(plateforme, "dossier_sorties", None),
+                                 cles_maitresses=getattr(plateforme, "cles_maitresses", None))
     plateforme.facturation = service
     return service

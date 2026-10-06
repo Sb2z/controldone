@@ -3,6 +3,7 @@
 *
 !requirements.lock
 !deploy/requirements-build.lock
+!deploy/pgdg.asc
 !pyproject.toml
 !README.md
 !src/

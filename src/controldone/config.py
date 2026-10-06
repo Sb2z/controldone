@@ -111,9 +111,25 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY", "CONTROLDONE_ANTHROPIC_API_KEY")
     )
+    #: Modèle de lecture (D-4002) : ``claude-opus-5-5`` (modèle recommandé par la documentation Anthropic au
+    #: 25/09/2026). Remplaçable sans code (``CONTROLDONE_LLM_MODEL``), avec un tarif dans ``config/llm_tarifs.yaml``.
     llm_model: str = "claude-opus-5-5"
+    #: Effort de raisonnement (``output_config.effort``) : ``low`` pour une recopie ancrée (D-4002) ; vide = défaut
+    #: du modèle (obligatoire pour un modèle sans paramètre d'effort, ex. ``claude-haiku-4-5``).
+    llm_effort: str = "low"
     llm_max_tokens: int = 16000
     llm_fallbacks: bool = True
+    llm_timeout_s: float = 120.0
+    llm_max_retries: int = 2
+    #: Le modèle n'est appelé que si l'extraction déterministe est faible : aucun résultat, champ requis absent,
+    #: ou champ clé de confiance inférieure à ce seuil (D-4001).
+    llm_seuil_confiance: float = 0.70
+    #: Minimisation (D-4005) : au plus N pages d'un document envoyées ; PDF jamais envoyé sauf option explicite
+    #: (et seulement pour un fichier qui ne contient que ce document).
+    llm_pages_max: int = 8
+    llm_envoyer_pdf: bool = False
+    #: Fichier des tarifs (USD par million de jetons, datés) ; défaut : ``<config_dir>/llm_tarifs.yaml``.
+    llm_tarifs_fichier: Path | None = None
     # Hypothèse : taux de conversion USD -> EUR pour le coût IA (le fournisseur facture en USD).
     usd_eur: Decimal = Decimal("0.92")
     #: Plafond par lot traité (``OptionsPipeline.plafond_ia_dossier_eur``, passé par le worker).
@@ -122,7 +138,9 @@ class Settings(BaseSettings):
     llm_plafond_client_mensuel_eur: Decimal = Decimal("8.00")
     #: Plafond mensuel par défaut d'un nouveau client « diagnostic ».
     llm_plafond_diagnostic_eur: Decimal = Decimal("20.00")
-    llm_confiance_ancree: float = 0.85
+    #: Confiance d'une valeur lue par le modèle et ancrée littéralement ; toujours ramenée sous 0,70
+    #: (``extract.llm.PLAFOND_CONFIANCE_LLM``) : une valeur du seul modèle ne fonde jamais un écart certain (D-4003).
+    llm_confiance_ancree: float = 0.65
 
     @property
     def llm_disponible(self) -> bool:

@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "macros.html.j2" import kpi, badge_niveau, badge_suivi %}
+{% from "macros.html.j2" import kpi, badge_niveau, badge_suivi, csrf_champ %}
 {% from "graphes.html.j2" import graphe %}
 {% set libs = {"ecart_certain": _("Écart certain"), "a_verifier": _("À vérifier"), "conforme": _("Conforme"), "document_manquant": _("Document manquant"), "non_concerne": _("Non concerné"), "inconnu": _("En cours")} %}
 {% block contenu %}
@@ -7,6 +7,24 @@
   <h1>{{ _("Tableau de bord") }}</h1>
   <p class="discret">{{ _("Tous clients — coûts IA du mois {mois}.", mois=d.mois) }}</p>
 </div>
+{% if bandeau %}
+<section class="bandeau-alertes" aria-labelledby="t-bandeau">
+  <div class="carte-tete"><h2 id="t-bandeau">{{ _("Alertes graves non lues") }}</h2>
+    <a class="petit-lien" href="/admin/alertes">{{ _("Voir les alertes") }}</a></div>
+  <ul>
+  {% for b in bandeau %}
+    <li><span class="badge b-alerte">{{ _(libelle_alerte(b.kind)) }}</span>
+      <span>{{ _("{n} non lue(s), la dernière le {date}", n=b.nombre, date=b.dernier|date) }}</span>
+      <form method="post" action="/admin/alertes/bandeau/lues" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="kind" value="{{ b.kind }}">
+        <button type="submit" class="btn btn-petit">{{ _("Marquer comme lu") }}<span class="vh"> : {{ _(libelle_alerte(b.kind)) }}</span></button></form></li>
+  {% endfor %}
+  </ul>
+  {% if bandeau|length > 1 %}
+  <form method="post" action="/admin/alertes/bandeau/lues" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="kind" value="tous">
+    <button type="submit" class="btn btn-petit">{{ _("Tout marquer comme lu") }}</button></form>
+  {% endif %}
+</section>
+{% endif %}
 <section class="kpis" aria-label="{{ _("Indicateurs") }}">
   {{ kpi(_("Constats à valider"), d.totaux.proposes, _("file de validation"), "accent" if d.totaux.proposes else None, "/admin/validation") }}
   {{ kpi(_("Actions sortantes à approuver"), d.totaux.sorties, _("rapports, relevés d'écarts"), None, "/admin/validation#sorties") }}

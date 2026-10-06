@@ -436,6 +436,8 @@ def _d1_resultat(
     ligne_non_lue: bool = False,
     produit: bool = False,
     somme_de_lignes: bool = False,
+    motifs_structure: Sequence[str] = (),
+    explications_ligne: Sequence[str] = (),
 ) -> ResultatControle:
     v_imp = imprime.decimal_signe()
     candidats = [calcul, *alternatives]
@@ -454,7 +456,17 @@ def _d1_resultat(
         # Les totaux imprimés se confirment entre eux : une ligne non lue explique l'écart (D-706).
         return ctx.non_verifiable("D1", RaisonCode.valeur_absente, **{
             **commun, "details": {"motif": "ligne_probablement_non_lue"}})
+    if explications_ligne:
+        # D-4203 : l'écart d'une ligne s'explique par une autre lecture de ses colonnes (montant TVA comprise lu
+        # comme TVA, quantité imprimée dans le libellé…) : la lecture ne peut pas trancher.
+        return ctx.non_verifiable("D1", RaisonCode.montant_tva_comprise if "colonne_ttc" in explications_ligne
+                                  else RaisonCode.lecture_douteuse, **{
+                                      **commun, "details": {"motif": "lecture_de_ligne_alternative",
+                                                            "explications": list(explications_ligne)}})
     montant = ecart if avec_montant and ecart > 0 else None
+    # D-4202 : un total imprimé supérieur à la somme des lignes lues n'est un écart certain que si une autre
+    # identité imprimée prouve que la lecture des lignes est complète (sinon une ligne non lue l'explique).
+    structure = list(motifs_structure) if somme_de_lignes and ecart > 0 else []
 
     def acc_operande(o: ValeurSourcee):
         d = o.decimal_signe()
@@ -469,7 +481,10 @@ def _d1_resultat(
         confusion=[Confusion(imprime, accepte=lambda x: any(abs(x - c) <= tol for c in candidats)),
                    *(Confusion(o, accepte=acc_operande(o)) for o in operandes)],
         documents=[f.id], montant=ecart,
+        raisons_supplementaires=[RaisonCode.structure_non_validee] if structure else [],
     )
+    if structure:
+        commun["details"] = {"structure_non_validee": structure}
     if (somme_de_lignes and ecart > 0 and classement.niveau is Niveau.a_verifier
             and set(classement.raisons) & _RAISONS_LECTURE):
         # D-3703 : total imprimé supérieur à la somme des lignes lues, lecture sous le seuil (scan) : des lignes

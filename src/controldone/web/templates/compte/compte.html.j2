@@ -1,0 +1,29 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% block contenu %}
+<div class="titre-page"><h1>{{ _("Mon compte") }}</h1>
+<p class="discret">{{ email }} · {{ _("Fondateur") if acteur.role.value == "fondateur" else (_("Administrateur client") if acteur.role.value == "client_admin" else _("Lecteur")) }}</p></div>
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-langue">
+  <h2 id="t-langue">{{ _("Langue de l'interface") }}</h2>
+  <p class="discret">{{ _("Enregistrée sur votre compte : elle s'applique à chaque connexion, quel que soit le navigateur. Les rapports, relevés d'écarts et textes des constats restent en français.") }}</p>
+  <form method="post" action="/compte/langue" class="formulaire">{{ csrf_champ(csrf) }}
+    <fieldset class="choix-radio">
+      <legend>{{ _("Langue") }}</legend>
+      {% for code, nom in LANGUES.items() %}
+      <label class="case"><input type="radio" name="langue" value="{{ code }}"{% if (langue_compte or langue) == code %} checked{% endif %}> <span lang="{{ code }}">{{ nom }}</span></label>
+      {% endfor %}
+    </fieldset>
+    {% if not langue_compte %}<p class="discret">{{ _("Aucune langue enregistrée sur le compte pour l'instant : celle de ce navigateur s'applique.") }}</p>{% endif %}
+    <button type="submit" class="btn btn-principal">{{ _("Enregistrer") }}</button>
+  </form>
+</section>
+<section class="carte" aria-labelledby="t-securite">
+  <h2 id="t-securite">{{ _("Sécurité") }}</h2>
+  <ul class="liste-simple">
+    <li><a href="/compte/sessions">{{ _("Mes sessions actives") }}</a></li>
+    <li><a href="/compte/mot-de-passe">{{ _("Changer de mot de passe") }}</a></li>
+  </ul>
+</section>
+</div>
+{% endblock %}

@@ -13,10 +13,10 @@
 {% endif %}
 
 <section class="kpis" aria-label="{{ _("Indicateurs") }}">
-  {{ kpi(_("Dossiers"), c.dossiers|length) }}
-  {{ kpi(_("Constats à valider"), c.dossiers|sum(attribute="nb_proposes"), None, "accent" if c.dossiers|sum(attribute="nb_proposes") else None, "/admin/validation") }}
-  {{ kpi(_("Recouvrable certain (validé)"), c.dossiers|sum(attribute="recouvrable_certain")|montant) }}
-  {{ kpi(_("Coût IA du mois"), c.cout_ia|montant, _("plafond {m}", m=c.plafond|montant)) }}
+  {{ kpi(_("Dossiers"), ind.dossiers) }}
+  {{ kpi(_("Constats à valider"), ind.proposes, None, "accent" if ind.proposes else None, "/admin/validation") }}
+  {{ kpi(_("Recouvrable certain (validé)"), ind.certain|montant) }}
+  {{ kpi(_("Coût IA du mois"), c.cout_ia|montant, _("plafond {m}", m=c.plafond|montant) ~ " · " ~ _("{n} % du plafond", n=ratio_ia), "alerte" if ratio_ia >= 80 else None, "#plafond-ia") }}
 </section>
 
 <section class="carte" id="dossiers" aria-labelledby="t-dossiers">
@@ -81,7 +81,11 @@
   {% for l in c.lots %}<tr><td>{{ l.recu_le|date }}</td><td>{{ l.canal }}</td><td>{{ _(l.statut_libelle) }}</td><td class="num">{{ l.resume.get("fichiers", "—") }}</td><td class="num">{{ l.resume.get("refuses", 0) }}</td></tr>{% endfor %}
   </tbody></table>
   {% else %}<p class="vide">{{ _("Aucun dépôt.") }}</p>{% endif %}
-  <h3>{{ _("Plafond IA mensuel") }}</h3>
+  <h3 id="plafond-ia">{{ _("Plafond IA mensuel") }}</h3>
+  <p><span class="jauge{% if ratio_ia >= 100 %} jauge-stop{% elif ratio_ia >= 80 %} jauge-alerte{% endif %}" role="img" aria-label="{{ _("{n} % du plafond", n=ratio_ia) }}"><span class="w-{{ (([ratio_ia, 100]|min) / 5)|round|int * 5 }}"></span></span>
+    <span class="num">{{ c.cout_ia|montant }} / {{ c.plafond|montant }}</span>
+    {% if ratio_ia >= 100 %}<span class="badge b-alerte">{{ _("Plafond atteint : appels au modèle arrêtés") }}</span>{% elif ratio_ia >= 80 %}<span class="badge b-propose">{{ _("80 % du plafond atteint") }}</span>{% endif %}</p>
+  <p class="discret">{{ _("Coût des appels au modèle d'extraction ce mois-ci (registre ai_usage). Au plafond, les appels au modèle s'arrêtent pour ce client jusqu'à votre décision.") }}</p>
   <form method="post" action="/admin/clients/{{ t }}/plafond" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
     <label for="pl">{{ _("Plafond (EUR)") }}</label><input id="pl" name="plafond" value="{{ c.plafond }}" inputmode="decimal" maxlength="12" required>
     <button type="submit" class="btn">{{ _("Modifier") }}</button>

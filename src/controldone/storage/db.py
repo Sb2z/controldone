@@ -11,7 +11,7 @@ SQLite : ``journal_mode=WAL``, ``foreign_keys=ON``, ``busy_timeout``. Les transa
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from controldone.auth.roles import Acteur
     from controldone.storage.scope import OperatorScope, TenantScope
 
-__all__ = ["Database", "SchemaPerime", "creer_moteur", "url_par_defaut"]
+__all__ = ["Database", "MigrationEnAttente", "SchemaPerime", "creer_moteur", "url_par_defaut"]
 
 _TRIGGERS_SQLITE = [
     "CREATE TRIGGER IF NOT EXISTS audit_log_sans_update BEFORE UPDATE ON audit_log "
@@ -89,6 +89,10 @@ class SchemaPerime(RuntimeError):
     d'exécution (audit B, suspicion 8 ; D-1322)."""
 
 
+class MigrationEnAttente(SchemaPerime):
+    """Production : une étape de migration attend ``controldone migrer`` (D-3503, D-4102)."""
+
+
 class Database:
     """Base de données de la plateforme."""
 
@@ -146,14 +150,52 @@ class Database:
             if mode_execution() in ("dev", "test") or env("CONTROLDONE_MIGRATION_AUTO") == "1":
                 self.migrer()
             else:
-                raise SchemaPerime("schéma de la base à migrer : " + ", ".join(
+                raise MigrationEnAttente("schéma de la base à migrer : " + ", ".join(
                     f"{m.version:04d} {m.nom}" for m in attente) + " — sauvegarder puis exécuter « controldone "
-                    "migrer » (docs/EXPLOITATION.md, migrations)")
+                    "migrer » (docker compose : service « migrer », docs/EXPLOITATION.md § migrations)")
         manquantes = self.colonnes_manquantes()
         if manquantes:
             raise SchemaPerime("schéma de la base périmé : colonnes manquantes " + ", ".join(manquantes[:20])
                                + (" …" if len(manquantes) > 20 else "")
                                + " — appliquer la migration de la version (docs/EXPLOITATION.md, schéma)")
+
+    def attendre_schema_a_jour(self, *, attente_s: float | None = None, intervalle_s: float = 5.0,
+                               rappel_s: float = 60.0, journal: Callable[[str], None] | None = None) -> None:
+        """Démarrage du web et du worker en production (D-4102) : comme ``exiger_schema_a_jour``, mais une
+        **migration en attente** fait attendre le processus (au plus ``attente_s`` secondes, défaut
+        ``CONTROLDONE_MIGRATION_ATTENTE_S``, 600 en production, 0 ailleurs) au lieu de l'arrêter aussitôt :
+        pendant une mise à jour, le service ponctuel ``migrer`` (docker-compose) applique les étapes et le
+        processus démarre alors de lui-même. Message clair au début puis toutes les ``rappel_s`` secondes ; le
+        service web, qui n'écoute pas encore, est vu « unhealthy » par la sonde. Au-delà du délai :
+        ``MigrationEnAttente`` (le processus sort une fois, code 3). Des colonnes manquantes **sans** migration
+        en attente ne se réparent pas en attendant : ``SchemaPerime`` immédiat."""
+        import time
+
+        from controldone.storage.cles import mode_execution
+
+        if attente_s is None:
+            brut = env("CONTROLDONE_MIGRATION_ATTENTE_S").strip()
+            try:
+                attente_s = float(brut) if brut else (600.0 if mode_execution() == "prod" else 0.0)
+            except ValueError:
+                attente_s = 600.0
+        debut = time.monotonic()
+        dernier_rappel: float | None = None
+        while True:
+            try:
+                self.exiger_schema_a_jour()
+                if dernier_rappel is not None and journal:
+                    journal(f"migrations appliquées après {time.monotonic() - debut:.0f} s d'attente : démarrage")
+                return
+            except MigrationEnAttente as exc:
+                ecoule = time.monotonic() - debut
+                if ecoule >= attente_s:
+                    raise MigrationEnAttente(f"{exc} — attente de {attente_s:.0f} s écoulée, arrêt") from None
+                if journal and (dernier_rappel is None or time.monotonic() - dernier_rappel >= rappel_s):
+                    journal(f"{exc} — démarrage suspendu, en attente de la migration "
+                            f"(encore {attente_s - ecoule:.0f} s au plus)")
+                    dernier_rappel = time.monotonic()
+                time.sleep(max(0.01, min(intervalle_s, attente_s - ecoule)))
 
     def chemin_sqlite(self) -> Path | None:
         u = make_url(self.url)

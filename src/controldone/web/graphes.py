@@ -166,33 +166,33 @@ def _serie_mois(par_mois: dict[str, Decimal], *, nb: int = 12, aujourd_hui: date
     return [(_mois_libelle(x), par_mois.get(x, Decimal(0))) for x in mois]
 
 
-def donnees_client(scope: Any) -> list[Graphe]:
-    """Graphiques du tableau de bord client, à partir des constats **publiés** de la version courante."""
-    from controldone.services.lecture import constats_courants, hors_totaux
-    from controldone.storage.models import Dossier, Transitaire
+def donnees_client(scope: Any, lignes: Sequence[Any] | None = None) -> list[Graphe]:
+    """Graphiques du tableau de bord client, à partir des constats **publiés** de la version courante.
 
-    dossiers = {d.id: d for d in scope.lister(Dossier)}
+    ``lignes`` : lecture en colonnes des constats courants visibles (``storage.listes_sql.constats_indicateurs``,
+    déjà faite pour les indicateurs) ; relue si absente."""
+    from controldone.storage.listes_sql import constats_indicateurs
+    from controldone.storage.models import Transitaire
+
+    if lignes is None:
+        lignes = constats_indicateurs(scope)
     noms = {t.id: t.nom for t in scope.lister(Transitaire)}
     par_mois: dict[str, Decimal] = {}
     par_famille: dict[str, Decimal] = {}
     par_transitaire: dict[str, Decimal] = {}
-    for c in constats_courants(scope):
-        if c.statut_validation != "valide":
+    for controle, niveau, statut, nature, montant, exclu, cree_le, tid in lignes:
+        if statut != "valide":
             continue
-        fam = (c.controle_id or "?")[0]
+        fam = (controle or "?")[0]
         par_famille[fam] = par_famille.get(fam, Decimal(0)) + 1
-        if hors_totaux(c) or c.niveau != "ecart_certain" or c.nature_montant != "recouvrable":
+        if exclu or niveau != "ecart_certain" or nature != "recouvrable":
             continue
-        if not c.montant_en_jeu or c.montant_en_jeu <= 0:
+        if not montant or montant <= 0:
             continue
-        d = dossiers.get(c.dossier_id)
-        if d is None:
-            continue
-        m = mois_paris(d.cree_le)
-        par_mois[m] = par_mois.get(m, Decimal(0)) + c.montant_en_jeu
-        tid = (d.contenu or {}).get("transitaire_id")
+        m = mois_paris(cree_le)
+        par_mois[m] = par_mois.get(m, Decimal(0)) + montant
         lib = noms.get(tid or "", _("Transitaire non identifié"))
-        par_transitaire[lib] = par_transitaire.get(lib, Decimal(0)) + c.montant_en_jeu
+        par_transitaire[lib] = par_transitaire.get(lib, Decimal(0)) + montant
     return [
         colonnes("g-mois", N_("Montant recouvrable certain par mois"), _serie_mois(par_mois),
                  note=N_("Écarts certains validés, par mois de traitement du dossier (12 derniers mois).")),

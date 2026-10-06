@@ -36,7 +36,11 @@ def test_brouillon_puis_emission_et_depot(service, db, pa, tmp_path):
     envoyee = FileSortante(db).obtenir(a.id, FONDATEUR)
     assert envoyee.statut is StatutAction.envoye and envoyee.reference_envoi.startswith("pa:pa_bouchon:")
     assert (pa.racine / "deposees" / "PA-BOUCHON-F-2026-0001.pdf").read_bytes() == f.pdf
-    assert (tmp_path / "sorties" / "facture_emise" / "F-2026-0001.pdf").exists()
+    copie = tmp_path / "sorties" / "facture_emise" / "F-2026-0001.pdf.enc"  # chiffrée au repos (D-4106)
+    from controldone.storage.traces_envoi import TracesEnvoi
+
+    assert TracesEnvoi.depuis_env(tmp_path / "sorties").lire(copie) == f.pdf and f.pdf not in copie.read_bytes()
+    assert not (tmp_path / "sorties" / "facture_emise" / "F-2026-0001.pdf").exists()
     assert [s.code for s in stock.statuts_pa(db, facture_id=f.id)] == ["200"]
     # relancer ne crée ni nouveau numéro ni nouveau dépôt
     assert service.emettre_et_deposer(a.id, FONDATEUR, le=LE).id == f.id and len(stock.factures(db)) == 1

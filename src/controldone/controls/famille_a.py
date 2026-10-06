@@ -1680,7 +1680,43 @@ def a12_pays_origine(ctx: ControlContext) -> list[ResultatControle]:
 # =====================================================================================================
 
 
-def _a13(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
+@dataclass
+class _EcartA13:
+    """Codes SH6 sans équivalent dans un couple (A13), à regrouper par dossier (D-4201)."""
+
+    couple: Couple
+    seuls_f: list[str]
+    seuls_d: list[str]
+    fcodes: dict[str, list[ValeurSourcee]]
+    dcodes: dict[str, list[tuple[Document, int, ValeurSourcee]]]
+
+    @property
+    def croise(self) -> bool:
+        """Écart des deux côtés (code de facture sans équivalent **et** code déclaré sans équivalent)."""
+        return bool(self.seuls_f and self.seuls_d)
+
+    def valeurs(self) -> tuple[list[ValeurSourcee], list[ValeurSourcee]]:
+        return ([v for code in self.seuls_f for v in self.fcodes[code]],
+                [v for code in self.seuls_d for _, _, v in self.dcodes[code]])
+
+    def phrase(self) -> str:
+        c, phrases = self.couple, []
+        if self.seuls_f:
+            lst = ", ".join(f"{self.fcodes[k][0].valeur_brute or self.fcodes[k][0].valeur} "
+                            f"(page {self.fcodes[k][0].page})" for k in self.seuls_f)
+            phrases.append(
+                f"sur {_refs_fc(c.fcs)}, {lst} sans équivalent (comparaison sur 6 chiffres) parmi les codes "
+                f"imprimés sur {_refs_dec(c.decs)}"
+            )
+        if self.seuls_d:
+            lst = ", ".join(f"{v.valeur_brute or v.valeur} ({_article_txt(dec, i)})"
+                            for k in self.seuls_d for dec, i, v in self.dcodes[k][:1])
+            ref = _refs_dec(c.decs) if len(c.decs) > 1 or self.seuls_f else "la déclaration"
+            phrases.append(f"sur {ref}, {lst} sans équivalent parmi les codes imprimés sur {_refs_fc(c.fcs)}")
+        return " ; ".join(phrases)
+
+
+def _a13_couple(ctx: ControlContext, c: Couple) -> ResultatControle | _EcartA13:
     cid = "A13"
     commun: dict = dict(unite=c.unite, documents=c.doc_ids)
     fcodes: dict[str, list[ValeurSourcee]] = {}
@@ -1691,8 +1727,8 @@ def _a13(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
                 assert v is not None
                 fcodes.setdefault(code, []).append(v)
     if not fcodes:
-        return [ctx.non_verifiable(cid, RaisonCode.valeur_absente,
-                                   details={"motif": "la facture ne porte pas de code"}, **commun)]
+        return ctx.non_verifiable(cid, RaisonCode.valeur_absente,
+                                  details={"motif": "la facture ne porte pas de code"}, **commun)
     dcodes: dict[str, list[tuple[Document, int, ValeurSourcee]]] = {}
     for dec in c.decs:
         for i, art in enumerate(dec.dec.articles):
@@ -1701,45 +1737,64 @@ def _a13(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
                 assert v is not None
                 dcodes.setdefault(code, []).append((dec, i, v))
     if not dcodes:
-        return [ctx.non_verifiable(cid, RaisonCode.valeur_absente,
-                                   details={"motif": "la déclaration ne porte pas de code lisible"}, **commun)]
+        return ctx.non_verifiable(cid, RaisonCode.valeur_absente,
+                                  details={"motif": "la déclaration ne porte pas de code lisible"}, **commun)
     seuls_f = sorted(set(fcodes) - set(dcodes))
     seuls_d = sorted(set(dcodes) - set(fcodes))
-    commun.update(attendu=",".join(sorted(fcodes)), constate=",".join(sorted(dcodes)),
-                  details={"sh6_facture_seuls": seuls_f, "sh6_declaration_seuls": seuls_d})
     if not seuls_f and not seuls_d:
-        return [ctx.conforme(cid, **commun)]
-    douteux = any(codes_confondables(a, b) for a in seuls_f for b in seuls_d)
-    vals_f = [v for code in seuls_f for v in fcodes[code]]
-    vals_d = [v for code in seuls_d for _, _, v in dcodes[code]]
+        commun.update(attendu=",".join(sorted(fcodes)), constate=",".join(sorted(dcodes)),
+                      details={"sh6_facture_seuls": [], "sh6_declaration_seuls": []})
+        return ctx.conforme(cid, **commun)
+    return _EcartA13(c, seuls_f, seuls_d, fcodes, dcodes)
+
+
+def _a13_dossier(ctx: ControlContext, ecarts: list[_EcartA13]) -> ResultatControle:
+    """Un seul constat A13 par dossier (D-4201, décision 6C du fondateur) : les codes de tous les couples à
+    rapprocher manuellement, avec toutes les preuves. Toujours ``a_verifier`` (contrôle de signal, renvoi)."""
+    cid = "A13"
+    docs = list(dict.fromkeys(d for e in ecarts for d in e.couple.doc_ids))
+    vals_f = [v for e in ecarts for v in e.valeurs()[0]]
+    vals_d = [v for e in ecarts for v in e.valeurs()[1]]
+    douteux = any(codes_confondables(a, b) for e in ecarts for a in e.seuls_f for b in e.seuls_d)
     cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[*vals_f, *vals_d],
-                      documents=c.doc_ids, renvoi=True,
+                      documents=docs, renvoi=True,
                       raisons_supplementaires=[RaisonCode.lecture_douteuse] if douteux else [])
-    phrases = []
-    if seuls_f:
-        lst = ", ".join(f"{fcodes[k][0].valeur_brute or fcodes[k][0].valeur} (page {fcodes[k][0].page})" for k in seuls_f)
-        phrases.append(
-            f"sur {_refs_fc(c.fcs)}, {lst} sans équivalent (comparaison sur 6 chiffres) parmi les codes imprimés "
-            f"sur {_refs_dec(c.decs)}"
-        )
-    if seuls_d:
-        lst = ", ".join(
-            f"{v.valeur_brute or v.valeur} ({_article_txt(dec, i)})" for k in seuls_d for dec, i, v in dcodes[k][:1]
-        )
-        phrases.append(f"sur la déclaration, {lst} sans équivalent parmi les codes imprimés sur la facture")
-    libelle = "Codes marchandise imprimés : " + " ; ".join(phrases) + "."
+    seuls_f = sorted({k for e in ecarts for k in e.seuls_f})
+    seuls_d = sorted({k for e in ecarts for k in e.seuls_d})
+    details = {
+        "sh6_facture_seuls": seuls_f,
+        "sh6_declaration_seuls": seuls_d,
+        "couples": [{"unite": e.couple.unite, "sh6_facture_seuls": e.seuls_f, "sh6_declaration_seuls": e.seuls_d,
+                     "croise": e.croise} for e in ecarts],
+        "a_sens_unique": not any(e.croise for e in ecarts),
+    }
+    libelle = "Codes marchandise à rapprocher manuellement : " + " ; ".join(e.phrase() for e in ecarts) + "."
     if douteux:
         libelle += " Certains codes ne diffèrent que par des chiffres souvent confondus à la lecture."
     libelle += f" {PHRASE_RENVOI}"
     preuves = [preuve(v, RolePreuve.valeur_a) for v in vals_f] + [preuve(v, RolePreuve.valeur_b) for v in vals_d]
-    return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_RENVOI, preuves=preuves, renvoi=True,
-                        **commun)]
+    unite = ecarts[0].couple.unite if len(ecarts) == 1 else "dossier"
+    return ctx.constat(cid, cl, unite=unite, libelle=libelle, prochaine_action=ACTION_RENVOI, preuves=preuves,
+                       renvoi=True, documents=docs, attendu=",".join(sorted({k for e in ecarts for k in e.fcodes})),
+                       constate=",".join(sorted({k for e in ecarts for k in e.dcodes})), details=details)
 
 
 @control("A13")
 def a13_codes_marchandise(ctx: ControlContext) -> list[ResultatControle]:
-    """A13 — codes marchandise imprimés comparés sur 6 chiffres (jamais validés ni jugés). Note de renvoi."""
-    return _par_couple(ctx, "A13", _a13)
+    """A13 — codes marchandise imprimés comparés sur 6 chiffres (jamais validés ni jugés). Note de renvoi.
+
+    Un seul constat par dossier (D-4201) : tous les codes sans équivalent, de tous les couples, à rapprocher
+    manuellement. Les couples conformes ou non vérifiables gardent leur résultat propre."""
+    out: list[ResultatControle] = []
+    ecarts: list[_EcartA13] = []
+    for r in _par_couple(ctx, "A13", lambda ctx_, c: [_a13_couple(ctx_, c)]):  # type: ignore[list-item]
+        if isinstance(r, _EcartA13):
+            ecarts.append(r)
+        else:
+            out.append(r)
+    if ecarts:
+        out.append(_a13_dossier(ctx, ecarts))
+    return out
 
 
 # =====================================================================================================

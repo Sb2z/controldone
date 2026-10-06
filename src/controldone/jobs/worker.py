@@ -19,6 +19,7 @@ import logging
 import os
 import signal
 import socket
+import sys
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -208,6 +209,12 @@ class Worker:
         return n
 
 
+def _journal_schema(message: str) -> None:
+    """Attente d'une migration (D-4102) : événement JSON (sans texte libre) et message lisible sur stderr."""
+    evenement(log, "schema_en_attente", logging.WARNING)
+    print(f"ControlDOne worker : {message}", file=sys.stderr, flush=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m controldone.jobs.worker")
     parser.add_argument("--once", action="store_true", help="traiter les jobs prêts puis s'arrêter")
@@ -230,10 +237,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         db.creer_schema(migrer=False)  # migrations : exiger_schema_a_jour (D-3503)
     from controldone.storage.db import SchemaPerime
 
-    try:  # D-1322 : jamais d'erreur « no such column » en cours de job
-        db.exiger_schema_a_jour()
+    try:  # D-1322 : jamais d'erreur « no such column » en cours de job ; migration en attente : D-4102
+        db.attendre_schema_a_jour(journal=_journal_schema)
     except SchemaPerime as exc:
-        evenement(log, "schema_perime", logging.CRITICAL, detail=str(exc)[:500])
+        evenement(log, "schema_perime", logging.CRITICAL)
+        print(f"ControlDOne worker : {exc}", file=sys.stderr, flush=True)  # noms d'étapes ou de colonnes seulement
         db.fermer()
         return 3
     worker = Worker(db, worker_id=args.worker_id, lease_s=args.lease, poll_s=args.poll,
