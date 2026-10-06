@@ -25,8 +25,19 @@ from starlette.requests import Request
 
 from controldone.web.i18n_en import CATALOGUE_EN, TEXTES_JS
 
-__all__ = ["AVERTISSEMENT_EN", "COOKIE_LANGUE", "LANGUES", "PHRASE_RENVOI_EN", "activer", "courante", "langue_de",
-           "negocier", "textes_js", "traduire"]
+__all__ = [
+    "AVERTISSEMENT_EN",
+    "COOKIE_LANGUE",
+    "LANGUES",
+    "N_",
+    "PHRASE_RENVOI_EN",
+    "activer",
+    "courante",
+    "langue_de",
+    "negocier",
+    "textes_js",
+    "traduire",
+]
 
 LANGUES = {"fr": "Français", "en": "English"}
 DEFAUT = "fr"
@@ -44,6 +55,12 @@ PHRASE_RENVOI_EN = (
 )
 
 _courante: ContextVar[str] = ContextVar("controldone_langue", default=DEFAUT)
+
+
+def N_(texte: str) -> str:
+    """Marque un texte à traduire **plus tard** (libellé de liste, titre passé à une fonction) : renvoie le texte
+    tel quel ; la traduction se fait à l'affichage (``_()`` dans le gabarit ou la fonction appelée)."""
+    return texte
 
 
 def courante() -> str:

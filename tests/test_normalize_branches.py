@@ -59,6 +59,7 @@ def test_code_marchandise_non_numerique():
     assert code_marchandise("84A1.30") is None
     assert code_marchandise("8471.30.00") == "84713000"
     assert code_marchandise("84713") is None
+    assert code_marchandise("") is None and code_marchandise(None) is None
 
 
 @pytest.mark.parametrize("texte, message", [

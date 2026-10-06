@@ -322,10 +322,13 @@ docker compose ps && curl -fsS https://app.exemple.fr/sante                     
   tourner sur un schéma incomplet. `controldone migrer` fait d'abord une sauvegarde chiffrée (vérifiée) puis
   applique les étapes ; `--etat` les liste sans rien faire. `CONTROLDONE_MIGRATION_AUTO=1` migre au démarrage
   (déconseillé : pas de sauvegarde préalable).
-- Dépendances : `requirements.lock` est régénéré depuis le venv de développement (`uv pip freeze`, en
-  retirant la ligne `-e` et les outils de dev, voir l'en-tête du fichier) puis commité avec le changement.
+- Dépendances (D-3609) : `requirements.lock` porte une empreinte SHA-256 par archive et l'image l'installe par
+  `pip --require-hashes`. Pour monter une version : la modifier dans `requirements.lock`, puis `make lock`
+  (recalcule les empreintes et la fermeture des dépendances, ainsi que `deploy/requirements-build.lock`), puis
+  `make audit`, et commiter avec le changement.
 - Image de base et paquets système : `docker compose build --pull` une fois par mois (correctifs de
-  sécurité de Debian et de tesseract).
+  sécurité de Debian et de tesseract), puis `make audit-image` (Trivy) : il échoue s'il reste une vulnérabilité
+  grave **corrigeable** (reconstruire), et liste les autres dans `var/audit/image.md`.
 
 ## 14. Test de restauration (chaque mois)
 

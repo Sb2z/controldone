@@ -2,80 +2,80 @@
 {% from "macros.html.j2" import csrf_champ, badge_niveau, constat_carte %}
 {% block contenu %}
 {% set d = lu.ligne %}
-<nav class="fil" aria-label="Fil d'Ariane">
-  {% if fondateur %}<a href="/admin/clients">Clients</a> › <a href="/admin/clients/{{ client.id }}">{{ client.raison_sociale }}</a>{% else %}<a href="/espace/dossiers">Dossiers</a>{% endif %} › <span>{{ d.reference }}</span>
+<nav class="fil" aria-label="{{ _("Fil d'Ariane") }}">
+  {% if fondateur %}<a href="/admin/clients">{{ _("Clients") }}</a> › <a href="/admin/clients/{{ client.id }}">{{ client.raison_sociale }}</a>{% else %}<a href="/espace/dossiers">{{ _("Dossiers") }}</a>{% endif %} › <span>{{ d.reference }}</span>
 </nav>
 <div class="titre-page titre-dossier">
   <div>
-    <h1>Dossier {{ d.reference }} {{ badge_niveau(d.statut_code, d.statut) }}</h1>
-    <p class="discret">Version {{ d.version }}{% if lu.transitaire %} · transitaire {{ lu.transitaire }}{% endif %} · créé le {{ d.cree_le|date }}</p>
+    <h1>{{ _("Dossier {ref}", ref=d.reference) }} {{ badge_niveau(d.statut_code, d.statut) }}</h1>
+    <p class="discret">{{ _("Version {n}", n=d.version) }}{% if lu.transitaire %} · {{ _("transitaire {nom}", nom=lu.transitaire) }}{% endif %} · {{ _("créé le {date}", date=d.cree_le|date) }}</p>
   </div>
-  <a class="btn btn-secondaire imprimer" href="#" data-imprimer>Imprimer</a>
+  <a class="btn btn-secondaire imprimer" href="#" data-imprimer>{{ _("Imprimer") }}</a>
 </div>
 
 <section class="carte">
   <dl class="cles">
-    {% for lib, val in d.cles %}<div><dt>{{ lib }}</dt><dd><code>{{ val }}</code></dd></div>{% endfor %}
+    {% for lib, val in d.cles %}<div><dt>{{ _(lib) }}</dt><dd><code>{{ val }}</code></dd></div>{% endfor %}
   </dl>
-  {% if lu.documents_manquants %}<p class="alerte-ligne">Documents manquants : {{ lu.documents_manquants|join(", ") }}.</p>{% endif %}
+  {% if lu.documents_manquants %}<p class="alerte-ligne">{{ _("Documents manquants :") }} {{ lu.documents_manquants|map("trad")|join(", ") }}.</p>{% endif %}
 </section>
 
 <section aria-labelledby="t-constats">
-  <h2 id="t-constats">Constats {% if not fondateur %}<span class="discret">publiés</span>{% endif %} <span class="compteur">{{ lu.constats|length }}</span></h2>
-  {% if fondateur %}<p class="discret">Valider publie le constat au client. Un « à vérifier » ne devient « écart certain » qu'après correction ou confirmation de la valeur douteuse (le contrôle est relancé).</p>{% endif %}
+  <h2 id="t-constats">{{ _("Constats") }} {% if not fondateur %}<span class="discret">{{ _("publiés") }}</span>{% endif %} <span class="compteur">{{ lu.constats|length }}</span></h2>
+  {% if fondateur %}<p class="discret">{{ _("Valider publie le constat au client. Un « à vérifier » ne devient « écart certain » qu'après correction ou confirmation de la valeur douteuse (le contrôle est relancé).") }}</p>{% endif %}
   {% for c in lu.constats %}
     {{ constat_carte(c, img.extraits, base, csrf, retour, fondateur, client.id if fondateur else None) }}
   {% else %}
-    <p class="vide carte">{% if fondateur %}Aucun constat : tous les contrôles exécutés sont conformes, non applicables ou non vérifiables.{% else %}Aucun constat publié pour ce dossier pour l'instant.{% endif %}</p>
+    <p class="vide carte">{% if fondateur %}{{ _("Aucun constat : tous les contrôles exécutés sont conformes, non applicables ou non vérifiables.") }}{% else %}{{ _("Aucun constat publié pour ce dossier pour l'instant.") }}{% endif %}</p>
   {% endfor %}
 </section>
 
 <section aria-labelledby="t-docs">
-  <h2 id="t-docs">Documents <span class="compteur">{{ lu.documents|length }}</span></h2>
-  <p class="discret">{{ lu.mention_documents }}</p>
+  <h2 id="t-docs">{{ _("Documents") }} <span class="compteur">{{ lu.documents|length }}</span></h2>
+  <p class="discret" lang="fr">{{ lu.mention_documents }}</p>
   {% for doc in lu.documents %}
   <article class="carte document" id="doc-{{ doc.id }}">
     <header class="document-tete">
       <div>
-        <h3>{{ doc.libelle }}</h3>
-        <p class="discret">{% if doc.fichier_nom %}{{ doc.fichier_nom }}{% endif %}{% if doc.pages %} · page{{ "s" if doc.pages|length > 1 else "" }} {{ doc.pages|map(attribute=1)|join(", ") }}{% endif %} · classement {{ doc.confiance }} · rattachement {{ doc.lien }}{% if doc.signaux %} ({{ doc.signaux }}){% endif %}</p>
+        <h3 lang="fr">{{ doc.libelle }}</h3>
+        <p class="discret">{% if doc.fichier_nom %}{{ doc.fichier_nom }}{% endif %}{% if doc.pages %} · {{ (_("pages {liste}") if doc.pages|length > 1 else _("page {liste}")).format(liste=doc.pages|map(attribute=1)|join(", ")) }}{% endif %} · {{ _("classement {pct}", pct=doc.confiance) }} · {{ _("rattachement {force}", force=_(doc.lien)) }}{% if doc.signaux %} (<span lang="fr">{{ doc.signaux }}</span>){% endif %}</p>
       </div>
-      {% if doc.faible %}<span class="badge b-verifier">Rattachement faible</span>{% endif %}
-      {% if doc.fichier_id %}<a class="petit-lien" href="{{ base }}/fichiers/{{ doc.fichier_id }}">Télécharger l'original</a>{% endif %}
+      {% if doc.faible %}<span class="badge b-verifier">{{ _("Rattachement faible") }}</span>{% endif %}
+      {% if doc.fichier_id %}<a class="petit-lien" href="{{ base }}/fichiers/{{ doc.fichier_id }}">{{ _("Télécharger l'original") }}</a>{% endif %}
     </header>
     {% set vign = img.vignettes.get(doc.id, []) %}
     <div class="document-corps">
     {% if vign %}
     <div class="vignettes">
       {% for n, png in vign %}
-      <a href="{{ base }}/documents/{{ doc.id }}/pages/{{ n }}.png" class="vignette"><img src="data:image/png;base64,{{ png|b64 }}" alt="Page {{ n }} de {{ doc.libelle }}" loading="lazy"><span>Page {{ n }}</span></a>
+      <a href="{{ base }}/documents/{{ doc.id }}/pages/{{ n }}.png" class="vignette"><img src="data:image/png;base64,{{ png|b64 }}" alt="{{ _("Page {n} de {doc}", n=n, doc=doc.libelle) }}" loading="lazy"><span>{{ _("Page {n}", n=n) }}</span></a>
       {% endfor %}
     </div>
     {% endif %}
     {% if doc.valeurs %}
     <details class="valeurs{% if not vign %} pleine{% endif %}"{% if fondateur and lu.documents|length <= 2 %} open{% endif %}>
-      <summary>Valeurs extraites et provenance ({{ doc.valeurs|length }})</summary>
+      <summary>{{ _("Valeurs extraites et provenance ({n})", n=doc.valeurs|length) }}</summary>
       <div class="defilement">
       <table class="donnees compacte">
-        <thead><tr><th scope="col">Champ</th><th scope="col">Texte lu</th><th scope="col">Valeur retenue</th><th scope="col" class="num">Page</th><th scope="col">Méthode</th><th scope="col" class="num">Confiance</th>{% if fondateur %}<th scope="col">Corriger ou confirmer</th>{% endif %}</tr></thead>
+        <thead><tr><th scope="col">{{ _("Champ") }}</th><th scope="col">{{ _("Texte lu") }}</th><th scope="col">{{ _("Valeur retenue") }}</th><th scope="col" class="num">{{ _("Page") }}</th><th scope="col">{{ _("Méthode") }}</th><th scope="col" class="num">{{ _("Confiance") }}</th>{% if fondateur %}<th scope="col">{{ _("Corriger ou confirmer") }}</th>{% endif %}</tr></thead>
         <tbody>
         {% for v in doc.valeurs %}
           <tr{% if v.remplace %} class="corrigee"{% endif %}>
             <td><code>{{ v.libelle }}</code></td>
-            <td>{{ v.valeur_brute or "—" }}{% if not v.ancree and v.methode not in ("xml_structure", "csv_structure", "saisie_humaine") %} <span class="badge b-verifier" title="valeur non retrouvée telle quelle dans le texte de la page">non ancrée</span>{% endif %}</td>
+            <td>{{ v.valeur_brute or "—" }}{% if not v.ancree and v.methode not in ("xml_structure", "csv_structure", "saisie_humaine") %} <span class="badge b-verifier" title="{{ _("valeur non retrouvée telle quelle dans le texte de la page") }}">{{ _("non ancrée") }}</span>{% endif %}</td>
             <td class="num">{{ v.valeur if v.valeur is not none else "—" }}{% if v.unite %} {{ v.unite }}{% endif %}</td>
             <td class="num">{{ v.page or "—" }}</td>
-            <td>{{ {"texte_natif": "texte natif", "ocr": "OCR", "llm": "modèle", "saisie_humaine": "saisie humaine", "derive": "dérivée", "xml_structure": "XML", "csv_structure": "CSV"}.get(v.methode, v.methode) }}</td>
+            <td>{{ {"texte_natif": _("texte natif"), "ocr": "OCR", "llm": _("modèle"), "saisie_humaine": _("saisie humaine"), "derive": _("dérivée"), "xml_structure": "XML", "csv_structure": "CSV"}.get(v.methode, v.methode) }}</td>
             <td class="num">{{ v.confiance }}</td>
             {% if fondateur %}
             <td>
-              <details class="corriger"><summary>Corriger</summary>
+              <details class="corriger"><summary>{{ _("Corriger") }}</summary>
               <form method="post" action="/admin/clients/{{ client.id }}/dossiers/{{ d.id }}/corriger" class="formulaire compact">
                 {{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
                 <input type="hidden" name="document_id" value="{{ doc.id }}"><input type="hidden" name="valeur_id" value="{{ v.id }}">
-                <label for="v-{{ v.id }}">Valeur (telle qu'imprimée)</label><input id="v-{{ v.id }}" name="valeur" value="{{ v.valeur_brute or v.valeur or '' }}" required maxlength="300">
-                <label for="m-{{ v.id }}">Motif</label><input id="m-{{ v.id }}" name="motif" required maxlength="1000" placeholder="ex. lu sur l'original page {{ v.page or '' }}">
-                <button type="submit" class="btn btn-petit">Enregistrer et relancer les contrôles</button>
+                <label for="v-{{ v.id }}">{{ _("Valeur (telle qu'imprimée)") }}</label><input id="v-{{ v.id }}" name="valeur" value="{{ v.valeur_brute or v.valeur or '' }}" required maxlength="300">
+                <label for="m-{{ v.id }}">{{ _("Motif") }}</label><input id="m-{{ v.id }}" name="motif" required maxlength="1000" placeholder="{{ _("ex. lu sur l'original page {n}", n=v.page or "") }}">
+                <button type="submit" class="btn btn-petit">{{ _("Enregistrer et relancer les contrôles") }}</button>
               </form></details>
             </td>
             {% endif %}
@@ -94,18 +94,18 @@
 {% if fondateur %}
 <section class="carte">
   <details>
-    <summary><h2 class="en-ligne">Contrôles exécutés ({{ lu.resultats|length }})</h2></summary>
+    <summary><h2 class="en-ligne">{{ _("Contrôles exécutés ({n})", n=lu.resultats|length) }}</h2></summary>
     <div class="defilement">
     <table class="donnees compacte">
-      <thead><tr><th scope="col">Contrôle</th><th scope="col">Libellé</th><th scope="col">Résultat</th><th scope="col" class="num">Attendu</th><th scope="col" class="num">Constaté</th><th scope="col">Raison</th></tr></thead>
-      <tbody>{% for r in lu.resultats %}<tr><td>{{ r.controle_id }}</td><td>{{ r.libelle }}</td><td>{{ badge_niveau(r.code, r.resultat) }}</td><td class="num">{{ r.attendu }}</td><td class="num">{{ r.constate }}</td><td>{{ r.raison }}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th scope="col">{{ _("Contrôle") }}</th><th scope="col">{{ _("Libellé") }}</th><th scope="col">{{ _("Résultat") }}</th><th scope="col" class="num">{{ _("Attendu") }}</th><th scope="col" class="num">{{ _("Constaté") }}</th><th scope="col">{{ _("Raison") }}</th></tr></thead>
+      <tbody>{% for r in lu.resultats %}<tr><td>{{ r.controle_id }}</td><td lang="fr">{{ r.libelle }}</td><td>{{ badge_niveau(r.code, r.resultat) }}</td><td class="num">{{ r.attendu }}</td><td class="num">{{ r.constate }}</td><td lang="fr">{{ r.raison }}</td></tr>{% endfor %}</tbody>
     </table>
     </div>
   </details>
   {% if lu.corrections %}
-  <h2>Corrections</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Le</th><th scope="col">Champ</th><th scope="col">Ancienne</th><th scope="col">Nouvelle</th><th scope="col">Motif</th></tr></thead><tbody>
-  {% for k in lu.corrections %}<tr><td>{{ k.le|date }}</td><td><code>{{ k.chemin }}</code></td><td>{{ k.ancienne_valeur or "—" }}</td><td>{{ k.nouvelle_valeur or "—" }}</td><td>{{ k.motif }}</td></tr>{% endfor %}
+  <h2>{{ _("Corrections") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Le") }}</th><th scope="col">{{ _("Champ") }}</th><th scope="col">{{ _("Ancienne") }}</th><th scope="col">{{ _("Nouvelle") }}</th><th scope="col">{{ _("Motif") }}</th></tr></thead><tbody>
+  {% for k in lu.corrections %}<tr><td>{{ k.le|date }}</td><td><code>{{ k.chemin }}</code></td><td>{{ k.ancienne_valeur or "—" }}</td><td>{{ k.nouvelle_valeur or "—" }}</td><td lang="fr">{{ k.motif }}</td></tr>{% endfor %}
   </tbody></table>
   {% endif %}
 </section>

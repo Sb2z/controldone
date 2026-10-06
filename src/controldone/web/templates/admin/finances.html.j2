@@ -2,34 +2,33 @@
 {% from "macros.html.j2" import kpi, csrf_champ %}
 {% block contenu %}
 <div class="titre-page">
-  <h1>Finances</h1>
-  <p class="discret">Factures du fondateur (Factur-X EN 16931), encaissements, coût IA et marge brute. Paiement :
-    {% if paiement.nom == "bouchon" %}<span class="badge b-neutre">bouchon local (aucune clé Stripe)</span>{% else %}<span class="badge {{ 'b-valide' if paiement.mode_test else 'b-alerte' }}">Stripe {{ "mode test" if paiement.mode_test else "PRODUCTION" }}</span>{% endif %}
-    — Plateforme agréée : <span class="badge b-neutre">{{ pa.nom }}</span>
-    — <a href="/admin/finances/export.csv">Export CSV</a></p>
+  <h1>{{ _("Finances") }}</h1>
+  <p class="discret">{{ _("Factures du fondateur (Factur-X EN 16931), encaissements, coût IA et marge brute.") }} {{ _("Paiement :") }}
+    {% if paiement.nom == "bouchon" %}<span class="badge b-neutre">{{ _("bouchon local (aucune clé Stripe)") }}</span>{% else %}<span class="badge {{ 'b-valide' if paiement.mode_test else 'b-alerte' }}">Stripe {{ _("mode test") if paiement.mode_test else "PRODUCTION" }}</span>{% endif %}
+    — {{ _("Plateforme agréée :") }} <span class="badge b-neutre">{{ pa.nom }}</span>
+    — <a href="/admin/finances/export.csv">{{ _("Export CSV") }}</a></p>
 </div>
 
 {% if vendeur_incomplet %}
-<div class="message erreur" role="alert">Identité du vendeur incomplète ({{ vendeur_incomplet|join(", ") }}) :
-  les factures portent la mention « NON VALABLE » et l'émission est refusée en production. Compléter
-  <code>config/offres.yaml</code> ou les variables <code>CONTROLDONE_VENDEUR_*</code>.</div>
+<div class="message erreur" role="alert">{{ _("Identité du vendeur incomplète ({champs}) : les factures portent la mention « NON VALABLE » et l'émission est refusée en production.", champs=vendeur_incomplet|join(", ")) }}
+  {{ _("Compléter") }} <code>config/offres.yaml</code> {{ _("ou les variables") }} <code>CONTROLDONE_VENDEUR_*</code>.</div>
 {% endif %}
 
-<section class="kpis" aria-label="Indicateurs du mois {{ mois }}">
-  {{ kpi("CA HT du mois", (du_mois.ca_ht if du_mois else 0)|montant, "factures − avoirs émis", "accent") }}
-  {{ kpi("Encaissé TTC du mois", (du_mois.encaisse_ttc if du_mois else 0)|montant, "paiements reçus (webhooks)") }}
-  {{ kpi("Coût IA du mois", (du_mois.cout_ia if du_mois else 0)|montant, "registre ai_usage") }}
-  {{ kpi("Marge brute du mois", (du_mois.marge_brute if du_mois else 0)|montant, "CA HT − coût IA") }}
-  {{ kpi("Factures à émettre", a_emettre|length, "brouillons approuvés", "alerte" if a_emettre else None) }}
+<section class="kpis" aria-label="{{ _("Indicateurs du mois {mois}", mois=mois) }}">
+  {{ kpi(_("CA HT du mois"), (du_mois.ca_ht if du_mois else 0)|montant, _("factures − avoirs émis"), "accent") }}
+  {{ kpi(_("Encaissé TTC du mois"), (du_mois.encaisse_ttc if du_mois else 0)|montant, _("paiements reçus (webhooks)")) }}
+  {{ kpi(_("Coût IA du mois"), (du_mois.cout_ia if du_mois else 0)|montant, _("registre ai_usage")) }}
+  {{ kpi(_("Marge brute du mois"), (du_mois.marge_brute if du_mois else 0)|montant, _("CA HT − coût IA")) }}
+  {{ kpi(_("Factures à émettre"), a_emettre|length, _("brouillons approuvés"), "alerte" if a_emettre else None) }}
 </section>
 
 {% if a_emettre %}
 <section class="carte">
-  <h2>Brouillons approuvés à émettre</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Client</th><th scope="col">Type</th><th scope="col" class="num">Total HT</th><th scope="col">Action</th></tr></thead><tbody>
+  <h2>{{ _("Brouillons approuvés à émettre") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Type") }}</th><th scope="col" class="num">{{ _("Total HT") }}</th><th scope="col">{{ _("Action") }}</th></tr></thead><tbody>
   {% for a in a_emettre %}
   <tr><td>{{ clients.get(a.tenant_id, a.tenant_id) }}</td><td>{{ a.payload_effectif.type_facture }}</td><td class="num">{{ a.payload_effectif.total_ht|montant }}</td>
-    <td><form method="post" action="/admin/finances/emettre/{{ a.id }}" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit btn-principal" type="submit">Émettre et déposer</button></form></td></tr>
+    <td><form method="post" action="/admin/finances/emettre/{{ a.id }}" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit btn-principal" type="submit">{{ _("Émettre et déposer") }}</button></form></td></tr>
   {% endfor %}
   </tbody></table>
 </section>
@@ -37,102 +36,102 @@
 
 <div class="grille-2">
 <section class="carte">
-  <h2>Par mois</h2>
+  <h2>{{ _("Par mois") }}</h2>
   <table class="donnees compacte">
-    <thead><tr><th scope="col">Mois</th><th scope="col" class="num">CA HT</th><th scope="col" class="num">Encaissé TTC</th><th scope="col" class="num">Coût IA</th><th scope="col" class="num">Marge brute</th></tr></thead>
+    <thead><tr><th scope="col">{{ _("Mois") }}</th><th scope="col" class="num">{{ _("CA HT") }}</th><th scope="col" class="num">{{ _("Encaissé TTC") }}</th><th scope="col" class="num">{{ _("Coût IA") }}</th><th scope="col" class="num">{{ _("Marge brute") }}</th></tr></thead>
     <tbody>
     {% for x in s.par_mois|reverse %}
       <tr><th scope="row">{{ x.mois }}</th><td class="num">{{ x.ca_ht|montant }}</td><td class="num">{{ x.encaisse_ttc|montant }}</td><td class="num">{{ x.cout_ia|montant }}</td><td class="num">{{ x.marge_brute|montant }}{% if x.taux_marge is not none %} <span class="discret">({{ x.taux_marge|nombre }} %)</span>{% endif %}</td></tr>
-    {% else %}<tr><td colspan="5" class="vide">Aucune donnée.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="5" class="vide">{{ _("Aucune donnée.") }}</td></tr>{% endfor %}
     </tbody>
   </table>
 </section>
 <section class="carte">
-  <h2>Par client</h2>
+  <h2>{{ _("Par client") }}</h2>
   <table class="donnees compacte">
-    <thead><tr><th scope="col">Client</th><th scope="col" class="num">CA HT</th><th scope="col" class="num">Coût IA</th><th scope="col" class="num">Marge brute</th><th scope="col" class="num">Dossiers (IA)</th></tr></thead>
+    <thead><tr><th scope="col">{{ _("Client") }}</th><th scope="col" class="num">{{ _("CA HT") }}</th><th scope="col" class="num">{{ _("Coût IA") }}</th><th scope="col" class="num">{{ _("Marge brute") }}</th><th scope="col" class="num">{{ _("Dossiers (IA)") }}</th></tr></thead>
     <tbody>
     {% for x in s.par_client %}
       <tr><th scope="row">{{ x.raison_sociale }}</th><td class="num">{{ x.ca_ht|montant }}</td><td class="num">{{ x.cout_ia|montant }}</td><td class="num">{{ x.marge_brute|montant }}</td><td class="num">{{ x.nb_dossiers_ia }}</td></tr>
-    {% else %}<tr><td colspan="5" class="vide">Aucune donnée.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="5" class="vide">{{ _("Aucune donnée.") }}</td></tr>{% endfor %}
     </tbody>
   </table>
 </section>
 </div>
 
 <section class="carte" id="factures">
-  <h2>Factures et avoirs émis</h2>
+  <h2>{{ _("Factures et avoirs émis") }}</h2>
   <div class="defilement">
   <table class="donnees compacte">
-    <thead><tr><th scope="col">Numéro</th><th scope="col">Date</th><th scope="col">Client</th><th scope="col">Objet</th><th scope="col" class="num">HT</th><th scope="col" class="num">TTC</th><th scope="col" class="num">Encaissé</th><th scope="col">Plateforme agréée</th><th scope="col">Pièces et actions</th></tr></thead>
+    <thead><tr><th scope="col">{{ _("Numéro") }}</th><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Objet") }}</th><th scope="col" class="num">{{ _("HT") }}</th><th scope="col" class="num">{{ _("TTC") }}</th><th scope="col" class="num">{{ _("Encaissé") }}</th><th scope="col">{{ _("Plateforme agréée") }}</th><th scope="col">{{ _("Pièces et actions") }}</th></tr></thead>
     <tbody>
     {% for x in s.factures %}
-      <tr><th scope="row">{{ x.type }} {{ x.numero }}{% if not x.vendeur_complet %} <span class="badge b-alerte">non valable</span>{% endif %}</th><td>{{ x.date|date(false) }}</td><td>{{ x.client }}</td><td>{{ x.type_facture }}</td>
+      <tr><th scope="row">{{ _(x.type) }} {{ x.numero }}{% if not x.vendeur_complet %} <span class="badge b-alerte">{{ _("non valable") }}</span>{% endif %}</th><td>{{ x.date|date(false) }}</td><td>{{ x.client }}</td><td>{{ x.type_facture }}</td>
         <td class="num">{{ x.total_ht|montant }}</td><td class="num">{{ x.total_ttc|montant }}</td><td class="num">{{ x.encaisse|montant }}</td><td>{{ x.statut_pa }}</td>
         <td><a href="/admin/finances/factures/{{ x.id }}.pdf">PDF</a> · <a href="/admin/finances/factures/{{ x.id }}.xml">XML</a>
         {% if x.type == "Facture" %}
-          {% if x.net_a_payer > 0 %}<form method="post" action="/admin/finances/factures/{{ x.id }}/paiement" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Lien de paiement</button></form>{% endif %}
-          <details class="corriger"><summary>Avoir</summary>
+          {% if x.net_a_payer > 0 %}<form method="post" action="/admin/finances/factures/{{ x.id }}/paiement" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">{{ _("Lien de paiement") }}</button></form>{% endif %}
+          <details class="corriger"><summary>{{ _("Avoir") }}</summary>
             <form method="post" action="/admin/finances/factures/{{ x.id }}/avoir" class="formulaire">{{ csrf_champ(csrf) }}
-              <label for="av-m-{{ x.id }}">Motif</label><input id="av-m-{{ x.id }}" name="motif" maxlength="500" required>
-              <label for="av-h-{{ x.id }}">Montant HT (vide = total)</label><input id="av-h-{{ x.id }}" name="montant_ht" maxlength="20" inputmode="decimal">
-              <button class="btn btn-petit" type="submit">Préparer l'avoir</button></form></details>
+              <label for="av-m-{{ x.id }}">{{ _("Motif") }}</label><input id="av-m-{{ x.id }}" name="motif" maxlength="500" required>
+              <label for="av-h-{{ x.id }}">{{ _("Montant HT (vide = total)") }}</label><input id="av-h-{{ x.id }}" name="montant_ht" maxlength="20" inputmode="decimal">
+              <button class="btn btn-petit" type="submit">{{ _("Préparer l'avoir") }}</button></form></details>
         {% endif %}</td></tr>
-    {% else %}<tr><td colspan="9" class="vide">Aucune facture émise.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="9" class="vide">{{ _("Aucune facture émise.") }}</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>
-  <form method="post" action="/admin/finances/pa/synchroniser" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Relever les statuts de la plateforme agréée</button></form>
-  <p class="discret">ControlDOne n'est pas une plateforme agréée : les factures du fondateur sont déposées sur la plateforme agréée partenaire, qui les transmet.</p>
+  <form method="post" action="/admin/finances/pa/synchroniser" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">{{ _("Relever les statuts de la plateforme agréée") }}</button></form>
+  <p class="discret">{{ _("ControlDOne n'est pas une plateforme agréée : les factures du fondateur sont déposées sur la plateforme agréée partenaire, qui les transmet.") }}</p>
 </section>
 
 <div class="grille-2">
 <section class="carte" id="nouvelle">
-  <h2>Proposer une facture</h2>
-  <p class="discret">Chaque facture part en brouillon dans la <a href="/admin/validation#sorties">file de validation</a> ; le numéro est attribué à l'émission.</p>
-  <h3>Diagnostic ({{ cat.prix_diagnostic_ht|montant }} HT)</h3>
+  <h2>{{ _("Proposer une facture") }}</h2>
+  <p class="discret">{{ _("Chaque facture part en brouillon dans la file de validation ; le numéro est attribué à l'émission.") }} <a href="/admin/validation#sorties">{{ _("File de validation") }}</a></p>
+  <h3>{{ _("Diagnostic ({prix} HT)", prix=cat.prix_diagnostic_ht|montant) }}</h3>
   <form method="post" action="/admin/finances/diagnostic" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="d-client">Client</label><select id="d-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
-    <label for="d-coupon">Coupon (facultatif)</label><select id="d-coupon" name="coupon"><option value="">Aucun</option>{% for code, c in cat.coupons.items() %}<option value="{{ code }}">{{ code }} — {{ coupons[code] }}/{{ c.utilisations_max }} utilisé(s)</option>{% endfor %}</select>
-    <fieldset><legend>Accord de publication des résultats anonymisés (facultatif, distinct de la remise, révocable)</legend>
-      <label><input type="checkbox" name="consentement_signe" value="1"> Accord signé par le client</label>
-      <label for="d-par">Signé par</label><input id="d-par" name="signe_par" maxlength="200">
-      <label for="d-le">Signé le</label><input id="d-le" name="signe_le" type="date">
-      <label for="d-ref">Référence du document signé</label><input id="d-ref" name="reference" maxlength="200">
+    <label for="d-client">{{ _("Client") }}</label><select id="d-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
+    <label for="d-coupon">{{ _("Coupon (facultatif)") }}</label><select id="d-coupon" name="coupon"><option value="">{{ _("Aucun") }}</option>{% for code, c in cat.coupons.items() %}<option value="{{ code }}">{{ code }} — {{ _("{n}/{max} utilisé(s)", n=coupons[code], max=c.utilisations_max) }}</option>{% endfor %}</select>
+    <fieldset><legend>{{ _("Accord de publication des résultats anonymisés (facultatif, distinct de la remise, révocable)") }}</legend>
+      <label><input type="checkbox" name="consentement_signe" value="1"> {{ _("Accord signé par le client") }}</label>
+      <label for="d-par">{{ _("Signé par") }}</label><input id="d-par" name="signe_par" maxlength="200">
+      <label for="d-le">{{ _("Signé le") }}</label><input id="d-le" name="signe_le" type="date">
+      <label for="d-ref">{{ _("Référence du document signé") }}</label><input id="d-ref" name="reference" maxlength="200">
     </fieldset>
-    <button class="btn" type="submit">Préparer la facture de diagnostic</button>
+    <button class="btn" type="submit">{{ _("Préparer la facture de diagnostic") }}</button>
   </form>
-  <h3>Abonnement de contrôle continu</h3>
+  <h3>{{ _("Abonnement de contrôle continu") }}</h3>
   <form method="post" action="/admin/finances/abonnement" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="a-client">Client</label><select id="a-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
-    <label for="a-palier">Palier</label><select id="a-palier" name="palier">{% for p in cat.paliers %}<option value="{{ p.code }}">{{ p.libelle }} — {{ p.prix_mensuel_ht|montant }} HT/mois, {{ p.dossiers_par_mois }} dossiers</option>{% endfor %}</select>
-    <label for="a-mois">Mois</label><input id="a-mois" name="mois" value="{{ mois }}" pattern="\d{4}-\d{2}" required>
-    <button class="btn" type="submit">Préparer la facture du mois</button>
-    <button class="btn" type="submit" formaction="/admin/finances/abonnement/lien">Créer le lien d'abonnement (paiement mensuel)</button>
+    <label for="a-client">{{ _("Client") }}</label><select id="a-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
+    <label for="a-palier">{{ _("Palier") }}</label><select id="a-palier" name="palier">{% for p in cat.paliers %}<option value="{{ p.code }}">{{ p.libelle }} — {{ _("{prix} HT/mois, {n} dossiers", prix=p.prix_mensuel_ht|montant, n=p.dossiers_par_mois) }}</option>{% endfor %}</select>
+    <label for="a-mois">{{ _("Mois") }}</label><input id="a-mois" name="mois" value="{{ mois }}" pattern="\d{4}-\d{2}" required>
+    <button class="btn" type="submit">{{ _("Préparer la facture du mois") }}</button>
+    <button class="btn" type="submit" formaction="/admin/finances/abonnement/lien">{{ _("Créer le lien d'abonnement (paiement mensuel)") }}</button>
   </form>
-  <h3>Commission ({{ (cat.taux_commission * 100)|nombre }} % des avoirs obtenus)</h3>
+  <h3>{{ _("Commission ({taux} % des avoirs obtenus)", taux=(cat.taux_commission * 100)|nombre) }}</h3>
   <form method="post" action="/admin/finances/commission" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="c-client">Client</label><select id="c-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
-    <label for="c-base">Base §17.4 (EUR, crédits imputés sur écarts validés)</label><input id="c-base" name="base" inputmode="decimal" required>
-    <label for="c-avoir">Référence de l'avoir</label><input id="c-avoir" name="avoir_id" maxlength="100" required>
-    <button class="btn" type="submit">Préparer la facture de commission</button>
+    <label for="c-client">{{ _("Client") }}</label><select id="c-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
+    <label for="c-base">{{ _("Base §17.4 (EUR, crédits imputés sur écarts validés)") }}</label><input id="c-base" name="base" inputmode="decimal" required>
+    <label for="c-avoir">{{ _("Référence de l'avoir") }}</label><input id="c-avoir" name="avoir_id" maxlength="100" required>
+    <button class="btn" type="submit">{{ _("Préparer la facture de commission") }}</button>
   </form>
 </section>
 
 <section class="carte">
-  <h2>Encaissements</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Date</th><th scope="col">Client</th><th scope="col">Événement</th><th scope="col" class="num">Montant</th></tr></thead><tbody>
+  <h2>{{ _("Encaissements") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Événement") }}</th><th scope="col" class="num">{{ _("Montant") }}</th></tr></thead><tbody>
   {% for e in s.encaissements[:30] %}
     <tr><td>{{ e.le|date }}</td><td>{{ e.client }}</td><td><code>{{ e.type }}</code> <span class="discret">({{ e.fournisseur }})</span></td><td class="num">{{ e.montant|montant if e.montant is not none else "—" }}</td></tr>
-  {% else %}<tr><td colspan="4" class="vide">Aucun événement de paiement.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="4" class="vide">{{ _("Aucun événement de paiement.") }}</td></tr>{% endfor %}
   </tbody></table>
-  <h2>Coût IA par dossier (plus coûteux)</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Client</th><th scope="col">Mois</th><th scope="col">Dossier</th><th scope="col" class="num">Coût</th></tr></thead><tbody>
+  <h2>{{ _("Coût IA par dossier (plus coûteux)") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Mois") }}</th><th scope="col">{{ _("Dossier") }}</th><th scope="col" class="num">{{ _("Coût") }}</th></tr></thead><tbody>
   {% for u in s.couts_dossiers[:20] %}
     <tr><td>{{ clients.get(u.client_id, u.client_id) }}</td><td>{{ u.mois }}</td><td><code>{{ u.dossier_id }}</code></td><td class="num">{{ u.cout_eur|montant }}</td></tr>
-  {% else %}<tr><td colspan="4" class="vide">Aucun coût IA enregistré.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="4" class="vide">{{ _("Aucun coût IA enregistré.") }}</td></tr>{% endfor %}
   </tbody></table>
-  {% if brouillons %}<p class="discret">{{ brouillons|length }} brouillon(s) de facture en attente d'approbation dans la file de validation.</p>{% endif %}
+  {% if brouillons %}<p class="discret">{{ _("{n} brouillon(s) de facture en attente d'approbation dans la file de validation.", n=brouillons|length) }}</p>{% endif %}
 </section>
 </div>
 {% endblock %}

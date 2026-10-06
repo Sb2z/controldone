@@ -110,13 +110,15 @@ def environnement() -> Environment:
         autoescape=select_autoescape(["html", "j2"], default=True, default_for_string=True),
         trim_blocks=True, lstrip_blocks=True, undefined=StrictUndefined,
     )
-    env.filters.update(montant=_montant, nombre=_nombre, date=_date, taille=_taille,
+    env.filters.update(montant=_montant, nombre=_nombre, date=_date, taille=_taille, trad=lambda t: traduire(t),
                        b64=lambda b: base64.b64encode(b).decode("ascii") if b else "")
     from controldone.services.publication import formats_disponibles
+    from controldone.web.listes_vues import ALERTES_GRAVES, libelle_alerte
 
     env.globals.update(AVERTISSEMENT=AVERTISSEMENT, PHRASE_RENVOI=PHRASE_RENVOI, formats=formats_disponibles,
                        AVERTISSEMENT_EN=AVERTISSEMENT_EN, PHRASE_RENVOI_EN=PHRASE_RENVOI_EN, LANGUES=LANGUES,
-                       _=traduire, langue_courante=courante)
+                       _=traduire, langue_courante=courante, libelle_alerte=libelle_alerte,
+                       ALERTES_GRAVES=ALERTES_GRAVES)
     return env
 
 

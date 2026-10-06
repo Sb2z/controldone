@@ -1,36 +1,36 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import csrf_champ %}
 {% block contenu %}
-<div class="titre-page"><h1>Clients</h1></div>
+<div class="titre-page"><h1>{{ _("Clients") }}</h1></div>
 <div class="grille-2 grille-large-etroite">
 <section class="carte">
-  <h2>Liste</h2>
+  <h2>{{ _("Liste") }}</h2>
   <div class="defilement">
   <table class="donnees">
-    <thead><tr><th scope="col">Client</th><th scope="col">Offre</th><th scope="col" class="num">Dossiers</th><th scope="col" class="num">À valider</th><th scope="col">Identifiant</th></tr></thead>
+    <thead><tr><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Offre") }}</th><th scope="col" class="num">{{ _("Dossiers") }}</th><th scope="col" class="num">{{ _("À valider") }}</th><th scope="col">{{ _("Identifiant") }}</th></tr></thead>
     <tbody>
     {% for c in d.clients %}
-      <tr><th scope="row"><a href="/admin/clients/{{ c.id }}">{{ c.raison_sociale }}</a>{% if c.demo %} <span class="badge b-demo">Fictif</span>{% endif %}{% if not c.actif %} <span class="badge b-neutre">Inactif</span>{% endif %}</th>
-      <td>{{ "Diagnostic" if c.offre == "diagnostic" else "Contrôle continu" }}</td>
+      <tr><th scope="row"><a href="/admin/clients/{{ c.id }}">{{ c.raison_sociale }}</a>{% if c.demo %} <span class="badge b-demo">{{ _("Fictif") }}</span>{% endif %}{% if not c.actif %} <span class="badge b-neutre">{{ _("Inactif") }}</span>{% endif %}</th>
+      <td>{{ _("Diagnostic") if c.offre == "diagnostic" else _("Contrôle continu") }}</td>
       <td class="num">{{ c.stats.get("nb_dossiers", 0) }}</td><td class="num">{{ c.stats.get("proposes", 0) }}</td>
       <td><code>{{ c.id }}</code></td></tr>
-    {% else %}<tr><td colspan="5" class="vide">Aucun client.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="5" class="vide">{{ _("Aucun client.") }}</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>
 </section>
 <section class="carte">
-  <h2>Nouveau client</h2>
+  <h2>{{ _("Nouveau client") }}</h2>
   <form method="post" action="/admin/clients" class="formulaire">
     {{ csrf_champ(csrf) }}
-    <label for="rs">Raison sociale</label>
+    <label for="rs">{{ _("Raison sociale") }}</label>
     <input id="rs" name="raison_sociale" required maxlength="300">
-    <label for="offre">Offre</label>
-    <select id="offre" name="offre"><option value="diagnostic">Diagnostic (390 EUR)</option><option value="continu">Contrôle continu</option></select>
-    <label for="plafond">Plafond IA mensuel (EUR) <span class="discret">— défaut 20 (diagnostic) ou 8</span></label>
+    <label for="offre">{{ _("Offre") }}</label>
+    <select id="offre" name="offre"><option value="diagnostic">{{ _("Diagnostic (390 EUR)") }}</option><option value="continu">{{ _("Contrôle continu") }}</option></select>
+    <label for="plafond">{{ _("Plafond IA mensuel (EUR)") }} <span class="discret">— {{ _("défaut 20 (diagnostic) ou 8") }}</span></label>
     <input id="plafond" name="plafond" inputmode="decimal" maxlength="12">
-    <label class="case"><input type="checkbox" name="demo" value="1"> Client de démonstration (données fictives)</label>
-    <button type="submit" class="btn btn-principal">Créer le client</button>
+    <label class="case"><input type="checkbox" name="demo" value="1"> {{ _("Client de démonstration (données fictives)") }}</label>
+    <button type="submit" class="btn btn-principal">{{ _("Créer le client") }}</button>
   </form>
 </section>
 </div>

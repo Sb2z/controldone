@@ -351,6 +351,10 @@ def test_javascript_sans_puits_html():
         assert not _PUITS.search(texte), (f.name, _PUITS.search(texte).group(0))
     for gabarit in (RACINE / "src/controldone/web/templates").rglob("*.j2"):
         texte = gabarit.read_text(encoding="utf-8")
+        # Seul bloc admis sans ``src`` : des **données** JSON (non exécutées, hors ``script-src``) produites par
+        # ``|tojson`` (qui échappe ``<``, ``>``, ``&`` et ``'`` : pas de sortie du bloc possible).
+        donnees = re.compile(r'<script type="application/json" id="[a-z0-9-]+">\{\{ [a-z_]+\|tojson \}\}</script>')
+        texte = donnees.sub("", texte)
         assert not re.search(r"<script(?![^>]*\bsrc=)", texte), gabarit.name  # aucun script en ligne
         assert not re.search(r"\son[a-z]+\s*=", texte), gabarit.name  # aucun gestionnaire en ligne
         assert "|safe" not in texte.replace(" ", ""), gabarit.name

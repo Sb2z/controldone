@@ -11,6 +11,19 @@
   var REVELER = ".titre-page, .fil, .kpi, .carte, .constat, .message, .ancres, .lien-dossier, .accueil-texte > *";
 
   function $$(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+
+  /* --- textes de l'interface dans la langue de la page (D-3803) : bloc JSON inerte produit par le serveur ----------- */
+  var TEXTES = {};
+  try {
+    var blocTextes = document.getElementById("cd-textes");
+    if (blocTextes) { TEXTES = JSON.parse(blocTextes.textContent || "{}") || {}; }
+  } catch (e) { TEXTES = {}; }
+  var ANGLAIS = racine.lang === "en";
+  function T(cle, params) {
+    var t = Object.prototype.hasOwnProperty.call(TEXTES, cle) ? TEXTES[cle] : cle;
+    if (params) { Object.keys(params).forEach(function (k) { t = t.split("{" + k + "}").join(String(params[k])); }); }
+    return t;
+  }
   function anime(el, kf, opts) {
     if (M && !reduit) { return M.animate(el, kf, opts); }
     return null;
@@ -41,7 +54,8 @@
   }
 
   /* --- compteurs : les montants défilent jusqu'à la valeur exacte affichée par le serveur ------------------- */
-  var MOTIF_NOMBRE = /^([^\d-]*)(-?[\d   ]+)(?:,(\d+))?(\s*(?:€|EUR|%)?)$/;
+  var MOTIF_NOMBRE = ANGLAIS ? /^([^\d-]*)(-?[\d,]+)(?:\.(\d+))?(\s*(?:€|EUR|%)?)$/
+    : /^([^\d-]*)(-?[\d   ]+)(?:,(\d+))?(\s*(?:€|EUR|%)?)$/;
   function compteurs() {
     if (!M || reduit) { return; }
     $$(".kpi-val").forEach(function (bloc) {
@@ -49,11 +63,11 @@
       var texte = cible.textContent.trim();
       var m = MOTIF_NOMBRE.exec(texte);
       if (!m) { return; }
-      var entier = parseInt(m[2].replace(/[\s  ]/g, ""), 10);
+      var entier = parseInt(m[2].replace(/[,\s  ]/g, ""), 10);
       var decimales = m[3] ? m[3].length : 0;
       var valeur = entier + (decimales ? (entier < 0 ? -1 : 1) * parseInt(m[3], 10) / Math.pow(10, decimales) : 0);
       if (!isFinite(valeur) || valeur === 0) { return; }
-      var fmt = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+      var fmt = new Intl.NumberFormat(ANGLAIS ? "en-GB" : "fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
       var lancer = function () {
         M.animate(0, valeur, {
           duration: Math.min(1.6, 0.7 + Math.log10(Math.abs(valeur) + 1) * 0.18), ease: EASE,
@@ -175,16 +189,18 @@
     var champ = dlg.querySelector("input");
     var liste = dlg.querySelector("ul");
     var entrees = [];
-    $$(".nav a").forEach(function (a) { entrees.push({ lib: a.textContent.trim(), aide: "Aller à", url: a.getAttribute("href") }); });
-    $$(".ancres a").forEach(function (a) { entrees.push({ lib: a.textContent.trim(), aide: "Sur cette page", url: a.getAttribute("href") }); });
+    $$(".nav a").forEach(function (a) { entrees.push({ lib: a.textContent.trim(), aide: T("Aller à"), url: a.getAttribute("href") }); });
+    $$(".ancres a").forEach(function (a) { entrees.push({ lib: a.textContent.trim(), aide: T("Sur cette page"), url: a.getAttribute("href") }); });
     $$(".carte-tete a.petit-lien, .carte h2 a.petit-lien").forEach(function (a) {
       var h = a.closest(".carte").querySelector("h2");
-      entrees.push({ lib: (h ? h.firstChild.textContent.trim() + " — " : "") + a.textContent.trim(), aide: "Lien", url: a.getAttribute("href") });
+      entrees.push({ lib: (h ? h.firstChild.textContent.trim() + " — " : "") + a.textContent.trim(), aide: T("Lien"), url: a.getAttribute("href") });
     });
     var compte = document.querySelector('.compte a[href="/compte/mot-de-passe"]');
-    if (compte) { entrees.push({ lib: "Changer de mot de passe", aide: "Compte", url: compte.getAttribute("href") }); }
-    entrees.push({ lib: "Basculer le thème clair / sombre", aide: "Affichage", action: function () { basculerTheme(); } });
-    if (document.querySelector("[data-imprimer]")) { entrees.push({ lib: "Imprimer cette page", aide: "Affichage", action: function () { window.print(); } }); }
+    if (compte) { entrees.push({ lib: T("Changer de mot de passe"), aide: T("Compte"), url: compte.getAttribute("href") }); }
+    var sessions = document.querySelector('.compte a[href="/compte/sessions"]');
+    if (sessions) { entrees.push({ lib: T("Mes sessions actives"), aide: T("Compte"), url: sessions.getAttribute("href") }); }
+    entrees.push({ lib: T("Basculer le thème clair / sombre"), aide: T("Affichage"), action: function () { basculerTheme(); } });
+    if (document.querySelector("[data-imprimer]")) { entrees.push({ lib: T("Imprimer cette page"), aide: T("Affichage"), action: function () { window.print(); } }); }
     var vues = [], sel = 0;
 
     function normaliser(s) { return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
@@ -194,7 +210,7 @@
       sel = Math.min(sel, Math.max(0, vues.length - 1));
       liste.textContent = "";
       if (!vues.length) {
-        var vide = document.createElement("li"); vide.className = "rien"; vide.textContent = "Aucun résultat";
+        var vide = document.createElement("li"); vide.className = "rien"; vide.textContent = T("Aucun résultat");
         vide.setAttribute("role", "option"); vide.setAttribute("aria-disabled", "true");
         liste.appendChild(vide); return;
       }
@@ -251,11 +267,11 @@
     var zone = form.querySelector(".zone-depot");
     var resume = form.querySelector("[data-resume]");
     var liste = form.querySelector(".liste-fichiers");
-    function taille(o) { return (o / 1048576).toFixed(1).replace(".", ",") + " Mo"; }
+    function taille(o) { var t = (o / 1048576).toFixed(1); return ANGLAIS ? t + " MB" : t.replace(".", ",") + " Mo"; }
     function afficher() {
       var n = champ.files.length, total = 0;
       for (var i = 0; i < n; i++) { total += champ.files[i].size; }
-      resume.textContent = n ? n + " fichier(s) sélectionné(s), " + taille(total) : "";
+      resume.textContent = n ? T("{n} fichier(s) sélectionné(s), {taille}", { n: n, taille: taille(total) }) : "";
       if (liste) {
         liste.textContent = "";
         for (var j = 0; j < Math.min(n, 40); j++) {
@@ -264,7 +280,7 @@
           var em = document.createElement("em"); em.textContent = taille(champ.files[j].size);
           li.appendChild(s); li.appendChild(em); liste.appendChild(li);
         }
-        if (n > 40) { var plus = document.createElement("li"); plus.textContent = "+ " + (n - 40) + " autre(s)"; liste.appendChild(plus); }
+        if (n > 40) { var plus = document.createElement("li"); plus.textContent = T("+ {n} autre(s)", { n: n - 40 }); liste.appendChild(plus); }
         if (M && !reduit && n) {
           M.animate($$("li", liste), { opacity: [0, 1], y: [8, 0], scale: [0.96, 1] }, { duration: 0.4, ease: EASE, delay: M.stagger(0.03) });
         }
@@ -277,7 +293,7 @@
     }
     form.addEventListener("submit", function () {
       var b = form.querySelector("button[type=submit]");
-      b.disabled = true; b.textContent = "Envoi en cours…";
+      b.disabled = true; b.textContent = T("Envoi en cours…");
     });
   }
 
@@ -285,8 +301,6 @@
   /* --- suivi en direct du traitement d'un dépôt (D-3402) ------------------------------------------------------------------------
      Interroge le point JSON de la même origine (session, périmètre du client) ; seuls des codes d'état et des textes fixes sont
      affichés (textContent). Arrêt quand le traitement est fini, pause quand l'onglet est masqué, attente plus longue après 429. */
-  var LIBELLES_ETAPE = { recu: "reçu, en attente de traitement", lecture: "lecture des documents", controles: "contrôles", termine: "terminé", erreur: "erreur" };
-  var ORDRE_ETAPES = ["recu", "lecture", "controles", "termine"];
   function interroger(url, surDonnees, intervalle) {
     var essais = 0, minuterie = null, arrete = false;
     function suivant(delai) { if (!arrete) { minuterie = window.setTimeout(tour, delai); } }
@@ -317,9 +331,11 @@
     var texte = bloc.querySelector("[data-suivi-texte]");
     var etapeAffichee = null;
     interroger(bloc.getAttribute("data-suivi"), function (d) {
-      var rang = ORDRE_ETAPES.indexOf(d.etape);
-      if (d.erreur) { rang = ORDRE_ETAPES.length - 1; }
-      $$("li[data-etape]", bloc).forEach(function (li, i) {
+      // rang, pourcentage et textes viennent du serveur (étapes fines du pipeline, D-3805 ; langue de la page)
+      var etapes = $$("li[data-etape]", bloc);
+      var rang = typeof d.rang === "number" ? d.rang : 0;
+      if (d.erreur) { rang = etapes.length - 1; }
+      etapes.forEach(function (li, i) {
         var fait = i < rang || (d.fini && !d.erreur);
         li.classList.toggle("fait", fait);
         li.classList.toggle("en-cours", !fait && i === rang);
@@ -327,10 +343,10 @@
         li.classList.toggle("erreur", !!d.erreur && i === rang);
         if (!fait && i === rang && !d.fini) { li.setAttribute("aria-current", "step"); } else { li.removeAttribute("aria-current"); }
         var lib = li.querySelector(".suivi-lib");
-        if (lib && d.erreur && i === rang) { lib.textContent = "Erreur"; }
+        if (lib && d.erreur && i === rang) { lib.textContent = d.libelle || T("Erreur"); }
       });
       if (barre) {
-        var pct = [5, 35, 65, 100][Math.max(0, rang)] || 5;
+        var pct = Math.max(0, Math.min(100, Math.round((d.pourcentage || 5) / 5) * 5));
         if (d.fini) { pct = 100; }
         var avant = barre.className;
         barre.className = "w-" + pct;
@@ -340,14 +356,16 @@
       }
       bloc.classList.toggle("suivi-erreur", !!d.erreur);
       bloc.classList.toggle("suivi-fini", !!d.fini && !d.erreur);
+      $$(".suivi-compteur", bloc).forEach(function (c) { c.textContent = ""; });
+      var compteurEtape = bloc.querySelector("li.en-cours .suivi-compteur");
+      if (compteurEtape && typeof d.fait === "number" && d.total) { compteurEtape.textContent = d.fait + "/" + d.total; }
+      if (texte) {
+        texte.textContent = d.fini && !d.erreur ? T("Traitement terminé : affichage des résultats…") : (d.texte || "");
+      }
       if (d.etape !== etapeAffichee) {
         etapeAffichee = d.etape;
         var actuelle = bloc.querySelector("li.en-cours .suivi-puce");
         if (actuelle) { anime(actuelle, { scale: [0.6, 1.15, 1] }, { duration: 0.5, ease: EASE }); }
-        if (texte) {
-          texte.textContent = d.erreur ? "Traitement en erreur. " + (d.detail || "")
-            : (d.fini ? "Traitement terminé : affichage des résultats…" : "Étape en cours : " + (LIBELLES_ETAPE[d.etape] || d.etape) + ".");
-        }
       }
       if (d.fini) {
         var lien = document.querySelector("[data-rafraichir]");

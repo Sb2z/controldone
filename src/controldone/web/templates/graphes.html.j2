@@ -3,7 +3,7 @@
 <figure class="graphe graphe-{{ g.genre }}">
   <figcaption class="graphe-titre">{{ g.titre }}</figcaption>
   {% if g.vide %}
-  <p class="vide graphe-vide">Pas encore de données à représenter.</p>
+  <p class="vide graphe-vide">{{ _("Pas encore de données à représenter.") }}</p>
   {% else %}
   <div class="graphe-cadre" tabindex="0" role="group" aria-labelledby="{{ g.id }}-t">
   <svg class="graphe-svg" viewBox="0 0 {{ g.largeur }} {{ g.hauteur }}" role="img" aria-labelledby="{{ g.id }}-t {{ g.id }}-d" focusable="false" preserveAspectRatio="xMidYMid meet" data-graphe>
@@ -34,7 +34,7 @@
   </div>
   {% if g.note %}<p class="discret graphe-note">{{ g.note }}</p>{% endif %}
   <details class="graphe-donnees">
-    <summary>Données du graphique</summary>
+    <summary>{{ _("Données du graphique") }}</summary>
     <table class="donnees compacte">
       <caption class="vh">{{ g.titre }}</caption>
       <thead><tr><th scope="col">{{ g.colonne_libelle }}</th><th scope="col" class="num">{{ g.colonne_valeur }}</th></tr></thead>

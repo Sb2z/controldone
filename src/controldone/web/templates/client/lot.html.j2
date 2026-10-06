@@ -16,7 +16,7 @@
       {% set rang = loop.index0 %}
       <li data-etape="{{ code }}" class="{{ 'fait' if rang < suivi.rang or (suivi.fini and not suivi.erreur) else ('en-cours' if rang == suivi.rang else 'a-venir') }}{% if suivi.erreur and rang == suivi.rang %} erreur{% endif %}"{% if rang == suivi.rang and not suivi.fini %} aria-current="step"{% endif %}>
         <span class="suivi-puce" aria-hidden="true"></span>
-        <span class="suivi-lib">{% if suivi.erreur and rang == suivi.rang %}{{ _("Erreur") }}{% else %}{{ _(lib) }}{% endif %}</span>
+        <span class="suivi-lib">{% if suivi.erreur and rang == suivi.rang %}{{ _("Erreur") }}{% else %}{{ _(lib) }}{% endif %}</span><span class="suivi-compteur num">{% if rang == suivi.rang and suivi.fait is not none and not suivi.fini %}{{ suivi.fait }}/{{ suivi.total }}{% endif %}</span>
       </li>
       {% endfor %}
     </ol>

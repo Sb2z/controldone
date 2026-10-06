@@ -172,3 +172,26 @@ def test_code_entre_parentheses_apres_le_libelle():
 def test_code_deux_points_avec_plusieurs_nombres_ignore():
     c = _extraire_ocr(_page(TAXES, "A00 : 12,56 20,0 % 2,51", total="77,47"))
     assert _totaux(c) == {}
+
+
+# --- D-3706 : totaux par code sans ligne de taxation lue ; total de catégorie sans code --------------------------
+
+
+def test_totaux_par_code_confirmes_par_le_total_sans_ligne_lue():
+    # tableau de taxation illisible (aucune ligne lue) ; récapitulatif « code : montant » complet
+    c = _extraire_ocr(_page([], "A00 : 12,56   B00 : 61,91"))
+    assert all(t.montant is None for t in c.taxations)
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "12.56"), ("B00", "61.91")]
+    # somme différente du total des droits et taxes : le code sans ligne lue n'est pas retenu
+    c = _extraire_ocr(_page([], "A00 : 12,56   B00 : 60,91"))
+    assert "B00" not in {t.type_taxe.valeur for t in c.totaux_par_code}
+
+
+def test_total_de_categorie_sans_code_rattache_au_seul_code_lu():
+    taxes = [("1", "A00", "210,00", "2,7 %", "5,67", "5,67", "E"), ("1", "A30", "100,00", "5,0 %", "5,00", "5,00", "E"),
+             ("1", "B00", "320,67", "20,0 %", "64,13", "64,13", "E")]
+    c = _extraire_ocr(_page(taxes, "Total droits (A00) 5,67   Total autres taxes 5,00   Total TVA (B00) 64,13",
+                            total="74,80"), conf=0.99)
+    par = {t.type_taxe.valeur: t.montant for t in c.totaux_par_code}
+    assert set(par) == {"A00", "A30", "B00"} and par["A30"].valeur == "5.00"
+    assert par["A30"].confiance < 0.90  # rattachement déduit : jamais une valeur certaine

@@ -29,6 +29,8 @@ from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.file_jobs import JobStore
 from controldone.storage.models import Document, Dossier, Fichier
 from controldone.web.graphes import donnees_fondateur
+from controldone.web.i18n import N_
+from controldone.web.i18n import traduire as _
 from controldone.web.listes import decalage, lire_requete, paginer
 from controldone.web.listes_vues import (
     NIVEAUX_VALIDATION,
@@ -54,10 +56,10 @@ from controldone.web.vues import image_page, images_dossier, images_preuves
 routeur = APIRouter(prefix="/admin")
 
 LIBELLES_SORTIE = {
-    "email_client": "Courriel au client", "rapport_publication": "Publication d'un rapport",
-    "reclamation_dossier": "Relevé d'écarts (mise à disposition du client)", "relance": "Rappel au client",
-    "facture_emise": "Facture émise", "post_linkedin": "Publication LinkedIn",
-    "email_prospection": "Courriel de prospection", "statut_litige_pa": "Statut de litige",
+    "email_client": N_("Courriel au client"), "rapport_publication": N_("Publication d'un rapport"),
+    "reclamation_dossier": N_("Relevé d'écarts (mise à disposition du client)"), "relance": N_("Rappel au client"),
+    "facture_emise": N_("Facture émise"), "post_linkedin": N_("Publication LinkedIn"),
+    "email_prospection": N_("Courriel de prospection"), "statut_litige_pa": N_("Statut de litige"),
 }
 
 
@@ -140,9 +142,9 @@ def ajouter_utilisateur(request: Request, tenant_id: str) -> Response:
         return redirection(request, f"/admin/clients/{tenant_id}", erreur=str(exc))
     if not mdp:
         return redirection(request, f"/admin/clients/{tenant_id}", message="Compte existant rattaché au client.")
-    return _fiche(request, f, tenant_id, secret={"titre": "Mot de passe provisoire", "valeur": mdp,
-                                                 "note": "À transmettre à l'utilisateur par un canal sûr ; "
-                                                         "il ne sera plus affiché."})
+    return _fiche(request, f, tenant_id, secret={"titre": N_("Mot de passe provisoire"), "valeur": mdp,
+                                                 "note": N_("À transmettre à l'utilisateur par un canal sûr ; "
+                                                            "il ne sera plus affiché.")})
 
 
 @routeur.post("/clients/{tenant_id}/entites")
@@ -192,7 +194,7 @@ def importer_grille(request: Request, tenant_id: str) -> Response:
     except RequeteInvalide as exc:
         return redirection(request, f"/admin/clients/{tenant_id}#grilles", erreur=str(exc))
     return redirection(request, f"/admin/clients/{tenant_id}#grilles",
-                       message=f"Grille importée en brouillon (version {g.version}) : à valider.")
+                       message="Grille importée en brouillon (version {n}) : à valider.", n=g.version)
 
 
 @routeur.post("/clients/{tenant_id}/grilles/valider")
@@ -219,8 +221,8 @@ def creer_cle(request: Request, tenant_id: str) -> Response:
                                       _s(form, "role", 30) or "client_admin")
     except RequeteInvalide as exc:
         return redirection(request, f"/admin/clients/{tenant_id}#cles", erreur=str(exc))
-    return _fiche(request, f, tenant_id, secret={"titre": "Clé d'API", "valeur": cle.cle,
-                                                 "note": "Copiez-la maintenant : seule son empreinte est conservée."})
+    return _fiche(request, f, tenant_id, secret={"titre": N_("Clé d'API"), "valeur": cle.cle,
+                                                 "note": N_("Copiez-la maintenant : seule son empreinte est conservée.")})
 
 
 @routeur.post("/clients/{tenant_id}/cles-api/{cle_id}/revoquer")
@@ -265,8 +267,8 @@ def publier(request: Request, tenant_id: str) -> Response:
                                erreur="Rapport bloqué : une formulation interdite figure dans le texte.")
         raise
     return redirection(request, "/admin/validation#sorties",
-                       message=f"Rapport préparé ({r.nb_dossiers} dossier(s), {r.nb_constats} constat(s) "
-                               "validé(s)) : à approuver dans la file de validation.")
+                       message="Rapport préparé ({d} dossier(s), {c} constat(s) validé(s)) : à approuver dans la file "
+                               "de validation.", d=r.nb_dossiers, c=r.nb_constats)
 
 
 @routeur.post("/clients/{tenant_id}/reclamations")
@@ -293,7 +295,7 @@ def dossier(request: Request, tenant_id: str, dossier_id: str) -> Response:
         info = client_info(scope)
         lu = detail_dossier(scope, dossier_id)
         images = images_dossier(pf.vault, scope, lu)
-    return page(request, "dossier.html.j2", titre=f"Dossier {lu.ligne.reference}", nav="clients", lu=lu, img=images,
+    return page(request, "dossier.html.j2", titre=_("Dossier {ref}", ref=lu.ligne.reference), nav="clients", lu=lu, img=images,
                 base=f"/admin/clients/{tenant_id}", client=info, fondateur=True, demo=info["demo"],
                 retour=request.url.path)
 
@@ -332,13 +334,13 @@ def _decision(request: Request, tenant_id: str, constat_id: str, quoi: str) -> R
             scope = op.client(tenant_id, f"décision sur un constat ({quoi})")
             if quoi == "valider":
                 validation.valider(scope, constat_id, motif or None)
-                msg = "Constat validé : il est publié au client."
+                msg = N_("Constat validé : il est publié au client.")
             elif quoi == "rejeter":
                 validation.rejeter(scope, constat_id, motif)
-                msg = "Constat rejeté."
+                msg = N_("Constat rejeté.")
             else:
                 validation.retrograder(scope, constat_id, motif)
-                msg = "Constat rétrogradé en « à vérifier »."
+                msg = N_("Constat rétrogradé en « à vérifier ».")
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
     return redirection(request, retour, message=msg)
@@ -373,8 +375,8 @@ def corriger(request: Request, tenant_id: str, dossier_id: str) -> Response:
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
     # le recontrôle a été mis en file dans la transaction de la correction (D-1306)
-    return redirection(request, retour, message=f"Valeur corrigée (version {version} du dossier) : les contrôles "
-                                                "sont relancés.")
+    return redirection(request, retour, message="Valeur corrigée (version {n} du dossier) : les contrôles sont "
+                                                "relancés.", n=version)
 
 
 # --- file de validation -----------------------------------------------------------------------------------------
@@ -425,7 +427,8 @@ def file_validation(request: Request) -> Response:
                                       "dossier": refs.get(v.dossier_id, v.dossier_id), "extraits": extraits}
             for b in bruts:
                 if b["tenant_id"] == tenant_id:
-                    attention.append({"type": "Rattachement faible" if b["type"] == "faible" else "Document non reconnu",
+                    attention.append({"type": N_("Rattachement faible") if b["type"] == "faible"
+                                      else N_("Document non reconnu"),
                                       "client": nom, "tenant_id": tenant_id, "dossier_id": b["dossier_id"],
                                       "dossier": b["dossier"],
                                       "detail": libelles.get(b["document_id"], b["document_id"])
@@ -464,25 +467,26 @@ def _sortie(request: Request, action_id: str, quoi: str) -> Response:
         if quoi == "approuver":
             fs.approuver(action_id, f)
             publication.mettre_a_disposition(pf, action_id, f)
-            msg = "Action approuvée."
+            msg = N_("Action approuvée.")
         elif quoi == "corriger":
             a = fs.obtenir(action_id, f)
             contenu = {**a.payload, "objet": _s(form, "objet", 300), "corps": _s(form, "corps", 20000)}
             fs.corriger(action_id, f, contenu)
             publication.mettre_a_disposition(pf, action_id, f)
-            msg = "Action corrigée et approuvée."
+            msg = N_("Action corrigée et approuvée.")
         else:
             motif = _s(form, "motif", 1000)
             if not motif:
                 return redirection(request, retour, erreur="Le refus exige un motif.")
             fs.refuser(action_id, f, motif)
-            msg = "Action refusée."
+            msg = N_("Action refusée.")
     except ActionBloquee as exc:
-        return redirection(request, retour, erreur="Bloqué par les garde-fous : " + "; ".join(exc.motifs)[:300])
+        return redirection(request, retour, erreur="Bloqué par les garde-fous : {motifs}",
+                           motifs="; ".join(exc.motifs)[:300])
     except TransitionInterdite:
         return redirection(request, retour, erreur="Cette action a déjà fait l'objet d'une décision.")
     except ValueError as exc:  # facture approuvée mais non émise (vendeur incomplet, coupon épuisé…)
-        return redirection(request, retour, erreur=f"Action approuvée, suite impossible : {exc}"[:300])
+        return redirection(request, retour, erreur="Action approuvée, suite impossible : {motif}", motif=str(exc)[:250])
     return redirection(request, retour, message=msg)
 
 

@@ -1,13 +1,13 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import csrf_champ %}
 {% block contenu %}
-<div class="titre-page"><h1>Paiement simulé (bouchon)</h1>
-  <p class="discret">Aucune clé Stripe n'est configurée : cette page remplace la page de paiement Stripe. Aucun argent ne circule.</p></div>
+<div class="titre-page"><h1>{{ _("Paiement simulé (bouchon)") }}</h1>
+  <p class="discret">{{ _("Aucune clé Stripe n'est configurée : cette page remplace la page de paiement Stripe. Aucun argent ne circule.") }}</p></div>
 <section class="carte carte-etroite">
-  <p>Session <code>{{ session.id }}</code> — {{ "abonnement mensuel" if session.mode == "subscription" else "paiement unique" }}</p>
-  <p>Montant TTC : <strong>{{ montant|montant }}</strong>{% if session.metadata.numero %} — facture {{ session.metadata.numero }}{% endif %}</p>
+  <p>{{ _("Session") }} <code>{{ session.id }}</code> — {{ _("abonnement mensuel") if session.mode == "subscription" else _("paiement unique") }}</p>
+  <p>{{ _("Montant TTC :") }} <strong>{{ montant|montant }}</strong>{% if session.metadata.numero %} — {{ _("facture {numero}", numero=session.metadata.numero) }}{% endif %}</p>
   <form method="post" action="/admin/finances/bouchon/{{ session.id }}/payer">{{ csrf_champ(csrf) }}
-    <button class="btn btn-principal" type="submit">Simuler un paiement réussi</button></form>
-  <p><a href="/admin/finances">Retour aux finances</a></p>
+    <button class="btn btn-principal" type="submit">{{ _("Simuler un paiement réussi") }}</button></form>
+  <p><a href="/admin/finances">{{ _("Retour aux finances") }}</a></p>
 </section>
 {% endblock %}

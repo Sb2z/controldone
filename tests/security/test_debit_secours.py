@@ -3,8 +3,11 @@ mémoire, jamais d'ouverture totale), remboursement, attente, effacement, pseudo
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
+from controldone.auth import debit
 from controldone.auth.debit import LimiteurDebit, LimiteurDebitPartage, cle_debit, sel_debit
 
 
@@ -28,14 +31,35 @@ def _partage(capacite=2, par_seconde=1.0, horloge=None):
                                 horloge=horloge or _Horloge())
 
 
-def test_base_en_panne_repli_en_memoire_qui_limite_encore(caplog):
-    lim = _partage(capacite=2)
-    assert lim.autoriser("203.0.113.7")
-    assert lim.autoriser("203.0.113.7")
-    assert not lim.autoriser("203.0.113.7")  # le repli limite toujours : pas d'ouverture en cas de panne
-    assert lim.autoriser("198.51.100.1")  # clés indépendantes
-    assert "debit_base_indisponible" in caplog.text
-    assert "203.0.113.7" not in caplog.text  # l'adresse n'est jamais journalisée
+class _Releve(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.lignes: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.lignes.append(record.getMessage())
+
+
+def test_base_en_panne_repli_en_memoire_qui_limite_encore():
+    # gestionnaire posé sur le journal du module : indépendant de la configuration de journalisation des autres tests
+    releve, journal = _Releve(), debit.log
+    niveau, desactive = journal.level, journal.disabled
+    journal.addHandler(releve)
+    journal.setLevel(logging.DEBUG)
+    journal.disabled = False  # un dictConfig d'un autre test peut l'avoir désactivé
+    try:
+        lim = _partage(capacite=2)
+        assert lim.autoriser("203.0.113.7")
+        assert lim.autoriser("203.0.113.7")
+        assert not lim.autoriser("203.0.113.7")  # le repli limite toujours : pas d'ouverture en cas de panne
+        assert lim.autoriser("198.51.100.1")  # clés indépendantes
+    finally:
+        journal.removeHandler(releve)
+        journal.setLevel(niveau)
+        journal.disabled = desactive
+    texte = "\n".join(releve.lignes)
+    assert "debit_base_indisponible" in texte
+    assert "203.0.113.7" not in texte  # l'adresse n'est jamais journalisée
 
 
 def test_base_en_panne_attente_remboursement_effacement():

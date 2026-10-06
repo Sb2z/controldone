@@ -141,7 +141,8 @@ def emettre(request: Request, action_id: str) -> Response:
         fac = service_pour(_pf(request)).emettre_et_deposer(action_id, f)
     except ValueError as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message=f"Facture {fac.numero} émise et déposée sur la plateforme agréée.")
+    return redirection(request, _RETOUR, message="Facture {numero} émise et déposée sur la plateforme agréée.",
+                       numero=fac.numero)
 
 
 @routeur.post("/factures/{facture_id}/avoir")
@@ -165,7 +166,7 @@ def lien_paiement(request: Request, facture_id: str) -> Response:
         session = service_pour(_pf(request)).lien_paiement(facture_id, f, url_base=_url_base(request))
     except ValueError as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message=f"Lien de paiement à transmettre au client : {session.url}")
+    return redirection(request, _RETOUR, message="Lien de paiement à transmettre au client : {url}", url=session.url)
 
 
 @routeur.post("/abonnement/lien")
@@ -177,7 +178,7 @@ def lien_abonnement(request: Request) -> Response:
                                                              url_base=_url_base(request))
     except (KeyError, ValueError) as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message=f"Lien d'abonnement à transmettre au client : {session.url}")
+    return redirection(request, _RETOUR, message="Lien d'abonnement à transmettre au client : {url}", url=session.url)
 
 
 @routeur.post("/pa/synchroniser")
@@ -185,7 +186,7 @@ def synchroniser_pa(request: Request) -> Response:
     _fondateur(request)
     formulaire_sync(request)
     n = service_pour(_pf(request)).synchroniser_statuts_pa()
-    return redirection(request, _RETOUR, message=f"{n} statut(s) de cycle de vie reçu(s) de la plateforme agréée.")
+    return redirection(request, _RETOUR, message="{n} statut(s) de cycle de vie reçu(s) de la plateforme agréée.", n=n)
 
 
 # --- bouchon de paiement (aucun Stripe configuré) ---------------------------------------------------------------
@@ -221,7 +222,7 @@ def payer_bouchon(request: Request, session_id: str) -> Response:
         raise AccesRefuse("introuvable ou hors périmètre") from exc
     for charge, signature in evenements:  # même chemin que les webhooks réels (signature vérifiée)
         svc.traiter_webhook(charge, signature)
-    return redirection(request, _RETOUR, message=f"Paiement simulé : {len(evenements)} événement(s) traité(s).")
+    return redirection(request, _RETOUR, message="Paiement simulé : {n} événement(s) traité(s).", n=len(evenements))
 
 
 # --- webhooks -----------------------------------------------------------------------------------------------------

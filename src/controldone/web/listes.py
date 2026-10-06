@@ -27,6 +27,8 @@ from starlette.requests import Request
 
 from controldone.services.plateforme import RequeteInvalide
 from controldone.services.saisie import montant_saisi
+from controldone.web.i18n import N_
+from controldone.web.i18n import traduire as _
 
 __all__ = ["Page", "Param", "Requete", "contient", "decalage", "lire_requete", "montant_dans", "normaliser", "paginer",
            "trier"]
@@ -121,9 +123,9 @@ class Page:
 def _texte(nom: str, libelle: str, v: str) -> str:
     v = v.strip()
     if len(v) > TEXTE_MAX:
-        raise RequeteInvalide(f"{libelle} : {TEXTE_MAX} caractères au plus")
+        raise RequeteInvalide(_("{libelle} : {n} caractères au plus", libelle=_(libelle), n=TEXTE_MAX))
     if _CONTROLE.search(v):
-        raise RequeteInvalide(f"{libelle} : caractère non admis")
+        raise RequeteInvalide(_("{libelle} : caractère non admis", libelle=_(libelle)))
     return v
 
 
@@ -136,14 +138,14 @@ def lire_requete(request: Request, params: dict[str, Param], tris: Sequence[str]
     for nom, spec in params.items():
         valeurs = qp.getlist(nom)
         if len(valeurs) > 1:
-            raise RequeteInvalide(f"{spec.libelle} : une seule valeur attendue")
+            raise RequeteInvalide(_("{libelle} : une seule valeur attendue", libelle=_(spec.libelle)))
         v = valeurs[0] if valeurs else ""
         v = _texte(nom, spec.libelle, v)
         if not v:
             continue
         if spec.genre == "choix":
             if v not in spec.choix:
-                raise RequeteInvalide(f"{spec.libelle} : valeur inconnue")
+                raise RequeteInvalide(_("{libelle} : valeur inconnue", libelle=_(spec.libelle)))
             filtres[nom] = v
         elif spec.genre == "montant":
             filtres[nom] = montant_saisi(v, nom=spec.libelle, zero=True)
@@ -151,20 +153,20 @@ def lire_requete(request: Request, params: dict[str, Param], tris: Sequence[str]
             try:
                 d = date.fromisoformat(v)
             except ValueError:
-                raise RequeteInvalide(f"{spec.libelle} : date attendue (AAAA-MM-JJ)") from None
+                raise RequeteInvalide(_("{libelle} : date attendue (AAAA-MM-JJ)", libelle=_(spec.libelle))) from None
             if not 2000 <= d.year <= 2100:
-                raise RequeteInvalide(f"{spec.libelle} : date hors limites")
+                raise RequeteInvalide(_("{libelle} : date hors limites", libelle=_(spec.libelle)))
             filtres[nom] = d
         else:
             filtres[nom] = v
         brut[nom] = v
-    tri = _texte("tri", "Tri", qp.get("tri", "")) or tri_defaut
+    tri = _texte("tri", N_("Tri"), qp.get("tri", "")) or tri_defaut
     if tri not in tris:
-        raise RequeteInvalide("Tri : valeur inconnue")
-    page = _entier(qp.get("page", ""), "Page", 1, PAGE_MAX, 1)
-    taille = _entier(qp.get("taille", ""), "Taille de page", 1, max(TAILLES), TAILLE_DEFAUT)
+        raise RequeteInvalide(_("Tri : valeur inconnue"))
+    page = _entier(qp.get("page", ""), N_("Page"), 1, PAGE_MAX, 1)
+    taille = _entier(qp.get("taille", ""), N_("Taille de page"), 1, max(TAILLES), TAILLE_DEFAUT)
     if taille not in TAILLES:
-        raise RequeteInvalide("Taille de page : 25, 50 ou 100")
+        raise RequeteInvalide(_("Taille de page : 25, 50 ou 100"))
     return Requete(filtres=filtres, brut=brut, tri=tri, tri_defaut=tri_defaut, page=page, taille=taille, ancre=ancre)
 
 
@@ -173,10 +175,10 @@ def _entier(v: str, libelle: str, mini: int, maxi: int, defaut: int) -> int:
     if not v:
         return defaut
     if not (v.isascii() and v.isdigit()) or len(v) > 6:  # « ² » est un chiffre pour isdigit, pas pour int (REV2-05)
-        raise RequeteInvalide(f"{libelle} : nombre entier attendu")
+        raise RequeteInvalide(_("{libelle} : nombre entier attendu", libelle=_(libelle)))
     n = int(v)
     if not mini <= n <= maxi:
-        raise RequeteInvalide(f"{libelle} : hors limites")
+        raise RequeteInvalide(_("{libelle} : hors limites", libelle=_(libelle)))
     return n
 
 

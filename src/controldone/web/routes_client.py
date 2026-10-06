@@ -27,6 +27,7 @@ from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalid
 from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.graphes import donnees_client
+from controldone.web.i18n import traduire as _
 from controldone.web.listes import lire_requete
 from controldone.web.listes_sql import page_dossiers, page_registre, totaux_registre, transitaires_registre
 from controldone.web.listes_vues import (
@@ -123,11 +124,11 @@ def deposer(request: Request) -> Response:
         r = depot.deposer(pf, a, transmis)
     except RequeteInvalide as exc:
         return redirection(request, "/espace/depot", erreur=str(exc))
-    msg = f"{r.acceptes} fichier(s) reçu(s)"
+    msg = _("{n} fichier(s) reçu(s)", n=r.acceptes)
     if r.doublons:
-        msg += f", {r.doublons} déjà reçu(s)"
+        msg += ", " + _("{n} déjà reçu(s)", n=r.doublons)
     if r.refuses:
-        msg += f", {len(r.refuses)} refusé(s)"
+        msg += ", " + _("{n} refusé(s)", n=len(r.refuses))
     return redirection(request, f"/espace/lots/{r.lot_id}", message=msg + ".")
 
 
@@ -208,7 +209,7 @@ def dossier(request: Request, dossier_id: str) -> Response:
         info = client_info(scope)
         lu = detail_dossier(scope, dossier_id)
         images = images_dossier(pf.vault, scope, lu)
-    return page(request, "dossier.html.j2", titre=f"Dossier {lu.ligne.reference}", nav="dossiers", lu=lu,
+    return page(request, "dossier.html.j2", titre=_("Dossier {ref}", ref=lu.ligne.reference), nav="dossiers", lu=lu,
                 img=images, base="/espace", client=info, fondateur=False, demo=info["demo"], retour=request.url.path,
                 **_contexte(a))
 

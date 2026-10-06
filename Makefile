@@ -32,8 +32,10 @@ pre-commit:
 COUV_MIN ?= 0
 couverture:
 	@mkdir -p var/couverture
-	$(PY) -m pytest -q --cov --cov-report=html --cov-report=json --cov-report=term:skip-covered $(PYTEST_ARGS)
-	$(PY) scripts/couverture_paquets.py var/couverture/couverture.json --out var/couverture/paquets.md --min $(COUV_MIN)
+	@# le résumé est produit même si des tests échouent ; le code de sortie reste celui de pytest
+	$(PY) -m pytest -q --cov --cov-report=html --cov-report=json --cov-report=term:skip-covered $(PYTEST_ARGS); \
+	  rc=$$?; $(PY) scripts/couverture_paquets.py var/couverture/couverture.json --out var/couverture/paquets.md \
+	  --min $(COUV_MIN) || { [ $$rc -ne 0 ] || rc=1; }; exit $$rc
 
 # Tests de propriétés (Hypothesis, tests/proprietes) : PROFIL=dev (défaut), ci (borné, déterministe) ou intensif.
 PROFIL ?= dev

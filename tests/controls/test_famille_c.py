@@ -786,3 +786,20 @@ def test_releve_reparti_entre_dossiers_un_seul_constat_d3704():
     assert r.details["dossier"] == "dos_autre"
     (r,) = run_controls(ctx_avec("dos_zzz"), controles=["C1"])  # ce dossier porte le constat
     assert r.outcome is Outcome.a_verifier and RaisonCode.allocation_prorata in r.constat.raisons
+
+
+def test_ligne_ventilee_par_mrn_reste_comparee_dans_chaque_dossier_d3704():
+    # La ligne cite le MRN de la déclaration de ce dossier : fait propre au dossier, jamais « couvert » ailleurs.
+    from controldone.controls.context import AutreDossier
+    from controldone.testing import dossier_pour
+
+    d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "80.00", mrn=MRN_B), refs_mrn=[MRN_A, MRN_B])
+    d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
+    autre = AutreDossier(dossier_pour([d1, f], id="dos_autre"), {d1.id: d1, f.id: f})
+    ctx = contexte([d2, f], autres_dossiers=[autre])
+    ctx.dossier.allocations.append(Allocation(
+        source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
+        montant_alloue=D("80.00"), methode=MethodeAllocation.prorata))
+    (r,) = run_controls(ctx, controles=["C1"])
+    assert r.outcome is not Outcome.non_applicable and r.constat is not None

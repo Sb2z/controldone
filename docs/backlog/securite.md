@@ -81,8 +81,8 @@ ok = etat.sessions.fermer_session(s.user_id, sid_vise)       # POST (CSRF) ; Fal
   retenu pour la production, l'ajouter à `requirements.lock` puis `make lock` (empreintes) et `make audit`.
   **À décider (bloc P).**
 - **Libellé de l'alerte `volume_non_chiffre`** (D-3605) dans l'écran Alertes. **À faire (interface).**
-- **`docs/DEPLOIEMENT.md`** : nouvelles variables `CONTROLDONE_URL_PUBLIQUE`, `CONTROLDONE_HOTES_AUTORISES`,
-  `CONTROLDONE_VOLUME_CHIFFRE`, `CONTROLDONE_DEV_RESEAU` documentées dans `deploy/.env.prod.example` et D-3601 à
-  D-3605 ; `make audit-image` et `make lock` à citer dans la procédure de mise à jour. **À faire (doc).**
+- **`docs/SECURITY.md`** : y reporter D-3601 à D-3605 (refus du mode `dev` exposé, URL publique et hôtes admis,
+  sessions actives, cookies `__Host-`, constat du volume chiffré). Variables documentées dans
+  `deploy/.env.prod.example`, `make lock` / `make audit-image` dans `docs/DEPLOIEMENT.md` § 13. **À faire (doc).**
 - **Rendu des vignettes** : chaque vignette coûte un processus (≈ 50 ms) ; une page qui en affiche beaucoup d'un
   coup pourrait les grouper en un seul appel isolé. **À mesurer (faible).**

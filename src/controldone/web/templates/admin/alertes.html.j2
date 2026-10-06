@@ -1,17 +1,22 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import csrf_champ %}
 {% block contenu %}
-<div class="titre-page"><h1>Alertes</h1></div>
-<section class="carte">
+<div class="titre-page"><h1>{{ _("Alertes") }}</h1>
+<p class="discret">{{ _("Tâches mortes, sauvegardes, coûts IA, chiffrement, facturation et suivi des écarts. Chaque alerte reste listée après lecture.") }}</p></div>
+<section class="carte" aria-labelledby="t-alertes">
+<h2 id="t-alertes" class="vh">{{ _("Liste des alertes") }}</h2>
+<div class="defilement">
 <table class="donnees">
-  <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Client</th><th scope="col">Message</th><th scope="col">État</th></tr></thead>
+  <thead><tr><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Type") }}</th><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Message") }}</th><th scope="col">{{ _("État") }}</th></tr></thead>
   <tbody>
   {% for a in alertes %}
-  <tr{% if not a.lue_le %} class="non-lue"{% endif %}><td>{{ a.cree_le|date }}</td><td>{{ {"job_mort": "Tâche morte", "cout_ia_alerte": "Coût IA 80 %", "cout_ia_plafond": "Plafond IA atteint", "sauvegarde_echec": "Sauvegarde en échec", "sauvegarde_verification_echec": "Sauvegarde non conforme", "sauvegarde_absente": "Aucune sauvegarde récente", "sauvegarde_hors_site_echec": "Copie hors site en échec"}.get(a.kind, a.kind) }}</td>
-    <td><code>{{ a.tenant_id or "—" }}</code></td><td>{{ a.message }}</td>
-    <td>{% if a.lue_le %}Lue le {{ a.lue_le|date }}{% else %}<form method="post" action="/admin/alertes/{{ a.id }}/lue" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Marquer comme lue</button></form>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="5" class="vide">Aucune alerte.</td></tr>{% endfor %}
+  <tr{% if not a.lue_le %} class="non-lue"{% endif %}><td>{{ a.cree_le|date }}</td>
+    <td><span class="badge {{ 'b-alerte' if a.kind in ALERTES_GRAVES else 'b-neutre' }}">{{ _(libelle_alerte(a.kind)) }}</span><br><code class="discret">{{ a.kind }}</code></td>
+    <td><code>{{ a.tenant_id or "—" }}</code></td><td lang="fr">{{ a.message }}</td>
+    <td>{% if a.lue_le %}{{ _("Lue le {date}", date=a.lue_le|date) }}{% else %}<form method="post" action="/admin/alertes/{{ a.id }}/lue" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">{{ _("Marquer comme lue") }}<span class="vh"> : {{ _(libelle_alerte(a.kind)) }}, {{ a.cree_le|date }}</span></button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="vide">{{ _("Aucune alerte.") }}</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
 </section>
 {% endblock %}

@@ -89,7 +89,7 @@ Sévérité comme dans la première revue (Élevée, Moyenne, Faible, Info).
 
 ## 6. Risques restants
 
-1. RS-16, RS-18, RS-19, RS-20, RS-21 de la première revue restent ouverts (RS-17 est corrigé).
+1. RS-16, RS-18, RS-19, RS-20, RS-21 de la première revue restaient ouverts : traités par le bloc S (D-3601 à D-3607 ; RS-21 atténué).
 2. Trusted Types appliqués par les navigateurs Chromium seulement ; ailleurs, le garde-fou est le test permanent.
 3. Chemin PostgreSQL du débit et des révocations écrit mais non testé (suite sous SQLite).
 4. Rendu OCR des PDF démesurés borné seulement par `RLIMIT_AS` du processus isolé.

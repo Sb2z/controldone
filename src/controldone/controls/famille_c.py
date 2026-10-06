@@ -476,6 +476,9 @@ class LigneDebours:
     #: Rattachement de la ligne à la déclaration non établi (MRN de ligne lu à une confusion OCR près, illisible,
     #: ou absent sur une facture qui couvre d'autres envois) : la comparaison n'est jamais certaine (D-2702).
     attribution_incertaine: bool = False
+    #: Ligne rattachée à ce dossier sans MRN ni allocation qui la désigne (ligne non ventilée, MRN illisible ou sans
+    #: correspondance) : un autre dossier qui contient la même facture la compare aussi (D-3704).
+    partagee: bool = False
 
 
 @dataclass
@@ -696,7 +699,7 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
                 if sure:
                     if not f.ft.est_releve and p not in autres_prefixes and len(decs) == 1:
                         # MRN sans correspondance (sujet de C7) : la seule déclaration du dossier reste la cible.
-                        explicites[decs[0].id].append(replace(ld, attribution_incertaine=multi_envois))
+                        explicites[decs[0].id].append(replace(ld, attribution_incertaine=multi_envois, partagee=True))
                     elif multi_envois and lg.mrn.confiance < ctx.profil.c_min_certain:
                         # MRN inconnu lu sous la confiance de certitude : peut-être un MRN du dossier mal lu.
                         non_rattachees.add(f.id)
@@ -708,9 +711,9 @@ def unites_c(ctx: ControlContext) -> list[UniteC]:
                 # Ligne non ventilée d'une facture qui couvre aussi d'autres envois : la rattacher à la seule
                 # déclaration du dossier est une hypothèse (D-2702).
                 incertaine = ld.attribution_incertaine or (multi_envois and not couvertes_prorata)
-                explicites[couv[0].id].append(replace(ld, attribution_incertaine=incertaine))
+                explicites[couv[0].id].append(replace(ld, attribution_incertaine=incertaine, partagee=True))
             else:
-                globales.append((couv, ld, hors_dossier and f.ft.est_releve))
+                globales.append((couv, replace(ld, partagee=True), hors_dossier and f.ft.est_releve))
 
     # Union des déclarations couvertes par une même ligne non ventilée.
     parent = {d.id: d.id for d in decs}
@@ -944,7 +947,7 @@ def _comparer_composante(
                                          refact, tol),
         montant=ecart, raisons_supplementaires=raisons,
     )
-    ailleurs = _unite_portee_ailleurs(ctx, cid, u, classement, details)
+    ailleurs = _unite_portee_ailleurs(ctx, cid, u, lignes, classement, details)
     if ailleurs is not None:
         return ailleurs
     nom = _NOM_CATEGORIE[cat]
@@ -974,14 +977,18 @@ def _comparer_composante(
 _RAISONS_NON_UNIVOQUES = frozenset({RaisonCode.attribution_non_univoque, RaisonCode.allocation_prorata})
 
 
-def _unite_portee_ailleurs(ctx: ControlContext, cid: str, u: UniteC, classement: Classement,
-                           details: dict) -> ResultatControle | None:
+def _unite_portee_ailleurs(ctx: ControlContext, cid: str, u: UniteC, lignes: Sequence[LigneDebours],
+                           classement: Classement, details: dict) -> ResultatControle | None:
     """Facture de transitaire répartie entre plusieurs dossiers du lot (relevé au prorata) dont la comparaison
-    n'est pas univoque (``attribution_non_univoque`` ou ``allocation_prorata``) : le même montant refacturé
-    serait comparé à la déclaration de chaque dossier, un constat par déclaration. Le constat n'est porté que
-    par le premier dossier (identifiant) qui contient la facture ; les autres rendent ``non_applicable``
-    (``couvert_par_autre_controle``, ``details.dossier``), dans l'esprit de D-3105 (D-3704)."""
+    n'est pas univoque (``attribution_non_univoque`` ou ``allocation_prorata``) et porte sur une ligne qu'aucun MRN
+    ni aucune allocation ne désigne (``LigneDebours.partagee``) : la même ligne serait comparée à la déclaration de
+    chaque dossier, un constat par déclaration. Le constat n'est porté que par le premier dossier (identifiant) qui
+    contient la facture ; les autres rendent ``non_applicable`` (``couvert_par_autre_controle``,
+    ``details.dossier``), dans l'esprit de D-3105 (D-3704). Des lignes ventilées par MRN sont des faits distincts
+    d'un dossier à l'autre : jamais concernées."""
     if classement.niveau is not Niveau.a_verifier or not set(classement.raisons) & _RAISONS_NON_UNIVOQUES:
+        return None
+    if not any(x.partagee for x in lignes):
         return None
     factures = {f.id for f in u.factures}
     freres = sorted({a.dossier.id for a in ctx.autres_dossiers if factures & set(a.documents)})
@@ -1204,7 +1211,7 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
             raisons_supplementaires=([RaisonCode.valeur_absente] if incompletes else [])
             + ([RaisonCode.attribution_non_univoque] if u.attribution_incertaine else []),
         )
-        ailleurs = _unite_portee_ailleurs(ctx, "C5", u, classement, details)
+        ailleurs = _unite_portee_ailleurs(ctx, "C5", u, lignes, classement, details)
         if ailleurs is not None:
             out.append(ailleurs)
             continue

@@ -2,59 +2,59 @@
 {% from "macros.html.j2" import csrf_champ %}
 {% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
-<div class="titre-page"><h1>Suivi des avoirs reçus</h1>
-<p class="discret">Écarts refacturés validés. Les montants sont des écarts constatés entre documents ; si vous écrivez à votre transitaire, c'est vous qui le faites ; enregistrez ici les avoirs reçus (montant hors taxes).</p></div>
-<section class="kpis" aria-label="Totaux">
-  <div class="kpi"><div class="kpi-lib">Écarts constatés</div><div class="kpi-val num">{{ totaux.initial|montant }}</div></div>
-  <div class="kpi"><div class="kpi-lib">Avoirs reçus</div><div class="kpi-val num">{{ totaux.credite|montant }}</div></div>
-  <div class="kpi kpi-accent"><div class="kpi-lib">Reste</div><div class="kpi-val num">{{ totaux.reste|montant }}</div></div>
+<div class="titre-page"><h1>{{ _("Suivi des avoirs reçus") }}</h1>
+<p class="discret">{{ _("Écarts refacturés validés. Les montants sont des écarts constatés entre documents ; si vous écrivez à votre transitaire, c'est vous qui le faites ; enregistrez ici les avoirs reçus (montant hors taxes).") }}</p></div>
+<section class="kpis" aria-label="{{ _("Totaux") }}">
+  <div class="kpi"><div class="kpi-lib">{{ _("Écarts constatés") }}</div><div class="kpi-val num">{{ totaux.initial|montant }}</div></div>
+  <div class="kpi"><div class="kpi-lib">{{ _("Avoirs reçus") }}</div><div class="kpi-val num">{{ totaux.credite|montant }}</div></div>
+  <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Reste") }}</div><div class="kpi-val num">{{ totaux.reste|montant }}</div></div>
 </section>
 <section class="carte" aria-labelledby="t-registre">
-<h2 id="t-registre" class="vh">Écarts et avoirs</h2>
-<form method="get" action="/espace/recouvrement" class="filtres" role="search" aria-label="Filtrer les écarts" data-filtres>
+<h2 id="t-registre" class="vh">{{ _("Écarts et avoirs") }}</h2>
+<form method="get" action="/espace/recouvrement" class="filtres" role="search" aria-label="{{ _("Filtrer les écarts") }}" data-filtres>
   <div class="filtre filtre-large">
-    <label for="r-q">Rechercher</label>
-    <input id="r-q" name="q" type="search" value="{{ req.brut.get('q', '') }}" maxlength="80" placeholder="Dossier, MRN, composante…" autocomplete="off" spellcheck="false">
+    <label for="r-q">{{ _("Rechercher") }}</label>
+    <input id="r-q" name="q" type="search" value="{{ req.brut.get('q', '') }}" maxlength="80" placeholder="{{ _("Dossier, MRN, composante…") }}" autocomplete="off" spellcheck="false">
   </div>
   <div class="filtre">
-    <label for="r-statut">Statut</label>
-    <select id="r-statut" name="statut"><option value="">Tous</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+    <label for="r-statut">{{ _("Statut") }}</label>
+    <select id="r-statut" name="statut"><option value="">{{ _("Tous") }}</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
   </div>
   <div class="filtre">
-    <label for="r-tr">Transitaire</label>
-    <select id="r-tr" name="transitaire"><option value="">Tous</option>{% for tid, nom in transitaires %}<option value="{{ tid }}"{% if req.brut.get('transitaire') == tid %} selected{% endif %}>{{ nom }}</option>{% endfor %}</select>
+    <label for="r-tr">{{ _("Transitaire") }}</label>
+    <select id="r-tr" name="transitaire"><option value="">{{ _("Tous") }}</option>{% for tid, nom in transitaires %}<option value="{{ tid }}"{% if req.brut.get('transitaire') == tid %} selected{% endif %}>{{ nom }}</option>{% endfor %}</select>
   </div>
   {{ fin_filtres(req, "r", "/espace/recouvrement") }}
 </form>
 <div data-resultats>
-{{ nb_resultats(p, req, "écart", "écarts") }}
+{{ nb_resultats(p, req, _("écart"), _("écarts")) }}
 <div class="defilement">
 <table class="donnees">
-  <caption class="vh">Écarts à recouvrer, page {{ p.page }} sur {{ p.pages }}</caption>
-  <thead><tr>{{ th_tri(req, "dossier", "Dossier") }}<th scope="col">Transitaire</th><th scope="col">Composante</th>{{ th_tri(req, "montant", "Écart", "num") }}<th scope="col" class="num">Crédité</th>{{ th_tri(req, "reste", "Reste", "num") }}{{ th_tri(req, "age", "Statut") }}{% if peut_declarer %}<th scope="col">Déclarer</th>{% endif %}</tr></thead>
+  <caption class="vh">{{ _("Écarts à recouvrer") }}, {{ _("page {n} sur {total}", n=p.page, total=p.pages) }}</caption>
+  <thead><tr>{{ th_tri(req, "dossier", _("Dossier")) }}<th scope="col">{{ _("Transitaire") }}</th><th scope="col">{{ _("Composante") }}</th>{{ th_tri(req, "montant", _("Écart"), "num") }}<th scope="col" class="num">{{ _("Crédité") }}</th>{{ th_tri(req, "reste", _("Reste"), "num") }}{{ th_tri(req, "age", _("Statut")) }}{% if peut_declarer %}<th scope="col">{{ _("Déclarer") }}</th>{% endif %}</tr></thead>
   <tbody>
   {% for x in p.elements %}
-  <tr><th scope="row">{% if x.dossier_id %}<a href="/espace/dossiers/{{ x.dossier_id }}">{{ x.dossier_reference or x.dossier_id }}</a>{% else %}—{% endif %}{% if x.niveau == "a_verifier" %} <span class="badge b-verifier">À confirmer</span>{% endif %}</th>
-    <td>{{ x.transitaire }}</td><td>{{ x.composante }}</td><td class="num">{{ x.montant_initial|montant }}</td><td class="num">{{ x.montant_credite|montant }}</td><td class="num">{{ x.reste|montant }}</td>
-    <td><span class="badge {{ {'credite': 'b-valide', 'abandonne': 'b-neutre', 'conteste': 'b-rejete', 'reclame': 'b-verifier', 'partiellement_credite': 'b-verifier'}.get(x.statut_code, 'b-propose') }}">{{ x.statut }}</span>{% if x.age_jours is not none %}<br><span class="discret">{{ x.age_jours }} j{% if x.relance %} · {{ x.relance }}{% endif %}</span>{% endif %}</td>
+  <tr><th scope="row">{% if x.dossier_id %}<a href="/espace/dossiers/{{ x.dossier_id }}">{{ x.dossier_reference or x.dossier_id }}</a>{% else %}—{% endif %}{% if x.niveau == "a_verifier" %} <span class="badge b-verifier">{{ _("À confirmer") }}</span>{% endif %}</th>
+    <td>{{ _(x.transitaire) }}</td><td>{{ _(x.composante) }}</td><td class="num">{{ x.montant_initial|montant }}</td><td class="num">{{ x.montant_credite|montant }}</td><td class="num">{{ x.reste|montant }}</td>
+    <td><span class="badge {{ {'credite': 'b-valide', 'abandonne': 'b-neutre', 'conteste': 'b-rejete', 'reclame': 'b-verifier', 'partiellement_credite': 'b-verifier'}.get(x.statut_code, 'b-propose') }}">{{ _(x.statut) }}</span>{% if x.age_jours is not none %}<br><span class="discret">{{ _("{n} j", n=x.age_jours) }}{% if x.relance %} · {{ _("rappel suggéré ({n} jours)", n=x.relance.split("(")[1].split(" ")[0]) if "(" in x.relance else x.relance }}{% endif %}</span>{% endif %}</td>
     {% if peut_declarer %}<td class="actions-registre">
       {% if x.statut_code in ("ouvert", "conteste") %}
-      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}"><button type="submit" class="btn btn-petit">J'ai envoyé mon courrier<span class="vh"> (dossier {{ x.dossier_reference or x.dossier_id }}, {{ x.composante }})</span></button></form>
+      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}"><button type="submit" class="btn btn-petit">{{ _("J'ai envoyé mon courrier") }}<span class="vh"> ({{ _("dossier {ref}", ref=x.dossier_reference or x.dossier_id) }}, {{ _(x.composante) }})</span></button></form>
       {% endif %}
       {% if x.statut_code not in ("credite", "abandonne") %}
-      <details class="corriger"><summary>Avoir reçu<span class="vh"> (dossier {{ x.dossier_reference or x.dossier_id }}, {{ x.composante }})</span></summary>
+      <details class="corriger"><summary>{{ _("Avoir reçu") }}<span class="vh"> ({{ _("dossier {ref}", ref=x.dossier_reference or x.dossier_id) }}, {{ _(x.composante) }})</span></summary>
       <form method="post" action="/espace/recouvrement/{{ x.id }}/avoir" class="formulaire compact">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
-        <label for="m-{{ x.id }}">Montant (EUR)</label><input id="m-{{ x.id }}" name="montant" inputmode="decimal" required maxlength="15">
-        <label for="r-{{ x.id }}">N° de l'avoir</label><input id="r-{{ x.id }}" name="reference" maxlength="200">
-        <button type="submit" class="btn btn-petit">Enregistrer</button></form></details>
+        <label for="m-{{ x.id }}">{{ _("Montant (EUR)") }}</label><input id="m-{{ x.id }}" name="montant" inputmode="decimal" required maxlength="15">
+        <label for="r-{{ x.id }}">{{ _("N° de l'avoir") }}</label><input id="r-{{ x.id }}" name="reference" maxlength="200">
+        <button type="submit" class="btn btn-petit">{{ _("Enregistrer") }}</button></form></details>
       {% endif %}
     </td>{% endif %}
   </tr>
-  {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}Aucun écart ne correspond à ces critères. <a href="/espace/recouvrement">Afficher tous les écarts</a>.{% elif total_lignes == 0 %}Aucun écart à recouvrer pour l'instant.{% else %}Aucun écart sur cette page.{% endif %}</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}{{ _("Aucun écart ne correspond à ces critères.") }} <a href="/espace/recouvrement">{{ _("Afficher tous les écarts") }}</a>.{% elif total_lignes == 0 %}{{ _("Aucun écart à recouvrer pour l'instant.") }}{% else %}{{ _("Aucun écart sur cette page.") }}{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
-{{ pagination(p, req, "Pages des écarts") }}
+{{ pagination(p, req, _("Pages des écarts")) }}
 </div>
 </section>
 {% endblock %}

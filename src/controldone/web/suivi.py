@@ -9,13 +9,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from controldone.web.i18n import traduire
+from controldone.web.i18n import N_, traduire
 
 __all__ = ["ETAPES", "etat_traitement"]
 
-ETAPES = (("recu", "Reçu"), ("pages", "Lecture des pages"), ("classement", "Classement des documents"),
-          ("extraction", "Extraction des valeurs"), ("regroupement", "Regroupement en dossiers"),
-          ("controles", "Contrôles"), ("termine", "Terminé"))
+ETAPES = (("recu", N_("Reçu")), ("pages", N_("Lecture des pages")), ("classement", N_("Classement des documents")),
+          ("extraction", N_("Extraction des valeurs")), ("regroupement", N_("Regroupement en dossiers")),
+          ("controles", N_("Contrôles")), ("termine", N_("Terminé")))
 _RANG = {code: i for i, (code, _l) in enumerate(ETAPES)}
 #: Anciennes valeurs (worker sans étapes fines) : « lecture » couvre tout le pipeline.
 _ALIAS = {"lecture": "pages"}
@@ -64,9 +64,9 @@ def etat_traitement(lot_statut: str, job: Any, langue: str | None = None) -> dic
     if lot_statut == "traite":
         code = "termine"
     elif lot_statut == "en_erreur":
-        code, detail = "erreur", "Aucun fichier exploitable dans ce dépôt."
+        code, detail = "erreur", N_("Aucun fichier exploitable dans ce dépôt.")
     elif statut == "dead":
-        code, detail = "erreur", "Le traitement a échoué ; le fondateur est alerté."
+        code, detail = "erreur", N_("Le traitement a échoué ; le fondateur est alerté.")
     elif statut == "done":
         code = "termine"
     elif statut == "running":
@@ -74,11 +74,11 @@ def etat_traitement(lot_statut: str, job: Any, langue: str | None = None) -> dic
     else:
         code = "recu"
         if essais:
-            detail = "Nouvel essai programmé."
+            detail = N_("Nouvel essai programmé.")
         elif statut == "pending":
-            detail = "En attente de traitement."
+            detail = N_("En attente de traitement.")
     if code == "erreur":
-        rang, libelle = len(ETAPES) - 1, "Erreur"
+        rang, libelle = len(ETAPES) - 1, N_("Erreur")
     else:
         rang, libelle = _RANG[code], dict(ETAPES)[code]
     libelle_t = traduire(libelle, langue)

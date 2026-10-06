@@ -2364,6 +2364,8 @@ class _Lecteur:
         lus: dict[str, list[Decimal]] = {}
         surs: dict[str, bool] = {}
         premiers: dict[str, tuple[_Lu, _Lu]] = {}
+        #: « Total autres taxes 1332,32 » : total imprimé d'une catégorie, sans code (D-3706)
+        sans_code: list[tuple[CategorieTaxe, _Span, _Lu]] = []
 
         def ajouter(code_lu: _Lu, lu: _Lu | None) -> None:
             code = code_lu.valeur
@@ -2395,7 +2397,10 @@ class _Lecteur:
                             code = _code_taxe(_Span(toks[j:j + 1]), ligne)
                             apres = j + 1
                             break
-                if code is None or code.valeur is None:
+                if code is None:
+                    self._total_categorie(toks, k + 1, fin, sans_code)
+                    continue
+                if code.valeur is None:
                     continue
                 reste = _Span(toks[apres:fin])
                 ms = [m for m in _nombres(reste) if _a_decimales(m)]
@@ -2422,11 +2427,80 @@ class _Lecteur:
             ajouter(code, self._lu_nombre(sp, ms[0]))
         # seuls les codes des lignes de taxation lues (« total TRY 616 558,35 » est un montant en devise)
         codes = {t.type_taxe.valeur for t in self.champs.taxations if t.type_taxe is not None and t.type_taxe.valeur}
-        for code, vals in lus.items():
-            if code in codes and len(set(vals)) == 1:
-                self.totaux_categories[code] = [(vals[0], surs.get(code, False))]
+        uniques = {code: vals[0] for code, vals in lus.items() if len(set(vals)) == 1}
+        for code, (code_lu, lu) in self._totaux_sans_code(sans_code, uniques).items():
+            # D-3706 : le seul code lu de la catégorie ; confiance plafonnée (rattachement déduit), jamais certaine
+            premiers[code] = (code_lu, lu)
+            surs[code] = False
+        if set(uniques) - codes and self._totaux_codes_complets(uniques):
+            # D-3706 : tableau de taxation illisible (scan dégradé) mais récapitulatif par code lu en entier : la
+            # somme de tous les totaux par code redonne le total des droits et taxes imprimé (ou le total à payer),
+            # ce qui confirme chaque code lu, même sans ligne de taxation.
+            codes = codes | set(uniques)
+        for code, val in uniques.items():
+            if code in codes:
+                self.totaux_categories[code] = [(val, surs.get(code, False))]
                 self._lus_totaux[code] = premiers[code]
         self._porter_totaux_par_code()
+
+    def _total_categorie(self, toks: Sequence[_Tok], debut: int, fin: int,
+                         sortie: list[tuple[CategorieTaxe, _Span, _Lu]]) -> None:
+        """« Total autres taxes 1332,32 » / « Total TVA 6268,36 » : libellé de catégorie seul (sans code) suivi d'un
+        seul montant à décimales (D-3706)."""
+        for j in range(debut, min(debut + 5, fin)):
+            libelle = _Span(list(toks[debut:j + 1]))
+            reste = _Span(list(toks[j + 1:fin]))
+            cat = _categorie_total(libelle.texte)
+            if cat is None or reste.vide:
+                continue
+            if re.match(r"(?i)(?:et|and|&)\b", reste.texte.strip()):
+                return  # « Total des droits et taxes » : total général, pas une catégorie
+            ms = [m for m in _nombres(reste) if _a_decimales(m)]
+            if len(ms) == 1 and ms[0].start() <= 4 and "%" not in reste.texte:
+                lu = self._lu_nombre(reste, ms[0])
+                if lu is not None and lu.valeur is not None:
+                    sortie.append((cat, libelle, lu))
+            return
+
+    def _totaux_sans_code(self, sans_code: list[tuple[CategorieTaxe, _Span, _Lu]],
+                          uniques: dict[str, Decimal]) -> dict[str, tuple[_Lu, _Lu]]:
+        """Total de catégorie sans code rattaché au **seul** code des lignes de taxation lues de cette catégorie,
+        quand ce code n'a pas de total lu et que la catégorie n'a qu'un total imprimé (D-3706). ``uniques`` est
+        complété ; retourne ``code -> (libellé lu comme code, montant lu)``."""
+        out: dict[str, tuple[_Lu, _Lu]] = {}
+        par_cat: dict[CategorieTaxe, list[tuple[_Span, _Lu]]] = {}
+        for cat, libelle, lu in sans_code:
+            par_cat.setdefault(cat, []).append((libelle, lu))
+        for cat, lectures in par_cat.items():
+            codes = {t.type_taxe.valeur for t in self.champs.taxations
+                     if t.categorie is cat and t.type_taxe is not None and t.type_taxe.valeur}
+            if len(lectures) != 1 or len(codes) != 1:
+                continue
+            code = next(iter(codes))
+            if code in uniques:
+                continue
+            libelle, lu = lectures[0]
+            try:
+                uniques[code] = Decimal(str(lu.valeur))
+            except ArithmeticError:
+                continue
+            out[code] = (_Lu(libelle, libelle.texte, code, penalite=0.15), _Lu(lu.span, lu.brut, lu.valeur, 0.15))
+        return out
+
+    def _totaux_codes_complets(self, uniques: dict[str, Decimal]) -> bool:
+        """Au moins deux totaux par code, et leur somme égale au total des droits et taxes ou au total à payer
+        imprimé, à 0,01 EUR par code près (D-3706)."""
+        if len(uniques) < 2:
+            return False
+        somme = sum(uniques.values(), Decimal(0))
+        for v in (self.champs.total_droits_taxes, self.champs.total_a_payer):
+            try:
+                total = Decimal(str(v.valeur)) if v is not None and v.valeur is not None else None
+            except ArithmeticError:
+                total = None
+            if total is not None and abs(total - somme) <= Decimal("0.01") * len(uniques):
+                return True
+        return False
 
     @staticmethod
     def _code_deux_points(toks: Sequence[_Tok], k: int) -> int | None:
@@ -2470,6 +2544,7 @@ class _Lecteur:
             code = t.type_taxe.valeur if t.type_taxe is not None else None
             if code and code in self._lus_totaux and code not in ordre:
                 ordre.append(code)
+        ordre += sorted(c for c in self._lus_totaux if c not in ordre)  # codes sans ligne lue (D-3706)
         for k, code in enumerate(ordre):
             code_lu, montant_lu = self._lus_totaux[code]
             total = TotalTaxeCode()
@@ -3063,6 +3138,22 @@ def _compatible(t: _Tok, genre: str) -> bool:
 def _code_minuscule(s: str) -> bool:
     """Code de taxe dont la lettre a été lue en minuscule par l'OCR (« x01 »)."""
     return bool(re.fullmatch(r"[a-z][0-9OoIlSZ]{2}", s)) and bool(re.search(r"\d", s))
+
+
+_LIBELLES_CATEGORIE_TOTAL: tuple[tuple[re.Pattern[str], CategorieTaxe], ...] = (
+    (re.compile(r"(?:des\s+)?droits?(?:\s+de\s+douane)?|(?:customs\s+)?dut(?:y|ies)"), CategorieTaxe.droit),
+    (re.compile(r"(?:des\s+)?autres?\s+taxes?|other\s+taxes?"), CategorieTaxe.autre_taxe),
+    (re.compile(r"(?:de\s+la\s+)?tva(?:\s+a\s+l'?\s*importation)?|(?:import\s+)?vat"), CategorieTaxe.tva),
+)
+
+
+def _categorie_total(libelle: str) -> CategorieTaxe | None:
+    """Catégorie d'un libellé de total sans code (« autres taxes », « TVA »), sinon ``None`` (D-3706)."""
+    t = re.sub(r"\s+", " ", sans_accents(libelle).lower().replace("’", "'")).strip(" :.-")
+    for motif, cat in _LIBELLES_CATEGORIE_TOTAL:
+        if motif.fullmatch(t):
+            return cat
+    return None
 
 
 def _code_taxe(span: _Span, ligne: _Ligne | None = None) -> _Lu | None:

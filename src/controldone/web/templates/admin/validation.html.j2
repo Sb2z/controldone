@@ -3,86 +3,87 @@
 {% from "listes.html.j2" import nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page">
-  <h1>File de validation</h1>
-  <p class="discret">Rien ne sort vers un client sans décision ici. Ordre : écarts certains par montant décroissant, puis à vérifier, puis points à faire vérifier par un professionnel.</p>
+  <h1>{{ _("File de validation") }}</h1>
+  <p class="discret">{{ _("Rien ne sort vers un client sans décision ici. Ordre : écarts certains par montant décroissant, puis à vérifier, puis points à faire vérifier par un professionnel.") }}</p>
 </div>
-<nav class="ancres" aria-label="Sections"><a href="#constats">Constats proposés ({{ total_file }})</a><a href="#sorties">Actions sortantes ({{ sorties|length }})</a><a href="#attention">Points d'attention ({{ attention|length }})</a></nav>
+<nav class="ancres" aria-label="{{ _("Sections") }}"><a href="#constats">{{ _("Constats proposés") }} ({{ total_file }})</a><a href="#sorties">{{ _("Actions sortantes") }} ({{ sorties|length }})</a><a href="#attention">{{ _("Points d'attention") }} ({{ nb_attention }})</a></nav>
 
 <section id="constats" aria-labelledby="t-c">
-  <h2 id="t-c">Constats proposés</h2>
-  <form method="get" action="/admin/validation#constats" class="filtres carte" role="search" aria-label="Filtrer les constats proposés" data-filtres>
+  <h2 id="t-c">{{ _("Constats proposés") }}</h2>
+  <form method="get" action="/admin/validation#constats" class="filtres carte" role="search" aria-label="{{ _("Filtrer les constats proposés") }}" data-filtres>
     <div class="filtre">
-      <label for="v-client">Client</label>
-      <select id="v-client" name="client"><option value="">Tous</option>{% for tid, nom in clients_filtre %}<option value="{{ tid }}"{% if req.brut.get('client') == tid %} selected{% endif %}>{{ nom }}</option>{% endfor %}</select>
+      <label for="v-client">{{ _("Client") }}</label>
+      <select id="v-client" name="client"><option value="">{{ _("Tous") }}</option>{% for tid, nom in clients_filtre %}<option value="{{ tid }}"{% if req.brut.get('client') == tid %} selected{% endif %}>{{ nom }}</option>{% endfor %}</select>
     </div>
     <div class="filtre filtre-large">
-      <label for="v-controle">Contrôle</label>
-      <select id="v-controle" name="controle"><option value="">Tous</option>{% for cid, lib in controles %}<option value="{{ cid }}"{% if req.brut.get('controle') == cid %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+      <label for="v-controle">{{ _("Contrôle") }}</label>
+      <select id="v-controle" name="controle"><option value="">{{ _("Tous") }}</option>{% for cid, lib in controles %}<option value="{{ cid }}"{% if req.brut.get('controle') == cid %} selected{% endif %} lang="fr">{{ lib }}</option>{% endfor %}</select>
     </div>
     <div class="filtre">
-      <label for="v-niveau">Niveau</label>
-      <select id="v-niveau" name="niveau"><option value="">Tous</option>{% for code, lib in niveaux.items() %}<option value="{{ code }}"{% if req.brut.get('niveau') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+      <label for="v-niveau">{{ _("Niveau") }}</label>
+      <select id="v-niveau" name="niveau"><option value="">{{ _("Tous") }}</option>{% for code, lib in niveaux.items() %}<option value="{{ code }}"{% if req.brut.get('niveau') == code %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
     </div>
     <fieldset class="filtre filtre-fourchette">
-      <legend>Montant en jeu (EUR)</legend>
-      <div><label for="v-min" class="vh">Montant minimal</label><input id="v-min" name="min" inputmode="decimal" maxlength="20" placeholder="min." value="{{ req.brut.get('min', '') }}"></div>
+      <legend>{{ _("Montant en jeu (EUR)") }}</legend>
+      <div><label for="v-min" class="vh">{{ _("Montant minimal") }}</label><input id="v-min" name="min" inputmode="decimal" maxlength="20" placeholder="{{ _("min.") }}" value="{{ req.brut.get('min', '') }}"></div>
       <span aria-hidden="true">–</span>
-      <div><label for="v-max" class="vh">Montant maximal</label><input id="v-max" name="max" inputmode="decimal" maxlength="20" placeholder="max." value="{{ req.brut.get('max', '') }}"></div>
+      <div><label for="v-max" class="vh">{{ _("Montant maximal") }}</label><input id="v-max" name="max" inputmode="decimal" maxlength="20" placeholder="{{ _("max.") }}" value="{{ req.brut.get('max', '') }}"></div>
     </fieldset>
     <div class="filtre">
-      <label for="v-tri">Ordre</label>
-      <select id="v-tri" name="tri">{% for code, lib in [("priorite", "Priorité (§7.7)"), ("-montant", "Montant décroissant"), ("montant", "Montant croissant"), ("client", "Client")] %}<option value="{{ code }}"{% if req.tri == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+      <label for="v-tri">{{ _("Ordre") }}</label>
+      <select id="v-tri" name="tri">{% for code, lib in [("priorite", _("Priorité (§7.7)")), ("-montant", _("Montant décroissant")), ("montant", _("Montant croissant")), ("client", _("Client"))] %}<option value="{{ code }}"{% if req.tri == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
     </div>
     {{ fin_filtres(req, "v", "/admin/validation", False) }}
   </form>
   <div data-resultats>
-  {{ nb_resultats(p, req, "constat proposé", "constats proposés") }}
+  {{ nb_resultats(p, req, _("constat proposé"), _("constats proposés")) }}
   {% for it in p.elements %}
     {{ constat_carte(it.c, it.extraits, "/admin/clients/" ~ it.tenant_id, csrf, retour, True, it.tenant_id, it.client, it.dossier) }}
-    <p class="lien-dossier"><a href="/admin/clients/{{ it.tenant_id }}/dossiers/{{ it.c.dossier_id }}#constat-{{ it.c.id }}">Ouvrir le dossier {{ it.dossier }} (corriger une valeur, voir les pages)</a></p>
+    <p class="lien-dossier"><a href="/admin/clients/{{ it.tenant_id }}/dossiers/{{ it.c.dossier_id }}#constat-{{ it.c.id }}">{{ _("Ouvrir le dossier {ref} (corriger une valeur, voir les pages)", ref=it.dossier) }}</a></p>
   {% else %}
-    <p class="vide carte">{% if req.actif %}Aucun constat ne correspond à ces critères. <a href="/admin/validation#constats">Afficher toute la file</a>.{% else %}Aucun constat en attente.{% endif %}</p>
+    <p class="vide carte">{% if req.actif %}{{ _("Aucun constat ne correspond à ces critères.") }} <a href="/admin/validation#constats">{{ _("Afficher toute la file") }}</a>.{% else %}{{ _("Aucun constat en attente.") }}{% endif %}</p>
   {% endfor %}
-  {{ pagination(p, req, "Pages de la file de validation") }}
+  {{ pagination(p, req, _("Pages de la file de validation")) }}
   </div>
 </section>
 
 <section id="sorties" aria-labelledby="t-s">
-  <h2 id="t-s">Actions sortantes à approuver</h2>
-  <p class="discret">Les rapports et relevés d'écarts approuvés sont mis à disposition du client dans son espace ; rien n'est envoyé à un transitaire.</p>
+  <h2 id="t-s">{{ _("Actions sortantes à approuver") }}</h2>
+  <p class="discret">{{ _("Les rapports et relevés d'écarts approuvés sont mis à disposition du client dans son espace ; rien n'est envoyé à un transitaire.") }}</p>
   {% for s in sorties %}
   <article class="carte sortie">
     <header class="sortie-tete">
-      <div><span class="badge b-propose">{{ libelles_sortie.get(s.kind.value, s.kind.value) }}</span> <strong>{{ s.payload.get("objet", "") }}</strong></div>
-      <span class="discret">{{ noms.get(s.tenant_id, "plateforme") if s.tenant_id else "plateforme" }} · {{ s.cree_le|date }}</span>
+      <div><span class="badge b-propose">{{ _(libelles_sortie.get(s.kind.value, s.kind.value)) }}</span> <strong lang="fr">{{ s.payload.get("objet", "") }}</strong></div>
+      <span class="discret">{{ noms.get(s.tenant_id, _("plateforme")) if s.tenant_id else _("plateforme") }} · {{ s.cree_le|date }}</span>
     </header>
-    {% if s.motif_blocage %}<p class="alerte-ligne">Bloqué par les garde-fous : {{ s.motif_blocage }}</p>{% endif %}
-    <pre class="corps" tabindex="0" role="region" aria-label="Texte : {{ s.payload.get('objet', '') or libelles_sortie.get(s.kind.value, s.kind.value) }}">{{ s.payload.get("corps", "") }}</pre>
-    {% if formats(s) %}<p>Pièces : {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</p>{% endif %}
+    {% if s.motif_blocage %}<p class="alerte-ligne">{{ _("Bloqué par les garde-fous :") }} {{ s.motif_blocage }}</p>{% endif %}
+    <pre class="corps" tabindex="0" role="region" lang="fr" aria-label="{{ _("Texte :") }} {{ s.payload.get('objet', '') or _(libelles_sortie.get(s.kind.value, s.kind.value)) }}">{{ s.payload.get("corps", "") }}</pre>
+    {% if formats(s) %}<p>{{ _("Pièces :") }} {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</p>{% endif %}
     <div class="decisions">
       <form method="post" action="/admin/sorties/{{ s.id }}/approuver" class="decision">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
-        <button type="submit" class="btn btn-principal">Approuver</button></form>
+        <button type="submit" class="btn btn-principal">{{ _("Approuver") }}<span class="vh"> : {{ s.payload.get("objet", "") }}</span></button></form>
       <form method="post" action="/admin/sorties/{{ s.id }}/refuser" class="decision decision-motif">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
-        <label class="vh" for="ref-{{ s.id }}">Motif du refus</label><input id="ref-{{ s.id }}" name="motif" required maxlength="1000" placeholder="Motif du refus (obligatoire)">
-        <button type="submit" class="btn">Refuser</button></form>
-      <details class="corriger"><summary>Corriger puis approuver</summary>
+        <label class="vh" for="ref-{{ s.id }}">{{ _("Motif du refus") }}</label><input id="ref-{{ s.id }}" name="motif" required maxlength="1000" placeholder="{{ _("Motif du refus (obligatoire)") }}">
+        <button type="submit" class="btn">{{ _("Refuser") }}</button></form>
+      <details class="corriger"><summary>{{ _("Corriger puis approuver") }}</summary>
         <form method="post" action="/admin/sorties/{{ s.id }}/corriger" class="formulaire">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
-          <label for="obj-{{ s.id }}">Objet</label><input id="obj-{{ s.id }}" name="objet" value="{{ s.payload.get('objet', '') }}" maxlength="300" required>
-          <label for="corps-{{ s.id }}">Texte</label><textarea id="corps-{{ s.id }}" name="corps" rows="10" maxlength="20000">{{ s.payload.get("corps", "") }}</textarea>
-          <button type="submit" class="btn">Enregistrer la correction et approuver</button>
+          <label for="obj-{{ s.id }}">{{ _("Objet") }}</label><input id="obj-{{ s.id }}" name="objet" value="{{ s.payload.get('objet', '') }}" maxlength="300" required>
+          <label for="corps-{{ s.id }}">{{ _("Texte") }}</label><textarea id="corps-{{ s.id }}" name="corps" rows="10" maxlength="20000">{{ s.payload.get("corps", "") }}</textarea>
+          <button type="submit" class="btn">{{ _("Enregistrer la correction et approuver") }}</button>
         </form></details>
     </div>
   </article>
-  {% else %}<p class="vide carte">Aucune action en attente.</p>{% endfor %}
+  {% else %}<p class="vide carte">{{ _("Aucune action en attente.") }}</p>{% endfor %}
 </section>
 
 <section id="attention" class="carte" aria-labelledby="t-a">
-  <h2 id="t-a">Points d'attention</h2>
-  <p class="discret">Documents non reconnus et rattachements faibles : à vérifier dans le dossier.</p>
+  <h2 id="t-a">{{ _("Points d'attention") }}</h2>
+  <p class="discret">{{ _("Documents non reconnus et rattachements faibles : à vérifier dans le dossier.") }}</p>
   {% if attention %}
-  <table class="donnees compacte"><thead><tr><th scope="col">Type</th><th scope="col">Client</th><th scope="col">Dossier</th><th scope="col">Document</th></tr></thead><tbody>
-  {% for a in attention %}<tr><td>{{ a.type }}</td><td>{{ a.client }}</td><td><a href="/admin/clients/{{ a.tenant_id }}/dossiers/{{ a.dossier_id }}">{{ a.dossier }}</a></td><td>{{ a.detail }}</td></tr>{% endfor %}
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Type") }}</th><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Dossier") }}</th><th scope="col">{{ _("Document") }}</th></tr></thead><tbody>
+  {% for a in attention %}<tr><td>{{ _(a.type) }}</td><td>{{ a.client }}</td><td><a href="/admin/clients/{{ a.tenant_id }}/dossiers/{{ a.dossier_id }}">{{ a.dossier }}</a></td><td>{{ a.detail }}</td></tr>{% endfor %}
   </tbody></table>
-  {% else %}<p class="vide">Aucun point d'attention.</p>{% endif %}
+  {% if nb_attention > attention|length %}<p class="discret">{{ _("{n} premiers points affichés sur {total}.", n=attention|length, total=nb_attention) }}</p>{% endif %}
+  {% else %}<p class="vide">{{ _("Aucun point d'attention.") }}</p>{% endif %}
 </section>
 {% endblock %}

@@ -1,0 +1,30 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% block contenu %}
+<div class="titre-page"><h1>{{ _("Mes sessions actives") }}</h1>
+<p class="discret">{{ _("Navigateurs et appareils connectés à votre compte. Une session se ferme seule après 30 minutes d'inactivité ou 8 heures au plus. Fermez celles que vous ne reconnaissez pas, puis changez votre mot de passe.") }}</p></div>
+<section class="carte" aria-labelledby="t-sessions">
+  <div class="carte-tete"><h2 id="t-sessions">{{ _("Sessions ouvertes") }} <span class="compteur">{{ sessions|length }}</span></h2>
+  {% if autres %}
+  <form method="post" action="/compte/sessions/fermer-autres" class="en-ligne">{{ csrf_champ(csrf) }}
+    <button type="submit" class="btn btn-principal">{{ _("Fermer mes autres sessions") }}</button></form>
+  {% endif %}
+  </div>
+  <div class="defilement">
+  <table class="donnees">
+    <caption class="vh">{{ _("Sessions ouvertes sur votre compte") }}</caption>
+    <thead><tr><th scope="col">{{ _("Appareil") }}</th><th scope="col">{{ _("Réseau") }}</th><th scope="col">{{ _("Ouverte le") }}</th><th scope="col">{{ _("Dernière activité") }}</th><th scope="col"><span class="vh">{{ _("Action") }}</span></th></tr></thead>
+    <tbody>
+    {% for x in sessions %}
+    <tr><th scope="row">{{ x.appareil.split(" · ")|map("trad")|join(" · ") if x.appareil else _("Appareil non identifié") }}{% if x.courante %} <span class="badge b-valide">{{ _("Cette session") }}</span>{% endif %}</th>
+      <td><code>{{ x.reseau or "—" }}</code></td><td>{{ x.debut|date }}</td><td>{{ x.vu|date }}</td>
+      <td>{% if not x.courante %}<form method="post" action="/compte/sessions/{{ x.ref }}/fermer" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit">{{ _("Fermer") }}<span class="vh"> : {{ x.appareil.split(" · ")|map("trad")|join(" · ") if x.appareil else _("Appareil non identifié") }}, {{ x.vu|date }}</span></button></form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if not autres %}<p class="discret">{{ _("Aucune autre session ouverte.") }}</p>{% endif %}
+  <p class="discret">{{ _("Réseau : adresse tronquée (aucune adresse complète conservée). Appareil : navigateur et système déduits de l'en-tête du navigateur.") }}</p>
+  <p><a class="petit-lien" href="/compte/mot-de-passe">{{ _("Changer de mot de passe") }}</a></p>
+</section>
+{% endblock %}

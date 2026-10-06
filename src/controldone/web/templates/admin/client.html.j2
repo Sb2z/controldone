@@ -3,170 +3,170 @@
 {% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 {% set t = c.info.id %}
-<nav class="fil" aria-label="Fil d'Ariane"><a href="/admin/clients">Clients</a> › <span>{{ c.info.raison_sociale }}</span></nav>
+<nav class="fil" aria-label="{{ _("Fil d'Ariane") }}"><a href="/admin/clients">{{ _("Clients") }}</a> › <span>{{ c.info.raison_sociale }}</span></nav>
 <div class="titre-page">
   <h1>{{ c.info.raison_sociale }}</h1>
-  <p class="discret">{{ "Diagnostic" if c.info.offre == "diagnostic" else "Contrôle continu" }} · identifiant <code>{{ t }}</code> · conservation {{ c.info.retention_jours }} jours</p>
+  <p class="discret">{{ _("Diagnostic") if c.info.offre == "diagnostic" else _("Contrôle continu") }} · {{ _("identifiant") }} <code>{{ t }}</code> · {{ _("conservation {n} jours", n=c.info.retention_jours) }}</p>
 </div>
 {% if secret is defined %}
-<div class="secret" role="alert"><h2>{{ secret.titre }}</h2><p><code class="selection">{{ secret.valeur }}</code></p><p class="discret">{{ secret.note }}</p></div>
+<div class="secret" role="alert"><h2>{{ _(secret.titre) }}</h2><p><code class="selection">{{ secret.valeur }}</code></p><p class="discret">{{ _(secret.note) }}</p></div>
 {% endif %}
 
-<section class="kpis">
-  {{ kpi("Dossiers", c.dossiers|length) }}
-  {{ kpi("Constats à valider", c.dossiers|sum(attribute="nb_proposes"), None, "accent" if c.dossiers|sum(attribute="nb_proposes") else None, "/admin/validation") }}
-  {{ kpi("Recouvrable certain (validé)", c.dossiers|sum(attribute="recouvrable_certain")|montant) }}
-  {{ kpi("Coût IA du mois", c.cout_ia|montant, "plafond " ~ (c.plafond|montant)) }}
+<section class="kpis" aria-label="{{ _("Indicateurs") }}">
+  {{ kpi(_("Dossiers"), c.dossiers|length) }}
+  {{ kpi(_("Constats à valider"), c.dossiers|sum(attribute="nb_proposes"), None, "accent" if c.dossiers|sum(attribute="nb_proposes") else None, "/admin/validation") }}
+  {{ kpi(_("Recouvrable certain (validé)"), c.dossiers|sum(attribute="recouvrable_certain")|montant) }}
+  {{ kpi(_("Coût IA du mois"), c.cout_ia|montant, _("plafond {m}", m=c.plafond|montant)) }}
 </section>
 
 <section class="carte" id="dossiers" aria-labelledby="t-dossiers">
-  <div class="carte-tete"><h2 id="t-dossiers">Dossiers</h2>
+  <div class="carte-tete"><h2 id="t-dossiers">{{ _("Dossiers") }}</h2>
     <form method="post" action="/admin/clients/{{ t }}/publier" class="en-ligne">{{ csrf_champ(csrf) }}
-      <button type="submit" class="btn btn-principal">Publier le rapport (constats validés)</button></form>
+      <button type="submit" class="btn btn-principal">{{ _("Publier le rapport (constats validés)") }}</button></form>
   </div>
-  <form method="get" action="/admin/clients/{{ t }}#dossiers" class="filtres" role="search" aria-label="Filtrer les dossiers du client" data-filtres>
+  <form method="get" action="/admin/clients/{{ t }}#dossiers" class="filtres" role="search" aria-label="{{ _("Filtrer les dossiers du client") }}" data-filtres>
     <div class="filtre filtre-large">
-      <label for="d-q">Rechercher</label>
-      <input id="d-q" name="q" type="search" value="{{ req.brut.get('q', '') }}" maxlength="80" placeholder="Référence, MRN, n° de facture…" autocomplete="off" spellcheck="false">
+      <label for="d-q">{{ _("Rechercher") }}</label>
+      <input id="d-q" name="q" type="search" value="{{ req.brut.get('q', '') }}" maxlength="80" placeholder="{{ _("Référence, MRN, n° de facture…") }}" autocomplete="off" spellcheck="false">
     </div>
     <div class="filtre">
-      <label for="d-statut">Statut</label>
-      <select id="d-statut" name="statut"><option value="">Tous</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+      <label for="d-statut">{{ _("Statut") }}</label>
+      <select id="d-statut" name="statut"><option value="">{{ _("Tous") }}</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
     </div>
     {{ fin_filtres(req, "d", "/admin/clients/" ~ t) }}
   </form>
   <div data-resultats>
-  {{ nb_resultats(p, req, "dossier", "dossiers") }}
+  {{ nb_resultats(p, req, _("dossier"), _("dossiers")) }}
   <div class="defilement">
   <table class="donnees">
-    <caption class="vh">Dossiers du client, page {{ p.page }} sur {{ p.pages }}</caption>
-    <thead><tr>{{ th_tri(req, "reference", "Référence") }}<th scope="col">Statut (avant validation)</th><th scope="col">MRN</th><th scope="col">Facture du transitaire</th>{{ th_tri(req, "constats", "Constats", "num") }}<th scope="col" class="num">À valider</th><th scope="col" class="num">Version</th></tr></thead>
+    <caption class="vh">{{ _("Dossiers du client") }}, {{ _("page {n} sur {total}", n=p.page, total=p.pages) }}</caption>
+    <thead><tr>{{ th_tri(req, "reference", _("Référence")) }}<th scope="col">{{ _("Statut (avant validation)") }}</th><th scope="col">MRN</th><th scope="col">{{ _("Facture du transitaire") }}</th>{{ th_tri(req, "constats", _("Constats"), "num") }}<th scope="col" class="num">{{ _("À valider") }}</th><th scope="col" class="num">{{ _("Version") }}</th></tr></thead>
     <tbody>
     {% for d in p.elements %}
       <tr><th scope="row"><a href="/admin/clients/{{ t }}/dossiers/{{ d.id }}">{{ d.reference }}</a></th>
       <td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td>{{ d.cles[0][1] }}</td>
       <td class="num">{{ d.nb_constats }}</td><td class="num">{{ d.nb_proposes }}</td><td class="num">{{ d.version }}</td></tr>
-    {% else %}<tr><td colspan="7" class="vide">{% if req.actif %}Aucun dossier ne correspond à ces critères.{% else %}Aucun dossier.{% endif %}</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="7" class="vide">{% if req.actif %}{{ _("Aucun dossier ne correspond à ces critères.") }}{% else %}{{ _("Aucun dossier.") }}{% endif %}</td></tr>{% endfor %}
     </tbody>
   </table>
   </div>
-  {{ pagination(p, req, "Pages des dossiers du client") }}
+  {{ pagination(p, req, _("Pages des dossiers du client")) }}
   </div>
 </section>
 
 <div class="grille-2">
 <section class="carte" id="sorties">
-  <h2>Publications et relevés d'écarts</h2>
+  <h2>{{ _("Publications et relevés d'écarts") }}</h2>
   {% if sorties %}
   <ul class="liste-simple">
   {% for s in sorties %}
-    <li><span class="badge {{ 'b-valide' if s.statut.value == 'envoye' else ('b-rejete' if s.statut.value == 'refuse' else 'b-propose') }}">{{ {"brouillon": "À approuver", "approuve": "Approuvé", "corrige": "Corrigé", "refuse": "Refusé", "envoye": "Mis à disposition"}[s.statut.value] }}</span>
-      {{ libelles_sortie.get(s.kind.value, s.kind.value) }} — {{ s.payload_effectif.get("objet", "") }} <span class="discret">{{ s.cree_le|date }}</span>
+    <li><span class="badge {{ 'b-valide' if s.statut.value == 'envoye' else ('b-rejete' if s.statut.value == 'refuse' else 'b-propose') }}">{{ {"brouillon": _("À approuver"), "approuve": _("Approuvé"), "corrige": _("Corrigé"), "refuse": _("Refusé"), "envoye": _("Mis à disposition")}[s.statut.value] }}</span>
+      {{ _(libelles_sortie.get(s.kind.value, s.kind.value)) }} — <span lang="fr">{{ s.payload_effectif.get("objet", "") }}</span> <span class="discret">{{ s.cree_le|date }}</span>
       {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</li>
   {% endfor %}
   </ul>
-  {% else %}<p class="vide">Aucune publication.</p>{% endif %}
-  <h3>Préparer un relevé d'écarts (et son modèle de courrier à adapter par le client)</h3>
+  {% else %}<p class="vide">{{ _("Aucune publication.") }}</p>{% endif %}
+  <h3>{{ _("Préparer un relevé d'écarts (et son modèle de courrier à adapter par le client)") }}</h3>
   <form method="post" action="/admin/clients/{{ t }}/reclamations" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
-    <label for="rec-tr">Transitaire</label>
+    <label for="rec-tr">{{ _("Transitaire") }}</label>
     <select id="rec-tr" name="transitaire_id" required>{% for tr in c.transitaires %}<option value="{{ tr.id }}">{{ tr.nom }}</option>{% endfor %}</select>
-    <button type="submit" class="btn">Préparer (au nom du client)</button>
+    <button type="submit" class="btn">{{ _("Préparer (au nom du client)") }}</button>
   </form>
 </section>
 
 <section class="carte">
-  <h2>Dépôts récents</h2>
+  <h2>{{ _("Dépôts récents") }}</h2>
   {% if c.lots %}
-  <table class="donnees compacte"><thead><tr><th scope="col">Reçu le</th><th scope="col">Canal</th><th scope="col">Statut</th><th scope="col" class="num">Fichiers</th><th scope="col" class="num">Refusés</th></tr></thead><tbody>
-  {% for l in c.lots %}<tr><td>{{ l.recu_le|date }}</td><td>{{ l.canal }}</td><td>{{ l.statut_libelle }}</td><td class="num">{{ l.resume.get("fichiers", "—") }}</td><td class="num">{{ l.resume.get("refuses", 0) }}</td></tr>{% endfor %}
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Reçu le") }}</th><th scope="col">{{ _("Canal") }}</th><th scope="col">{{ _("Statut") }}</th><th scope="col" class="num">{{ _("Fichiers") }}</th><th scope="col" class="num">{{ _("Refusés") }}</th></tr></thead><tbody>
+  {% for l in c.lots %}<tr><td>{{ l.recu_le|date }}</td><td>{{ l.canal }}</td><td>{{ _(l.statut_libelle) }}</td><td class="num">{{ l.resume.get("fichiers", "—") }}</td><td class="num">{{ l.resume.get("refuses", 0) }}</td></tr>{% endfor %}
   </tbody></table>
-  {% else %}<p class="vide">Aucun dépôt.</p>{% endif %}
-  <h3>Plafond IA mensuel</h3>
+  {% else %}<p class="vide">{{ _("Aucun dépôt.") }}</p>{% endif %}
+  <h3>{{ _("Plafond IA mensuel") }}</h3>
   <form method="post" action="/admin/clients/{{ t }}/plafond" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
-    <label for="pl">Plafond (EUR)</label><input id="pl" name="plafond" value="{{ c.plafond }}" inputmode="decimal" maxlength="12" required>
-    <button type="submit" class="btn">Modifier</button>
+    <label for="pl">{{ _("Plafond (EUR)") }}</label><input id="pl" name="plafond" value="{{ c.plafond }}" inputmode="decimal" maxlength="12" required>
+    <button type="submit" class="btn">{{ _("Modifier") }}</button>
   </form>
 </section>
 </div>
 
 <div class="grille-2">
 <section class="carte" id="utilisateurs">
-  <h2>Utilisateurs</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Adresse</th><th scope="col">Rôle</th></tr></thead><tbody>
-  {% for m in c.membres %}<tr><td>{{ m.email }}</td><td>{{ "Administrateur" if m.role == "client_admin" else "Lecteur" }}</td></tr>{% else %}<tr><td colspan="2" class="vide">Aucun utilisateur.</td></tr>{% endfor %}
+  <h2>{{ _("Utilisateurs") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Adresse") }}</th><th scope="col">{{ _("Rôle") }}</th></tr></thead><tbody>
+  {% for m in c.membres %}<tr><td>{{ m.email }}</td><td>{{ _("Administrateur") if m.role == "client_admin" else _("Lecteur") }}</td></tr>{% else %}<tr><td colspan="2" class="vide">{{ _("Aucun utilisateur.") }}</td></tr>{% endfor %}
   </tbody></table>
   <form method="post" action="/admin/clients/{{ t }}/utilisateurs" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="u-email">Adresse électronique</label><input id="u-email" name="email" type="email" required maxlength="320">
-    <label for="u-nom">Nom</label><input id="u-nom" name="nom" maxlength="200">
-    <label for="u-role">Rôle</label><select id="u-role" name="role"><option value="client_admin">Administrateur (dépôt, suivi des avoirs reçus)</option><option value="client_lecteur">Lecteur</option></select>
-    <button type="submit" class="btn">Créer le compte</button>
+    <label for="u-email">{{ _("Adresse électronique") }}</label><input id="u-email" name="email" type="email" required maxlength="320">
+    <label for="u-nom">{{ _("Nom") }}</label><input id="u-nom" name="nom" maxlength="200">
+    <label for="u-role">{{ _("Rôle") }}</label><select id="u-role" name="role"><option value="client_admin">{{ _("Administrateur (dépôt, suivi des avoirs reçus)") }}</option><option value="client_lecteur">{{ _("Lecteur") }}</option></select>
+    <button type="submit" class="btn">{{ _("Créer le compte") }}</button>
   </form>
 </section>
 
 <section class="carte" id="entites">
-  <h2>Entités contrôlées</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Raison sociale</th><th scope="col">TVA</th><th scope="col">EORI</th></tr></thead><tbody>
-  {% for e in c.entites %}<tr><td>{{ e.raison_sociale }}{% if e.alias %}<br><span class="discret">{{ e.alias }}</span>{% endif %}</td><td><code>{{ e.tva or "—" }}</code></td><td><code>{{ e.eori or "—" }}</code></td></tr>{% else %}<tr><td colspan="3" class="vide">Aucune entité.</td></tr>{% endfor %}
+  <h2>{{ _("Entités contrôlées") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Raison sociale") }}</th><th scope="col">{{ _("TVA") }}</th><th scope="col">EORI</th></tr></thead><tbody>
+  {% for e in c.entites %}<tr><td>{{ e.raison_sociale }}{% if e.alias %}<br><span class="discret">{{ e.alias }}</span>{% endif %}</td><td><code>{{ e.tva or "—" }}</code></td><td><code>{{ e.eori or "—" }}</code></td></tr>{% else %}<tr><td colspan="3" class="vide">{{ _("Aucune entité.") }}</td></tr>{% endfor %}
   </tbody></table>
   <form method="post" action="/admin/clients/{{ t }}/entites" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="e-rs">Raison sociale</label><input id="e-rs" name="raison_sociale" required maxlength="300">
-    <div class="champs-2"><div><label for="e-tva">TVA</label><input id="e-tva" name="tva" maxlength="32"></div>
+    <label for="e-rs">{{ _("Raison sociale") }}</label><input id="e-rs" name="raison_sociale" required maxlength="300">
+    <div class="champs-2"><div><label for="e-tva">{{ _("TVA") }}</label><input id="e-tva" name="tva" maxlength="32"></div>
     <div><label for="e-siren">SIREN</label><input id="e-siren" name="siren" maxlength="9" pattern="[0-9]{9}"></div></div>
     <label for="e-eori">EORI</label><input id="e-eori" name="eori" maxlength="32">
-    <label for="e-alias">Alias <span class="discret">(séparés par « ; »)</span></label><input id="e-alias" name="alias" maxlength="1000">
-    <button type="submit" class="btn">Enregistrer l'entité</button>
+    <label for="e-alias">{{ _("Alias") }} <span class="discret">({{ _("séparés par « ; »") }})</span></label><input id="e-alias" name="alias" maxlength="1000">
+    <button type="submit" class="btn">{{ _("Enregistrer l'entité") }}</button>
   </form>
 </section>
 </div>
 
 <div class="grille-2">
 <section class="carte" id="transitaires">
-  <h2>Transitaires</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Nom</th><th scope="col">TVA</th><th scope="col">Contact (relevés d'écarts)</th></tr></thead><tbody>
-  {% for tr in c.transitaires %}<tr><td>{{ tr.nom }}</td><td><code>{{ tr.tva or "—" }}</code></td><td>{{ tr.contact or "—" }}</td></tr>{% else %}<tr><td colspan="3" class="vide">Aucun transitaire.</td></tr>{% endfor %}
+  <h2>{{ _("Transitaires") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Nom") }}</th><th scope="col">{{ _("TVA") }}</th><th scope="col">{{ _("Contact (relevés d'écarts)") }}</th></tr></thead><tbody>
+  {% for tr in c.transitaires %}<tr><td>{{ tr.nom }}</td><td><code>{{ tr.tva or "—" }}</code></td><td>{{ tr.contact or "—" }}</td></tr>{% else %}<tr><td colspan="3" class="vide">{{ _("Aucun transitaire.") }}</td></tr>{% endfor %}
   </tbody></table>
   <form method="post" action="/admin/clients/{{ t }}/transitaires" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="t-nom">Nom</label><input id="t-nom" name="nom" required maxlength="300">
-    <div class="champs-2"><div><label for="t-tva">TVA</label><input id="t-tva" name="tva" maxlength="32"></div>
-    <div><label for="t-alias">Alias</label><input id="t-alias" name="alias" maxlength="1000"></div></div>
-    <label for="t-contact">Contact pour les relevés d'écarts</label><input id="t-contact" name="contact" maxlength="500">
-    <button type="submit" class="btn">Enregistrer le transitaire</button>
+    <label for="t-nom">{{ _("Nom") }}</label><input id="t-nom" name="nom" required maxlength="300">
+    <div class="champs-2"><div><label for="t-tva">{{ _("TVA") }}</label><input id="t-tva" name="tva" maxlength="32"></div>
+    <div><label for="t-alias">{{ _("Alias") }}</label><input id="t-alias" name="alias" maxlength="1000"></div></div>
+    <label for="t-contact">{{ _("Contact pour les relevés d'écarts") }}</label><input id="t-contact" name="contact" maxlength="500">
+    <button type="submit" class="btn">{{ _("Enregistrer le transitaire") }}</button>
   </form>
 </section>
 
 <section class="carte" id="grilles">
-  <h2>Grilles tarifaires</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Référence</th><th scope="col">Transitaire</th><th scope="col" class="num">Version</th><th scope="col" class="num">Postes</th><th scope="col">Statut</th></tr></thead><tbody>
+  <h2>{{ _("Grilles tarifaires") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Référence") }}</th><th scope="col">{{ _("Transitaire") }}</th><th scope="col" class="num">{{ _("Version") }}</th><th scope="col" class="num">{{ _("Postes") }}</th><th scope="col">{{ _("Statut") }}</th></tr></thead><tbody>
   {% for g in c.grilles %}<tr><td>{{ g.reference }}</td><td>{{ g.transitaire }}</td><td class="num">{{ g.version }}</td><td class="num">{{ g.postes }}</td>
-    <td>{% if g.statut == "validee" %}<span class="badge b-valide">Validée</span>{% else %}
+    <td>{% if g.statut == "validee" %}<span class="badge b-valide">{{ _("Validée") }}</span>{% else %}
       <form method="post" action="/admin/clients/{{ t }}/grilles/valider" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="grille_id" value="{{ g.grille_id }}"><input type="hidden" name="version" value="{{ g.version }}">
-      <span class="badge b-propose">Brouillon</span> <button type="submit" class="btn btn-petit">Valider</button></form>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="5" class="vide">Aucune grille.</td></tr>{% endfor %}
+      <span class="badge b-propose">{{ _("Brouillon") }}</span> <button type="submit" class="btn btn-petit">{{ _("Valider") }}</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="5" class="vide">{{ _("Aucune grille.") }}</td></tr>{% endfor %}
   </tbody></table>
   <form method="post" action="/admin/clients/{{ t }}/grilles" enctype="multipart/form-data" class="formulaire">{{ csrf_champ(csrf) }}
-    <label for="g-tr">Transitaire</label>
+    <label for="g-tr">{{ _("Transitaire") }}</label>
     <select id="g-tr" name="transitaire_id" required>{% for tr in c.transitaires %}<option value="{{ tr.id }}">{{ tr.nom }}</option>{% endfor %}</select>
-    <label for="g-f">Fichier JSON ou CSV</label><input id="g-f" name="fichier" type="file" accept=".json,.csv,application/json,text/csv" required>
-    <p class="discret">CSV : colonnes <code>code_poste;nature;mode;prix;unite_base;pourcentage;base_pourcentage;minimum;maximum;franchise_jours;inclus;devise;libelles_reconnus</code> (libellés séparés par « | »).</p>
-    <div class="champs-2"><div><label for="g-ref">Référence (devis, contrat)</label><input id="g-ref" name="reference" maxlength="200"></div>
-    <div><label for="g-hg">Prestations hors grille</label><select id="g-hg" name="hors_grille"><option value="tolerees">Tolérées (à vérifier)</option><option value="interdites">Interdites (écart)</option></select></div></div>
-    <div class="champs-2"><div><label for="g-du">Valide du</label><input id="g-du" name="valide_du" type="date"></div><div><label for="g-au">au</label><input id="g-au" name="valide_au" type="date"></div></div>
-    <button type="submit" class="btn">Importer en brouillon</button>
+    <label for="g-f">{{ _("Fichier JSON ou CSV") }}</label><input id="g-f" name="fichier" type="file" accept=".json,.csv,application/json,text/csv" required>
+    <p class="discret">{{ _("CSV : colonnes") }} <code>code_poste;nature;mode;prix;unite_base;pourcentage;base_pourcentage;minimum;maximum;franchise_jours;inclus;devise;libelles_reconnus</code> ({{ _("libellés séparés par « | »") }}).</p>
+    <div class="champs-2"><div><label for="g-ref">{{ _("Référence (devis, contrat)") }}</label><input id="g-ref" name="reference" maxlength="200"></div>
+    <div><label for="g-hg">{{ _("Prestations hors grille") }}</label><select id="g-hg" name="hors_grille"><option value="tolerees">{{ _("Tolérées (à vérifier)") }}</option><option value="interdites">{{ _("Interdites (écart)") }}</option></select></div></div>
+    <div class="champs-2"><div><label for="g-du">{{ _("Valide du") }}</label><input id="g-du" name="valide_du" type="date"></div><div><label for="g-au">{{ _("au") }}</label><input id="g-au" name="valide_au" type="date"></div></div>
+    <button type="submit" class="btn">{{ _("Importer en brouillon") }}</button>
   </form>
 </section>
 </div>
 
 <section class="carte" id="cles">
-  <h2>Clés d'API</h2>
-  <table class="donnees compacte"><thead><tr><th scope="col">Nom</th><th scope="col">Préfixe</th><th scope="col">Rôle</th><th scope="col">Créée le</th><th scope="col">Dernier usage</th><th scope="col">État</th></tr></thead><tbody>
-  {% for k in c.cles %}<tr><td>{{ k.nom }}</td><td><code>cdk_{{ k.prefixe }}_…</code></td><td>{{ "Administrateur" if k.role == "client_admin" else "Lecteur" }}</td><td>{{ k.cree_le|date }}</td><td>{{ k.dernier_usage|date }}</td>
-    <td>{% if k.revoquee %}<span class="badge b-rejete">Révoquée</span>{% else %}<form method="post" action="/admin/clients/{{ t }}/cles-api/{{ k.id }}/revoquer" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit">Révoquer</button></form>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="6" class="vide">Aucune clé.</td></tr>{% endfor %}
+  <h2>{{ _("Clés d'API") }}</h2>
+  <table class="donnees compacte"><thead><tr><th scope="col">{{ _("Nom") }}</th><th scope="col">{{ _("Préfixe") }}</th><th scope="col">{{ _("Rôle") }}</th><th scope="col">{{ _("Créée le") }}</th><th scope="col">{{ _("Dernier usage") }}</th><th scope="col">{{ _("État") }}</th></tr></thead><tbody>
+  {% for k in c.cles %}<tr><td>{{ k.nom }}</td><td><code>cdk_{{ k.prefixe }}_…</code></td><td>{{ _("Administrateur") if k.role == "client_admin" else _("Lecteur") }}</td><td>{{ k.cree_le|date }}</td><td>{{ k.dernier_usage|date }}</td>
+    <td>{% if k.revoquee %}<span class="badge b-rejete">{{ _("Révoquée") }}</span>{% else %}<form method="post" action="/admin/clients/{{ t }}/cles-api/{{ k.id }}/revoquer" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit">{{ _("Révoquer") }}</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6" class="vide">{{ _("Aucune clé.") }}</td></tr>{% endfor %}
   </tbody></table>
   <form method="post" action="/admin/clients/{{ t }}/cles-api" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
-    <label for="k-nom">Nom</label><input id="k-nom" name="nom" maxlength="200" required>
-    <label for="k-role">Rôle</label><select id="k-role" name="role"><option value="client_admin">Administrateur</option><option value="client_lecteur">Lecteur</option></select>
-    <button type="submit" class="btn">Créer une clé</button>
+    <label for="k-nom">{{ _("Nom") }}</label><input id="k-nom" name="nom" maxlength="200" required>
+    <label for="k-role">{{ _("Rôle") }}</label><select id="k-role" name="role"><option value="client_admin">{{ _("Administrateur") }}</option><option value="client_lecteur">{{ _("Lecteur") }}</option></select>
+    <button type="submit" class="btn">{{ _("Créer une clé") }}</button>
   </form>
 </section>
 {% endblock %}
