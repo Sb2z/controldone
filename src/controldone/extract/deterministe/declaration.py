@@ -46,6 +46,8 @@ from controldone.extract.deterministe._mise_en_page import est_bandeau_texte, se
 from controldone.extract.valeurs import valeur_sourcee
 from controldone.ids import IdGenerator, Prefixe
 from controldone.model.champs import (
+    REGLE_TOTAL_CATEGORIE_RATTACHE,
+    REGLE_TOTAL_CODE_SANS_LIGNE,
     ArticleDeclaration,
     ChampsDeclaration,
     IndiceAutoliquidation,
@@ -93,6 +95,8 @@ CONF_NATIF = 0.97
 PLAFOND_CODE_ILLISIBLE = 0.85
 #: Ligne d'un tableau de liquidation dont le code est illisible, gardée pour sa cohérence arithmétique (D-1805).
 PLAFOND_LIGNE_SANS_CODE = 0.75
+#: Total par code déduit (D-3706) : sous ``C_MIN_CERTAIN``, jamais une valeur clé d'un écart certain (D-3710).
+PLAFOND_TOTAL_CODE_DEDUIT = 0.85
 CONF_NATIF_FAIBLE = 0.93
 #: Confiance d'un sens de taux déduit (§8.7).
 CONF_SENS_DERIVE = 0.85
@@ -628,6 +632,8 @@ class _Lecteur:
         self.totaux_categories: dict[str, list[tuple[Decimal, bool]]] = {}
         #: Lectures (code, montant) retenues par code, portées par ``ChampsDeclaration.totaux_par_code`` (D-3101).
         self._lus_totaux: dict[str, tuple[_Lu, _Lu]] = {}
+        #: Codes dont le total est déduit (D-3706) -> règle portée par ``regle_derivation`` (D-3710).
+        self._totaux_deduits: dict[str, str] = {}
 
     # --- chargement -------------------------------------------------------------------------------------
 
@@ -2432,10 +2438,13 @@ class _Lecteur:
             # D-3706 : le seul code lu de la catégorie ; confiance plafonnée (rattachement déduit), jamais certaine
             premiers[code] = (code_lu, lu)
             surs[code] = False
+            self._totaux_deduits[code] = REGLE_TOTAL_CATEGORIE_RATTACHE
         if set(uniques) - codes and self._totaux_codes_complets(uniques):
             # D-3706 : tableau de taxation illisible (scan dégradé) mais récapitulatif par code lu en entier : la
             # somme de tous les totaux par code redonne le total des droits et taxes imprimé (ou le total à payer),
             # ce qui confirme chaque code lu, même sans ligne de taxation.
+            for code in set(uniques) - codes:
+                self._totaux_deduits.setdefault(code, REGLE_TOTAL_CODE_SANS_LIGNE)
             codes = codes | set(uniques)
         for code, val in uniques.items():
             if code in codes:
@@ -2550,6 +2559,11 @@ class _Lecteur:
             total = TotalTaxeCode()
             total.type_taxe = self._vs(f"totaux_par_code[{k}].type_taxe", code_lu)
             total.montant = self._vs(f"totaux_par_code[{k}].montant", montant_lu, unite="EUR")
+            if total.montant is not None and code in self._totaux_deduits:
+                # D-3710 : total déduit, jamais une preuve suffisante d'un écart certain ; confiance plafonnée
+                total.montant = total.montant.model_copy(update={
+                    "regle_derivation": self._totaux_deduits[code],
+                    "confiance": min(total.montant.confiance, PLAFOND_TOTAL_CODE_DEDUIT)})
             if total.montant is not None:
                 self.champs.totaux_par_code.append(total)
 
@@ -2856,7 +2870,10 @@ class _Lecteur:
 
         Un désaccord n'infirme rien : le total d'un code peut être la valeur fausse (B2)."""
         c = self.champs
-        tot = {code: lus[0][0] for code, lus in self.totaux_categories.items() if lus[0][1]}
+        # D-3710 : un total déduit (D-3706) ne confirme rien ; un code sans ligne a été admis parce que la somme des
+        # totaux redonne le total imprimé : confirmer ce total par cette même somme serait circulaire.
+        tot = {code: lus[0][0] for code, lus in self.totaux_categories.items()
+               if lus[0][1] and code not in self._totaux_deduits}
         if not tot:
             return
         td = c.total_droits_taxes

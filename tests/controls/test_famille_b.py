@@ -447,3 +447,34 @@ def test_b2_code_lu_sous_le_seuil_a_verifier():
                totaux_par_code=[tot_code("A00", "40.00", confiance=0.8, methode="ocr"), tot_code("B00", "110.00")])
     (a00, _) = par_sous(b2_sommes_taxes(contexte([d])), "code")
     assert a00.outcome is Outcome.a_verifier and RaisonCode.confiance_insuffisante in a00.constat.raisons
+
+
+# --- D-3710 : un total par code déduit (D-3706) n'est jamais la valeur comparée d'un écart certain -------------
+
+
+def _deduit(t, regle=None):
+    from controldone.model.champs import REGLE_TOTAL_CATEGORIE_RATTACHE
+
+    t.montant = t.montant.model_copy(update={"regle_derivation": regle or REGLE_TOTAL_CATEGORIE_RATTACHE})
+    assert t.deduit
+    return t
+
+
+def test_b2_code_total_deduit_jamais_certain_d3710():
+    d = dec_b2(*_lignes_b2(), total="140.00",
+               totaux_par_code=[_deduit(tot_code("A00", "40.00")), tot_code("B00", "110.00")])
+    (a00, b00) = par_sous(b2_sommes_taxes(contexte([d])), "code")
+    assert a00.outcome is Outcome.a_verifier and RaisonCode.structure_non_validee in a00.constat.raisons
+    assert b00.outcome is Outcome.conforme
+
+
+def test_total_deduit_ne_prouve_pas_les_lignes_completes_d3710():
+    # Même situation que la ligne absente compensée par le total du code (D-3103), mais total du code déduit :
+    # il ne prouve rien, l'écart reste non établi.
+    from controldone.controls.structure_declaration import _code_complet_par_total
+
+    lignes = [tax("10.00"), tax("20.00", article="2")]
+    d = dec_b2(*lignes, total="30.00", totaux_par_code=[tot_code("A00", "30.00")])
+    assert _code_complet_par_total(d, "A00", [0, 1], lambda v: D(v.valeur), contexte([d]).tol)
+    d = dec_b2(*lignes, total="30.00", totaux_par_code=[_deduit(tot_code("A00", "30.00"))])
+    assert not _code_complet_par_total(d, "A00", [0, 1], lambda v: D(v.valeur), contexte([d]).tol)

@@ -313,3 +313,17 @@ def test_b2_code_certain_avec_lecture_corroboree():
     rs = [r for r in b2_sommes_taxes(contexte([d])) if r.sous_controle == "code"]
     assert [r.outcome for r in rs] == [Outcome.ecart_certain, Outcome.conforme]
     assert rs[0].constat.montant_en_jeu == D("10.00")
+
+
+def test_total_par_code_deduit_hors_du_reseau_d3710():
+    # Un total déduit (D-3706) ne corrobore ni les lignes de son code ni le total des droits et taxes.
+    from controldone.model.champs import REGLE_TOTAL_CODE_SANS_LIGNE
+
+    b00 = _total_code("B00", "66.00")
+    b00.montant = b00.montant.model_copy(update={"regle_derivation": REGLE_TOTAL_CODE_SANS_LIGNE})
+    d = _dec(_droit("1", "100.00", "10", "10.00"), _droit("2", "200.00", "10", "20.00"),
+             _tva("1", "110.00", "22.00"), _tva("2", "220.00", "44.00"), total="96.00",
+             totaux_par_code=[_total_code("A00", "30.00"), b00])
+    reseau = {i.cle for i in corroboration.reseau(d, lambda v: v is not None, contexte([d]).tol)}
+    assert "dec:code:A00" in reseau and "dec:code:B00" not in reseau
+    assert not any(k.startswith("dec:codes:") for k in reseau)

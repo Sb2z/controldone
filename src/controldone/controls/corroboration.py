@@ -212,11 +212,13 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
                                    [(v, x) for v, x in ops if v is not None and x is not None], tol))
     # Totaux imprimés par code (D-3101) : Σ lignes du code = total du code ; Σ totaux par code = total des droits et
     # taxes ou total à payer. Jamais des lignes de taxation.
+    # D-3710 : un total déduit (D-3706) n'entre dans aucune identité — il ne corrobore ni les lignes de son code ni
+    # le total des droits et taxes (circulaire pour un code admis par cette même somme).
     lus_codes: list[tuple[ValeurSourcee, Decimal]] = []
     for tot in c.totaux_par_code:
         code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur else ""
         v_total = lec.num(tot.montant)
-        if not code or tot.montant is None or v_total is None:
+        if not code or tot.montant is None or v_total is None or tot.deduit:
             lus_codes = []
             break
         lus_codes.append((tot.montant, v_total))

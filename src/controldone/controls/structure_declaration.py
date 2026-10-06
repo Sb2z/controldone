@@ -220,6 +220,8 @@ def _code_complet_par_total(dec: Document, code: str, lignes: Sequence[int], num
         return False
     s = sum((x for x in du_code if x is not None), _ZERO)
     for tot in dec.dec.totaux_par_code:
+        if tot.deduit:
+            continue  # D-3710 : un total déduit ne prouve pas que les lignes du code sont toutes lues
         if tot.type_taxe is not None and (tot.type_taxe.valeur or "").strip().upper() == code:
             vt = num(tot.montant)
             if vt is not None and abs(vt - s) <= tol.t_somme(len(du_code)):

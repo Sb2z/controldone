@@ -398,10 +398,13 @@ def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatCont
             # Sous-contrôle émis seulement quand la lecture peut trancher (D-3102) : sinon impossible de conclure.
             return ctx.non_verifiable("B2", RaisonCode.structure_non_validee, **commun_nv,
                                       details={**details, "motif": "structure_non_validee", "structure": manques})
+    # D-3710 : total du code déduit (D-3706) : jamais la valeur comparée d'un écart certain
+    deduit = (lambda: ["total du code déduit (total de catégorie sans code ou code sans ligne lue)"]) \
+        if tot.deduit else None
     return _b2_resultat(
         ctx, dec, unite=unite, sous_controle="code", total=total, v_total=v_total, operandes=operandes,
         somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
-        composante=_COMPOSANTE.get(c.taxations[lignes[0]].categorie), concorde=concorde,
+        composante=_COMPOSANTE.get(c.taxations[lignes[0]].categorie), concorde=concorde, structure=deduit,
     )
 
 

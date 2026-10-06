@@ -350,6 +350,20 @@ class TotalTaxeCode(_Noeud):
     base_montant: Opt = None
     montant: Opt = None
 
+    @property
+    def deduit(self) -> bool:
+        """Total retenu par déduction (D-3706, D-3710) : code sans ligne de taxation lue, admis parce que la somme
+        des totaux par code redonne le total imprimé, ou total de catégorie sans code rattaché au seul code de sa
+        catégorie. Il peut confirmer une lecture mais n'est jamais la seule preuve d'un écart certain, ni la valeur
+        comparée d'un constat certain."""
+        return self.montant is not None and (self.montant.regle_derivation or "") in REGLES_TOTAL_CODE_DEDUIT
+
+
+#: ``ValeurSourcee.regle_derivation`` des totaux par code déduits (D-3706, D-3710).
+REGLE_TOTAL_CODE_SANS_LIGNE = "total_code_sans_ligne_confirme_par_somme_des_codes"
+REGLE_TOTAL_CATEGORIE_RATTACHE = "total_categorie_sans_code_rattache_au_seul_code"
+REGLES_TOTAL_CODE_DEDUIT = frozenset({REGLE_TOTAL_CODE_SANS_LIGNE, REGLE_TOTAL_CATEGORIE_RATTACHE})
+
 
 class ChampsDeclaration(Champs):
     TYPE: ClassVar[TypeDocument] = TypeDocument.declaration

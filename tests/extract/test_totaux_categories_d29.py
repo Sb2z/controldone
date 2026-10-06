@@ -195,3 +195,14 @@ def test_total_de_categorie_sans_code_rattache_au_seul_code_lu():
     par = {t.type_taxe.valeur: t.montant for t in c.totaux_par_code}
     assert set(par) == {"A00", "A30", "B00"} and par["A30"].valeur == "5.00"
     assert par["A30"].confiance < 0.90  # rattachement déduit : jamais une valeur certaine
+
+
+def test_totaux_deduits_marques_et_sans_confirmation_d3710():
+    from controldone.model.champs import REGLE_TOTAL_CODE_SANS_LIGNE
+
+    c = _extraire_ocr(_page([], "A00 : 12,56   B00 : 61,91"))
+    b00 = next(t for t in c.totaux_par_code if t.type_taxe.valeur == "B00")
+    assert b00.deduit and b00.montant.regle_derivation == REGLE_TOTAL_CODE_SANS_LIGNE
+    assert b00.montant.confiance < 0.90
+    # la somme qui a admis le code ne confirme pas le total des droits et taxes (circulaire)
+    assert c.total_droits_taxes.confiance < 0.90

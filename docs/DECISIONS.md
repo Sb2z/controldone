@@ -4284,3 +4284,32 @@ serveur ; le JavaScript n'a plus de liste d'étapes.
 quarantaine, agents) ; repli sur les libellés des notifications puis sur le nom technique. Badge « grave » pour
 les alertes qui exigent une action. Un test relève les types émis dans les sources et exige leur libellé.
 Tâches : colonnes « Créée » (`JobInfo.cree_le`) et « Prochain essai » séparées.
+
+## D-3710 — Totaux par code déduits (D-3706) : jamais une preuve suffisante d'un écart certain
+
+Signalement (jeux tenus à l'écart, symptômes agrégés seulement) : après le lot 2, un B2 certain non apparié et un C5
+certain au montant faux, absents après le bloc A. Chemins recherchés sur le dev seulement :
+- **extraction** (`_recouper_totaux_categories`) : un code sans ligne lue, admis parce que Σ des totaux par code =
+  total des droits et taxes (D-3706), entrait dans la même somme qui **confirme** ce total (et les totaux de code) :
+  confirmation circulaire, qui portait le total des droits et taxes au-dessus de `C_MIN_CERTAIN` alors que les lignes
+  n'étaient pas lues — chemin vers un B2 total certain et vers la valeur liquidée comparée par C1–C6 ;
+- **réseau d'identités** (`corroboration`) : `dec:code:<code>` (Σ lignes = total du code) et `dec:codes:<total>`
+  (Σ totaux = total) acceptaient un total déduit et pouvaient corroborer lignes et total ;
+- **structure** (`_code_complet_par_total`) : un total déduit égal à la somme des lignes « prouvait » que les lignes du
+  code étaient toutes lues et levait le motif D-3103 ;
+- **B2 par code** : un total rattaché (« Total autres taxes ») pouvait être la valeur comparée.
+Règle : un total par code déduit porte `regle_derivation` (`REGLE_TOTAL_CODE_SANS_LIGNE` ou
+`REGLE_TOTAL_CATEGORIE_RATTACHE`, `TotalTaxeCode.deduit`) et une confiance plafonnée à 0,85. Il ne confirme rien à
+l'extraction, n'entre dans aucune identité (le réseau des totaux par code est abandonné dès qu'un total est déduit,
+comme avant le lot 2), ne prouve pas la complétude des lignes ; B2 par code contre un total déduit est au plus
+`a_verifier` (`structure_non_validee`). Il reste porté (mesure d'extraction, motif « le total reprend la somme des
+totaux par code », qui ne fait que retirer de la certitude).
+D-3704 : la règle « premier dossier » ne s'applique qu'à un classement `a_verifier` et ne rend que `non_applicable` ;
+un écart certain et son montant ne sont jamais touchés (vérifié : aucun montant de constat certain changé entre le
+bloc A et le lot 2 sur les trois dev). Tests : `tests/controls/test_famille_b.py`,
+`tests/controls/test_corroboration.py`, `tests/extract/test_totaux_categories_d29.py` (D-3710).
+
+Mesure (dev, lot 2 -> D-3710) : constats identiques sur les trois jeux (aucun constat ajouté, retiré ou reclassé ;
+montants inchangés) — g4 103/0 certains, rappel 0,8311, bruit 176 ; g2 115/0, 0,8700, 226 ; d'origine 125/0,
+0,8293, 174. Les chemins fermés ne sont pas exercés par le dev : l'effet sur les jeux tenus à l'écart reste à
+mesurer (en totaux).
