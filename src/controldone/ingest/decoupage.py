@@ -135,6 +135,8 @@ class _EnCours:
     mrns: list[str] = field(default_factory=list)
     page_total: int | None = None
     langues: list[str] = field(default_factory=list)
+    #: Références imprimées sur les pages du document (D-2901).
+    jetons: set[str] = field(default_factory=set)
 
 
 def _proches(a: str, b: str) -> bool:
@@ -171,17 +173,45 @@ def _suite_de_declaration(cur: _EnCours, c: ClassementPage) -> bool:
             and r.page_n != 1 and any(_mrn_voisin(r.mrn_prefixes[0], q) for q in cur.mrn_prefixes))
 
 
+def _suite_annoncee_numero_voisin(cur: _EnCours, c: ClassementPage) -> bool:
+    """« Page 2/2 » d'un document en 2 pages dont le numéro lu ne diffère de celui de la page 1 que par un
+    caractère (OCR : « …1860 » / « …1869 ») : même document (D-2901)."""
+    r = c.refs
+    a, b = r.numero_facture or "", cur.numero_facture or ""
+    return (bool(r.page_n and r.page_n > 1 and r.page_total and cur.page_total == r.page_total)
+            and len(a) == len(b) >= 6 and sum(1 for x, y in zip(a, b, strict=True) if x != y) <= 1)
+
+
 def _changement_ref(cur: _EnCours, c: ClassementPage) -> bool:
     r = c.refs
     if r.numero_facture and cur.numero_facture and not _proches(r.numero_facture, cur.numero_facture) \
-            and cur.type in (*_FACTURES, TypeDocument.document_non_exploitable):
+            and cur.type in (*_FACTURES, TypeDocument.document_non_exploitable) \
+            and not _suite_annoncee_numero_voisin(cur, c):
         return True
     if cur.type is TypeDocument.declaration and r.mrn_prefixes and cur.mrn_prefixes:
         return not (_mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes) or _suite_de_declaration(cur, c))
     return False
 
 
+def _numero_imprime(numero: str, jetons: Iterable[str]) -> bool:
+    """Le numéro lu sur une page est imprimé (à une ou deux confusions OCR près) sur les pages du document en
+    cours : intitulé non reconnu sur la première page, reconnu sur la suivante (D-2901)."""
+    return any(_proches(numero, j) for j in jetons)
+
+
+def _meme_numero_autre_type(cur: _EnCours, c: ClassementPage) -> bool:
+    """Page d'une facture rangée sous l'autre type de facture (commerciale / transitaire) alors qu'elle porte le
+    numéro de la facture en cours et n'en est pas la première page : suite de cette facture (D-2901)."""
+    types = (TypeDocument.facture_commerciale, TypeDocument.facture_transitaire)
+    r = c.refs
+    return (c.type in types and cur.type in types and c.type != cur.type and c.confiance < 0.9
+            and r.page_n != 1 and bool(r.numero_facture) and bool(cur.numero_facture)
+            and _proches(r.numero_facture or "", cur.numero_facture or ""))
+
+
 def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
+    if _meme_numero_autre_type(cur, c):
+        return True
     if c.type != cur.type:
         return False
     if c.type is TypeDocument.document_support and c.sous_type != cur.sous_type:
@@ -200,10 +230,12 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
                 and not _suite_de_declaration(cur, c):
             return False  # nouvelle page de tête d'un autre MRN complet (version rectificative du même préfixe)
         return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes)) \
-            or _suite_de_declaration(cur, c)
+            or _suite_de_declaration(cur, c) or (c.suite and not cur.mrn_prefixes and r.page_n != 1)
     if cur.type in _FACTURES:
         if r.numero_facture and cur.numero_facture:
             return _proches(r.numero_facture, cur.numero_facture)
+        if r.numero_facture and not cur.numero_facture:
+            return _numero_imprime(r.numero_facture, cur.jetons)
         return False
     # supports : une page qui porte son propre intitulé (LTA, liste de colisage…) commence un document ;
     # conditions générales, courriel et pages sans intitulé suivent le document en cours.
@@ -236,6 +268,7 @@ def _absorber(e: _EnCours, c: ClassementPage) -> None:
         e.page_total = c.refs.page_total
     if c.langue:
         e.langues.append(c.langue)
+    e.jetons.update(c.refs.jetons)
 
 
 def _regrouper(classements: Sequence[ClassementPage]) -> list[_EnCours]:

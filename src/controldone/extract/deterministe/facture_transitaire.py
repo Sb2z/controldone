@@ -102,6 +102,8 @@ C_OCR_RECOUPEE = 0.92
 C_OCR_INCOHERENTE = 0.6
 #: Plafond des montants de ligne d'un tableau dont une rangée illisible a été perdue (D-2505).
 C_RANGEE_PERDUE = 0.85
+#: Confiance OCR minimale des mots d'un membre d'une somme imprimée qui tient pour être relevé (D-2904).
+C_OCR_SOMME_MIN = 0.6
 
 TAUX_TVA_CONNUS = (Decimal("0"), Decimal("2.1"), Decimal("5.5"), Decimal("8.5"), Decimal("10"), Decimal("20"))
 _CENT = Decimal("0.01")
@@ -1440,6 +1442,10 @@ class _Extraction:
                         base.montant_tva = lu
                     elif typ == "pourcent" or (typ in ("entier", "nombre") and role == "taux"):
                         base.taux_tva = lu
+                    elif typ == "montant" and role == "taux" and base.taux_tva is None \
+                            and (t_col := _montant_lu(lu)) is not None and 0 <= t_col <= 30:
+                        # taux imprimé « 20,00 » sous l'intitulé « TVA % » / « IVA % » (D-2905)
+                        base.taux_tva = lu
                     elif typ in ("marqueur", "code") or (typ == "entier" and role in ("cat", "tva")):
                         base.marqueur = base.marqueur or lu
                     elif typ == "code_taux" and brut:
@@ -1819,8 +1825,32 @@ class _Extraction:
 
         def relever(vs: Sequence[ValeurSourcee | None]) -> None:
             for v in vs:
-                if ocr(v) and v.ancree:  # type: ignore[union-attr]
+                if ocr(v) and v.ancree and maj.get(v.id) != -4.0:  # type: ignore[union-attr]
                     maj[v.id] = max(maj.get(v.id, 0.0), -1.0)  # type: ignore[union-attr]
+
+        def relever_somme(total: ValeurSourcee | None, operandes: Sequence[ValeurSourcee | None], *,
+                          garder_contredites: bool = False) -> None:
+            """Somme imprimée qui tient avec au moins deux opérandes non nuls lus à des endroits distincts : une
+            erreur de lecture d'un membre devrait être compensée exactement par une autre (D-2904). Les membres
+            sont relevés même si la confiance OCR de leurs mots est moyenne."""
+            membres = [v for v in (total, *operandes) if v is not None]
+            non_nuls = [v for v in operandes if v is not None and (_dec(v) or Decimal(0)) != 0]
+            if len(non_nuls) < 2 or len({v.id for v in membres}) != len(membres):
+                relever(membres)
+                return
+            for v in membres:
+                if not (ocr(v) and v.ancree):
+                    continue
+                # une lecture contredite par l'identité de sa propre ligne (rangées mêlées, colonne voisine) n'est
+                # relevée que comme avant (mots lus à 0,90 au moins) : la somme peut tenir avec la valeur bien
+                # lue mais rangée sur la mauvaise ligne
+                if v.id in contredites:
+                    if not garder_contredites:
+                        maj[v.id] = -1.0
+                    continue
+                maj[v.id] = -4.0
+
+        contredites: set[str] = set()
 
         def abaisser(vs: Sequence[ValeurSourcee | None]) -> None:
             for v in vs:
@@ -1835,25 +1865,38 @@ class _Extraction:
                     relever([lg.quantite, lg.prix_unitaire, lg.montant_ht])
                 else:
                     abaisser([lg.quantite, lg.prix_unitaire, lg.montant_ht])
+                    contredites.update(v.id for v in (lg.quantite, lg.prix_unitaire, lg.montant_ht) if v is not None)
             tx, tva = _dec(lg.taux_tva), _dec(lg.montant_tva)
             if None not in (tx, tva, ht) and lg.montant_tva.methode is not Methode.derive:  # type: ignore[union-attr]
                 if abs(_arrondi(ht * tx / 100) - tva) <= _CENT:  # type: ignore[operator]
                     relever([lg.montant_tva])
                 else:
                     abaisser([lg.montant_tva])
+                    contredites.add(lg.montant_tva.id)  # type: ignore[union-attr]
         cle_ht = "total_credite_ht" if self.avoir else "total_ht"
         cle_ttc = "total_credite_ttc" if self.avoir else "total_ttc"
         tht, ttva, tttc = c.obtenir(cle_ht), c.obtenir("total_tva"), c.obtenir(cle_ttc)
         hts = [lg.montant_ht for lg in lignes if lg.montant_ht is not None]
+        td_lu = None if self.avoir else c.total_debours  # type: ignore[union-attr]
+        if td_lu is not None and (td_lu.methode is Methode.derive or _dec(td_lu) is None):
+            td_lu = None
+        prest = [lg.montant_ht for lg in lignes if not lg.nature.est_debours and lg.montant_ht is not None]
         if tht is not None and tht.methode is not Methode.derive and hts:
             s = sum((_dec_signe(v) or Decimal(0)) for v in hts)
+            s_prest = sum((_dec_signe(v) or Decimal(0)) for v in prest)
             if abs(s - (_dec_signe(tht) or Decimal(0))) <= _CENT:
-                relever([tht, *hts])
+                relever_somme(tht, hts)
+            elif td_lu is not None and prest and len(prest) < len(hts) \
+                    and abs(s_prest - (_dec_signe(tht) or Decimal(0))) <= _CENT:
+                relever_somme(tht, prest)  # total HT des seules prestations, débours à part (D-2904)
             else:
                 abaisser([tht])
         if None not in (tht, ttva, tttc) and tttc.methode is not Methode.derive:  # type: ignore[union-attr]
             if abs((_dec(tht) or 0) + (_dec(ttva) or 0) - (_dec(tttc) or 0)) <= _CENT:
-                relever([tht, ttva, tttc])
+                relever_somme(tttc, [tht, ttva])
+            elif td_lu is not None and tht.methode is not Methode.derive and abs(  # type: ignore[union-attr]
+                    (_dec(tht) or 0) + (_dec(ttva) or 0) + (_dec(td_lu) or 0) - (_dec(tttc) or 0)) <= _CENT:
+                relever_somme(tttc, [tht, ttva, td_lu])  # TTC = HT des prestations + TVA + débours (D-2904)
             else:
                 abaisser([ttva, tttc])
         if not self.avoir:
@@ -1861,7 +1904,7 @@ class _Extraction:
             deb = [lg.montant_ht for lg in lignes if lg.nature.est_debours and lg.montant_ht is not None]
             if td is not None and td.methode is not Methode.derive and deb:
                 if abs(sum((_dec_signe(v) or Decimal(0)) for v in deb) - (_dec_signe(td) or Decimal(0))) <= _CENT:
-                    relever([td, *deb])
+                    relever_somme(td, deb)
                 else:
                     abaisser([td])
                     if any(ocr(v) for v in (td, *deb)):
@@ -1874,6 +1917,21 @@ class _Extraction:
             if net is not None and tttc is not None and net.methode is Methode.ocr \
                     and abs((_dec(net) or 0) - (_dec(tttc) or 0)) <= _CENT:
                 relever([net, tttc])
+        # Σ TVA des lignes (lues) = total TVA imprimé ; puis HT × taux imprimé = TVA confirmée : le montant HT de
+        # la ligne est confirmé à son tour (D-2905)
+        tvas_lues = [lg.montant_tva for lg in lignes if lg.montant_tva is not None
+                     and lg.montant_tva.methode is not Methode.derive]
+        if ttva is not None and ttva.methode is not Methode.derive and tvas_lues and abs(
+                sum((_dec_signe(v) or Decimal(0)) for v in tvas_lues) - (_dec_signe(ttva) or Decimal(0))) <= _CENT:
+            relever_somme(ttva, tvas_lues, garder_contredites=True)
+            for lg in lignes:
+                tx, tva, ht = _dec(lg.taux_tva), _dec(lg.montant_tva), _dec(lg.montant_ht)
+                if None in (tx, tva, ht) or tx == 0 or lg.taux_tva.methode is Methode.derive \
+                        or lg.montant_ht.methode is Methode.derive or maj.get(lg.montant_tva.id) != -4.0:
+                    continue
+                if abs(_arrondi(ht * tx / 100) - tva) <= _CENT and maj.get(lg.montant_ht.id) != -2.0 \
+                        and ocr(lg.montant_ht) and lg.montant_ht.ancree:
+                    maj[lg.montant_ht.id] = -4.0
         if not maj:
             return
         for chemin_rel, v in list(_feuilles(c)):
@@ -1888,6 +1946,12 @@ class _Extraction:
             elif v.type is TypeValeur.montant and chemin_rel.startswith("lignes[") \
                     and "rangee_illisible" in self.avertissements:
                 continue  # rangée perdue : les montants de ligne restent sous le plafond (D-2505)
+            elif maj[v.id] == -4.0:
+                # membre d'une somme imprimée qui tient (D-2904) : relevé si ses mots sont lisibles
+                ocr_min = _conf_ocr_min(v, self.vue)
+                if ocr_min is None or ocr_min < C_OCR_SOMME_MIN:
+                    continue
+                nv = v.model_copy(update={"confiance": max(v.confiance, C_OCR_RECOUPEE)})
             else:
                 ocr_min = _conf_ocr_min(v, self.vue)
                 if ocr_min is None or ocr_min < 0.9:

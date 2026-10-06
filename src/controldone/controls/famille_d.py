@@ -16,7 +16,7 @@ Unités : ``cle_unite(ft=<facture>, ligne=<index>)`` par ligne, ``cle_unite(ft=<
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_CEILING, Decimal
 from itertools import pairwise
@@ -71,6 +71,7 @@ from controldone.model import (
     ValeurSourcee,
 )
 from controldone.normalize.natures import renvoie_a_une_annexe
+from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import (
     cle_confusion_ocr,
     mrn_prefixe,
@@ -739,11 +740,23 @@ def d3_prix_grille(ctx: ControlContext) -> list[ResultatControle]:
 # =====================================================================================================
 
 
+@dataclass
+class _Assiette:
+    """Assiette d'un pourcentage de débours (D4, C6) : montant facturé, excédent constaté par C, valeurs lues,
+    motifs de rattachement non établi ; unités C et factures dont viennent les débours (D-2801)."""
+
+    montant: Decimal
+    excedent: Decimal
+    valeurs: list[ValeurSourcee]
+    motifs: list[str]
+    unites: list = field(default_factory=list)
+    factures: list[Document] = field(default_factory=list)
+
+
 def _assiette(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, base: BasePourcentage | None
-              ) -> tuple[Decimal, Decimal, list[ValeurSourcee], list[str]] | None:
-    """(assiette facturée, excédent constaté par C, valeurs, motifs de rattachement non établi) pour un
-    pourcentage de débours : débours des déclarations de la ligne (MRN cité sur la ligne, sinon déclarations
-    couvertes par la facture)."""
+              ) -> _Assiette | None:
+    """Assiette facturée d'un pourcentage de débours : débours des déclarations de la ligne (MRN cité sur la ligne,
+    sinon déclarations couvertes par la facture)."""
     decs = ctx.declarations()
     unites = unites_c(ctx) if decs else []
     concernees = unites_pour_ligne(ctx, f, ligne, unites)
@@ -754,7 +767,8 @@ def _assiette(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, 
         assiette = _somme(assiette_debours(u, base) for u in concernees)
         vals = [x.valeur for u in concernees for x in u.lignes if x.valeur is not None]
         motifs = ["debours_rattaches_sans_certitude"] if any(u.attribution_incertaine for u in concernees) else []
-        return assiette, excedent, vals, motifs
+        factures = list({x.facture.id: x.facture for u in concernees for x in u.lignes}.values())
+        return _Assiette(assiette, excedent, vals, motifs, list(concernees), factures)
     # Pas de déclaration rapprochée : débours de la facture elle-même (même MRN que la ligne s'il est cité),
     # sans correction. Sur une facture qui couvre plusieurs envois, ce choix des débours n'est pas établi
     # (MRN de ligne mal lu, déclaration absente) : jamais certain (D-2703).
@@ -771,7 +785,7 @@ def _assiette(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, 
     if any(_dec(ctx, v) is None for v in vals):
         return None
     motifs = ["debours_de_la_ligne_non_rattaches"] if facture_multi_envois(ctx, f) else []
-    return _somme(v.decimal_signe() for v in vals), ZERO, vals, motifs
+    return _Assiette(_somme(v.decimal_signe() for v in vals), ZERO, vals, motifs, [], [f])
 
 
 def _debours_complets(ctx: ControlContext, f: Document) -> bool:
@@ -790,8 +804,31 @@ def _debours_complets(ctx: ControlContext, f: Document) -> bool:
         vals = [_dec(ctx, _montant(ctx, lg)) for lg in lignes]
         if not vals or any(v is None for v in vals):
             return False
-        return abs(_somme(v for v in vals if v is not None) - (_dec(ctx, ht) or ZERO)) <= ctx.tol.t_somme(len(vals))
+        if abs(_somme(v for v in vals if v is not None) - (_dec(ctx, ht) or ZERO)) > ctx.tol.t_somme(len(vals)):
+            return False
+        # D-2801 : Σ lignes = total HT prouve que toutes les lignes sont lues, pas qu'une ligne de débours n'a pas été
+        # prise pour une prestation (libellé mal lu, nature non reconnue). Le total de TVA imprimé le prouve : une
+        # ligne de débours (sans TVA) comptée comme prestation (taux normal) romprait Σ HT × taux = total TVA.
+        return _tva_concorde(ctx, f)
     return False
+
+
+def _tva_concorde(ctx: ControlContext, f: Document) -> bool:
+    """Σ (HT × taux de la ligne, lu ou déduit selon la nature) = total de TVA imprimé (D-2801)."""
+    total = _dec(ctx, f.ft.total_tva)
+    if total is None or f.ft.total_tva is None or f.ft.total_tva.est_reconstruite:
+        return False
+    calcul = ZERO
+    n = 0
+    for lg in f.ft.lignes:
+        ht = _dec(ctx, _montant(ctx, lg))
+        taux = lg.taux_tva.decimal_ou_none() if lg.taux_tva is not None and ctx.utilisable(lg.taux_tva) else None
+        if ht is None or (taux is None and not lg.nature.est_debours):
+            return False
+        if taux:
+            calcul += ht * taux / _CENT
+            n += 1
+    return abs(calcul - total) <= ctx.tol.t_somme(n + 1)
 
 
 #: Assiettes d'un pourcentage de débours essayées comme explication d'un FAF (D-2213).
@@ -803,8 +840,8 @@ _BASES_ALTERNATIVES = (
 )
 
 
-def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire
-                            ) -> list[list[Decimal]]:
+def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire,
+                            factures: Sequence[Document] = ()) -> list[list[Decimal]]:
     """Autres assiettes plausibles d'un FAF, chacune comme liste de bases **par envoi** (D-2213) : débours
     refacturés des unités de la ligne selon chaque composante (avec ou sans l'excédent constaté), montants
     liquidés des déclarations, débours imprimés sur la facture elle-même. Le minimum et le maximum de la
@@ -844,13 +881,29 @@ def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactur
                                if lg.nature not in exclues and lg.montant_ht is not None)])
         out.append([_somme(lg.montant_ht.decimal_signe() for lg in propres
                            if lg.nature is NatureLigne.debours_droits and lg.montant_ht is not None)])
-    # Total des débours imprimé (D-2703) : il reprend aussi une ligne de débours perdue à la lecture.
-    total = _dec(ctx, f.ft.total_debours)
-    if total is not None:
-        out.append([total])
-        tva = [_dec(ctx, _montant(ctx, lg)) for lg in f.ft.lignes if lg.nature is NatureLigne.debours_tva]
-        if tva and all(x is not None for x in tva):
-            out.append([total - _somme(x for x in tva if x is not None)])
+    # Total des débours imprimé (D-2703) : il reprend aussi une ligne de débours perdue à la lecture. Débours
+    # portés par d'autres factures (facture de débours séparée, D-2801) : leurs totaux imprimés aussi.
+    totaux: list[Decimal] = []
+    tvas: list[Decimal] = []
+    tva_complete = True
+    for x in {d.id: d for d in (f, *factures)}.values():
+        total = _dec(ctx, x.ft.total_debours)
+        if total is None or (x is not f and x.ft.total_debours is not None and x.ft.total_debours.est_reconstruite):
+            continue
+        totaux.append(total)
+        tva = [_dec(ctx, _montant(ctx, lg)) for lg in x.ft.lignes if lg.nature is NatureLigne.debours_tva]
+        if tva and all(t is not None for t in tva):
+            tvas.append(_somme(t for t in tva if t is not None))
+        elif tva:
+            tva_complete = False
+        if x is f and total is not None:
+            out.append([total])
+            if tva and all(t is not None for t in tva):
+                out.append([total - _somme(t for t in tva if t is not None)])
+    if len(totaux) > 1:
+        out.append([_somme(totaux)])
+        if tva_complete and tvas:
+            out.append([_somme(totaux) - _somme(tvas)])
     return out
 
 
@@ -877,6 +930,75 @@ def _faf_explique(ctx: ControlContext, p: PosteGrille, facture: Decimal, attendu
     return None
 
 
+def _borne_faf(p: PosteGrille, base: Decimal) -> Decimal:
+    assert p.pourcentage is not None
+    return borner(arrondi_centime(p.pourcentage * base / _CENT), p.minimum, p.maximum)
+
+
+def _lignes_faf(ctx: ControlContext, f: Document) -> int:
+    """Nombre de lignes de FAF de la facture évaluées dans ce dossier."""
+    return sum(1 for lg in f.ft.lignes
+               if lg.nature is NatureLigne.frais_avance_fonds and ligne_evaluee_ici(ctx, f, lg))
+
+
+def _d4_ambiguites(ctx: ControlContext, lr: LigneRoutee, p: PosteGrille, base: BasePourcentage | None,
+                   a: _Assiette, attendu: Decimal) -> tuple[list[str], list[ValeurSourcee]]:
+    """Situations où l'assiette (et donc l'attendu, ou le montant de l'écart) dépend d'une convention que les
+    documents ne fixent pas (D-2801). Retourne les motifs et les débours TVA comprise de l'assiette (valeurs clés
+    même quand l'attendu est borné : leur montant net n'est pas établi).
+
+    1. ``faf_par_envoi_non_ventile`` : l'assiette couvre plusieurs déclarations, la ligne de FAF ne cite pas de
+       MRN et la facture porte plusieurs lignes de FAF : chacune est calculée sur les débours d'un envoi, lequel
+       n'est pas établi ;
+    2. ``bornes_par_envoi_ou_par_facture`` : une seule ligne de FAF pour plusieurs déclarations ; le minimum ou le
+       maximum appliqué par envoi donne un autre attendu qu'appliqué à la somme (ou la ventilation par envoi
+       n'est pas connue alors que la grille a des bornes) ;
+    3. ``avoirs_dans_les_debours`` : l'assiette contient des montants négatifs (lignes d'avoir mêlées au relevé)
+       ou des avoirs de débours déjà reçus ; l'attendu calculé sur les débours bruts et sur les débours nets
+       diffère."""
+    motifs: list[str] = []
+    tol = ctx.tol.t_tarif()
+    decs = {d.id for u in a.unites for d in u.declarations}
+    ventilee = lr.ligne.mrn is not None and ctx.utilisable(lr.ligne.mrn) and bool(mrn_prefixe(lr.ligne.mrn.valeur))
+    if len(decs) > 1 and not ventilee:
+        if _lignes_faf(ctx, lr.facture) > 1:
+            motifs.append("faf_par_envoi_non_ventile")
+        elif all(len(u.declarations) == 1 for u in a.unites):
+            refs = {d.id: reference_declaration(ctx, d) for d in ctx.declarations()}
+            par_envoi: dict[str, Decimal] = {}
+            for u in a.unites:
+                e = excedent_debours(u, refs, base) or ZERO
+                k = u.declarations[0].id
+                par_envoi[k] = par_envoi.get(k, ZERO) + assiette_debours(u, base) - e
+            if abs(_somme(_borne_faf(p, x) for x in par_envoi.values()) - attendu) > tol:
+                motifs.append("bornes_par_envoi_ou_par_facture")
+        elif p.minimum is not None or p.maximum is not None:
+            motifs.append("bornes_par_envoi_ou_par_facture")
+    negatifs = [x for x in a.valeurs if (d := _dec(ctx, x)) is not None and d < 0]
+    credits = _somme(c.montant for u in a.unites for c in u.credits)
+    if negatifs or credits:
+        retenue = a.montant - a.excedent
+        brute = retenue + _somme(abs(x.decimal_signe()) for x in negatifs)
+        nette = retenue - abs(credits)
+        if any(abs(_borne_faf(p, x) - attendu) > tol for x in (brute, nette)):
+            motifs.append("avoirs_dans_les_debours")
+    marquees = [x for x in a.valeurs if RaisonCode.montant_tva_comprise in x.raisons]
+    return motifs, marquees
+
+
+def _grille_attestee(ctx: ControlContext, lr: LigneRoutee) -> str | None:
+    """D-2802 : la grille appliquée est celle du transitaire du dossier ; l'émetteur lu sur la facture elle-même
+    doit désigner ce transitaire (numéro de TVA ou nom). Sinon (émetteur illisible ou inconnu), le tarif comparé
+    n'est pas établi : motif ``emetteur_non_identifie``."""
+    em = lr.facture.ft.emetteur
+    tva = em.tva.valeur if em.tva is not None and ctx.utilisable(em.tva) else None
+    nom = em.nom.valeur if em.nom is not None and ctx.utilisable(em.nom) else None
+    tid = identifier_transitaire(tva, nom, ctx.transitaires)
+    if tid == lr.grille.transitaire_id:
+        return None
+    return "emetteur_non_identifie" if tid is None else "autre_transitaire"
+
+
 def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControle:
     """Poste en pourcentage (FAF, surcharge) : ``attendu = borner(pourcentage × assiette)``."""
     p = lr.poste
@@ -895,15 +1017,16 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
             return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
                                       details={"motif": "assiette_de_la_surcharge_absente"})
         assiette, excedent, motifs = _somme(x.decimal_signe() for x in vals), ZERO, []
+        a_obj: _Assiette | None = None
     elif base in (BasePourcentage.valeur_marchandise, BasePourcentage.autre):
         return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
                                   details={"motif": "assiette_non_calculable"})
     else:
-        a = _assiette(ctx, lr.facture, lr.ligne, base)
-        if a is None:
+        a_obj = _assiette(ctx, lr.facture, lr.ligne, base)
+        if a_obj is None:
             return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
                                       details={"motif": "assiette_non_calculable"})
-        assiette, excedent, vals, motifs = a
+        assiette, excedent, vals, motifs = a_obj.montant, a_obj.excedent, a_obj.valeurs, a_obj.motifs
     retenue = assiette - excedent
     attendu = borner(arrondi_centime(p.pourcentage * retenue / _CENT), p.minimum, p.maximum)
     bornes = []
@@ -936,14 +1059,36 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
         # D-2703 : débours de l'assiette rattachés à la ligne sans certitude (MRN de ligne mal lu, relevé).
         raisons.append(RaisonCode.attribution_non_univoque)
         details["attribution_non_univoque"] = motifs
-    if cid == "D4" and (p.maximum is None or attendu < p.maximum) and not _debours_complets(ctx, lr.facture):
-        # D-2703 : une ligne de débours non lue augmenterait l'assiette ; sans total qui prouve que toutes les
-        # lignes sont lues, l'attendu n'est pas établi (sauf au maximum de la grille).
+    # D-2703, D-2801 : une ligne de débours non lue augmenterait l'assiette ; sans total qui prouve que toutes les
+    # lignes sont lues, l'attendu n'est pas établi (sauf au maximum de la grille). La preuve est exigée de chaque
+    # facture dont viennent les débours de l'assiette (facture de débours séparée de la facture de prestations),
+    # pas seulement de la facture qui porte le FAF.
+    factures_assiette = [lr.facture, *(x for x in (a_obj.factures if a_obj is not None else [])
+                                       if x.id != lr.facture.id)]
+    incompletes = [x.id for x in factures_assiette if not _debours_complets(ctx, x)]
+    if cid == "D4" and (p.maximum is None or attendu < p.maximum) and incompletes:
         raisons.append(RaisonCode.valeur_absente)
         details["assiette_non_confirmee"] = "total_des_debours_non_retrouve"
+        if any(i != lr.facture.id for i in incompletes):
+            details["factures_de_debours_non_confirmees"] = [i for i in incompletes if i != lr.facture.id]
+    if cid == "D4" and a_obj is not None:
+        ambigu, marquees = _d4_ambiguites(ctx, lr, p, base, a_obj, attendu)
+        cles += [x for x in marquees if x not in cles]
+        if ambigu:
+            raisons.append(RaisonCode.assiette_non_etablie)
+            details["assiette_non_etablie"] = ambigu
+    devise = lr.facture.ft.devise
+    if cid == "D4" and devise is not None and not ctx.utilisable(devise):
+        # D-2802 : devise de la facture lue mais illisible ; la grille est en euros (« EUR » non établi).
+        raisons.append(RaisonCode.devise_incertaine)
+    if cid == "D4":
+        attestation = _grille_attestee(ctx, lr)
+        if attestation is not None:
+            raisons.append(RaisonCode.grille_non_attestee)
+            details["grille_non_attestee"] = attestation
     if cid == "D4" and v.decimal_signe() - attendu - deduction > ctx.tol.t_tarif():
         motif = _faf_explique(ctx, p, v.decimal_signe() - deduction, attendu,
-                              _assiettes_alternatives(ctx, lr.facture, lr.ligne))
+                              _assiettes_alternatives(ctx, lr.facture, lr.ligne, factures_assiette))
         if motif is not None:
             raisons.append(RaisonCode.assiette_alternative)
             details["assiette_alternative"] = motif

@@ -30,6 +30,7 @@ import sys
 import tempfile
 import threading
 import zipfile
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
@@ -57,7 +58,8 @@ __all__ = [
 ]
 
 #: Version de l'algorithme de pages (entre dans la clé d'idempotence §7 étape 2 avec Tesseract).
-VERSION_PAGES = "1.1.0"  # 1.1.0 : prétraitement OCR, deux pages par feuille, réessai d'orientation (D-2601 à D-2606)
+VERSION_PAGES = "1.1.1"  # 1.1.0 : prétraitement OCR, deux pages par feuille, réessai d'orientation (D-2601 à D-2606)
+# 1.1.1 : feuille « deux pages » écartée quand une ligne de texte touche la coupure (D-2902)
 
 SEUIL_NATIF = 0.85
 SEUIL_NATIF_FAIBLE = 0.5
@@ -878,7 +880,12 @@ def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
         if REGLAGES_OCR["deux_pages"]:
             coupe = pt.coupure_deux_pages(image)
     if coupe is not None:
-        return _ocr_deux_pages(image, coupe, opts, numero, rotation or 0, notes)
+        double = _ocr_deux_pages(image, coupe, opts, numero, rotation or 0, notes)
+        if moities_separees(double.lignes, coupe / image.size[0]):
+            return double
+        # D-2902 : du texte touche la coupure (tableau en paysage dont deux colonnes encadrent la bande centrale,
+        # pied de page centré) : une seule page, relue entière
+        notes = [*notes, "deux_pages_ecarte"]
     mots, score, rot_finale, angle, _ = _ocr_oriente(image, opts, rotation)
     return _page_ocr(numero, mots, score, rot_finale, angle, notes)
 
@@ -892,6 +899,27 @@ def _page_ocr(numero: int, mots: list[Mot], score: float, rotation: int, angle: 
         qualite = QualiteTexte.illisible
     return PageText(numero=numero, texte=texte, lignes=lignes, qualite=qualite, source="ocr",
                     score_ocr=round(score, 4), rotation=rotation, desinclinaison=angle, avertissements=notes)
+
+
+#: Distance minimale (fraction de la largeur) entre le texte de chaque moitié et la coupure d'une vraie feuille
+#: « deux pages » : les marges des deux pages réduites l'encadrent (≥ 3 % de chaque côté sur le banc, D-2902).
+MARGE_COUPURE_DEUX_PAGES = 0.012
+
+
+def moities_separees(lignes: Sequence[Ligne], coupe: float) -> bool:
+    """Les lignes lues de part et d'autre de la coupure ``coupe`` (0–1) restent à distance de celle-ci : une
+    ligne qui la touche (moins de ``MARGE_COUPURE_DEUX_PAGES``) appartient à une page unique coupée à tort
+    (une colonne vide au milieu d'un tableau en paysage n'est pas une gouttière, D-2902)."""
+    for li in lignes:
+        mots = [m for m in li.mots if sum(c.isalnum() for c in m.texte) >= 2]
+        if not mots:
+            continue
+        x0, x1 = min(m.x0 for m in mots), max(m.x1 for m in mots)
+        if x1 <= coupe + 0.002 and coupe - x1 < MARGE_COUPURE_DEUX_PAGES:
+            return False
+        if x0 >= coupe - 0.002 and x0 - coupe < MARGE_COUPURE_DEUX_PAGES:
+            return False
+    return True
 
 
 def _ocr_deux_pages(image, coupe: int, opts: OptionsPages, numero: int, rotation: int, notes: list[str]) -> PageText:

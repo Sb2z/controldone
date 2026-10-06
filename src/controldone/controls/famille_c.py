@@ -1383,14 +1383,14 @@ def unites_pour_ligne(
 
 
 def grille_pour_facture(ctx: ControlContext, f: Document) -> GrilleTarifaire | None:
-    """Grille **validée** applicable à la facture : transitaire du dossier, sinon émetteur reconnu par
-    son numéro de TVA puis par son nom ou un alias ; valide à la date de la facture (§13)."""
-    tid = ctx.dossier.transitaire_id
-    if tid is None:
-        em = f.ft.emetteur
-        tva = em.tva.valeur if ctx.utilisable(em.tva) and em.tva is not None else None
-        nom = em.nom.valeur if ctx.utilisable(em.nom) and em.nom is not None else None
-        tid = identifier_transitaire(tva, nom, ctx.transitaires)
+    """Grille **validée** applicable à la facture : transitaire désigné par l'émetteur de la facture elle-même
+    (numéro de TVA, puis nom ou alias), à défaut transitaire du dossier ; valide à la date de la facture (§13).
+    Le transitaire du dossier est celui de sa première facture identifiée : une facture d'un autre transitaire
+    rangée dans le dossier se compare à la grille de son propre émetteur (D-2802)."""
+    em = f.ft.emetteur
+    tva = em.tva.valeur if ctx.utilisable(em.tva) and em.tva is not None else None
+    nom = em.nom.valeur if ctx.utilisable(em.nom) and em.nom is not None else None
+    tid = identifier_transitaire(tva, nom, ctx.transitaires) or ctx.dossier.transitaire_id
     if tid is None:
         return None
     le = None

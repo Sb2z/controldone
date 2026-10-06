@@ -621,6 +621,10 @@ class _Lecteur:
         #: (D-1805) : plafonnées plus bas encore (leur rattachement à un article est lui-même une lecture OCR).
         self._lignes_sans_code: list[TaxationDeclaration] = []
         self._mt_generique = False
+        #: Totaux imprimés par code de taxe (« Total A00 : 323,00 », récapitulatif « A00 Droits de douane 96,65 ») :
+        #: ils ne sont pas des lignes de taxation (une ligne sans article serait additionnée par les contrôles) et
+        #: servent seulement aux recoupements des lectures OCR (D-2903).
+        self.totaux_categories: dict[str, list[tuple[Decimal, bool]]] = {}
 
     # --- chargement -------------------------------------------------------------------------------------
 
@@ -1181,6 +1185,7 @@ class _Lecteur:
             self._taxe_prose(self.lignes[idx], plages, None)
         self._forfait_sans_entete()
         self._totaux()
+        self._totaux_categories()
         self._indices()
         self._sens_taux_derive()
         self._coherence()
@@ -1997,18 +2002,24 @@ class _Lecteur:
         if tx.taux is None and tx.taux_nature is None and cat is CategorieTaxe.tva and tx.base_montant is not None:
             tx.taux_nature = TauxNature.ad_valorem  # colonne TVA sans taux imprimé : la TVA est ad valorem
         repare = None
+        m_pts = None
         if montant is not None and not montant.vide and self.sep == ",":
             # Lectures OCR d'un montant de colonne (D-712) : virgule lue « / » ou « | » (« 31/87 ») ; chiffre
             # de la colonne de statut collé au montant (« 929,527 » quand la colonne St est vide).
             txt = montant.texte.strip()
             m_rep = re.fullmatch(r"(\d{1,3}(?:[ .]?\d{3})*) ?[/|] ?(\d{2})", txt)
+            # « 3:46: », « 12:591;51 » : séparateurs lus « : » ou « ; » (D-2903) ; relecture plafonnée
+            m_pts = None if m_rep else re.fullmatch(r"(\d{1,3}(?:[ .:;]?\d{3})*)[:;](\d{2})[:;.|]?", txt)
+            m_rep = m_rep or m_pts
             m_col = re.fullmatch(r"(\d{1,3}(?:[ .]?\d{3})*),(\d{2})\d", txt) if mp is None or mp.vide else None
             m_ok = m_rep or m_col
             if m_ok:
-                valeur = Decimal(re.sub(r"[ .]", "", m_ok.group(1)) + "." + m_ok.group(2))
+                valeur = Decimal(re.sub(r"[ .:;]", "", m_ok.group(1)) + "." + m_ok.group(2))
                 repare = _Lu(montant, txt, str(valeur), 0.15)
         if repare is not None:
             tx.montant = self._vs(f"{p}.montant", repare, unite="EUR", type_valeur=TypeValeur.montant)
+            if m_pts is not None and tx.montant is not None:
+                self._reparees.add(tx.montant.id)
         elif montant is not None and not montant.vide:
             ms = [m for m in _nombres(montant) if _a_decimales(m)] or _nombres(montant)
             if ms:
@@ -2342,6 +2353,57 @@ class _Lecteur:
         self.champs.total_a_payer = self._vs(
             "total_a_payer", self._lire(["total_a_payer"], self.v_montant, lignes=tout, dessous=False), unite="EUR")
 
+    def _totaux_categories(self) -> None:
+        """Totaux imprimés par code de taxe (D-2903) : « Total A00 : 323,00 Total B00 : 2 553,90 », « Total AO0
+        EUR 477.10 », ou rangée d'un récapitulatif « A00 Droits de douane 96,65 » (code, libellé, un seul
+        montant), hors tableaux de taxation et blocs d'articles. Chaque lecture garde sa valeur et si elle est
+        sûre (texte natif, ou OCR sans pénalité) ; un code lu deux fois avec deux valeurs n'est pas retenu."""
+        lus: dict[str, list[Decimal]] = {}
+        surs: dict[str, bool] = {}
+
+        def ajouter(code: str, lu: _Lu | None) -> None:
+            if lu is None or lu.valeur is None:
+                return
+            try:
+                d = Decimal(str(lu.valeur))
+            except ArithmeticError:
+                return
+            lus.setdefault(code, []).append(d)
+            sur = lu.penalite == 0 and (self._methode(lu.span) is Methode.texte_natif
+                                        or self._confiance(lu.span) >= 0.5)
+            surs[code] = surs.get(code, True) and sur
+
+        for ligne in self.lignes:
+            toks = ligne.toks
+            # « Total <code> [:] [EUR] <montant> » (plusieurs par ligne)
+            debuts = [k for k, t in enumerate(toks[:-1]) if re.fullmatch(r"(?i)total[e]?:?", t.t.strip())]
+            for n, k in enumerate(debuts):
+                code = _code_taxe(_Span(toks[k + 1:k + 2]), ligne)
+                if code is None or code.valeur is None:
+                    continue
+                fin = debuts[n + 1] if n + 1 < len(debuts) else len(toks)
+                reste = _Span(toks[k + 2:fin])
+                ms = [m for m in _nombres(reste) if _a_decimales(m)]
+                if len(ms) == 1:
+                    ajouter(code.valeur, self._lu_nombre(reste, ms[0]))
+            if debuts or ligne.idx in self.lignes_blocs or ligne.idx in self.lignes_tableaux or len(toks) < 3:
+                continue
+            # rangée de récapitulatif : code, libellé (mots), un seul montant à décimales en fin de ligne
+            code = _code_taxe(_Span(toks[:1]), ligne)
+            if code is None or code.valeur is None or code.penalite > 0.12:
+                continue
+            sp = _Span(toks[1:])
+            ms = _nombres(sp)
+            if len(ms) != 1 or not _a_decimales(ms[0]) or ms[0].end() < len(sp.texte.rstrip(" |€")) \
+                    or "%" in sp.texte or not re.search(r"[^\W\d_]{4,}", sp.texte[:ms[0].start()]):
+                continue
+            ajouter(code.valeur, self._lu_nombre(sp, ms[0]))
+        # seuls les codes des lignes de taxation lues (« total TRY 616 558,35 » est un montant en devise)
+        codes = {t.type_taxe.valeur for t in self.champs.taxations if t.type_taxe is not None and t.type_taxe.valeur}
+        for code, vals in lus.items():
+            if code in codes and len(set(vals)) == 1:
+                self.totaux_categories[code] = [(vals[0], surs.get(code, False))]
+
     def _indices(self) -> None:
         c = self.champs
         for d in c.documents_references:
@@ -2556,6 +2618,7 @@ class _Lecteur:
                       if tx.paiement_normalise is not PaiementNormalise.autoliquide)
             ok = abs(dus - c.total_a_payer.decimal()) <= demi  # type: ignore[union-attr]
             (self._confirmer if ok else self._infirmer)(c.total_a_payer)
+        self._recouper_totaux_categories(demi)
         # montant total facturé = somme des articles (même devise)
         mts = [a.montant_facture_article for a in c.articles]
         if _plusieurs(mts) and lisibles(c.montant_total_facture, *mts) and all(
@@ -2604,6 +2667,46 @@ class _Lecteur:
                 self._remplacer(vs, max(vs.confiance, cible))
             elif vs.id in self._infirmees:
                 self._remplacer(vs, min(vs.confiance, PLAFOND_INCOHERENT))
+
+    def _recouper_totaux_categories(self, demi: Decimal) -> None:
+        """Recoupements par les totaux imprimés de chaque code de taxe (D-2903), qui ne confirment que :
+
+        - Σ des totaux par code (au moins deux codes, tous lus sûrement) = total des droits et taxes imprimé :
+          confirme ce total ; total à payer = ce total, ou ce total moins les codes dont toutes les lignes sont
+          autoliquidées : confirme le total à payer ;
+        - Σ des montants des lignes d'un code (au moins deux montants non nuls) = total imprimé du code :
+          confirme ces montants.
+
+        Un désaccord n'infirme rien : le total d'un code peut être la valeur fausse (B2)."""
+        c = self.champs
+        tot = {code: lus[0][0] for code, lus in self.totaux_categories.items() if lus[0][1]}
+        if not tot:
+            return
+        td = c.total_droits_taxes
+        somme = sum(tot.values(), Decimal(0))
+        if len(tot) >= 2 and td is not None and td.est_lisible and abs(td.decimal() - somme) <= demi:
+            self._confirmer(td)
+            ap = c.total_a_payer
+            if ap is not None and ap.est_lisible:
+                auto = set()
+                for code in tot:
+                    du_code = [t for t in c.taxations if t.type_taxe is not None and t.type_taxe.valeur == code]
+                    if du_code and all(t.paiement_normalise is PaiementNormalise.autoliquide for t in du_code):
+                        auto.add(code)
+                cibles = {somme, somme - sum((tot[k] for k in auto), Decimal(0))}
+                if any(abs(ap.decimal() - x) <= demi for x in cibles):
+                    self._confirmer(ap)
+        for code, total in tot.items():
+            lignes = [t for t in c.taxations if t.type_taxe is not None and t.type_taxe.valeur == code
+                      and t.article is not None]
+            montants = [t.montant if t.montant is not None else t.montant_a_payer for t in lignes]
+            if not montants or any(m is None or not m.est_lisible for m in montants):
+                continue
+            vals = [m.decimal() for m in montants if m is not None]
+            if sum(1 for x in vals if x != 0) < 2:
+                continue
+            if abs(sum(vals, Decimal(0)) - total) <= demi:
+                self._confirmer(*montants)
 
     def _recouper_taux(self) -> None:
         c = self.champs

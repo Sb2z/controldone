@@ -23,6 +23,7 @@ from datetime import date
 from decimal import Decimal
 from itertools import combinations
 
+from controldone.controls._aides_befg import documents_autres, mrn_cites
 from controldone.controls.famille_p import entites_client_declaration, identifier_facture
 from controldone.controls.framework import (
     Confusion,
@@ -54,7 +55,7 @@ from controldone.model import (
 )
 from controldone.normalize.countries import country_to_iso2
 from controldone.normalize.incoterms import parse_incoterm
-from controldone.normalize.refs import norm_ref, ref_compatibles
+from controldone.normalize.refs import cle_confusion_ocr, norm_ref, ref_compatibles
 from controldone.normalize.units import UNITE_INCONNUE, normalize_unit
 
 __all__ = [
@@ -875,6 +876,75 @@ def a3_devise(ctx: ControlContext) -> list[ResultatControle]:
     return _par_couple(ctx, "A3", _a3)
 
 
+_PUISSANCES_DE_DIX = tuple(Decimal(10) ** k for k in (-3, -2, -1, 1, 2, 3))
+
+
+def _perimetre_non_etabli(ctx: ControlContext, c: Couple, declare: Decimal, reference: Decimal) -> list[str]:
+    """Explications d'un écart A4 / A5 par un ensemble de documents incomplet ou par une lecture d'échelle, de
+    signe ou de page (D-2803). ``reference`` : total facture (A4) ou total converti (A5), dans l'unité du montant
+    déclaré.
+
+    0. ``montant_negatif_lu`` : total de la facture commerciale ou montant déclaré négatif (signe lu) ;
+       ``total_lu_avant_des_lignes`` : le total retenu est imprimé sur une page qui précède des lignes de la même
+       facture (total de page, report) ;
+    1. ``facteur_puissance_de_dix`` : le montant déclaré est la référence multipliée par 10, 100 ou 1 000 (ou
+       divisée) : séparateur décimal ou de milliers lu autrement sur l'un des documents (devise sans décimales) ;
+    2. ``facture_citee_absente`` (déclaré > facture) : la déclaration cite, avec un code de facture, une
+       référence qu'aucune facture commerciale du couple ne porte : la facture manquante peut expliquer
+       l'excédent ;
+    3. ``declaration_citee_absente`` (déclaré < facture) : une facture du transitaire qui cite le MRN d'une
+       déclaration du couple cite aussi un MRN qu'aucune déclaration lue (ce dossier ou un autre) ne porte : la
+       facture commerciale peut être répartie sur une déclaration absente ou non lue ; ou une déclaration d'un
+       autre dossier cite une facture du couple."""
+    motifs: list[str] = []
+    if declare < 0 or any(x is not None and _decimal(x) is not None and (_decimal(x) or 0) < 0
+                          for x in (fc.fc.total_facture for fc in c.fcs)):
+        # Facture commerciale (pas un avoir) ou montant déclaré négatif : signe lu (tiret, trait de tableau).
+        motifs.append("montant_negatif_lu")
+    for fc in c.fcs:
+        tot = fc.fc.total_facture
+        pages = [lg.montant_ligne.page for lg in fc.fc.lignes if lg.montant_ligne is not None and lg.montant_ligne.page]
+        if tot is not None and tot.page and pages and max(pages) > tot.page:
+            # Total lu sur une page qui précède des lignes de la même facture : total de page ou report.
+            motifs.append("total_lu_avant_des_lignes")
+            break
+    # Tolérance relative stricte sur le montant déclaré (pas celle de la comparaison, proportionnelle au plus grand
+    # des deux montants) : l'échelle est seule en cause, les chiffres doivent concorder.
+    if reference != 0 and declare != 0 and any(
+        abs(declare - reference * k) <= max(Decimal("0.01"), abs(declare) / 2000) for k in _PUISSANCES_DE_DIX
+    ):
+        motifs.append("facteur_puissance_de_dix")
+    numeros = [fc.fc.numero.valeur for fc in c.fcs
+               if fc.fc.numero is not None and fc.fc.numero.valeur and ctx.utilisable(fc.fc.numero)]
+    if declare > reference:
+        cites: list[ValeurSourcee] = []
+        for dec in c.decs:
+            cites += [r.reference for r in dec.dec.documents_references
+                      if r.type_code is not None and r.type_code.valeur and _est_ref_facture(r.type_code)
+                      and r.reference is not None and ctx.utilisable(r.reference)]
+            cites += [v for art in dec.dec.articles for v in art.references_facture if ctx.utilisable(v)]
+        if any(not any(ref_compatibles(n, v.valeur) for n in numeros) for v in cites if v.valeur):
+            motifs.append("facture_citee_absente")
+    elif declare < reference:
+        couple = {cle_confusion_ocr(d.dec.mrn_prefixe) for d in c.decs if d.dec.mrn_prefixe}
+        connus = {cle_confusion_ocr(d.dec.mrn_prefixe) for d in ctx.declarations(dernieres_versions=False)
+                  if d.dec.mrn_prefixe}
+        ailleurs = [x.doc for x in documents_autres(ctx, TypeDocument.declaration)]
+        connus |= {cle_confusion_ocr(d.dec.mrn_prefixe) for d in ailleurs if d.dec.mrn_prefixe}
+        for ft in ctx.factures_transitaires():
+            cles = {cle_confusion_ocr(p) for p, v in mrn_cites(ft).items() if ctx.utilisable(v)}
+            if cles & couple and cles - connus:
+                motifs.append("declaration_citee_absente")
+                break
+        for d in ailleurs:
+            refs = [r.reference for r in d.dec.documents_references if r.reference is not None and r.reference.valeur]
+            refs += [v for art in d.dec.articles for v in art.references_facture if v.valeur]
+            if any(ref_compatibles(n, v.valeur) for n in numeros for v in refs):
+                motifs.append("facture_declaree_ailleurs")
+                break
+    return motifs
+
+
 def _a4_allocations(ctx: ControlContext, c: Couple, dv: Devises) -> list[ResultatControle]:
     """A4, sous-contrôle ``allocation`` : montant déclaré d'une déclaration contre le montant explicitement
     alloué de la facture (facture répartie sur plusieurs déclarations, même devise)."""
@@ -969,6 +1039,10 @@ def _a4(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         details["lignes_de_pied"] = [v.id for v in expliquent]
     else:
         explication = _explication_version(ctx, c, lambda d: abs(d - m.total) <= t)
+    perimetre = _perimetre_non_etabli(ctx, c, m.declare, m.total)
+    if perimetre:
+        raisons.append(RaisonCode.perimetre_non_etabli)
+        details["perimetre_non_etabli"] = perimetre
     confusion = _confusions_somme(m.dec_vals, lambda x: abs(x - m.total) <= t)
     confusion += _confusions_somme(m.fc_vals, lambda x: abs(m.declare - x) <= t)
     cl = ctx.classify(cid, ecart=ecart, tolerance=t, seuil_certitude=s,
@@ -1044,6 +1118,10 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         _, ecart_autre = ev["ecarts"][ev["autre"]]
         if abs(ecart_autre) <= ev["s"]:
             raisons.append(RaisonCode.sens_taux_derive)
+    perimetre = _perimetre_non_etabli(ctx, c, m.declare, attendu)
+    if perimetre:
+        raisons.append(RaisonCode.perimetre_non_etabli)
+        details["perimetre_non_etabli"] = perimetre
     taux_v = t.taux
     confusion = _confusions_somme(m.dec_vals, lambda x: abs(x - attendu) <= t_conv)
     confusion += _confusions_somme(

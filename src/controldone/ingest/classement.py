@@ -316,6 +316,25 @@ _NUM_FACTURE2 = re.compile(
     r"(?:n°|no\.?|numero|number|num\.?)[ \t]*(?:de |of )?(?:la )?(?:facture|invoice|factura|avoir|credit note)"
     r"[ \t]*[:#]?[ \t]*([a-z0-9][a-z0-9\-/_.]{2,30})"
 )
+#: Numéro imprimé juste après l'intitulé, sans « N° » (« FACTURE HTD2026-47293 », « AVOIR HTD-AV-09866 »,
+#: « FACTURA COMPLEMENT FT26-97327 », « FAKTURA UZUPEŁNIAJĄCA Nr FV/03342/07/2026 ») : seulement dans le haut de
+#: la page (D-2901).
+_NUM_FACTURE_TITRE = re.compile(
+    r"\b(?:invoice|facture|factura|avoir|faktura|fattura|fatura|rechnung|factuur|credit note|nota de credito)\b"
+    r"(?:[ \t]*(?:-|—|–))?(?:[ \t]+[a-z]{4,20}){0,3}?(?:[ \t]+(?:de|des|do|da)[ \t]+[a-z]{4,20})?"
+    r"(?:[ \t]*(?:-|—|–))?[ \t]+(?:(?:nr|no|n°|nº|n\.°|n\.º)\.?[ \t]*[:#]?[ \t]*)?"
+    r"(?=[a-z0-9\-/_.]*\d)([a-z0-9][a-z0-9\-/_.]{4,30})"
+)
+#: Intitulé cité (« avoir sur facture X », « credit note for invoice X ») : le numéro n'est pas celui de la page.
+_AVANT_TITRE_CITE = re.compile(r"\b(?:sur|on|for|to|of|zu|per|para|a|la|du|de|origine|original|related|"
+                               r"correction)[ \t]*$")
+#: Lignes du haut de page où un numéro sans libellé est cherché.
+_LIGNES_TITRE = 8
+#: « … — page 2 », « … — str. 2 » en fin de ligne (numéro de page sans total, D-2901).
+_PAGE_FIN = re.compile(r"(?:—|–|-)[ \t]*(?:page|seite|pagina|pag\.?|str\.?|blad|blatt)[ \t]*(\d{1,3})[ \t]*$",
+                       re.MULTILINE)
+#: « n/m » seul en fin d'une des premières lignes (« FEUILLET D'EN-TÊTE 1/2 », « ANNEXE A1 MRN … 2/2 »).
+_PAGE_NM_FIN = re.compile(r"(?<![\d/.,])(\d{1,2})[ \t]*/[ \t]*(\d{1,2})[ \t]*$")
 _AVANT_NUM_EXCLU = re.compile(r"(?:montant|total|valeur|amount|value|date|importe|ref(?:erence)?s?)[^\n]{0,12}$")
 _MOTS_LANGUE = {
     "fr": {"le", "la", "les", "des", "du", "et", "pour", "facture", "montant", "pays", "poids", "droits", "taxe",
@@ -342,6 +361,9 @@ class RefsPage:
     numero_facture: str | None = None
     page_n: int | None = None
     page_total: int | None = None
+    #: Références imprimées de la page (jetons alphanumériques normalisés d'au moins 6 caractères avec un
+    #: chiffre) : un numéro lu sur une page et imprimé sur la précédente relie les deux pages (D-2901).
+    jetons: frozenset[str] = frozenset()
 
     @property
     def mrn_prefixes(self) -> tuple[str, ...]:
@@ -410,6 +432,21 @@ def extraire_refs(texte: str) -> RefsPage:
                 break
         if num:
             break
+    haut_lignes = [li for li in t.splitlines() if li.strip()][:_LIGNES_TITRE]
+    if not num:
+        # D-2901 : numéro imprimé après l'intitulé, sans libellé, dans le haut de la page
+        for li in haut_lignes:
+            for m in _NUM_FACTURE_TITRE.finditer(li):
+                cand = m.group(1).strip("._-/")
+                avant = li[max(0, m.start() - 30):m.start()]
+                if _AVANT_NUM_EXCLU.search(avant) or _AVANT_TITRE_CITE.search(avant) \
+                        or re.match(r"[.,]\d", li[m.end(1):]):
+                    continue
+                if _numero_plausible(cand):
+                    num = norm_ref(cand)
+                    break
+            if num:
+                break
     pn = pt = None
     m = _PAGE_N.search(t)
     if m:
@@ -420,7 +457,31 @@ def extraire_refs(texte: str) -> RefsPage:
         m = _PAGE_SEULE.search(t)
         if m and int(m.group(1)) > 0:
             pn = int(m.group(1))  # « Page 2 » seul sur sa ligne (relevé sur plusieurs pages, D-2113)
-    return RefsPage(mrns=tuple(mrns), numero_facture=num, page_n=pn, page_total=pt)
+        else:
+            # D-2901 : « … — page 2 » en fin de ligne, « 2/2 » en fin d'une ligne de tête
+            for li in haut_lignes[:4]:
+                mf = _PAGE_FIN.search(li)
+                if mf and int(mf.group(1)) > 0:
+                    pn = int(mf.group(1))
+                    break
+                mf = _PAGE_NM_FIN.search(li)
+                if mf and 1 <= int(mf.group(1)) <= int(mf.group(2)) <= 30 and int(mf.group(2)) >= 2:
+                    pn, pt = int(mf.group(1)), int(mf.group(2))
+                    break
+    jetons = frozenset(j for j in (norm_ref(x) for x in re.findall(r"[a-z0-9][a-z0-9\-/_.]{4,40}", t))
+                       if len(j) >= 6 and any(c.isdigit() for c in j))
+    return RefsPage(mrns=tuple(mrns), numero_facture=num, page_n=pn, page_total=pt, jetons=jetons)
+
+
+def _numero_plausible(cand: str) -> bool:
+    """Numéro de document sans libellé : au moins 6 caractères utiles, un chiffre, ni date ni année seule ni
+    montant."""
+    utile = norm_ref(cand)
+    if len(utile) < 6 or not any(c.isdigit() for c in utile):
+        return False
+    if re.fullmatch(r"\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}", cand) or re.fullmatch(r"\d+[.,]\d{2}", cand):
+        return False
+    return bool(re.search(r"[a-z]", cand) or re.search(r"\d[-/_.]\d", cand) or len(utile) >= 6)
 
 
 @dataclass
@@ -621,7 +682,8 @@ def classer_page(
     if not refs.numero_facture:  # intitulé entrelacé avec le nom de société (texte natif) : relu démêlé
         n2 = extraire_refs("\n".join(tt.lignes)).numero_facture
         if n2:
-            refs = RefsPage(mrns=refs.mrns, numero_facture=n2, page_n=refs.page_n, page_total=refs.page_total)
+            refs = RefsPage(mrns=refs.mrns, numero_facture=n2, page_n=refs.page_n, page_total=refs.page_total,
+                            jetons=refs.jetons)
             base["refs"] = refs
     indices: list[str] = []
 

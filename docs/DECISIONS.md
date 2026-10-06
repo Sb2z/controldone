@@ -3206,3 +3206,217 @@ il ne fonde pas un écart certain (motif de structure). Test :
 
 Mesures après D-2710/D-2711 (dev, OCR 1.1.0) : `corpus_g4` 84 vrais / 0 faux certains (rappel 0,805),
 `corpus_g2` 111 / 0 (0,840), `corpus` 120 / 0 (0,827) ; les trois seuils passent.
+
+# Contrôles : écarts certains sur des documents jamais vus — D4, A4/A5, preuves imprimées (dev seulement)
+
+Constat : sur les jeux tenus à l'écart (OCR 1.1.0), il restait un faux écart certain D4 (jeu de type `corpus_g4`) et un
+A4 (jeu de type `corpus_h2`). Ces dossiers n'ont pas été ouverts. Étude, sur les seuls jeux de développement des trois
+corpus, de tous les constats D4 et A2–A5 (vrais, faux, « à vérifier », pièges déclenchés) et des chemins de code, à la
+recherche des façons dont un constat peut être certain et faux — montant compris : un écart certain au montant faux
+compte comme un faux certain. Un cas réel a été trouvé, sauvé par chance : GZ0179 (factures de débours et de
+prestations séparées, facture de débours scannée dont la ligne de TVA n'est pas lue) — la complétude de D-2703 était
+prouvée sur la facture de prestations (Σ lignes = total HT), pas sur celle des débours ; D4 aurait été certain
+(38,14) si le total liquidé de la déclaration n'avait pas expliqué le FAF. Règles générales seulement : aucune ne lit
+un nom de gabarit, de fichier, de client ou de transitaire. Tests : `tests/controls/test_precision_d28.py` (24 cas
+fictifs).
+
+## D-2801 — D4 : assiette établie sans ambiguïté
+
+- **Complétude prouvée sur chaque facture dont viennent les débours** (`famille_d._Assiette.factures`) et non plus
+  seulement sur la facture qui porte le FAF : facture de débours séparée de la facture de prestations, débours d'un
+  relevé. Motif `details.factures_de_debours_non_confirmees`. Les totaux des débours imprimés de ces factures
+  (avec et sans TVA) s'ajoutent aux assiettes alternatives de D-2213.
+- **Complétude par le total HT** (aucun total des débours imprimé) : Σ lignes = total HT prouve que toutes les lignes
+  sont lues, pas qu'une ligne de débours au libellé illisible (« Cło » lu « Cto ») n'a pas été prise pour une
+  prestation. Exigé en plus : Σ (HT × taux de la ligne, lu ou déduit selon la nature) = total de TVA imprimé
+  (`_tva_concorde`) ; une ligne de débours (sans TVA) comptée comme prestation au taux normal romprait l'égalité.
+- **Conventions que les documents ne fixent pas** → raison nouvelle `assiette_non_etablie`
+  (`details.assiette_non_etablie`) :
+  1. `faf_par_envoi_non_ventile` : l'assiette couvre plusieurs déclarations, la ligne de FAF ne cite pas de MRN et
+     la facture porte plusieurs lignes de FAF (une par envoi, laquelle ?) — GZ0048, GX0152, GX0164 ;
+  2. `bornes_par_envoi_ou_par_facture` : une ligne de FAF pour plusieurs déclarations et le minimum/maximum
+     appliqué par envoi donne un autre attendu qu'appliqué à la somme (ou la ventilation par envoi n'est pas
+     connue alors que la grille a des bornes) — huit relevés du corpus d'origine, tous `conforme` ;
+  3. `avoirs_dans_les_debours` : montants négatifs (lignes d'avoir mêlées au relevé) ou avoirs de débours déjà
+     reçus, et l'attendu sur les débours bruts ou nets diffère.
+  Une ligne de débours « TVA comprise » de l'assiette (D-2701) devient valeur clé même quand l'attendu est borné.
+- **Écartés** : exiger que le FAF dépasse l'attendu de *toutes* les assiettes (droits, débours avec/sans TVA) :
+  la TVA pèse lourd, les vrais D4 non bornés (GX0098, BX0201) seraient perdus ; FAF égal au prix forfaitaire d'un
+  autre poste de la grille (ligne mal rapprochée) : 17 coïncidences de montants ronds sur les `conforme` du dev g4,
+  les libellés reconnus des grilles sont en français et ne départagent pas les lignes étrangères.
+
+## D-2802 — D4 : grille du transitaire qui émet la facture ; devise illisible
+
+- `famille_c.grille_pour_facture` : transitaire désigné par l'émetteur de la facture elle-même (TVA, puis nom ou
+  alias), à défaut celui du dossier (qui est celui de sa *première* facture identifiée) : une facture d'un autre
+  transitaire rangée dans le dossier se compare à la grille de son propre émetteur (C6 et D en profitent).
+- D4 certain seulement si l'émetteur lu sur la facture désigne le transitaire de la grille ; sinon raison nouvelle
+  `grille_non_attestee` (motif `emetteur_non_identifie`). Émetteur non identifié sur le dev : 3 factures sur 253
+  (g4), 6 sur 314 (g2), 3 sur 319 (origine), aucune avec un D4 certain.
+- Devise de la facture lue mais inutilisable (sous `C_MIN_UTILE`) → `devise_incertaine` (la grille est en euros).
+  Une devise absente reste « EUR supposé » (les factures sans devise du banc sont en euros ; écarté : exiger une
+  devise lue, qui casse les factures natives sans mention de devise).
+
+## D-2803 — A4 / A5 : périmètre des montants comparés, échelle et signe
+
+`famille_a._perimetre_non_etabli`, raison nouvelle `perimetre_non_etabli` (`details.perimetre_non_etabli`), sur le
+constat principal de A4 et sur A5 (même montant déclaré, référence convertie) :
+- `facture_citee_absente` (déclaré > facture) : la déclaration cite avec un code de facture (N380, 380, 325, 935…)
+  une référence qu'aucune facture commerciale du couple ne porte — « deux factures pour une déclaration » dont une
+  manque ou a été rangée ailleurs ;
+- `declaration_citee_absente` (déclaré < facture) : une facture du transitaire qui cite le MRN d'une déclaration
+  du couple cite aussi un MRN qu'aucune déclaration lue (ce dossier ou un autre) ne porte ; ou une déclaration
+  d'un autre dossier cite une facture du couple — facture répartie sur plusieurs déclarations. BX0244 (deux
+  déclarations d'un même PDF lues comme une seule) passait à un niveau de confiance près du certain faux ;
+- `facteur_puissance_de_dix` : déclaré = référence × 10^k (k = ±1 à ±3, à 0,05 % près) : séparateur décimal ou de
+  milliers lu autrement (devise sans décimales) ;
+- `montant_negatif_lu` : total de facture commerciale ou montant déclaré négatif (GZ0144 : −161 827,40 contre
+  +161 827,40) ;
+- `total_lu_avant_des_lignes` : le total retenu est imprimé sur une page qui précède des lignes de la même facture
+  (total de page, report ; mise en page multipage). Écarté : étendre à « total imprimé au-dessus de lignes de la
+  même page » — un seul cas sur le dev des trois jeux, un vrai total en tête de page (GZ0082).
+Aucun constat certain du dev n'est touché ; les motifs ne s'appliquent qu'aux écarts hors tolérance.
+
+## D-2804 — Lecture corroborée : identités imprimées des factures « TVA comprise » et des taux non imprimés
+
+Dans l'esprit de D-1700 (la confirmation vient toujours de l'arithmétique imprimée du même document, jamais d'une
+valeur dérivée) :
+- Σ débours = total des débours : seules les lignes de **débours** doivent être lues (avant : toutes les lignes ;
+  une ligne de prestation qui n'imprime que son TTC empêchait l'identité) ;
+- Σ TTC des lignes = total TTC (`ttc_lignes`, portée « tout ») quand chaque ligne imprime son TTC ;
+- Σ HT lus × taux déduits (taux normal selon la nature, quand les taux de ligne ne sont pas imprimés) = total de
+  TVA lu (`tva_base_taux_deduits`, portée « taxable ») : membres confirmés le total de TVA et les HT lus, **jamais**
+  les taux déduits. Un taux mal attribué (débours compté au taux normal) rompt l'identité.
+Effet (dev g4, extraction figée) : sept erreurs attendues ou non « certain » deviennent certaines, montants justes
+(C1 ×2, C3, C4, D1 ×3 ; factures portugaises TVA comprise, natives et scannées, D1 « total TTC »), aucune fausse.
+
+## D-2805 — B2 : article au nombre de lignes de taxe inégal et ligne sans code de taxe
+
+Constat (banc final, extraction du moment) : GX0026, déclaration scannée de deux articles ; l'article 1 a ses
+droits et sa TVA, l'article 2 une seule ligne au code illisible ; une ligne de 1,59 n'est pas lue. Le total des
+droits et taxes (53,17) passe de 0,80 à 0,93 avec la nouvelle extraction : B2 certain faux (1,59), aussi avec les
+contrôles d'avant. `structure_declaration.motifs_structure_taxes` : articles au nombre de lignes de taxe inégal
+**et** ligne sans code de taxe lisible → `structure_non_validee` (D-2210). Touche 4 B2 du dev, tous déjà
+« à vérifier » sauf GX0026.
+
+## D-2806 — Mesures (dev seulement)
+
+**Effet des seuls contrôles** (extraction figée : mêmes documents préparés, contrôles du dépôt contre contrôles
+modifiés) :
+
+| | `corpus_g4` avant | après | `corpus_g2` avant | après | corpus d'origine avant | après |
+|---|---|---|---|---|---|---|
+| VP / FP certain | 84 / 0 | 91 / 0 | 111 / 0 | 111 / 0 | 120 / 0 | 120 / 0 |
+| rappel certain | 0,600 | 0,642 | 0,755 | 0,755 | 0,785 | 0,785 |
+| sous-classements | 32 | 27 | 23 | 23 | 18 | 18 |
+| violations de pièges | 44 | 44 | 34 | 34 | 29 | 29 |
+
+**Bancs complets** `*_dev_d27b` → `*_dev_c5` (code du moment, y compris l'extraction D-2901 à D-2905 menée en
+parallèle et `VERSION_PAGES` 1.1.1) :
+
+| | `corpus_g4` avant | après | `corpus_g2` avant | après | corpus d'origine avant | après |
+|---|---|---|---|---|---|---|
+| VP / FP certain | 84 / 0 | 98 / 0 | 111 / 0 | 113 / 0 | 120 / 0 | 120 / 0 |
+| rappel | 0,805 | 0,821 | 0,840 | 0,860 | 0,827 | 0,827 |
+| rappel certain | 0,600 | 0,692 | 0,755 | 0,763 | 0,785 | 0,785 |
+| sous-classements | 32 | 24 | 23 | 25 | 18 | 18 |
+| bruit « à vérifier » par dossier | 1,57 | 1,46 | 1,42 | 1,39 | 1,19 | 1,18 |
+| violations de pièges | 44 | 51 | 34 | 35 | 29 | 29 |
+
+Seuils bloquants : PASSE sur les trois. Aucun vrai certain perdu. Les violations de pièges nouvelles (toutes
+« à vérifier ») viennent de l'extraction (inchangées à extraction figée). Sans D-2805, `corpus_g2` aurait un faux
+certain (GX0026 B2), dû à la nouvelle extraction.
+
+**Sous-classements restants sur le dev `corpus_g4`** (24) : F3 ×5 (MRN de ligne lu 0,85 et rattachement faible de
+l'autre facture, propre à l'erreur elle-même : non modifié), B1 ×4 (base et taux lus 0,55–0,80 sur scan, sans autre
+identité), C5 ×3 (total liquidé non confirmé), A5 ×2 (taux de change OCR 0,86–0,88 : aucune seconde lecture ;
+écarté : le confirmer par le taux de référence, une erreur de lecture de 0,3 % fausserait le montant), puis un cas
+chacun (C8, C4, D1, D2, D5, D7, D9, A1). Aucun ne repose sur une preuve robuste au sens de la consigne.
+
+**Relevé pour l'extraction** : GX0026 (total des droits et taxes relevé à 0,93 alors qu'une ligne de taxe manque) ;
+lignes d'avoir d'un relevé lues positives et comme prestations (« Gutschrift zu Rechnung … », GZ0041, GZ0107) ;
+deux déclarations d'un même PDF lues comme une seule (BX0244) ; ligne de TVA perdue d'une facture de débours scannée
+(GZ0179) ; total de facture commerciale lu négatif (GZ0144) ; totaux par code de taxe absents du modèle (D-2903).
+
+# Extraction : valeurs décisives manquantes ou peu sûres sur `corpus_g4` (dev seulement)
+
+Constat (banc `g4_dev_d27b`, 120 erreurs attendues « certain », 84 trouvées certaines) : sur les 36 manquées, la
+cause côté lecture est surtout (a) des documents de deux pages coupés en deux documents (facture de transitaire et
+avoir paysage « par MRN » dont la page 2 porte le récapitulatif, annexe de débours espagnole, page 2 d'une facture
+rangée sous l'autre type), si bien que les lignes et les totaux ne se recoupent plus ; (b) des feuilles paysage
+prises à tort pour des feuilles « deux pages » (D-2604) : chaque rangée du tableau était lue en deux lignes et les
+lignes de la facture n'étaient pas lues (G16 scannée : 48 montants de ligne absents sur 56) ; (c) des valeurs
+lues par OCR justes mais sous 0,90 faute d'identité imprimée exploitée (totaux par code de taxe, TTC = HT + TVA +
+débours, Σ TVA des lignes, taux « 20,00 » sous « TVA % »). Règles générales seulement : aucune ne lit un nom de
+gabarit, de fichier, de client ou de transitaire.
+
+## D-2901 — Découpage : numéro sans libellé, numéro imprimé sur la page précédente, « page 2 »
+
+- `classement.extraire_refs` : dans les 8 premières lignes, numéro imprimé juste après l'intitulé, sans « N° »
+  (« FACTURE HTD2026-47293 », « AVOIR HTD-AV-09866 », « FACTURA COMPLEMENT FT26-97327 », « FAKTURA … Nr
+  FV/03342/07/2026 ») : au moins 6 caractères utiles et un chiffre, ni date, ni année, ni montant ; un intitulé
+  cité (« avoir sur facture X », « credit note for invoice X ») n'en donne pas. Numéro de page « … — page 2 »,
+  « — str. 2 » en fin de ligne, « 2/2 » en fin d'une des 4 premières lignes. `RefsPage.jetons` : références
+  imprimées de la page (alphanumériques ≥ 6 caractères avec un chiffre).
+- `decoupage._meme_document` : (1) facture dont la page 1 n'a pas donné de numéro, page suivante qui en donne un :
+  même document si ce numéro est imprimé (à deux confusions OCR près) sur les pages en cours ; (2) page rangée
+  sous l'autre type de facture (commerciale / transitaire, confiance < 0,90), qui n'est pas une page 1 et porte le
+  numéro de la facture en cours : suite de celle-ci ; (3) « page 2/2 » dont le numéro lu ne diffère de celui de
+  la page 1 que d'un caractère : pas de changement de document ; (4) page de suite d'une déclaration dont le MRN
+  de la page de tête n'a pas été lu : même déclaration.
+- Mesure (dev, documents attendus retrouvés à l'identique, fichier × pages × type) : `corpus_g4` 61 → 9
+  manquants, `corpus_g2` 71 → 22, corpus d'origine 89 → 29 (restent surtout des classeurs dont la vérité ne
+  compte qu'une feuille) ; aucun dossier dégradé. Tests : `tests/ingest/test_decoupage_d29.py`.
+
+## D-2902 — Feuille « deux pages » écartée quand du texte touche la coupure (`VERSION_PAGES` 1.1.1)
+
+- **Défaut** (prétraitement OCR, D-2604) : sur une facture paysage dont deux colonnes du tableau encadrent la bande
+  centrale (« Unité » | « P.U. HT ») et dont le pied centré a un blanc entre deux mots au même endroit,
+  `coupure_deux_pages` trouvait une gouttière : 15 pages du dev `corpus_g4` coupées pour 2 vraies feuilles
+  « deux pages », 12 sur `corpus_g2`. Les rangées étaient lues en deux moitiés et le tableau perdu.
+- **Règle** (`pages.moities_separees`) : après la lecture des deux moitiés, si une ligne de texte (mots d'au moins
+  deux caractères alphanumériques) finit ou commence à moins de 1,2 % de la largeur de la coupure, la feuille est
+  une seule page, relue entière (avertissement `deux_pages_ecarte`). Sur le dev, le texte des vraies feuilles
+  « deux pages » reste à 3,2 % au moins de la coupure (marges des deux pages réduites) ; celui des pages coupées
+  à tort la touche (0 à 0,9 %), sauf une facture G1 (5,8 %), toujours coupée.
+- **Coût** : la clé de cache des pages change (`VERSION_PAGES` 1.1.0 → 1.1.1) : toutes les pages OCR sont relues
+  une fois (dev des trois jeux relus ici ; les caches des jeux tenus à l'écart devront l'être). Le prétraitement
+  lui-même (D-2601 à D-2605) n'est pas modifié. Tests : `tests/ingest/test_decoupage_d29.py`.
+
+## D-2903 — Déclaration : totaux imprimés par code de taxe ; séparateur décimal lu « : »
+
+- `_totaux_categories` lit « Total A00 : 323,00 Total B00 : 2 553,90 », « Total AO0 EUR 477.10 » et les rangées
+  d'un récapitulatif « A00 Droits de douane 96,65 » (code, libellé, un seul montant, hors tableaux de taxation),
+  pour les seuls codes des lignes de taxation lues (« total TRY 616 558,35 » n'en est pas un). Ils ne sont **pas**
+  ajoutés aux taxations : une ligne sans article serait additionnée par les contrôles qui somment les lignes
+  (famille C). Ils servent aux recoupements OCR (`_recouper_totaux_categories`), qui ne font que confirmer :
+  Σ des totaux par code (≥ 2 codes) = total des droits et taxes imprimé → ce total ; total à payer = cette somme,
+  ou cette somme moins les codes dont toutes les lignes sont autoliquidées → le total à payer ; Σ des montants
+  des lignes d'un code (≥ 2 non nuls) = total du code → ces montants. Un désaccord n'abaisse rien (le total du
+  code peut être la valeur fausse, B2).
+- Montant de ligne de taxe lu « 3:46: », « 12:591;51 » (séparateurs lus « : » / « ; ») : relu 3,46 / 12 591,51,
+  confiance de relecture (jamais au-dessus de `PLAFOND_REPARE`) ; il complète les sommes.
+- **Non fait, pour les contrôles** : B2 par code (« total A00 imprimé faux ») reste invisible tant que ces totaux
+  ne sont pas portés par le modèle (3 erreurs attendues certaines du dev g4, 3 de g2, 2 du corpus d'origine) ; il
+  faudrait un champ dédié (par ex. `ChampsDeclaration.totaux_par_code`) lu par B2 et par le réseau d'identités.
+  Tests : `tests/extract/test_totaux_categories_d29.py`.
+
+## D-2904 — Facture de transitaire OCR : membres d'une somme imprimée qui tient
+
+- Une somme imprimée qui tient avec au moins deux opérandes non nuls (Σ lignes = total HT, Σ débours = total des
+  débours, HT + TVA = TTC, Σ TVA des lignes = total TVA) relève ses membres à 0,92 dès que la confiance OCR de leurs
+  mots atteint 0,60 (avant : 0,90 exigé comme pour une simple double lecture « 1 × x = x ») : une erreur de lecture
+  d'un membre devrait être compensée exactement par une autre. Les montants OCR suspects (milliers sans
+  séparateur, D-2505) et les rangées perdues restent exclus ; une contradiction abaisse toujours.
+- Identités ajoutées : total HT des seules prestations (Σ prestations = total HT quand les débours ont leur
+  total) ; TTC = HT des prestations + TVA + total des débours (récapitulatif sur une page à part, factures polonaise et française « par MRN ») — les
+  mêmes que celles du réseau des contrôles (`total_ht_prestations`, `total_ttc_debours`).
+  Tests : `tests/extract/test_ft_sommes_ocr_d29.py`.
+
+## D-2905 — Taux de TVA « 20,00 » sous l'intitulé « TVA % » ; HT confirmé par la TVA de sa ligne
+
+- Dans une colonne de taux, un nombre à deux décimales entre 0 et 30 est le taux de la ligne (avant : pris pour un
+  montant et ignoré ; le taux était déduit, confiance ≤ 0,60). Effet `corpus_g4` : taux des lignes ≥ 0,90 justes
+  120 → 314 (natif), sans valeur fausse.
+- Σ TVA des lignes lues = total TVA imprimé confirme ces TVA ; une ligne dont HT × taux imprimé = TVA confirmée
+  voit son HT confirmé (chaîne d'identités imprimées, D-2904), même quand le total HT est la valeur contestée (D1).

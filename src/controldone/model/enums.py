@@ -135,6 +135,11 @@ class RaisonCode(StrEnum):
     # Ajouts moteur (D-2701, D-2702) : ligne TVA comprise ; rattachement d'une ligne à une déclaration non établi
     montant_tva_comprise = "montant_tva_comprise"
     attribution_non_univoque = "attribution_non_univoque"
+    # Ajouts moteur (D-2801 à D-2803) : assiette ou grille d'un tarif non établie ; écart expliqué par un ensemble
+    # de documents incomplet ou par une lecture du séparateur décimal (A4, A5)
+    assiette_non_etablie = "assiette_non_etablie"
+    grille_non_attestee = "grille_non_attestee"
+    perimetre_non_etabli = "perimetre_non_etabli"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -214,6 +219,21 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
         "à vérifier : une ligne de la facture du transitaire n'a pas pu être rattachée avec certitude à une "
         "déclaration (référence d'envoi illisible, d'un autre envoi ou absente sur une facture qui couvre plusieurs "
         "envois)"
+    ),
+    RaisonCode.assiette_non_etablie: (
+        "à vérifier : l'assiette du calcul n'est pas établie sans ambiguïté (frais calculés par envoi ou par "
+        "facture, débours d'une autre facture dont toutes les lignes ne sont pas confirmées, avoirs ou montants "
+        "TVA comprise dans les débours) ; l'écart dépend de l'assiette retenue"
+    ),
+    RaisonCode.grille_non_attestee: (
+        "à vérifier : l'émetteur lu sur la facture ne permet pas de confirmer le transitaire dont la grille "
+        "tarifaire a été appliquée"
+    ),
+    RaisonCode.perimetre_non_etabli: (
+        "à vérifier : l'écart peut venir d'un document de l'envoi absent du dossier (autre facture citée par la "
+        "déclaration, autre déclaration de l'envoi), d'un total de page pris pour le total de la facture, ou "
+        "d'une lecture de l'échelle (séparateur décimal) ou du signe d'un montant ; les montants comparés ne "
+        "couvrent peut-être pas le même périmètre"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

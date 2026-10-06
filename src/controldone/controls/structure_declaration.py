@@ -233,6 +233,17 @@ def motifs_structure_taxes(
                     f"le code n'a pas de ligne lue pour l'article {', '.join(sorted(manquants))} : la ligne sans "
                     "article peut être la sienne"
                 )
+    # D-2805 : articles qui n'ont pas le même nombre de lignes de taxe alors qu'une ligne n'a pas de code de taxe
+    # lisible : une ligne de l'article le plus court a pu être perdue (ou la ligne sans code être la sienne).
+    par_article: dict[str, int] = {}
+    for t in taxations:
+        k = numero_article(t.article)
+        if k:
+            par_article[k] = par_article.get(k, 0) + 1
+    sans_code = [t for t in taxations if t.type_taxe is None or not (t.type_taxe.valeur or "").strip()
+                 or not t.type_taxe.est_lisible]
+    if len(par_article) >= 2 and len(set(par_article.values())) > 1 and sans_code:
+        motifs.append("articles au nombre de lignes de taxe inégal et ligne sans code de taxe lisible")
     incoherentes = [i for i in lignes if not _ligne_coherente(taxations[i], num, tol)]
     if incoherentes:
         motifs.append(f"ligne(s) {', '.join(str(i) for i in incoherentes)} : montant ≠ base × taux")

@@ -130,6 +130,16 @@ class _Lecteur:
         except ValueError:
             return None
 
+    def taux(self, v: ValeurSourcee | None) -> Decimal | None:
+        """Taux de TVA d'une ligne, lu ou déduit (taux normal attribué selon la nature de la ligne) : il ne sert
+        que de facteur d'une identité dont les membres confirmés sont des montants lus (D-2804)."""
+        if v is None or v.est_reconstruite or not self._utilisable(v):
+            return None
+        try:
+            return v.decimal_signe()
+        except ValueError:
+            return None
+
 
 def _zones_distinctes(a: ValeurSourcee, b: ValeurSourcee) -> bool:
     """Deux valeurs lues à deux endroits différents de la page (écho probant)."""
@@ -268,11 +278,14 @@ def _reseau_lignes_ft(
             out.append(Identite(f"{prefixe}:tva_ligne:{i}", "produit", TVA_LIGNE, lg.montant_tva.id,
                                 (lg.montant_ht.id, lg.taux_tva.id), abs(tva - ht * tx / _CENT) <= tol.t_ligne()))
     complets = bool(hts) and all(x is not None for _, _, x in hts)
+    # Σ débours = total des débours : seules les lignes de débours doivent être lues ; une ligne de prestation dont
+    # seul le TTC est imprimé (« TVA comprise ») n'entre pas dans cette somme (D-2804).
+    debours_lus = all(x is not None for lg, _, x in hts if lg.nature.est_debours)
     debours = [(v, x) for lg, v, x in hts if lg.nature.est_debours and v is not None and x is not None]
     prest = [(v, x) for lg, v, x in hts if not lg.nature.est_debours and v is not None and x is not None]
     tout = debours + prest
     v_td, v_ht, v_tva = lec.num(total_debours), lec.num(total_ht), lec.num(total_tva)
-    if complets and total_debours is not None and v_td is not None:
+    if debours_lus and debours and total_debours is not None and v_td is not None:
         out.append(_somme_identite(f"{prefixe}:total_debours", "lignes", total_debours, v_td, debours, tol, "debours"))
     if complets and total_ht is not None and v_ht is not None:
         out.append(_somme_identite(f"{prefixe}:total_ht", "lignes", total_ht, v_ht, tout, tol, "tout"))
@@ -295,9 +308,29 @@ def _reseau_lignes_ft(
             ops_ids = tuple(v.id for v, _, _, _ in taxees) + tuple(tx.id for _, _, tx, _ in taxees)
             out.append(Identite(f"{prefixe}:tva_base", "somme", "tva", total_tva.id, ops_ids,
                                 abs(v_tva - s) <= tol.t_somme(len(taxees) + 1), "taxable"))
+        elif sans_taux and v_tva != 0:
+            # D-2804 : taux de ligne non imprimés mais déduits (taux normal selon la nature) : Σ HT lus × taux = total
+            # de TVA lu. Membres confirmés : le total et les HT lus (jamais les taux déduits).
+            derives = [(lg, v, x, lec.taux(lg.taux_tva)) for lg, v, x in hts]
+            if all(t is not None or lg.nature.est_debours for lg, _, _, t in derives):
+                taxees_d = [(v, x, t) for _, v, x, t in derives if t is not None and t != 0 and v is not None
+                            and x is not None]
+                if taxees_d:
+                    s = sum((x * t / _CENT for _, x, t in taxees_d), _ZERO)
+                    out.append(Identite(f"{prefixe}:tva_base_taux_deduits", "somme", "tva", total_tva.id,
+                                        tuple(v.id for v, _, _ in taxees_d),
+                                        abs(v_tva - s) <= tol.t_somme(len(taxees_d) + 1), "taxable"))
     # Aucun débours lu ni total des débours imprimé : la portée « débours » est vide.
     if complets and not debours and (v_td is None or v_td == 0):
         out.append(Identite(f"{prefixe}:sans_debours", "somme", "vide", "", (), True, "debours"))
+    # Σ TTC des lignes = total TTC (lignes « TVA comprise », D-2804) : chaque ligne doit imprimer son TTC ; l'identité
+    # couvre toutes les lignes (portée « tout »).
+    ttcs = [(getattr(lg, "montant_ttc", None), lec.num(getattr(lg, "montant_ttc", None))) for lg in lignes]
+    v_ttc_total = lec.num(total_ttc)
+    if (ttcs and total_ttc is not None and v_ttc_total is not None
+            and all(v is not None and x is not None for v, x in ttcs)):
+        out.append(_somme_identite(f"{prefixe}:ttc_lignes", "lignes", total_ttc, v_ttc_total,
+                                   [(v, x) for v, x in ttcs if v is not None and x is not None], tol, "tout"))
     # Totaux d'en-tête.
     v_ttc = lec.num(total_ttc)
     if v_ttc is not None and v_ht is not None and v_tva is not None:
