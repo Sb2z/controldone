@@ -157,6 +157,53 @@ Non-régression sur les autres jeux tenus à l'écart (même code, OCR 1.1.0) :
 - **Durée par dossier, OCR 1.1.0 compris** (première passe, sans cache) : 4,6 à 8,8 s en moyenne selon le jeu,
   p95 entre 12 et 31 s.
 
+## Troisième cycle : `corpus_g5` vierge (6 octobre 2026)
+
+**Jeu.** `bench/corpus_g5` : 110 dossiers, tous tenus à l'écart. Il a été généré par le générateur 2.1 avec `--ext`
+(graine 20261007) : 95 % des dossiers portent un élément nouveau, avec 128 erreurs dont 40 attendues « certain »,
+et 505 pièges. Personne ne l'a ouvert. Avant la mesure finale, seuls les totaux de la mesure de départ ont été lus.
+
+**Travail.** Il a été fait sur les seuls dossiers de développement :
+- contrôles (D-2801 à D-2806) : commission d'avance (D4) certaine seulement si l'assiette et la grille sont
+  établies, périmètre établi pour A4/A5, nouvelles identités imprimées pour le rappel ;
+- lecture (D-2901 à D-2908, `VERSION_PAGES` 1.1.1) : documents de deux pages recollés, totaux par code de taxe
+  lus pour confirmer, identités imprimées sur les factures de transitaire scannées, faux « deux pages par feuille »
+  corrigé.
+
+| `corpus_g5` (vierge, 110 dossiers) | Avant le cycle | Après |
+|---|---|---|
+| Écarts certains vrais / faux | 31 / 1 | **35 / 1** |
+| Précision des écarts certains | 96,9 % | **97,2 %** (borne basse de Wilson 85,8 %) |
+| Rappel (toutes erreurs) | 78,1 % | 79,7 % |
+| Rappel des erreurs attendues « certain » | 62,5 % | 72,5 % |
+| Exactitude des montants | 92,5 % | 90,9 % |
+| Constats « à vérifier » sans erreur, par dossier | 2,02 | 1,95 |
+| Pièges déclenchés (« à vérifier ») | 43 | 47 |
+| Seuil bloquant | échoue | **passe** |
+
+Tous les jeux, même code (OCR 1.1.1) :
+
+| Jeu | Statut | Vrais / faux certains | Précision | Rappel | Seuil |
+|---|---|---|---|---|---|
+| `corpus_g5` (110) | vierge | 35 / 1 | 97,2 % | 79,7 % | passe |
+| `corpus_g4` holdout (45) | contrôle fautif vu au cycle 2 | 29 / 0 | 100 % | 79,5 % | passe |
+| `corpus_g3` (80) | vu sous forme agrégée | 65 / 0 | 100 % | 87,8 % | passe |
+| `corpus_g2` holdout (68) | vu | 37 / 0 | 100 % | 81,5 % | passe |
+| `corpus_h2` (48) | vu | 45 / 0 | 100 % | 80,4 % | passe |
+| `corpus` holdout (48) | vu | 44 / 0 | 100 % | 84,6 % | passe |
+| dev `corpus_g4` / `corpus_g2` / `corpus` | développement | 98 / 0, 113 / 0, 120 / 0 | 100 % | 82–86 % | passe |
+
+**Lecture honnête.**
+- **Le seuil est franchi de justesse sur le jeu vierge.** Il reste 1 faux sur 36 écarts certains, et un faux de plus
+  ferait échouer le seuil (94,6 %). La borne basse de Wilson (85,8 %) dit la même chose : sur des documents vraiment
+  nouveaux, il faut s'attendre à quelques fausses certitudes par centaine d'écarts. La validation humaine prévue reste
+  indispensable.
+- **Le bruit reste au-dessus de l'alerte sur ce jeu** : 1,95 constat « à vérifier » sans erreur par dossier, pour un
+  seuil d'alerte de 1,5. C'est du temps de validation, pas une fausse accusation.
+- **Limite connue** : les erreurs sur un total par code de taxe de la déclaration (B2 par code) ne sont pas détectées.
+  Le modèle de données n'a pas de champ pour ces totaux.
+- **Durée par dossier, OCR compris** : 5 à 9 s en moyenne selon le jeu, p95 entre 15 et 30 s.
+
 ## Reproduire
 
 ```bash
@@ -166,5 +213,5 @@ CONTROLDONE_PAGES_CACHE_DIR=var/cache/g3_pages python -m controldone.bench_run \
 python -m bench.score --corpus bench/corpus_g3 --split holdout --run bench/out/g3 --gate
 ```
 
-Tests : 2 026 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
+Tests : 2 075 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
 (`scripts/demo_complete.sh --sans-serveur`) se termine sans erreur.
