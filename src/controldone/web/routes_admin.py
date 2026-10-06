@@ -687,13 +687,13 @@ def notifications(request: Request) -> Response:
     """Historique des notifications poussées (une par type d'alerte et par jour) et état des canaux (bloc I3)."""
     from controldone.web import notifications_vues as nv
 
-    f = _fondateur(request)
-    pf = _pf(request)
+    _fondateur(request)
     req = lire_requete(request, {}, ("-date",), "-date", ancre="#historique")
-    liste, total = _page_sql(req, lambda dec: nv.historique(pf, f, decalage=dec, limite=req.taille))
-    recentes, _total = nv.historique(pf, f, decalage=0, limite=200)
+    vue = nv.lire(_pf(request).db)
+    h = vue.historique
     return page(request, "admin/notifications.html.j2", titre="Notifications", nav="alertes", req=req,
-                p=paginer(liste, req, total=total), canaux=nv.etat_canaux(recentes), config=nv.resume_config())
+                p=paginer(h.notifications, req), h=h, mode=vue.mode, jours=nv.JOURS,
+                canaux=sorted(h.canaux.values(), key=lambda c: c.canal))
 
 
 @routeur.post("/alertes/{alerte_id}/lue")

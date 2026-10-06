@@ -17,11 +17,11 @@ from typing import Any
 
 from sqlalchemy import Numeric, case, cast, func, or_, select
 
-from controldone.storage.models import Constat, Dossier, Ecart, NotificationAlerte, Transitaire
-from controldone.storage.scope import OperatorScope, TenantScope
+from controldone.storage.models import Constat, Dossier, Ecart, Transitaire
+from controldone.storage.scope import TenantScope
 
 __all__ = ["CLES_DOSSIER", "compter_dossiers", "constats_indicateurs", "dossiers_page", "ecarts_page",
-           "lignes_dossiers", "notifications_page", "totaux_ecarts", "transitaires_ecarts"]
+           "lignes_dossiers", "totaux_ecarts", "transitaires_ecarts"]
 
 _EN_CONSTATS = ("ecart_certain", "a_verifier")
 CLES_DOSSIER = ("num_facture_transitaire", "ref_transport", "mrn", "num_facture_commerciale")
@@ -203,20 +203,3 @@ def ecarts_page(scope: TenantScope, *, statut: str | None, transitaire: str | No
     lignes, total = _page(scope, q, ordre, page, taille)
     return [r[0] for r in lignes], total
 
-
-# --- historique des notifications poussées (fondateur) -----------------------------------------------------------
-
-
-def notifications_page(op: OperatorScope, *, decalage: int, limite: int) -> tuple[list[dict[str, Any]], int]:
-    """Notifications poussées (``notifications_alertes``, D-3502), plus récentes d'abord : ``(lignes, total)``.
-    Aucune donnée client dans cette table (type, nombre, canaux, état, essais, horodatages).
-
-    Interface mince de l'interface (bloc I3) en attendant l'API de lecture du bloc production : seule
-    ``web/notifications_vues.py`` l'appelle."""
-    total = int(op.session.execute(select(func.count()).select_from(NotificationAlerte)).scalar() or 0)
-    q = (select(NotificationAlerte).order_by(NotificationAlerte.cree_le.desc(), NotificationAlerte.id.desc())
-         .offset(max(0, decalage)).limit(limite))
-    lignes = [{"id": n.id, "kind": n.kind, "nombre": n.nombre, "canaux": [c for c in (n.canaux or "").split(",") if c],
-               "statut": n.statut, "essais": n.essais, "cree_le": n.cree_le, "envoyee_le": n.envoyee_le}
-              for n in op.session.execute(q).scalars()]
-    return lignes, total
