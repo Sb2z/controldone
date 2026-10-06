@@ -235,11 +235,11 @@ def test_taches_creee_et_prochain_essai(monde):
     from controldone.storage.file_jobs import JobStore
 
     store = JobStore(monde.pf.db)
-    jid = store.enqueue("essai_fictif", {}, "essai-fictif-cree")
+    jid = store.enqueue("essai_fictif", {}, "essai-fictif-cree")[0].id
     with monde.pf.db.transaction_systeme() as s:
         from controldone.storage.models import Job
 
-        j = s.get(Job, getattr(jid, "id", jid))
+        j = s.get(Job, jid)
         j.cree_le = datetime(2026, 3, 4, 9, 0, tzinfo=UTC)
         j.run_after = datetime(2031, 5, 6, 9, 0, tzinfo=UTC) + timedelta(minutes=1)
     info = next(x for x in store.rechercher(kind="essai_fictif")[0])
