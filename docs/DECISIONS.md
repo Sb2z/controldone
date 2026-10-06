@@ -4661,3 +4661,124 @@ journalisée par `modifier_client` ; badge « Lecture par modèle désactivée �
   parent tolérante. Entrée « Mon compte » ajoutée.
 - Vérification (Chromium, démo, 0 erreur de console, axe-core 0 violation, FR/EN, deux thèmes) : `/admin`,
   fiche client, `/admin/notifications`, `/admin/alertes`, `/compte`, `/espace`.
+
+# Moteur (bloc M3) : A13 regroupé, D1 sans faux certain, bruit « à vérifier », rappel certain (dev seulement, octobre 2026)
+
+Constat : sur les jeux tenus à l'écart, D1 donnait encore deux faux certains (un piège, un non apparié, connus par
+leurs seuls totaux), le bruit dépassait l'alerte sur deux jeux (1,49 et 1,55) et le rappel des erreurs attendues
+« certain » restait entre 55 et 75 %. Tout a été étudié et mesuré sur les seuls jeux de développement
+(`corpus_g4`, `corpus_g2`, `corpus` : split `dev`) ; aucun jeu tenu à l'écart n'a été lu ni relancé. Règles
+générales seulement : aucune ne lit un nom de gabarit, de fichier, de client ou de transitaire.
+
+## D-4201 — A13 : un seul « à vérifier » par dossier, codes à rapprocher manuellement (décision 6C du fondateur)
+
+A13 n'émet plus qu'un constat par dossier : les codes sans équivalent de **tous** les couples (facture -> déclaration),
+dans les deux sens, sous le libellé « Codes marchandise à rapprocher manuellement : … » suivi de la phrase de renvoi ;
+toutes les valeurs en preuves, tous les documents des couples concernés. Toujours `a_verifier` (contrôle de signal,
+`renvoi = true`, montant `null`), jamais certain. `details` : `sh6_facture_seuls`, `sh6_declaration_seuls`, et par
+couple `croise` (écart des deux côtés, la forme des vrais écarts A13) ; `a_sens_unique` quand aucun couple n'est
+croisé. Les couples conformes ou non vérifiables gardent leur résultat. Mesure : le moteur émettait déjà un constat
+par couple et presque tous les dossiers n'en ont qu'un : A13 non apparié reste à 72 sur les trois jeux (le vrai cas
+à sens unique, GX0005, est conservé). Le gain est de lecture (un seul point à traiter par dossier), pas de compte.
+
+## D-4202 — D1 total HT / total des débours : lignes prouvées complètes
+
+Un total imprimé **supérieur** à la somme des lignes lues n'est un écart certain que si une autre identité
+**imprimée** (ni déduite ni reconstruite) prouve que la lecture des lignes est complète ; sinon `a_verifier`
+(`structure_non_validee`, `details.structure_non_validee`). Preuves (`famille_d._preuves_lignes_completes`) :
+total TTC = somme des lignes + total TVA ; facture structurée (XML, CSV) ; pour le total HT, total des débours imprimé
+= somme des débours lus **et** total TVA imprimé = somme des TVA imprimées de chaque ligne qui en porte une (toutes
+les prestations en portent) ou taux unique × lignes taxées ; pour le total des débours, TTC ou total HT = somme de
+toutes les lignes. D-3703 (lecture sous le seuil -> `non_verifiable`) passe avant. Mesure (trace des écarts positifs
+sur le dev) : 8 écarts prouvés, tous de vraies erreurs (un seul écart d'OCR, rattrapé par le test de confusion) ;
+24 non prouvés, aucune erreur réelle. Les 9 D1 certains du dev restent certains.
+
+## D-4203 — D1 : lectures alternatives d'une ligne ; ligne de débours
+
+- `ligne` : montant = q × pu × (1 + t) ou prix TVA comprise (colonne « TTC »), ou un nombre imprimé dans le libellé
+  redonne le montant avec le prix lu (tarif au kilo, à l'article) -> `non_verifiable` (`montant_tva_comprise` ou
+  `lecture_douteuse`, `details.explications`).
+- `tva_ligne` : TVA lue = montant × (1 + t) (montant TTC lu dans la colonne TVA, y compris à taux nul) ->
+  `non_verifiable` (`montant_tva_comprise`). Sur le dev : D1 `tva_ligne` 10 -> 3 (lignes TVA comprise).
+- Une ligne de **débours** (forfait par article, droits) reproduit un montant de la déclaration : son produit est
+  celui de la déclaration (G1, B1) et la refacturation est comparée par C et G ; D1 `ligne` -> `non_applicable`
+  (`couvert_par_autre_controle`). Cas trouvé : GZ0066, erreur G1 (forfait 15,00 ≠ 2 × 3,00) reprise sur la facture
+  du transitaire ; sur un original natif, D1 l'aurait relevée en écart certain hors erreur et hors piège.
+- Total des débours dont l'écart égale le montant d'une ligne lue comme prestation (« TVA al'importation » mal lue)
+  -> `non_verifiable` (`nature_de_ligne`).
+
+## D-4204 — D1 : autres présentations des totaux, sans effet sur le montant
+
+TTC = HT des prestations + TVA + total des débours imprimé (débours hors HT, lignes de débours non toutes lues) ;
+net à payer = TTC − acomptes + total des débours ; total HT avant une remise ou un avoir porté en ligne négative.
+Ces présentations n'expliquent qu'un total qui les redonne **à la tolérance près** ; elles ne servent jamais de
+référence au montant d'un écart (une première version qui les laissait choisir comme « calcul le plus proche » a
+déplacé le montant du vrai D1 de GZ0107, relevé par le banc : corrigé).
+
+## D-4205 — C5 : écart en faveur du client qu'une lecture explique
+
+Écart négatif (refacturé < liquidé), classement `a_verifier` :
+- aucune ligne de TVA ni de « droits et taxes » refacturée et l'écart égale la TVA liquidée -> `non_verifiable`
+  (`tva_non_refacturee` : TVA autoliquidée dont l'indice n'est pas lu, ou acquittée directement ; relève de C3/C4) ;
+- lecture sous le seuil et aucun total des débours imprimé égal à la somme des débours lus -> `non_verifiable`
+  (`debours_possiblement_non_lus`, comme D-3703).
+Un écart certain ou en défaveur du client n'est jamais concerné. C5 non apparié 41 -> 24. Coût : quatre appariements
+« à vérifier » perdus (GZ0016, GZ0130, GZ0199, BX0188) ; tous étaient des constats de signe et de montant faux
+(−1 345,31 pour une erreur de +118,60…) appariés par le seul contrôle accepté.
+
+## D-4206 — P1 : manque commun à tout le lot, signalé une fois
+
+Quand **aucun** dossier du lot n'a de document exploitable du type manquant, le manque est un fait du lot : le
+premier dossier (identifiant) qui le partage porte le constat, cite les documents restés sans contrepartie dans
+chacun de ces dossiers et précise « même manque pour N autres dossiers du lot » ; les autres -> `non_applicable`
+(`couvert_par_autre_controle`, `details.dossier`, motif `manque_commun_du_lot`). Le statut du dossier reste
+`document_manquant` (`findings_io.statut_global_depuis_resultats`). Un défaut d'appariement (le type existe ailleurs
+dans le lot) reste signalé par chaque dossier. P1 non apparié 35 -> 22, aucun manque réel perdu.
+
+## D-4207 — A2 : référence de facture lue par OCR
+
+`normalize.refs.ref_compatibles_ocr` : `ref_compatibles` sur les clés de confusion OCR (« 0MS » / « OMS »,
+« G1 » / « GI », troncature « 1C20263215 » de « FT PIC2026/3215 ») -> conforme. `ref_facture_proches` : quand l'une
+des deux valeurs est lue par OCR, clés de confusion d'au moins 8 caractères à au plus `max(1, n // 6)` caractères
+d'écart -> `non_verifiable` (`lecture_douteuse`, motif `reference_proche`). Texte natif des deux côtés : inchangé.
+Toutes les erreurs A2 injectées sont des références absentes (branche inchangée). A2 non apparié 33 -> 15.
+
+## D-4208 — B2 : total supérieur à la somme lue, lignes possiblement non lues
+
+Écart positif, structure qui signale une ligne non lue (article ou code sans ligne de taxe lue, ligne sans code) et
+lecture sous le seuil (ou articles non tous lus) -> `non_verifiable` (`structure_non_validee`, motif
+`lignes_possiblement_non_lues`), comme D-2307 et D-3703. B2 total non apparié 33 -> 19. Coût : BX0039-E1 n'est plus
+apparié (constat de +10 822,49 pour une erreur de −30,95).
+
+## D-4209 — F3 : lien établi par le MRN
+
+La facture qui refacture le MRN d'un autre dossier n'est rattachée à ce dossier que faiblement, à cause de l'écart
+lui-même. Quand le MRN est lu sûrement (≥ `C_MIN_CERTAIN`, ancré, même préfixe) sur les deux factures et que la
+complémentarité a pu être testée (montant liquidé connu), le lien est établi par le MRN : `ControlContext.classify`
+reçoit `liens_etablis` (documents exclus de la condition 5) et `_raisons_ailleurs` n'ajoute plus
+`rattachement_faible`. Les autres conditions (confiance des montants, confusion, corroboration D-1700) restent. Gain :
+BX0137-E3 et BX0188-E4 deviennent certains (corpus d'origine). Les autres F3 « à vérifier » ont aussi une valeur lue
+sous le seuil : inchangés.
+
+## D-4210 — P4 : lien faible d'un document partagé, signalé une fois
+
+Un document rattaché faiblement à plusieurs dossiers du même lot (avoir ou relevé d'une page d'un PDF « envoi
+complet ») n'est signalé que par le premier de ces dossiers ; ailleurs `non_applicable` (`lien_faible_partage`).
+
+## D-4211 — Mesures (dev seulement)
+
+Bancs `*_dev_m3base` (code de départ, identique à `*_dev_lot2d`) -> `*_dev_m3g` :
+
+| dev | VP / FP certains | rappel | rappel certain | bruit / dossier | pièges déclenchés | montants justes |
+|---|---|---|---|---|---|---|
+| `corpus_g4` (175) | 103 / 0 -> 103 / 0 | 0,8311 -> 0,8212 | 0,733 -> 0,733 | 1,006 -> 0,857 | 40 -> 27 | 0,958 -> 0,979 |
+| `corpus_g2` (232) | 115 / 0 -> 115 / 0 | 0,8700 -> 0,8700 | 0,777 -> 0,777 | 0,974 -> 0,832 | 17 -> 13 | 0,966 -> 0,966 |
+| d'origine (202) | 125 / 0 -> 127 / 0 | 0,8293 -> 0,8238 | 0,813 -> 0,826 | 0,861 -> 0,787 | 28 -> 27 | 0,960 -> 0,973 |
+
+Bruit non apparié + pièges (trois jeux) : 576 -> 501 (0,946 -> 0,823 par dossier). Par contrôle : A2 33 -> 15,
+C5 41 -> 24, B2 total 33 -> 19, P1 35 -> 22, D1 `tva_ligne` 10 -> 3, P4 28 -> 25. Seuils bloquants : PASSE sur les
+trois. Les six appariements perdus (D-4205, D-4208) étaient des constats de signe ou de montant faux. Totaux par code
+(tâche 5) : rien de sûr à gagner sans nouvelle lecture ; L4 n'imprime aucun total par code (36 des 133 absents du
+corpus d'origine), les autres absents sont des récapitulatifs OCR que l'identité « somme des codes = total » ne
+confirme pas (souvent parce qu'un total est l'erreur injectée). Extraction inchangée : calibration identique.
+Tests : `tests/controls/test_bloc_m3.py`, `test_famille_d.py`, `test_precision_d28.py` (données fictives).

@@ -91,3 +91,31 @@ Mesures sur les seuls jeux de développement (`bench/out/*_dev_blocA`), sauf men
   l'interface (`services/lecture.py`) le reprend par `LIBELLES_SIGNAL`. Traduction anglaise éventuelle : bloc
   interface. **À vérifier par le bloc interface.**
 
+
+## Bloc M3 (A13 regroupé, D1, bruit, rappel certain) — 6 octobre 2026
+
+Mesures sur les seuls jeux de développement (`bench/out/*_dev_m3base` -> `*_dev_m3g`). Détail : D-4201 à D-4211.
+
+- **A13 regroupé (décision 6C).** Un constat par dossier, « codes à rapprocher manuellement », toutes les preuves,
+  jamais certain (D-4201). Le compte ne baisse pas (72 non appariés) : le moteur émettait déjà un constat par couple.
+  **Fait.** Reste, si le fondateur le souhaite : présenter A12/A13 dans une rubrique « à transmettre » du rapport
+  (bloc interface).
+- **D1 : faux certains des jeux `--ext`.** Lignes prouvées complètes par une identité imprimée (D-4202), lectures
+  alternatives d'une ligne (TVA comprise, quantité du libellé), ligne de débours non jugée par D1, nature de ligne
+  ambiguë (D-4203), présentations des totaux sans effet sur le montant (D-4204). Cas trouvé sur le dev : une erreur G1
+  reprise sur la facture du transitaire aurait donné un D1 certain hors erreur sur un original natif (GZ0066).
+  **Fait.** À confirmer sur les jeux tenus à l'écart (orchestrateur).
+- **Bruit.** C5 sous-facturation expliquée (D-4205), P1 commun au lot (D-4206), A2 OCR (D-4207), B2 total lignes non
+  lues (D-4208), P4 lien partagé (D-4210) : 0,946 -> 0,823 par dossier sur le dev. **Fait.**
+- **Bruit restant (dev, trois jeux, `*_dev_m3g`).** A13 72 (décision), B1 27 (bases et taux mal lus sur scans :
+  taux « 2 517 % », colonne de statut de paiement lue comme montant ; les vrais écarts B1 « à vérifier » ont la même
+  forme, rien de générique sans perte), E5 25 (avoirs sans écart ouvert : même forme que les vraies erreurs E5),
+  P4 25 (dont factures citant le MRN d'un autre dossier : vrai signal, apparié à C7/F3/F4 et pas à P4), C5 24, C7 22
+  (MRN mal lus sur scans), P1 22 (défauts d'appariement dans les lots multi-envois), D2 19, B2 total 19. **À faire.**
+- **Rappel certain.** F3 : lien établi par le MRN (D-4209), +2 certains (corpus d'origine). Restent : F3 (9) et B1 (5)
+  avec une valeur lue sous le seuil sur scan ; A5 (3) taux OCR ; A6 (7 « à vérifier » : devise de facture lue à 0,90–0,93, sous
+  `a6_confiance_devise_min` = 0,95, ou sous le seuil : à corroborer par la devise du taux imprimé de la déclaration, que l'extraction
+  ne porte pas encore). **À faire** (extraction).
+- **Totaux par code absents (34 / 46 / 133).** L4 n'imprime aucun total par code (36 des 133 du corpus d'origine) ;
+  les autres sont des récapitulatifs OCR non confirmés par l'identité « somme des codes = total ». Rien de sûr sans
+  lecture nouvelle. **Constat.**

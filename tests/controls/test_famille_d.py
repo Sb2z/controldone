@@ -500,3 +500,17 @@ def test_d1_total_superieur_a_la_somme_lue_sous_le_seuil_d3703():
            total_ht="120.00")
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.outcome is Outcome.a_verifier
+
+
+def test_d1_total_ht_avant_remise_en_ligne_negative():
+    # D-4204 : total HT imprimé avant la remise portée en ligne négative : présentation, pas une erreur.
+    f = ft(ligne(N.frais_dedouanement, "100.00", taux_tva="20", montant_tva="20.00"),
+           ligne(N.autre_prestation, "-10.00", libelle="Remise FICTIF"), total_ht="100.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.outcome is Outcome.conforme
+    # Une présentation qui ne redonne pas le total exactement ne sert jamais de référence au montant.
+    f = ft(ligne(N.frais_dedouanement, "100.00", taux_tva="20", montant_tva="18.00"),
+           ligne(N.autre_prestation, "-10.00", libelle="Remise FICTIF", taux_tva="20", montant_tva="-2.00"),
+           total_ht="115.00", total_tva="18.00", total_ttc="133.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.ecart == D("25.00")
