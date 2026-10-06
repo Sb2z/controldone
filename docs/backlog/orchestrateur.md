@@ -31,4 +31,6 @@
   l'interface y renvoie sans la dupliquer. Fait.
 - **Test instable `tests/ingest/test_ingest_pages.py::test_processus_isole_echec_memoire`.** Il échoue parfois, en
   suite complète ou seul juste après une suite, quand la machine est chargée (plafond de mémoire du processus isolé),
-  puis passe. À examiner en fin de lot, machine au repos. À faire.
+  puis passe. Cause : avec une seule page de texte, le processus isolé pouvait aboutir sur la mémoire libre héritée
+  du forkserver sans nouvelle allocation, donc sans atteindre la limite. Le test utilise maintenant un document de
+  40 pages qui exige de nouvelles allocations ; l'application n'était pas en cause. Fait.

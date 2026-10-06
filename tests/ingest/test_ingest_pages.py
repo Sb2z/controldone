@@ -247,11 +247,14 @@ def test_processus_isole_forkserver_meme_resultat_que_local():
 
 
 def test_processus_isole_echec_memoire():
-    contenu = fab.pdf([fab.LTA])
+    # Document assez gros (40 pages de texte) pour exiger de nouvelles allocations : sous 60 Mo, le processus isolé
+    # échoue toujours. Avec une seule page, il pouvait aboutir sur la mémoire libre héritée du forkserver, d'où un
+    # test instable en suite complète.
+    lignes = [f"Ligne {i} FICTIF montant {i * 3},50 EUR reference REF-{i:06d} article" for i in range(60)]
     pages = extraire_pages(
-        contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, memoire_mo=60)
+        fab.pdf([lignes] * 40), type_mime="application/pdf", options=OptionsPages(ocr=False, memoire_mo=60)
     )
-    assert pages[0].page.qualite_texte is QualiteTexte.illisible
+    assert all(p.page.qualite_texte is QualiteTexte.illisible for p in pages)
     assert pages[0].texte.avertissements[0].startswith("processus_pages_code_")
 
 
