@@ -243,8 +243,13 @@ d'hébergeur) :
 3. Crontab root (`crontab -e`) :
 
    ```
-   45 2 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
+   45 2 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes BACKUP_ALERTE_COMPOSE=/srv/controldone/app/deploy/docker-compose.yml /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
    ```
+
+   Le script vérifie d'abord que la dernière archive locale a moins de 26 h et que son empreinte `.sha256` est
+   conforme, copie, puis contrôle la copie (`rclone check`). Un échec rend un code non nul (4, 3, 5, 6), inscrit
+   une alerte dans `/admin/alertes` et, si `BACKUP_PING_URL` est défini, prévient la sonde externe
+   (`deploy/README.md`, « Codes de retour et alertes »).
 
 Les archives sont déjà chiffrées par la clé dérivée de `CONTROLDONE_MASTER_KEY` : le stockage objet ne
 voit jamais de données en clair. `rclone copy --immutable` n'écrase ni ne supprime rien à distance.
@@ -257,7 +262,7 @@ Sauvegarde manuelle immédiate : `docker compose exec scheduler /app/deploy/back
 | Disponibilité | Sonde HTTPS externe toutes les 5 min sur **`https://app.exemple.fr/sante`** (réponse `{"statut":"ok"}`), alerte par courriel. Elle vérifie aussi le certificat. |
 | Conteneurs | `docker compose ps` (web a un healthcheck `/sante` ; `restart: unless-stopped` partout). |
 | Journaux | `docker compose logs -f --tail 100 web worker scheduler caddy` (JSON, sans contenu de document ; rotation 5 × 10 Mo). |
-| Sauvegardes | `docker compose logs scheduler | grep sauvegarde` doit montrer un `tache_ok` par jour ; `ls -lt /srv/controldone/backups` ; `rclone ls objeu:controldone-sauvegardes`. |
+| Sauvegardes | Sonde « homme mort » `BACKUP_PING_URL` (alerte par courriel sans signal pendant 26 h) ; alertes `sauvegarde_*` dans `/admin/alertes` ; `docker compose logs scheduler | grep sauvegarde` doit montrer un `tache_ok` par jour ; `ls -lt /srv/controldone/backups` ; `rclone ls objeu:controldone-sauvegardes`. |
 | Jobs en échec, coûts IA | `/admin` (alertes `job_mort`, `cout_ia_alerte`, `cout_ia_plafond`). |
 | Disque | `df -h /srv/controldone` chaque semaine (alerte à 80 %). |
 | Certificat | renouvelé automatiquement par Caddy (journal `caddy`). |
@@ -322,15 +327,15 @@ Sur la VM (ou mieux, sur une VM de test créée pour l'occasion avec la même cl
 cd /srv/controldone/app/deploy
 mkdir -p /srv/controldone/restauration && chown 10001:10001 /srv/controldone/restauration
 ARCHIVE=$(ls -t /srv/controldone/backups/controldone-*.tar.gz.enc | head -1)
-docker compose run --rm --no-deps -v /srv/controldone/restauration:/restauration scheduler \
-  python -m controldone.storage.sauvegarde restaurer "/backups/$(basename "$ARCHIVE")" /restauration/essai
-docker compose run --rm --no-deps -v /srv/controldone/restauration:/restauration scheduler \
-  python -c "from controldone.storage import Database, verifier_chaine; db=Database('sqlite:////restauration/essai/base/controldone.db'); print(verifier_chaine(db.session_systeme()) or 'chaine intacte')"
+(cd /srv/controldone/backups && sha256sum -c "$(basename "$ARCHIVE").sha256")   # sans clé
+time docker compose run --rm --no-deps -v /srv/controldone/restauration:/restauration scheduler \
+  controldone sauvegarde restaurer "/backups/$(basename "$ARCHIVE")" /restauration/essai --controler
 rm -rf /srv/controldone/restauration/essai
 ```
 
-Attendu : le chemin du répertoire restauré (`base/`, `coffre/`, `PRAGMA integrity_check` vérifié) puis
-`chaine intacte`. Tester aussi une archive téléchargée depuis le stockage objet (`rclone copy
+Attendu : `OK` pour l'empreinte, puis `résultat : CONFORME` (intégrité SQLite, lignes par table égales au
+manifeste, chaîne d'audit intacte, chaque objet du coffre déchiffré, chaque fichier référencé présent), code 0.
+**Noter la durée** (`time`) : c'est la mesure du RTO technique (`deploy/README.md`, « RPO / RTO »). Tester aussi une archive téléchargée depuis le stockage objet (`rclone copy
 objeu:controldone-sauvegardes/<archive> /srv/controldone/backups/`). Restauration réelle : arrêter
 `web worker scheduler`, puis suivre `docs/EXPLOITATION.md` § 3.2 en remplaçant `var/` par
 `/srv/controldone/var/` ; redémarrer avec `docker compose up -d`.
@@ -343,7 +348,8 @@ objeu:controldone-sauvegardes/<archive> /srv/controldone/backups/`). Restauratio
 - [ ] `https://<domaine>/sante` répond ; certificat valide ; `http://` redirige vers `https://`.
 - [ ] Fondateur créé par `creer-fondateur`, connexion TOTP vérifiée ; aucune base de démonstration en prod.
 - [ ] Webhook Stripe en mode test reçu (`stripe trigger checkout.session.completed`).
-- [ ] Une sauvegarde locale + sa copie hors site ; un test de restauration réussi.
+- [ ] Une sauvegarde locale + sa copie hors site ; un test de restauration réussi (§ 14, durée notée).
+- [ ] Sonde « homme mort » `BACKUP_PING_URL` active pour la sauvegarde et pour la copie hors site.
 - [ ] Sonde externe active sur `/sante`.
 - [ ] Mentions légales du site : hébergeur (nom, adresse, téléphone) — `docs/recherche/legal_market.md` § 4.
 - [ ] Registre RGPD et liste des sous-traitants à jour (hébergeur, stockage objet, Stripe, Anthropic si activé).

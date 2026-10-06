@@ -9,6 +9,7 @@
 {% block meta %}{% endblock %}
 <title>{{ titre }} — ControlDOne</title>
 <link rel="preload" href="/static/vendor/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/theme.js"></script>
 <script src="/static/vendor/motion.min.js" defer></script>
@@ -19,7 +20,7 @@
 <div class="decor" aria-hidden="true"><div class="halo h1"></div><div class="halo h2"></div><div class="halo h3"></div><div class="trame"></div><div class="grain"></div></div>
 <div class="progression" aria-hidden="true"></div>
 {% if demo %}
-<div class="bandeau-demo" role="note"><strong>DONNÉES FICTIVES</strong> — client de démonstration : sociétés, documents et montants inventés.</div>
+<aside class="bandeau-demo" aria-label="Données fictives"><strong>DONNÉES FICTIVES</strong> — client de démonstration : sociétés, documents et montants inventés.</aside>
 {% endif %}
 <header class="entete">
   <div class="entete-int">

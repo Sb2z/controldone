@@ -5,6 +5,8 @@
     controldone serve [--host 127.0.0.1] [--port 8000] [--sans-worker] [--init-schema]
     controldone init-demo [--force] [--si-absente]
     controldone creer-fondateur --email <adresse> [--nom "…"] [--mot-de-passe-stdin]
+    controldone debit lister | effacer (--email E | --ip A | --cle-api P | --tout) [--motif "…"]
+    controldone reinitialiser-mot-de-passe --email <adresse> [--mot-de-passe-stdin]
     controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice …
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
@@ -211,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
     di.add_argument("--force", action="store_true", help="supprimer la base SQLite et le coffre existants")
     di.add_argument("--si-absente", dest="si_absente", action="store_true", help="ne rien faire si déjà initialisée")
     di.set_defaults(fn=_init_demo)
+
+    from controldone.auth.cli_securite import ajouter_commandes
+
+    ajouter_commandes(sous)  # debit lister|effacer, reinitialiser-mot-de-passe (D-3201)
 
     cf = sous.add_parser("creer-fondateur", help="compte fondateur de production (mot de passe saisi + TOTP)")
     cf.add_argument("--email", required=True)

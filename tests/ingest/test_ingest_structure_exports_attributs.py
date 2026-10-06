@@ -96,7 +96,7 @@ XML_ATTRIBUTS = f"""<?xml version='1.0' encoding='UTF-8'?>
 
 def test_export_xml_a_attributs():
     doc, res = _extraire(XML_ATTRIBUTS, "export.xml")
-    assert doc.sous_type == "export_xml" and "fiche:g2_m5_xml@1.0.0" in res.avertissements
+    assert doc.sous_type == "export_xml" and "fiche:g2_m5_xml@1.1.0" in res.avertissements
     c = res.champs
     assert c.mrn.valeur == MRN and c.version.valeur == "2" and c.date_acceptation.valeur == "2026-05-04"
     assert c.importateur.nom.valeur == "Atelier Fictif SARL" and c.importateur.tva.valeur == "FR01000424242"

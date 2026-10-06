@@ -57,7 +57,7 @@
       <span class="discret">{{ noms.get(s.tenant_id, "plateforme") if s.tenant_id else "plateforme" }} · {{ s.cree_le|date }}</span>
     </header>
     {% if s.motif_blocage %}<p class="alerte-ligne">Bloqué par les garde-fous : {{ s.motif_blocage }}</p>{% endif %}
-    <pre class="corps">{{ s.payload.get("corps", "") }}</pre>
+    <pre class="corps" tabindex="0" role="region" aria-label="Texte : {{ s.payload.get('objet', '') or libelles_sortie.get(s.kind.value, s.kind.value) }}">{{ s.payload.get("corps", "") }}</pre>
     {% if formats(s) %}<p>Pièces : {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</p>{% endif %}
     <div class="decisions">
       <form method="post" action="/admin/sorties/{{ s.id }}/approuver" class="decision">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">

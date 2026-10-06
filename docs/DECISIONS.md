@@ -3499,3 +3499,66 @@ Demande : une interface « fluide et très moderne », avec effets et animations
 - **Contrôles** : 2 075 tests passent. Le parcours fondateur, le parcours client et le mobile ont été vérifiés par
   captures (Playwright), dans les deux thèmes, sans erreur dans la console. Vidéo de démonstration (données
   fictives) : `docs/interface/demo_interface.mp4`.
+
+## D-3301 — Sauvegarde : manifeste, traces d'envoi, empreinte externe (octobre 2026)
+
+- **Constat** : l'archive ne contenait que la base et le coffre ; `var/outbox_envoyee/` (copies des rapports et
+  factures mis à disposition) n'était pas sauvegardé, et rien ne permettait de vérifier une archive fichier par
+  fichier sans la restaurer.
+- **Choix** : même conteneur chiffré `CDSAV2` (D-1320) ; le tar contient `base/controldone.db`, `coffre/`,
+  `outbox_envoyee/` puis, en dernier, `MANIFESTE.json` : taille et SHA-256 de chaque fichier (calculés pendant la
+  copie, sur le descripteur ouvert), nombre de lignes par table, intégrité et tête de la chaîne d'audit de
+  l'instantané. À côté : `….tar.gz.enc.sha256` au format `sha256sum`, empreinte de l'archive **chiffrée** (contrôle
+  d'une copie hors site sans la clé ; ne révèle rien du contenu). Les archives sans manifeste restent restaurables.
+- **Écarté** : un manifeste en clair à côté de l'archive (les noms des objets du coffre sont les SHA-256 des
+  documents des clients : ils restent dans la partie chiffrée).
+
+## D-3302 — Clés hors des sauvegardes
+
+- Seules les entrées `base/`, `coffre/`, `outbox_envoyee/` et le manifeste sont écrites et admises à la restauration ;
+  `dev_master.key`, `.env*`, `identifiants.txt` restent hors de l'archive (test). La clé maîtresse et le secret de
+  session se conservent à part (gestionnaire de secrets + copie papier). Les secrets TOTP sont dans la base, chiffrés
+  par une clé dérivée distincte (`secrets`) : ils voyagent chiffrés deux fois.
+- Rotation de la clé maîtresse : garder l'ancienne clé dans `CONTROLDONE_MASTER_KEY` au moins 35 jours (durée de
+  conservation hors site), sinon les archives antérieures deviennent illisibles.
+
+## D-3303 — Vérification systématique, codes de retour, alertes
+
+- `sauvegarder` relit toujours l'archive créée (déchiffrement de chaque segment jusqu'au segment final, SHA-256 de
+  chaque fichier comparé au manifeste, empreinte externe) ; une archive non conforme est renommée `.invalide` (elle
+  ne bloque pas le rattrapage `--si-absente` et n'entre pas dans la rotation). La lecture vide désormais le flux
+  jusqu'au segment final : une archive dont seule la fin manque est refusée même si le tar se lit.
+- Codes : 0 succès, 1 création, 2 configuration, 3 vérification, 4 fraîcheur ; `--hors-site` : 5 copie, 6 contrôle
+  (`rclone check --one-way`). Alertes fondateur dédoublonnées par jour : `sauvegarde_echec`,
+  `sauvegarde_verification_echec`, `sauvegarde_absente`, `sauvegarde_hors_site_echec` (l'hôte passe par
+  `docker compose exec scheduler … alerter`). Sonde externe facultative `BACKUP_PING_URL` (`/0` succès,
+  `/<code>` échec) : seule façon d'être prévenu quand plus rien ne tourne.
+- `restaurer` n'écrit que dans un répertoire absent ou vide.
+
+## D-3304 — Contrôle approfondi d'une restauration
+
+- `controldone.storage.controle_restauration.controler` : intégrité SQLite, lignes par table égales au manifeste,
+  chaîne d'audit (`verifier_chaine`) et tête identiques, chaque objet du coffre déchiffré avec les clés fournies et
+  conforme à sa référence, chaque fichier et texte de page non purgé référencé par la base présent. Exposé par
+  `restaurer --controler`, `controler`, `verifier --profond` et `sauvegarder --verification-profonde` (restauration
+  d'essai dans un répertoire temporaire **du même volume** que les archives, effacé ensuite). Le planificateur Docker
+  la fait le dimanche (`BACKUP_VERIFICATION_PROFONDE_JOUR`).
+
+## D-3305 — Exercice de restauration de bout en bout (`make restauration-test`)
+
+- `controldone sauvegarde exercice` (`services/exercice_restauration.py`) : base fictive neuve (`init-demo`) dans un
+  répertoire temporaire avec une clé neuve tenue seulement dans l'environnement des sous-processus, sauvegarde par
+  la ligne de commande, contrôles négatifs (autre clé, octet altéré, aucune clé dans l'archive), effacement de la
+  source, restauration ailleurs, comparaison avec la source, puis `controldone serve` sur les données restaurées :
+  connexion du fondateur avec TOTP, `/admin`, connexion d'un client, rapport publié rendu en HTML et PDF. Hors ligne
+  (aucune clé d'API transmise, aucun `.env` lu), refuse `var/demo_web` et tout répertoire non vide. Durée ≈ 11 s ;
+  aussi exécuté par `pytest` (marque `lent`, déclarée dans `pyproject.toml`).
+- RPO/RTO documentés dans `deploy/README.md` : RPO 24 h (≈ 24 h 30 hors site), RTO objectif 4 h ouvrées non
+  mesuré en conditions réelles, dominé par les gestes humains.
+
+## D-3306 — Sauvegarde avant purge
+
+- `deploy/scheduler.sh` lance la sauvegarde du jour **avant** de mettre en file `purger_retention` : la purge
+  (worker) ne retire plus du coffre, pendant la copie, un contenu que l'instantané de la base référence encore. Un
+  fichier purgé entre le parcours et la lecture n'est simplement pas copié ; le contrôle approfondi le signalerait
+  comme « contenu référencé absent ».

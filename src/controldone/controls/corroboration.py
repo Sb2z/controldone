@@ -11,7 +11,8 @@ Réseau d'identités d'un document (``reseau``), construit uniquement sur des va
 valeurs dérivées, qui reproduiraient la lecture qu'elles prétendent confirmer) :
 
 - déclaration : base × taux = montant par ligne de taxation ; Σ lignes d'une taxe = total imprimé de la
-  taxe ; Σ lignes = total des droits et taxes ou total à payer (TVA autoliquidée incluse ou exclue) ;
+  taxe (ligne de total ou ``totaux_par_code``, D-3101) ; Σ totaux par code = total des droits et taxes ou total
+  à payer ; Σ lignes = total des droits et taxes ou total à payer (TVA autoliquidée incluse ou exclue) ;
   Σ montants facturés des articles = montant total facturé ; écho montant facturé de l'article = valeur
   statistique ou base du droit de l'article (deux colonnes distinctes donnent le même nombre) ;
 - facture du transitaire, avoir : quantité × prix unitaire = montant (quantité ≠ 1) ; montant HT × taux =
@@ -209,6 +210,27 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
             continue
         out.append(_somme_identite(f"dec:categorie:{code}", "taxes", total, v_total,
                                    [(v, x) for v, x in ops if v is not None and x is not None], tol))
+    # Totaux imprimés par code (D-3101) : Σ lignes du code = total du code ; Σ totaux par code = total des droits et
+    # taxes ou total à payer. Jamais des lignes de taxation.
+    lus_codes: list[tuple[ValeurSourcee, Decimal]] = []
+    for tot in c.totaux_par_code:
+        code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur else ""
+        v_total = lec.num(tot.montant)
+        if not code or tot.montant is None or v_total is None:
+            lus_codes = []
+            break
+        lus_codes.append((tot.montant, v_total))
+        du_code = [_montant_taxe(t) for t in c.taxations
+                   if t.type_taxe is not None and (t.type_taxe.valeur or "").strip().upper() == code]
+        ops_code = [(v, lec.num(v)) for v in du_code]
+        if ops_code and all(v is not None and x is not None for v, x in ops_code):
+            out.append(_somme_identite(f"dec:code:{code}", "taxes", tot.montant, v_total,
+                                       [(v, x) for v, x in ops_code if v is not None and x is not None], tol))
+    if len(lus_codes) >= 2:
+        for nom_total, total in (("total_droits_taxes", c.total_droits_taxes), ("total_a_payer", c.total_a_payer)):
+            v_total = lec.num(total)
+            if total is not None and v_total is not None:
+                out.append(_somme_identite(f"dec:codes:{nom_total}", "taxes", total, v_total, lus_codes, tol))
     # Σ lignes = total des droits et taxes / total à payer, TVA autoliquidée incluse ou exclue.
     lignes = [(i, _montant_taxe(t)) for i, t in enumerate(c.taxations) if i not in exclus]
     lues = [(i, v, lec.num(v)) for i, v in lignes]

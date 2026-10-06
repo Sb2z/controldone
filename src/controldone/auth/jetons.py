@@ -37,6 +37,11 @@ __all__ = [
 ]
 
 
+#: Inactivité maximale et durée absolue d'une session (secondes).
+INACTIVITE_S = 30 * 60
+DUREE_ABSOLUE_S = 8 * 3600
+
+
 class SessionInvalide(PermissionError):
     pass
 
@@ -79,8 +84,8 @@ def secrets_session_depuis_env(mode: str | None = None) -> list[str]:
 
 
 class GestionnaireSessions:
-    def __init__(self, secrets_: str | Sequence[str], *, inactivite_s: int = 30 * 60,
-                 duree_absolue_s: int = 8 * 3600, rotation_s: int = 15 * 60,
+    def __init__(self, secrets_: str | Sequence[str], *, inactivite_s: int = INACTIVITE_S,
+                 duree_absolue_s: int = DUREE_ABSOLUE_S, rotation_s: int = 15 * 60,
                  horloge: Callable[[], float] = time.time, registre: Registre | None = None) -> None:
         cles = [secrets_] if isinstance(secrets_, str) else list(secrets_)
         if not cles or any(len(c) < 32 for c in cles):
@@ -153,7 +158,7 @@ class GestionnaireSessions:
         return apres
 
 
-def parametres_cookie(*, prod: bool = True, max_age: int = 8 * 3600) -> dict[str, Any]:
+def parametres_cookie(*, prod: bool = True, max_age: int = DUREE_ABSOLUE_S) -> dict[str, Any]:
     """Paramètres du cookie de session (à passer à ``response.set_cookie``). En production, préfixe
     ``__Host-`` (impose ``Secure``, ``Path=/``, pas de ``Domain``)."""
     return {

@@ -26,15 +26,20 @@
 	# --- En-têtes de sécurité ----------------------------------------------------------------------------
 	# L'application pose déjà CSP, X-Frame-Options, Referrer-Policy… (web/securite.py) ; le préfixe « ? »
 	# ne les pose que s'ils manquent (réponses d'erreur, fichiers statiques), sans écraser ceux de l'application.
+	# HSTS : même valeur que l'application (2 ans, sous-domaines) ; « preload » non demandé (décision du fondateur,
+	# irréversible à court terme : docs/REVUE_SECURITE_2.md). Posé par Caddy sur toutes les réponses HTTPS.
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
 		?X-Content-Type-Options "nosniff"
 		?X-Frame-Options "DENY"
 		?Referrer-Policy "same-origin"
-		?Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
-		?Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		?Permissions-Policy "accelerometer=(), autoplay=(), browsing-topics=(), camera=(), display-capture=(), encrypted-media=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), screen-wake-lock=(), serial=(), usb=(), xr-spatial-tracking=()"
+		?Cross-Origin-Opener-Policy "same-origin"
+		?Cross-Origin-Resource-Policy "same-origin"
+		?Content-Security-Policy "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; report-uri /csp-rapport"
 		-Server
 		-Via
+		-X-Powered-By
 	}
 
 	# Journal d'accès JSON sur la sortie standard (pas de corps de requête, pas de cookie).

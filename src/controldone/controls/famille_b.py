@@ -26,9 +26,11 @@ from controldone.controls.framework import (
     preuve,
 )
 from controldone.controls.structure_declaration import (
+    code_taxe,
     montant_taxe,
     motifs_structure_masses,
     motifs_structure_taxes,
+    motifs_structure_total_code,
     totaux_par_categorie,
 )
 from controldone.formatage import format_montant, format_nombre, format_pourcentage
@@ -295,6 +297,56 @@ def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, l
     )
 
 
+def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatControle | None:
+    """B2 par code (D-3101) : Σ des lignes d'un code de taxe contre le total **imprimé** de ce code
+    (``ChampsDeclaration.totaux_par_code``, jamais une ligne de taxation). Montant liquidé ou montant à payer
+    (TVA autoliquidée) : ``conforme`` si l'une des deux sommes concorde."""
+    c = dec.dec
+    tot = c.totaux_par_code[k]
+    code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur else ""
+    if not code or tot.montant is None:
+        return None
+    unite = cle_unite(dec=dec.id, total_code=code)
+    lignes = [i for i, t in enumerate(c.taxations) if code_taxe(t) == code]
+    details: dict = {"declaration_id": dec.id, "type_taxe": code, "total_par_code": k, "lignes": lignes}
+    if not lignes:
+        return ctx.non_verifiable("B2", RaisonCode.valeur_absente, unite=unite, sous_controle="code",
+                                  documents=[dec.id], details={**details, "motif": "aucune ligne du code lue"})
+    total = tot.montant
+    operandes_vs = [montant_taxe(c.taxations[i]) for i in lignes]
+    for v in [total, *operandes_vs]:
+        if not ctx.utilisable(v) or _num(v) is None:
+            return ctx.non_verifiable(
+                "B2", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                unite=unite, sous_controle="code", documents=[dec.id], details=details,
+            )
+    v_total = _num(total) or _ZERO
+    operandes = [(v, _num(v) or _ZERO) for v in operandes_vs if v is not None]
+    somme = sum((x for _, x in operandes), _ZERO)
+    # Hypothèse « à payer » : une TVA autoliquidée imprime 0 à payer ; le total du code peut reprendre cette colonne.
+    a_payer = [c.taxations[i].montant_a_payer for i in lignes]
+    concorde: bool | None = None
+    if all(ctx.utilisable(v) and _num(v) is not None for v in a_payer):
+        s_payer = sum((_num(v) or _ZERO for v in a_payer), _ZERO)
+        if abs(v_total - s_payer) <= ctx.tol.t_somme(len(lignes)):
+            concorde = True
+    ecart = v_total - somme
+    return _b2_resultat(
+        ctx, dec, unite=unite, sous_controle="code", total=total, v_total=v_total, operandes=operandes,
+        somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
+        composante=_COMPOSANTE.get(c.taxations[lignes[0]].categorie), concorde=concorde,
+        structure=lambda: motifs_structure_total_code(dec, code, lignes, _num, ctx.tol, ecart=ecart)
+        + _motif_total_negatif(v_total),
+    )
+
+
+def _meme_fait(a: ResultatControle, b: ResultatControle, tol: Decimal) -> bool:
+    """Deux constats B2 d'une même déclaration dont l'écart est le même : une ligne de taxe (lue ou imprimée) en
+    cause fausse à la fois le total du code et le total des droits et taxes ; un seul constat (D-3102)."""
+    return (a.constat is not None and b.constat is not None and a.ecart is not None and b.ecart is not None
+            and abs(a.ecart - b.ecart) <= tol)
+
+
 def _motif_total_negatif(total: Decimal) -> list[str]:
     """Un total de droits et taxes imprimé négatif sur une déclaration d'import est presque toujours un signe mal
     lu (tiret, trait de tableau) : il ne fonde pas un écart certain (D-2711)."""
@@ -429,7 +481,9 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
     (a) ``sous_controle="categorie"`` : pour chaque code de taxe portant un total de catégorie imprimé
     (ligne sans article, voir ``structure_declaration.totaux_par_categorie``), Σ montants par article contre ce total ;
     (b) ``sous_controle="total"`` : Σ des lignes (hors totaux de catégorie) contre ``total_droits_taxes``
-    ou ``total_a_payer``, TVA autoliquidée incluse ou exclue (``conforme`` si une hypothèse concorde).
+    ou ``total_a_payer``, TVA autoliquidée incluse ou exclue (``conforme`` si une hypothèse concorde) ;
+    (c) ``sous_controle="code"`` : Σ des lignes d'un code contre le total imprimé de ce code
+    (``ChampsDeclaration.totaux_par_code``, D-3101) ; un écart égal à celui du total (b) est le même fait.
     Tolérance ``T_SOMME(n)`` ; ``ecart_certain`` si ``|écart| > 1,00 EUR``, tous les articles lus et
     règle générale. Montant ``arithmetique_declaration`` = total imprimé − somme.
     """
@@ -442,6 +496,22 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
         for code, (i_total, lignes) in sorted(totaux.items()):
             resultats.append(_b2_categorie(ctx, dec, code, i_total, lignes))
         r = _b2_total(ctx, dec, {i for i, _ in totaux.values()})
+        # (c) totaux imprimés par code (D-3101), sauf un code déjà porté par une ligne de total de catégorie
+        vus: set[str] = set(totaux)
+        for k, tot in enumerate(dec.dec.totaux_par_code):
+            code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur \
+                else ""
+            if not code or code in vus:
+                continue
+            vus.add(code)
+            rc = _b2_code_imprime(ctx, dec, k)
+            if rc is None:
+                continue
+            if r is not None and _meme_fait(rc, r, ctx.tol.t_somme(len(dec.dec.taxations))):
+                rc = ctx.non_applicable("B2", RaisonCode.couvert_par_autre_controle, unite=rc.unite,
+                                        sous_controle="code", documents=[dec.id],
+                                        details={**rc.details, "couvert_par": "B2 total"})
+            resultats.append(rc)
         if r is not None:
             resultats.append(r)
     return resultats

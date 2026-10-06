@@ -2,7 +2,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 
-.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build restauration-test
+.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build audit restauration-test
 
 # Installation reproductible sur un clone neuf (F-17) : crée .venv s'il manque, installe les versions figées
 # de requirements.lock, puis le paquet en mode éditable avec les outils de développement (pytest, ruff).
@@ -17,6 +17,15 @@ test:
 
 lint:
 	$(VENV)/bin/ruff check src tests
+
+# Audit des dépendances (D-3203) : vulnérabilités connues (pip-audit sur requirements.lock), SBOM CycloneDX et
+# licences (permissives seulement ; exceptions justifiées dans config/audit_dependances.json). Outils dans un
+# environnement séparé (.venv-audit), jamais dans l'image. Sorties : var/audit/. HORS_LIGNE=1 : ne pas échouer si
+# aucune base de vulnérabilités n'est joignable (SBOM et licences restent produits).
+AUDIT_VENV ?= .venv-audit
+audit:
+	@test -x $(AUDIT_VENV)/bin/pip-audit || { uv venv -q $(AUDIT_VENV) && uv pip install -q --python $(AUDIT_VENV)/bin/python "pip-audit>=2.7" "cyclonedx-bom>=4" "pip-licenses>=5"; }
+	$(PY) scripts/audit_dependances.py --venv $(VENV) --outils $(AUDIT_VENV) --out var/audit $(if $(HORS_LIGNE),--hors-ligne,)
 
 # Démonstration sur un jeu fictif : rapport dans var/demo/ (report.pdf, report.html…)
 demo:

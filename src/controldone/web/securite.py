@@ -6,8 +6,7 @@ sécurité, limite de taille des corps de requête, messages flash signés.
   ``OperatorScope.client`` (journal d'audit avec motif).
 - CSRF : jeton ``nonce.HMAC(secret, sid|nonce)`` lié à la session (``auth.jetons``) ; avant connexion, lié
   à un identifiant de pré-session (cookie ``HttpOnly``).
-- En-têtes : CSP ``default-src 'self'`` (aucune ressource externe, aucun script en ligne, Trusted Types : aucun
-  puits HTML du DOM, D-3204), violations envoyées à ``/csp-rapport`` (``report-uri`` et ``report-to``), ``X-Frame-
+- En-têtes : CSP ``default-src 'self'`` (aucune ressource externe, aucun script en ligne), violations envoyées à ``/csp-rapport`` (``report-uri`` et ``report-to``), ``X-Frame-
   Options: DENY``, ``Referrer-Policy: same-origin``, ``X-Content-Type-Options: nosniff``, ``Permissions-Policy``
   (toutes les fonctions sensibles refusées), ``Cross-Origin-Opener-Policy`` / ``-Resource-Policy: same-origin``,
   HSTS si HTTPS ; ``Cache-Control: no-store`` sur les pages authentifiées.
@@ -58,12 +57,13 @@ log = logging.getLogger("controldone.web.securite")
 CHEMIN_RAPPORT_CSP = "/csp-rapport"
 _RAPPORT = f"report-uri {CHEMIN_RAPPORT_CSP}; report-to csp"
 #: Interface : tout vient de l'application (``/static/theme.js`` synchrone, ``/static/vendor/motion.min.js``,
-#: ``/static/app.js``), aucun script ni style en ligne. Trusted Types (D-3204) : aucune politique, donc aucun
-#: ``innerHTML`` / ``insertAdjacentHTML`` / ``document.write`` possible — le JavaScript de l'interface n'écrit que
-#: du ``textContent`` (vérifié par ``tests/security/test_revue_securite_2.py``).
+#: ``/static/app.js``), aucun script ni style en ligne. Le JavaScript de l'interface n'écrit que du ``textContent``
+#: (aucun ``innerHTML`` / ``insertAdjacentHTML`` / ``document.write`` / ``eval`` : test permanent
+#: ``tests/security/test_revue_securite_2.py``). Trusted Types pas encore imposés (D-3204 : le filtrage en direct
+#: des listes analyse la page filtrée de même origine avec ``DOMParser``).
 CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; "
        "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; "
-       "require-trusted-types-for 'script'; trusted-types 'none'; " + _RAPPORT)
+       + _RAPPORT)
 #: Rapport HTML affiché tel quel (gabarit maison, styles intégrés, aucun script) : CSP fermée.
 CSP_RAPPORT = ("default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'; "
                + _RAPPORT)

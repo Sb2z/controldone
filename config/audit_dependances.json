@@ -1,0 +1,42 @@
+{
+  "_description": "Exceptions de l'audit des dépendances (make audit, scripts/audit_dependances.py, D-3203). Toute entrée porte une justification datée ; une exception sans justification est refusée par le script.",
+  "vulnerabilites_ignorees": {},
+  "licences_acceptees": {
+    "python-stdnum": "LGPL-2.1+ (copyleft faible). Dépendance de factur-x, importée sans modification, non distribuée sous forme modifiée ; à citer dans les notices de distribution. Revue du 2026-10-02 (REVUE_SECURITE.md §4), reconduite le 2026-10-06.",
+    "certifi": "MPL-2.0 (copyleft faible au niveau du fichier). Magasin de certificats utilisé sans modification. Reconduite le 2026-10-06."
+  },
+  "composants_embarques": [
+    {
+      "nom": "motion",
+      "version": "14.0.0",
+      "licence": "MIT",
+      "chemin": "src/controldone/web/static/vendor/motion.min.js",
+      "fichier_licence": "src/controldone/web/static/vendor/LICENSE-motion.md",
+      "source": "https://motion.dev"
+    },
+    {
+      "nom": "geist-font",
+      "version": "inconnue (fichiers woff2 servis localement)",
+      "licence": "OFL-1.1",
+      "chemin": "src/controldone/web/static/vendor/fonts/geist-latin-wght-normal.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-geist.txt",
+      "source": "https://vercel.com/font"
+    },
+    {
+      "nom": "geist-font-latin-ext",
+      "version": "inconnue (fichiers woff2 servis localement)",
+      "licence": "OFL-1.1",
+      "chemin": "src/controldone/web/static/vendor/fonts/geist-latin-ext-wght-normal.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-geist.txt",
+      "source": "https://vercel.com/font"
+    },
+    {
+      "nom": "geist-mono-font",
+      "version": "inconnue (fichiers woff2 servis localement)",
+      "licence": "OFL-1.1",
+      "chemin": "src/controldone/web/static/vendor/fonts/geist-mono-latin-wght-normal.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-geist.txt",
+      "source": "https://vercel.com/font"
+    }
+  ]
+}

@@ -34,7 +34,7 @@
   --filet-fort: rgba(255, 255, 255, .14);
   --encre: #eef0f4;
   --encre-2: #a7adba;
-  --encre-3: #6c7280;
+  --encre-3: #828896;
   --accent: #8b9cff;
   --accent-2: #b69cff;
   --accent-3: #5eead4;
@@ -76,7 +76,7 @@
   --filet-fort: rgba(15, 20, 40, .16);
   --encre: #0b0d12;
   --encre-2: #4a5160;
-  --encre-3: #7a8191;
+  --encre-3: #5f6676;
   --accent: #4f5ee8;
   --accent-2: #7c4dff;
   --accent-3: #0ea5a0;
@@ -105,7 +105,7 @@
     --fond: #f6f7f9; --fond-2: #eef0f4; --surface: rgba(255, 255, 255, .78); --surface-2: rgba(15, 20, 40, .04);
     --surface-pleine: #fff; --verre: rgba(250, 251, 253, .72); --filet: rgba(15, 20, 40, .09);
     --filet-2: rgba(15, 20, 40, .06); --filet-fort: rgba(15, 20, 40, .16); --encre: #0b0d12; --encre-2: #4a5160;
-    --encre-3: #7a8191; --accent: #4f5ee8; --accent-2: #7c4dff; --accent-3: #0ea5a0;
+    --encre-3: #5f6676; --accent: #4f5ee8; --accent-2: #7c4dff; --accent-3: #0ea5a0;
     --accent-clair: rgba(79, 94, 232, .09); --degrade: linear-gradient(120deg, #4f5ee8 0%, #7c4dff 50%, #0ea5a0 100%);
     --degrade-btn: linear-gradient(180deg, #5d6bf0 0%, #4250d8 100%); --sur-accent: #fff; --certain: #c62828;
     --certain-fond: rgba(220, 38, 38, .07); --certain-filet: rgba(220, 38, 38, .22); --verifier: #a15c00;

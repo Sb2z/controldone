@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import itertools
 import json
 import multiprocessing
 import os
@@ -950,16 +951,30 @@ def _ocr_deux_pages(image, coupe: int, opts: OptionsPages, numero: int, rotation
     return _page_ocr(numero, mots_tous, score, rotation, angles[0] if angles else 0.0, notes, lignes=lignes)
 
 
+#: Taille maximale (pixels) d'une image agrandie avant l'OCR : une page A3 à 300 dpi en fait 17,4 M.
+MAX_PIXELS_AGRANDISSEMENT = 40_000_000
+
+
 def _pages_image(contenu: bytes, opts: OptionsPages) -> list[PageText]:
     from PIL import Image, ImageSequence
 
     sortie: list[PageText] = []
     try:
         im = Image.open(io.BytesIO(contenu))
-        cadres = [c.copy() for c in ImageSequence.Iterator(im)][: opts.max_pages]
+        # Cadres décodés un par un (REV2-03) : copier tous les cadres avant de couper à ``max_pages`` gardait en
+        # mémoire chaque page d'un TIFF ou d'un GIF à cadres multiples.
+        cadres = itertools.islice(ImageSequence.Iterator(im), opts.max_pages)
     except Exception:
         return [_page_illisible(1, "image_illisible")]
-    for i, cadre in enumerate(cadres, start=1):
+    for i in itertools.count(1):
+        try:
+            cadre = next(cadres).copy()
+        except StopIteration:
+            break
+        except Exception:
+            if not sortie:
+                return [_page_illisible(1, "image_illisible")]
+            break
         if cadre.mode in ("RGBA", "LA", "P"):
             fond = Image.new("RGB", cadre.size, (255, 255, 255))
             cadre = cadre.convert("RGBA")
@@ -971,8 +986,10 @@ def _pages_image(contenu: bytes, opts: OptionsPages) -> list[PageText]:
             continue
         dpi = cadre.info.get("dpi", (0, 0))[0] or 0
         if dpi and dpi < 150:  # agrandir une image basse résolution avant l'OCR
-            f = min(3.0, 300 / dpi)
-            cadre = cadre.resize((int(cadre.size[0] * f), int(cadre.size[1] * f)))
+            # sans dépasser MAX_PIXELS_AGRANDISSEMENT (REV2-03 : une image de 80 Mpx à 72 dpi en demandait 720)
+            f = min(3.0, 300 / dpi, (MAX_PIXELS_AGRANDISSEMENT / max(1, cadre.size[0] * cadre.size[1])) ** 0.5)
+            if f > 1:
+                cadre = cadre.resize((int(cadre.size[0] * f), int(cadre.size[1] * f)))
         try:
             p = _ocr_image(cadre, opts, i)
         except Exception as e:

@@ -159,15 +159,23 @@ COLONNES_CSV = ["code_poste", "nature", "mode", "prix", "unite_base", "pourcenta
                 "minimum", "maximum", "franchise_jours", "inclus", "devise", "libelles_reconnus"]
 
 
+class _ExcelPointVirgule(csv.excel):
+    delimiter = ";"
+
+
 def _postes_csv(texte: str) -> list[dict[str, Any]]:
     try:
-        dialecte = csv.Sniffer().sniff(texte[:2048], delimiters=";,\t")
+        dialecte: Any = csv.Sniffer().sniff(texte[:2048], delimiters=";,\t")
     except csv.Error:
-        dialecte = csv.excel
-        dialecte.delimiter = ";"  # type: ignore[misc]
-    lecteur = csv.DictReader(io.StringIO(texte), dialect=dialecte)
+        # Dialecte dérivé : modifier ``csv.excel`` lui-même changeait le séparateur de **tout** le processus
+        # (exports CSV, lecture des taux BCE) après une grille mal formée (REV2-04).
+        dialecte = _ExcelPointVirgule
+    try:
+        lignes = list(csv.DictReader(io.StringIO(texte), dialect=dialecte))
+    except csv.Error as exc:  # champ démesuré, octet NUL… : refus lisible, jamais une erreur 500 (REV2-04)
+        raise RequeteInvalide("fichier CSV illisible") from exc
     postes = []
-    for n, ligne in enumerate(lecteur, 2):
+    for n, ligne in enumerate(lignes, 2):
         if n > 500:
             raise RequeteInvalide("grille trop longue (500 postes au plus)")
         p = {k.strip(): (v or "").strip() for k, v in ligne.items() if k}

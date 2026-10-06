@@ -53,7 +53,25 @@ jobs:
           pip install "pytest>=8.0" "ruff>=0.4"
 
       - name: Ruff
-        run: ruff check src tests
+        run: ruff check src tests scripts
+
+      # D-3203 : vulnérabilités connues (pip-audit sur requirements.lock), SBOM CycloneDX, licences permissives
+      # seulement (exceptions justifiées : config/audit_dependances.json). Outils dans un environnement séparé.
+      - name: Audit des dépendances (vulnérabilités, SBOM, licences)
+        run: |
+          python -m venv .venv-audit
+          .venv-audit/bin/pip install --quiet "pip-audit>=2.7" "cyclonedx-bom>=4" "pip-licenses>=5"
+          python scripts/audit_dependances.py --venv "$(python -c 'import sys; print(sys.prefix)')" \
+            --outils .venv-audit --out var/audit
+
+      - name: SBOM et rapport de licences
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-dependances
+          path: var/audit/
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Pytest
         run: pytest -q

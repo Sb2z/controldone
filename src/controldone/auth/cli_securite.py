@@ -77,10 +77,7 @@ def _debit_effacer(args: argparse.Namespace) -> int:
         return 2
     acteur = "cli:debit"
     if args.tout:
-        n = effacer_debit(pf.db, tout=True, cles=None, portee=None, acteur=acteur, motif=args.motif) if False else 0
-        from controldone.storage.securite import effacer_tout_debit
-
-        n = effacer_tout_debit(pf.db, acteur=acteur, motif=args.motif)
+        n = effacer_debit(pf.db, tout=True, acteur=acteur, motif=args.motif)
     else:
         n = effacer_debit(pf.db, cles=[cle_debit(p, i, sel) for p, i in cibles], acteur=acteur, motif=args.motif)
     print(f"{n} compteur(s) effacé(s). Les connexions concernées sont débloquées.")
@@ -91,7 +88,7 @@ def _reinitialiser(args: argparse.Namespace) -> int:
     import getpass
 
     from controldone.auth.debit import cle_debit, sel_debit
-    from controldone.auth.jetons import GestionnaireSessions
+    from controldone.auth.jetons import DUREE_ABSOLUE_S
     from controldone.auth.motdepasse import LONGUEUR_MIN, MotDePasseFaible, hacher_mot_de_passe
     from controldone.auth.roles import Acteur, Role
     from controldone.storage.comptes import changer_mot_de_passe, utilisateur_par_email
@@ -116,8 +113,7 @@ def _reinitialiser(args: argparse.Namespace) -> int:
         return 2
     changer_mot_de_passe(pf.db, compte.id, empreinte, acteur=Acteur("cli:reinitialisation", Role.fondateur))
     maintenant = time.time()
-    duree = GestionnaireSessions.DUREE_ABSOLUE_PAR_DEFAUT
-    revoquer_sessions_utilisateur(pf.db, compte.id, apres=maintenant, expire=maintenant + duree + 60)
+    revoquer_sessions_utilisateur(pf.db, compte.id, apres=maintenant, expire=maintenant + DUREE_ABSOLUE_S + 60)
     sel = sel_debit(pf.cles_maitresses)
     effacer_debit(pf.db, cles=[cle_debit(p, i, sel) for p, i in _cles_compte(pf, args.email)],
                   acteur="cli:reinitialisation", motif="reinitialisation du mot de passe")
