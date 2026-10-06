@@ -42,7 +42,7 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
   lisible qu'en base ; `/admin/alertes` ne dit pas si une alerte a été poussée ni si un canal est en panne.
   Proposition : colonne « notifiée » et encart « canaux : webhook OK / courriel en échec depuis … » sur
   `/admin/alertes` (sans afficher l'URL ni l'adresse). **API faite (D-4104)** — voir « Historique des
-  notifications : mode d'emploi » ci-dessous ; page à faire (bloc interface).
+  notifications : mode d'emploi » ci-dessous ; **page faite (D-4304)** : `/admin/notifications`.
 - **Bandeau des alertes de sauvegarde sur `/admin`.** Constat : les libellés sont faits (D-3505), pas le bandeau
   tant qu'une alerte `sauvegarde_*` n'est pas lue. **Fait (D-4303).**
 - **Notification quand le scheduler est arrêté.** Constat : les notifications sont envoyées par le conteneur

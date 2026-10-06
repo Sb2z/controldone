@@ -4638,13 +4638,12 @@ un type hors bandeau n'est jamais marqué par ce formulaire. Le bandeau dispara�
 
 ## D-4304 — Historique des notifications poussées (`/admin/notifications`)
 
-Lien depuis `/admin/alertes`. Configuration vue par le serveur web (actives / mode hors production / aucun canal ;
-noms des canaux et erreurs de variables, **jamais** l'URL du webhook ni les adresses), état par canal (dernier
-succès, dernier échec, « en échec depuis »), historique paginé de `notifications_alertes`. Lecture par une
-**interface mince** (`web/notifications_vues.py` → `storage.listes_sql.notifications_page`) : l'API de lecture
-annoncée par le bloc production n'existait pas à la fin du bloc ; la brancher là sans toucher au gabarit.
-Limite : une notification réussie n'inscrit que les canaux réussis (`notifier_alertes`), l'échec d'un canal
-quand l'autre a réussi n'apparaît pas.
+Lien depuis `/admin/alertes`. Lecture par l'API du bloc production `services.notifications.historique` (D-4104 ;
+90 derniers jours, 500 lignes au plus, paginées à l'affichage) via `web/notifications_vues.py` : configuration
+(actives / mode hors production / aucun canal ; noms des canaux et erreurs de variables, **jamais** l'URL, le jeton
+ni l'adresse), état par canal (dernier succès, dernier échec, « en échec »), historique avec le résultat de chaque
+canal. L'interface mince écrite d'abord (lecture directe de `notifications_alertes`) a été retirée quand l'API est
+arrivée.
 
 ## D-4305 — Coût IA et lecture par modèle sur la fiche client
 

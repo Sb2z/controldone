@@ -54,12 +54,6 @@
 
 # Bloc I3 — interface (octobre 2026)
 
-- **API de lecture des notifications (bloc production).** Constat : `/admin/notifications` lit
-  `notifications_alertes` par `storage.listes_sql.notifications_page` (interface mince, D-4304). Proposition :
-  remplacer par l'API du bloc production dans `web/notifications_vues.historique` dès sa livraison. À faire.
-- **Échec partiel d'un canal invisible.** Constat : `notifier_alertes` n'inscrit que les canaux réussis quand au
-  moins un réussit. Impact : courriel en panne masqué si le webhook marche. Proposition : colonne des canaux en
-  échec (bloc production). À faire.
 - **Configuration des notifications vue par le web.** Constat : la page lit `CONTROLDONE_NOTIF_*` dans le processus
   web ; les envois partent du planificateur. Proposition : le planificateur inscrit un battement (date, canaux
   actifs) que la page affiche. À faire (faible).

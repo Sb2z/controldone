@@ -325,16 +325,27 @@ def _f3_unite(ctx: ControlContext, ft: Document, prefixe: str, pool: list[_Occ])
         return ctx.conforme("F3", **{**commun, "details": {**commun["details"], "complementaire": True}})
     # Déclaration absente : la complémentarité n'est pas testable ; le critère de certitude de §15 F3
     # (MRN lus, débours égaux dans T_DEBOURS et > S_DEBOURS) est appliqué tel quel (D-308).
-    raisons = _raisons_ailleurs([autre.occ])
+    mrn_vals = [*ici.mrn, *autre.mrn]
+    # D-4209 : la facture qui refacture le MRN d'un autre dossier n'est rattachée à ce dossier que faiblement, à
+    # cause de l'écart lui-même. Le fait comparé (deux factures, le même MRN) ne dépend pas de ce rattachement :
+    # quand le MRN est lu sûrement sur les deux factures et que la complémentarité a pu être testée (montant
+    # liquidé connu), le lien est établi par le MRN (pour cette facture comme pour l'autre).
+    seuil = ctx.profil.c_min_certain
+    mrn_surs = bool(ici.mrn and autre.mrn) and all(
+        v.confiance >= seuil and v.ancrage_suffisant() and mrn_prefixe(v.valeur) == prefixe for v in mrn_vals)
+    etablis = [ft.id] if mrn_surs and liq is not None else []
+    raisons = [] if etablis else _raisons_ailleurs([autre.occ])
     egaux = abs(ici.montant - autre.montant) <= t_deb
     if not egaux:
         raisons.append(RaisonCode.controle_signal_seulement)  # débours différents : refacturation partielle ?
-    mrn_vals = [*ici.mrn, *autre.mrn]
     if not ici.mrn or not autre.mrn:
         raisons.append(RaisonCode.confiance_insuffisante)
+    if etablis:
+        commun["details"] = {**commun["details"], "lien_etabli_par_mrn": True}
     classement = ctx.classify(
         "F3", ecart=ici.montant, tolerance=None, seuil_certitude=s_deb,
         valeurs_cles=[*mrn_vals, *ici.valeurs, *autre.valeurs], montant=ici.montant, raisons_supplementaires=raisons,
+        liens_etablis=etablis,
     )
     libelle = (
         f"{aides.maj(aides.ref_document(ft, ici.valeurs[0]))} refacture {format_montant(arrondi_centime(ici.montant), 'EUR')} "

@@ -444,6 +444,7 @@ class ControlContext:
         documents: Iterable[str] = (),
         allocations: Sequence[Allocation] | None = None,
         operandes_non_confirmees_max: int = 0,
+        liens_etablis: Iterable[str] = (),
         **kwargs: Any,
     ) -> Classement:
         """``classify`` (§8.5.1) avec collecte automatique :
@@ -456,10 +457,14 @@ class ControlContext:
           par aucune autre identité arithmétique de son document. ``operandes_non_confirmees_max`` : lignes
           d'une somme contestée admises sans confirmation (B3).
 
+        - ``liens_etablis`` : documents dont le rattachement est établi par la valeur comparée elle-même (F3 : le
+          MRN lu sur les deux factures, D-4209) ; leur lien au dossier n'entre pas dans la condition 5.
+
         Les autres paramètres (``explication``, ``renvoi``, ``eligible``, ``nature_montant``, ``montant``,
         ``raisons_supplementaires``) sont transmis à ``classify``.
         """
         doc_ids = [v.document_id for v in valeurs_cles if v.document_id] + list(documents)
+        etablis = set(liens_etablis)
         if allocations is None:
             vues: dict[str, Allocation] = {}
             for i in dict.fromkeys(doc_ids):
@@ -473,7 +478,7 @@ class ControlContext:
             seuil_certitude=seuil_certitude,
             valeurs_cles=self._confiance_par_identite(valeurs_cles),
             c_min_certain=self.profil.c_min_certain,
-            liens=self.liens_pour(doc_ids),
+            liens=self.liens_pour([i for i in doc_ids if i not in etablis]),
             allocations=allocations,
             lecture_douteuse=kwargs.pop("lecture_douteuse", False) or self.lecture_douteuse(confusion),
             **kwargs,

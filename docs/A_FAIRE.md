@@ -48,7 +48,6 @@ l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a ét�
 | Point | Effort |
 |---|---|
 | Messages d'erreur des services et page de documentation de l'API encore en français seulement | petit |
-| Brancher `/admin/notifications` sur l'API de lecture du bloc production (interface mince en place, D-4304) | petit |
 
 ## 5. Dépôt et outillage
 
