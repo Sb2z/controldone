@@ -240,6 +240,42 @@ Autres jeux tenus à l'écart, même code. Aucun faux certain nouveau ; tous les
 - La marge du seuil reste faible sur les jeux de type `--ext` : 1 faux certain sur 60. La validation humaine reste
   la règle.
 
+## Cinquième mesure : lot 2 (production, sécurité, moteur, interface, outillage) — `corpus_g7` vierge (6 octobre 2026)
+
+**Le jeu.** `bench/corpus_g7` compte 160 dossiers, tous tenus à l'écart, générés avec `--ext --per-control 3` et la
+graine 20261009. Il contient 189 erreurs, dont 74 attendues « certain », et 739 pièges. Il n'est pas versionné : sa
+recette et son empreinte sont dans `docs/backlog/orchestrateur.md`.
+
+| `corpus_g7` (vierge) | Avant le lot 2 | Après le lot 2 (D-3710 compris) |
+|---|---|---|
+| Écarts certains vrais / faux | 52 / 0 | **53 / 0** |
+| Précision (borne basse de Wilson) | 100 % (93,1 %) | 100 % (93,2 %) |
+| Rappel (toutes erreurs) | 75,1 % | 76,7 % |
+| Rappel des erreurs attendues « certain » | 62,2 % | 63,5 % |
+| « À vérifier » sans erreur, par dossier | 1,64 | **1,41** (sous l'alerte de 1,5) |
+| Pièges déclenchés | 44 | 33 |
+
+**Régression trouvée puis corrigée.** La première mesure après le lot 2 a montré deux faux écarts certains
+nouveaux : un B2 sans erreur sur `corpus_g7`, un C5 au montant faux sur `corpus_g6`, qui faisait aussi échouer le
+seuil par contrôle de ce jeu. La cause : des totaux par code de taxe déduits (D-3706) pouvaient confirmer des valeurs
+jusqu'à la certitude. La correction (D-3710) a été faite sur les seuls jeux de développement, à partir du symptôme
+agrégé : un total déduit ne fonde plus jamais un écart certain. Après correction, les deux faux certains ont disparu.
+Pour diagnostiquer, j'ai lu le contrôle en cause sur ces deux jeux : ils ne sont donc plus parfaitement vierges.
+
+| Jeu tenu à l'écart | Vrais / faux certains | Précision | Rappel | Bruit / dossier (avant le lot 2) |
+|---|---|---|---|---|
+| `corpus_g7` (160) | 53 / 0 | 100 % | 76,7 % | 1,41 (1,64) |
+| `corpus_g6` (160) | 59 / 1 | 98,3 % | 75,8 % | 1,49 (1,89) |
+| `corpus_g5` (110) | 37 / 1 | 97,4 % | 81,3 % | 1,55 (1,79) |
+| `corpus_g4` (45) | 31 / 0 | 100 % | 80,3 % | 0,71 (0,80) |
+| `corpus_g3` (80) | 66 / 0 | 100 % | 88,8 % | 0,74 (0,81) |
+| `corpus_g2` (68) | 39 / 0 | 100 % | 83,1 % | 0,60 (0,78) |
+| `corpus_h2` (48) | 46 / 0 | 100 % | 80,4 % | 1,33 (1,40) |
+| `corpus` (48) | 45 / 0 | 100 % | 85,2 % | 0,77 (0,96) |
+
+Tous les seuils passent. Le bruit baisse sur tous les jeux tenus à l'écart. Les deux faux certains restants (D1,
+un piège sur `corpus_g6` et un non apparié sur `corpus_g5`) existaient déjà avant le lot.
+
 ## Reproduire
 
 ```bash
@@ -249,5 +285,5 @@ CONTROLDONE_PAGES_CACHE_DIR=var/cache/g3_pages python -m controldone.bench_run \
 python -m bench.score --corpus bench/corpus_g3 --split holdout --run bench/out/g3 --gate
 ```
 
-Tests : 2 185 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
+Tests : 2 484 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
 (`scripts/demo_complete.sh --sans-serveur`) se termine sans erreur.
