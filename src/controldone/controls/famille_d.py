@@ -15,6 +15,7 @@ Unités : ``cle_unite(ft=<facture>, ligne=<index>)`` par ligne, ``cle_unite(ft=<
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -37,8 +38,10 @@ from controldone.controls.famille_c import (
     facture_multi_envois,
     grille_pour_facture,
     libelle_facture,
+    ligne_d_un_autre_envoi,
     ligne_evaluee_ici,
     mrns_cites,
+    nombre_envois_cites,
     page_txt,
     reference_declaration,
     unites_c,
@@ -72,6 +75,7 @@ from controldone.model import (
     RaisonCode,
     ResultatControle,
     RolePreuve,
+    TypeDocument,
     ValeurSourcee,
 )
 from controldone.normalize.natures import renvoie_a_une_annexe
@@ -306,6 +310,16 @@ def _ambigu(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControle:
 
 
 def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document, ValeurSourcee, Decimal]]:
+    """Lignes d'avoirs déjà reçus imputées à cette ligne de prestation (voir ``_lignes_credit_imputees``)."""
+    out: list[tuple[Document, ValeurSourcee, Decimal]] = []
+    for lc in _lignes_credit_imputees(ctx, lr):
+        avoir = ctx.document(lc.avoir_id)
+        if avoir is not None and lc.valeur is not None:
+            out.append((avoir, lc.valeur, lc.montant))
+    return out
+
+
+def _lignes_credit_imputees(ctx: ControlContext, lr: LigneRoutee) -> list:
     """Lignes d'avoirs déjà reçus qui créditent cette ligne de prestation (§8.6 : montant net des avoirs
     déjà imputés), selon la règle unique de §17.2 (D-1210) : lignes d'avoir du dossier (E3, ``C_MIN_UTILE``),
     même émetteur, même nature, rattachement par paliers (facture d'origine, à défaut MRN de la ligne).
@@ -323,7 +337,7 @@ def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document,
     )
     transports = tuple(x.valeur for x in f.ft.refs_transport if x.valeur and ctx.utilisable(x))
     emetteur = aides.emetteur_de(ctx, f)
-    out: list[tuple[Document, ValeurSourcee, Decimal]] = []
+    out = []
     for lc in aides.lignes_credit_du_dossier(ctx):
         if lc.nature is not lr.ligne.nature or not aides.memes_emetteurs(lc.emetteur, emetteur):
             continue
@@ -346,7 +360,7 @@ def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document,
         avoir = ctx.document(lc.avoir_id)
         if not memes or memes[0] != lr.index or avoir is None or lc.valeur is None:
             continue
-        out.append((avoir, lc.valeur, lc.montant))
+        out.append(lc)
     return out
 
 
@@ -393,6 +407,10 @@ def _comparer_tarif(
     )
     if ecart <= tol:
         return ctx.conforme(cid, **commun)
+    if cid in ("D3", "D4"):
+        garde, det_garde = _garde_tarif(ctx, cid, lr, facture, attendu + deduction, ecart)
+        raisons = [*raisons, *garde]
+        det.update(det_garde)
     devise = lr.facture.ft.devise
     if (
         ctx.utilisable(devise)
@@ -440,6 +458,268 @@ def _comparer_tarif(
         ],
         **commun,
     )
+
+
+# -----------------------------------------------------------------------------------------------------
+# D-4212 à D-4214 : un écart au tarif n'est certain que si la ligne de grille, la quantité, l'unité et
+# l'assiette sont établies sans ambiguïté, et qu'aucun avoir du dossier ne peut couvrir l'écart.
+# -----------------------------------------------------------------------------------------------------
+
+
+def _avoirs_non_imputes(ctx: ControlContext, lr: LigneRoutee) -> list[str]:
+    """D-4212 : avoirs du dossier (E3 exclu) dont une ligne de prestation (ou de nature inconnue) n'est imputée à
+    **aucune** ligne évaluée du dossier : rattachement par la facture, le MRN ou la référence de transport non établi
+    (référence mal lue, avoir rattaché au seul MRN), émetteur lu autrement, nature différente de celle de la ligne
+    (remise, geste commercial), ou avoir sans ligne exploitable. Rien n'exclut alors qu'il couvre l'écart. Un avoir
+    de débours relève de la famille C."""
+    # Avoir rattaché à la facture mais sans ligne ventilée : raison propre ``avoir_non_ventile`` (D-2205).
+    deja = {a.id for a in aides.avoirs_non_ventiles_pour(ctx, lr.facture)}
+    candidats = [a for a in aides.avoirs_imputables(ctx) if a.id not in deja]
+    if not candidats:
+        return []
+    imputees = {
+        (lc.avoir_id, lc.ligne) for x in lignes_routees(ctx)[0] for lc in _lignes_credit_imputees(ctx, x)
+    }
+    par_avoir: dict[str, list] = {}
+    for lc in aides.lignes_credit_du_dossier(ctx):
+        par_avoir.setdefault(lc.avoir_id, []).append(lc)
+    out: list[str] = []
+    for a in candidats:
+        lignes = par_avoir.get(a.id, [])
+        libres = [
+            lc
+            for lc in lignes
+            if (lc.avoir_id, lc.ligne) not in imputees
+            and not (lc.nature is not None and lc.nature.est_debours)
+            and lc.montant > 0
+        ]
+        if libres or not lignes:
+            out.append(a.id)
+    return out
+
+
+def _credits_hors_avoirs(ctx: ControlContext, lr: LigneRoutee, ecart: Decimal) -> list[str]:
+    """D-4212 : crédits qui ne passent pas par un avoir imputable du dossier et peuvent couvrir l'écart :
+
+    - ligne de prestation **négative** sur une facture du dossier d'un émetteur compatible (remise, « crédit sur
+      facture n° … », ligne facturée deux fois puis créditée sur la facture suivante) ;
+    - ligne de même nature, sur une autre facture du dossier, d'un montant égal à l'écart (avoir lu comme une
+      facture, montants imprimés sans signe) ;
+    - avoir d'un émetteur compatible rangé dans un autre dossier du même lot qui ne contient aucune facture du
+      transitaire (avoir resté orphelin au regroupement).
+
+    Retourne les identifiants des documents concernés."""
+    ef = aides.emetteur_de(ctx, lr.facture)
+    out: list[str] = []
+    for x in ctx.factures_transitaires():
+        if not aides.memes_emetteurs(aides.emetteur_de(ctx, x), ef):
+            continue
+        for lg in x.ft.lignes:
+            if lg.nature.est_debours:
+                continue
+            v = _montant(ctx, lg)
+            m = _dec(ctx, v)
+            if m is not None and v is not None and v.decimal_signe() < 0:
+                out.append(x.id)
+                break
+            if (
+                x.id != lr.facture.id
+                and lg.nature is lr.ligne.nature
+                and m is not None
+                and abs(m - ecart) <= ctx.tol.t_tarif()
+            ):
+                out.append(x.id)
+                break
+    lots = set(ctx.dossier.lot_ids)
+    for autre in ctx.autres_dossiers if lots else ():
+        if not lots & set(autre.dossier.lot_ids):
+            continue
+        docs = list(autre.documents.values())
+        if any(d.type is TypeDocument.facture_transitaire for d in docs):
+            continue
+        for d in docs:
+            if (
+                d.type is TypeDocument.avoir
+                and d.champs is not None
+                and aides.memes_emetteurs(aides.emetteur_de(ctx, d), ef)
+            ):
+                out.append(d.id)
+    return list(dict.fromkeys(out))
+
+
+def _ttc_possible(ctx: ControlContext, lr: LigneRoutee, facture: Decimal, attendu: Decimal) -> bool:
+    """D-4213 : le montant comparé est peut-être TVA comprise sans être marqué comme tel (colonne « TTC » lue comme
+    hors TVA, D-2701) : la TVA imprimée de la ligne égale l'attendu × un taux lu sur la facture (20 % à défaut) et le
+    montant égale l'attendu + cette TVA, ou la somme des lignes lues redonne le total TTC imprimé (différent du
+    total HT). Une simple égalité « montant = attendu × 1,2 » ne suffit pas : un vrai écart de 20 % la donne aussi."""
+    f = lr.facture
+    tol = ctx.tol.t_tarif()
+    taux = {Decimal(20)}
+    for lg in f.ft.lignes:
+        if lg.taux_tva is not None and ctx.utilisable(lg.taux_tva):
+            x = lg.taux_tva.decimal_ou_none()
+            if x is not None and x > 0:
+                taux.add(x)
+    tva = _dec(ctx, lr.ligne.montant_tva)
+    if (
+        tva is not None
+        and tva > 0
+        and lr.ligne.montant_tva is not None
+        and lr.ligne.montant_tva.methode is not Methode.derive
+        and any(
+            abs(facture - arrondi_centime(attendu * (1 + x / _CENT))) <= tol
+            and abs(tva - arrondi_centime(attendu * x / _CENT)) <= tol
+            for x in taux
+        )
+    ):
+        # TVA imprimée de la ligne = attendu × taux et montant = attendu + TVA : le montant lu est TTC.
+        return True
+    ttc, ht = _dec(ctx, f.ft.total_ttc), _dec(ctx, f.ft.total_ht)
+    if ttc is None or (ht is not None and abs(ttc - ht) <= tol):
+        return False
+    vals = [_dec(ctx, _montant(ctx, lg)) for lg in f.ft.lignes]
+    if not vals or any(v is None for v in vals):
+        return False
+    signes = [v.decimal_signe() for lg in f.ft.lignes if (v := _montant(ctx, lg)) is not None]
+    return abs(_somme(signes) - ttc) <= ctx.tol.t_somme(len(signes))
+
+
+def _date_facture(ctx: ControlContext, f: Document) -> date | None:
+    if f.ft.date is None or not ctx.utilisable(f.ft.date):
+        return None
+    try:
+        return f.ft.date.date_iso()
+    except ValueError:
+        return None
+
+
+def _parametres_poste(p: PosteGrille) -> tuple:
+    return (p.mode, p.prix, p.unite_base, p.pourcentage, p.base_pourcentage, p.minimum, p.maximum, p.inclus)
+
+
+def _autre_grille_possible(ctx: ControlContext, lr: LigneRoutee) -> bool:
+    """D-4213 : une autre grille validée du même transitaire (émetteur lu ou transitaire du dossier), valide à la
+    date de la facture ou à la date d'acceptation d'une déclaration du dossier (prestation rendue avant la date de
+    facture), rapproche la ligne d'un poste aux paramètres différents : la grille appliquée n'est pas établie."""
+    assert lr.poste is not None
+    em = lr.facture.ft.emetteur
+    tva = em.tva.valeur if em.tva is not None and ctx.utilisable(em.tva) else None
+    nom = em.nom.valeur if em.nom is not None and ctx.utilisable(em.nom) else None
+    tids = {
+        lr.grille.transitaire_id,
+        ctx.dossier.transitaire_id,
+        identifier_transitaire(tva, nom, ctx.transitaires),
+    }
+    dates: list[date | None] = [_date_facture(ctx, lr.facture)]
+    for d in ctx.declarations(dernieres_versions=False):
+        v = d.dec.date_acceptation
+        if v is not None and ctx.utilisable(v):
+            with contextlib.suppress(ValueError):
+                dates.append(v.date_iso())
+    reference = _parametres_poste(lr.poste)
+    for g in ctx.grilles:
+        if g.id == lr.grille.id or g.transitaire_id not in tids:
+            continue
+        if not any(g.applicable(g.transitaire_id, x) for x in dates):
+            continue
+        poste, ambigu = rapprocher_poste(g, lr.ligne)
+        if ambigu or (poste is not None and _parametres_poste(poste) != reference):
+            return True
+    return False
+
+
+def _autre_version_facture(ctx: ControlContext, lr: LigneRoutee) -> bool:
+    """D-4213 : une autre facture du dossier, d'un émetteur compatible, porte le même numéro (copie, version
+    rectificative, page reprise comme une facture) : la ligne comparée peut être remplacée par l'autre version."""
+    f = lr.facture
+    if f.ft.numero is None or not ctx.utilisable(f.ft.numero) or not f.ft.numero.valeur:
+        return False
+    cle = norm_ref(f.ft.numero.valeur)
+    ef = aides.emetteur_de(ctx, f)
+    for x in ctx.factures_transitaires():
+        if x.id == f.id or x.ft.numero is None or not ctx.utilisable(x.ft.numero) or not x.ft.numero.valeur:
+            continue
+        if norm_ref(x.ft.numero.valeur) == cle and aides.memes_emetteurs(aides.emetteur_de(ctx, x), ef):
+            return True
+    return False
+
+
+def _quantite_lue(ctx: ControlContext, v: ValeurSourcee | None) -> Decimal | None:
+    """Quantité imprimée sur la ligne (ni déduite ni reconstruite)."""
+    if v is None or v.methode is Methode.derive or v.est_reconstruite:
+        return None
+    return _dec(ctx, v)
+
+
+def _tarif_ligne_ambigu(ctx: ControlContext, lr: LigneRoutee, facture: Decimal) -> list[str]:
+    """D-4213 : motifs pour lesquels le tarif attendu d'une ligne forfaitaire ou unitaire n'est pas établi.
+
+    - forfait : quantité imprimée supérieure à 1 (prestation facturée par envoi, contenant ou déclaration) ;
+      montant égal à un multiple entier (≥ 2) du forfait (plusieurs envois, relevé, ligne de récapitulatif) ;
+    - unitaire (au kilo, au colis, à l'article…) : quantité non imprimée (ou déduite), prix unitaire non imprimé,
+      ou quantité × prix unitaire imprimés ≠ montant (quantité lue dans le libellé, colonne décalée, séparateur
+      de milliers) : l'unité et la quantité facturées ne sont pas établies."""
+    p = lr.poste
+    assert p is not None
+    tol = ctx.tol.t_tarif()
+    lg = lr.ligne
+    motifs: list[str] = []
+    q = _quantite_lue(ctx, lg.quantite)
+    if p.mode is ModePoste.forfait:
+        if q is not None and q > 1:
+            motifs.append("quantite_sur_forfait")
+        if p.prix is not None and p.prix > 0:
+            k = (facture / p.prix).to_integral_value()
+            if k >= 2 and abs(facture - k * p.prix) <= tol:
+                motifs.append("multiple_du_forfait")
+    elif p.mode is ModePoste.unitaire:
+        pu = _quantite_lue(ctx, lg.prix_unitaire)
+        if q is None:
+            motifs.append("quantite_non_lue")
+        if pu is None:
+            motifs.append("prix_unitaire_non_lu")
+        if q is not None and pu is not None and abs(arrondi_centime(q * pu) - facture) > tol:
+            motifs.append("quantite_prix_montant_incoherents")
+    return motifs
+
+
+def _garde_tarif(
+    ctx: ControlContext, cid: str, lr: LigneRoutee, facture: Decimal, attendu: Decimal, ecart: Decimal
+) -> tuple[list[RaisonCode], dict]:
+    """Conditions communes D3 / D4 d'un écart au tarif certain (D-4212, D-4213). Retourne les raisons et les
+    détails à ajouter ; vide quand tout est établi."""
+    raisons: list[RaisonCode] = []
+    det: dict = {}
+    avoirs = [*_avoirs_non_imputes(ctx, lr), *_credits_hors_avoirs(ctx, lr, ecart)]
+    if avoirs:
+        raisons.append(RaisonCode.avoir_non_impute)
+        det["avoirs_non_imputes"] = avoirs
+    motifs: list[str] = []
+    if lr.poste is not None and lr.poste.mode in (ModePoste.forfait, ModePoste.unitaire):
+        motifs += _tarif_ligne_ambigu(ctx, lr, facture)
+    if lr.poste is not None and _autre_grille_possible(ctx, lr):
+        motifs.append("plusieurs_grilles_applicables")
+    if _autre_version_facture(ctx, lr):
+        motifs.append("autre_version_de_la_facture")
+    if motifs:
+        raisons.append(RaisonCode.tarif_non_etabli)
+        det["tarif_non_etabli"] = motifs
+    if _ttc_possible(ctx, lr, facture, attendu):
+        raisons.append(RaisonCode.montant_tva_comprise)
+        det["montant_peut_etre_ttc"] = True
+    if ligne_d_un_autre_envoi(ctx, lr.facture, lr.ligne):
+        raisons.append(RaisonCode.attribution_non_univoque)
+        det["envoi_hors_dossier"] = True
+    if cid == "D3" or (lr.poste is not None and lr.poste.mode is not ModePoste.pourcentage):
+        # D-2802 étendu à D3 (D-4213) : grille du transitaire attestée par l'émetteur lu ; devise lisible.
+        attestation = _grille_attestee(ctx, lr)
+        if attestation is not None:
+            raisons.append(RaisonCode.grille_non_attestee)
+            det["grille_non_attestee"] = attestation
+        devise = lr.facture.ft.devise
+        if devise is not None and not ctx.utilisable(devise):
+            raisons.append(RaisonCode.devise_incertaine)
+    return raisons, det
 
 
 def _numero_avoir(a: Document) -> str:
@@ -1204,7 +1484,33 @@ def _d3_ligne(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControl
 def d3_prix_grille(ctx: ControlContext) -> list[ResultatControle]:
     """D3 — ``forfait`` : ``montant_ht − prix`` ; ``unitaire`` : ``montant_ht − quantité × prix`` (bornés par
     minimum et maximum). Écart négatif : ``conforme``."""
-    return _par_controle(ctx, "D3", lambda lr: _d3_ligne(ctx, "D3", lr) if lr.controle == "D3" else None)
+    vues: dict[tuple, int] = {}
+    return _par_controle(
+        ctx,
+        "D3",
+        lambda lr: (
+            _une_fois(ctx, "D3", lr, vues, lambda x: _d3_ligne(ctx, "D3", x)) if lr.controle == "D3" else None
+        ),
+    )
+
+
+def _une_fois(
+    ctx: ControlContext, cid: str, lr: LigneRoutee, vues: dict[tuple, int], traiter
+) -> ResultatControle:
+    """D-4213 (comme D-2705 pour D2) : une ligne identique à une ligne déjà évaluée de la même facture (nature,
+    libellé, montant, référence d'envoi) n'est comparée au tarif qu'une fois : ligne reprise sur une page de
+    récapitulatif ou reportée d'une page à l'autre, ou facturée deux fois (objet de D5). Un même écart n'est pas
+    relevé deux fois."""
+    premiere = _copie_de(ctx, lr, vues)
+    if premiere is not None:
+        return ctx.non_applicable(
+            cid,
+            RaisonCode.couvert_par_autre_controle,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"couvert_par": "D5", "copie_de_la_ligne": premiere},
+        )
+    return traiter(lr)
 
 
 # =====================================================================================================
@@ -1390,6 +1696,33 @@ def _assiettes_alternatives(
                 )
             ]
         )
+    # D-4214 : débours de toutes les factures du même émetteur du dossier (facture complémentaire, facture de
+    # débours séparée non rapprochée) et montants liquidés de toutes les déclarations du dossier.
+    ef = aides.emetteur_de(ctx, f)
+    autres = [
+        x
+        for x in ctx.factures_transitaires()
+        if x.id != f.id and aides.memes_emetteurs(aides.emetteur_de(ctx, x), ef)
+    ]
+    if autres:
+        toutes = [lg for x in (f, *autres) for lg in x.ft.lignes if lg.nature.est_debours]
+        montants = [(lg.nature, _dec(ctx, _montant(ctx, lg))) for lg in toutes]
+        if montants and all(m is not None for _, m in montants):
+            for garder in (
+                lambda n: True,
+                lambda n: n is not NatureLigne.debours_tva,
+                lambda n: n is NatureLigne.debours_droits,
+            ):
+                out.append([_somme(m for n, m in montants if m is not None and garder(n))])
+    if decs:
+        tous = {d.id: reference_declaration(ctx, d) for d in decs}
+        for cs in (
+            list(CategorieTaxe),
+            [c for c in CategorieTaxe if c is not CategorieTaxe.tva],
+            [CategorieTaxe.droit],
+        ):
+            par_dec = [_somme(r.liquide.get(c, ZERO) for c in cs) for r in tous.values()]
+            out.append(par_dec)
     # Total des débours imprimé (D-2703) : il reprend aussi une ligne de débours perdue à la lecture. Débours
     # portés par d'autres factures (facture de débours séparée, D-2801) : leurs totaux imprimés aussi.
     totaux: list[Decimal] = []
@@ -1508,6 +1841,37 @@ def _d4_ambiguites(
                 motifs.append("bornes_par_envoi_ou_par_facture")
         elif p.minimum is not None or p.maximum is not None:
             motifs.append("bornes_par_envoi_ou_par_facture")
+    # D-4214 : quantité imprimée supérieure à 1 sur la ligne de FAF (un FAF par envoi ou par déclaration) ; MRN
+    # cités par la facture plus nombreux que les déclarations de l'assiette, ligne sans MRN (des envois dont les
+    # débours ne sont pas dans l'assiette, ou des bornes appliquées par envoi).
+    q = _quantite_lue(ctx, lr.ligne.quantite)
+    if q is not None and q > 1:
+        motifs.append("faf_par_envoi_quantite")
+    # D-4214 : ligne « droits et taxes » combinée parmi les débours : elle ne se ventile pas par composante ; une
+    # assiette qui n'en reprend pas tout le montant (assiette « droits » ou « hors TVA », ou ligne écartée de
+    # l'assiette « total ») dépend de la ventilation retenue.
+    combinees = [
+        lg
+        for x in (a.factures or [lr.facture])
+        for lg in x.ft.lignes
+        if lg.nature is NatureLigne.debours_combines
+    ]
+    if combinees:
+        tous = [_dec(ctx, _montant(ctx, lg)) for x in (a.factures or [lr.facture]) for lg in x.ft.lignes]
+        total_debours = _somme(
+            m
+            for x in (a.factures or [lr.facture])
+            for lg in x.ft.lignes
+            if lg.nature.est_debours and (m := _dec(ctx, _montant(ctx, lg))) is not None
+        )
+        if (
+            base is not BasePourcentage.debours_total
+            or any(m is None for m in tous)
+            or a.montant + tol < total_debours
+        ):
+            motifs.append("debours_combines")
+    if not ventilee and nombre_envois_cites(ctx, lr.facture) > max(1, len(decs)):
+        motifs.append("envois_hors_assiette")
     negatifs = [x for x in a.valeurs if (d := _dec(ctx, x)) is not None and d < 0]
     credits = _somme(c.montant for u in a.unites for c in u.credits)
     if negatifs or credits:
@@ -1699,7 +2063,14 @@ def d4_faf_grille(ctx: ControlContext) -> list[ResultatControle]:
     """D4 — FAF contre la grille : ``attendu = borner(pourcentage × assiette retenue, minimum, maximum)``,
     l'assiette retenue étant les débours refacturés moins l'excédent constaté par la famille C. La part déjà
     chiffrée par C6 sur la même ligne est déduite (aucun double comptage)."""
-    return _par_controle(ctx, "D4", lambda lr: _d4_ligne(ctx, lr) if lr.controle == "D4" else None)
+    vues: dict[tuple, int] = {}
+    return _par_controle(
+        ctx,
+        "D4",
+        lambda lr: (
+            _une_fois(ctx, "D4", lr, vues, lambda x: _d4_ligne(ctx, x)) if lr.controle == "D4" else None
+        ),
+    )
 
 
 # =====================================================================================================

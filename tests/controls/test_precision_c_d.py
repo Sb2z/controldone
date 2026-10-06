@@ -555,9 +555,11 @@ def test_avoir_non_ventile_rattache_a_la_facture_jamais_certain():
     av = _avoir_tete("doc_av", mrns=(MRN_A,), total_ht="20.00")
     r = un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3")
     assert r.outcome is Outcome.a_verifier and RaisonCode.avoir_non_ventile in r.constat.raisons
-    # Avoir sans lien avec cette facture (autre MRN) : sans effet.
+    # Avoir du dossier sans lien établi avec cette facture (autre MRN lu) : D-4212, rien n'exclut une référence mal
+    # lue (avoir rattaché par le seul MRN) ; jamais certain, raison avoir_non_impute.
     av = _avoir_tete("doc_av", mrns=(MRN_B,))
-    assert un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3").outcome is Outcome.ecart_certain
+    r = un(run_controls(ctx_de([f, av]), controles=["D3"]), "D3")
+    assert r.outcome is Outcome.a_verifier and RaisonCode.avoir_non_impute in r.constat.raisons
     # C1 sur la même facture : même règle.
     fc = ft(ligne(N.debours_droits, "150.00", mrn=MRN_A), numero="FA-FICTIF-9", mrns=(MRN_A,))
     d = dec("doc_dec", MRN_A, "100.00")

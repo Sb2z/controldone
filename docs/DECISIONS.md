@@ -4783,6 +4783,77 @@ corpus d'origine), les autres absents sont des récapitulatifs OCR que l'identit
 confirme pas (souvent parce qu'un total est l'erreur injectée). Extraction inchangée : calibration identique.
 Tests : `tests/controls/test_bloc_m3.py`, `test_famille_d.py`, `test_precision_d28.py` (données fictives).
 
+## D-4212 — D3 / D4 : avoir ou crédit du dossier qui n'est imputé à aucune ligne
+
+Constat (jeu tenu à l'écart, symptôme agrégé seulement) : un D3 certain sur un piège « écart de prix soldé par un
+avoir ». L'imputation (§17.2, D-1210) ne déduit un avoir que s'il est rattaché à la facture (numéro, à défaut MRN, à
+défaut référence de transport) et de même nature que la ligne ; D-2205 ne couvrait que l'avoir **rattaché** dont aucune
+ligne n'est ventilée. Un avoir dont la référence est mal lue, rattaché par le seul MRN lu autrement, d'une autre
+nature (« geste commercial », remise) ou sans ligne exploitable laissait l'écart certain.
+
+Règle (`famille_d._avoirs_non_imputes`, `_credits_hors_avoirs`) : un écart D3 / D4 n'est pas certain (raison nouvelle
+`avoir_non_impute`, `details.avoirs_non_imputes`) quand le dossier contient
+- un avoir (E3 exclu, tout émetteur) dont une ligne de prestation ou de nature inconnue n'est imputée à **aucune**
+  ligne évaluée du dossier, ou qui n'a aucune ligne exploitable (un avoir rattaché sans ventilation garde
+  `avoir_non_ventile`, D-2205) ; un avoir de débours relève de la famille C et ne compte pas ;
+- une ligne de prestation **négative** sur une facture d'un émetteur compatible (remise, « crédit sur facture n° … ») ;
+- sur une autre facture du dossier, une ligne de même nature d'un montant égal à l'écart (avoir lu comme une facture) ;
+- dans un autre dossier du même lot sans facture du transitaire, un avoir d'un émetteur compatible (orphelin).
+
+Dev : aucun certain perdu ; les quatre D3 « avoir non ventilé » du dev (GZ0103, GX0035, GX0136, BX0219 : avoir
+rattaché) gardent `avoir_non_ventile` ; GX0018 D4 (ligne « crédit » négative sur la facture) prend la raison nouvelle.
+
+## D-4213 — D3 : grille, quantité, unité et envoi établis
+
+Un écart au tarif n'est certain que si la ligne de grille, la quantité, l'unité et l'envoi sont établis sans
+ambiguïté (`famille_d._garde_tarif`, raison nouvelle `tarif_non_etabli`, `details.tarif_non_etabli`) :
+- **forfait** : quantité imprimée > 1 (`quantite_sur_forfait`) ; montant égal à un multiple entier ≥ 2 du forfait
+  (`multiple_du_forfait` : plusieurs envois, relevé, page de récapitulatif) ;
+- **unitaire** (kilo, colis, article) : quantité non imprimée ou déduite (`quantite_non_lue`), prix unitaire non
+  imprimé (`prix_unitaire_non_lu`), quantité × prix unitaire imprimés ≠ montant (`quantite_prix_montant_incoherents` :
+  quantité du libellé, séparateur de milliers « 2.055 », colonne décalée). Piège « prestation au kilo, quantité =
+  masse brute arrondie » : quantité et prix imprimés cohérents -> comparaison inchangée (conforme) ; quantité absente
+  -> jamais certain ;
+- **grille** : une autre grille validée du même transitaire, valide à la date de facture ou à la date d'acceptation
+  d'une déclaration du dossier, rapproche la ligne d'un poste aux paramètres différents
+  (`plusieurs_grilles_applicables`) ;
+- **version** : une autre facture du dossier, d'un émetteur compatible, porte le même numéro
+  (`autre_version_de_la_facture`) ;
+- D-2802 étendu à D3 : émetteur lu qui ne désigne pas le transitaire de la grille -> `grille_non_attestee` ; devise lue
+  mais illisible -> `devise_incertaine` ;
+- **TVA comprise non marquée** (D-2701) : TVA imprimée de la ligne = attendu × taux et montant = attendu + TVA, ou
+  Σ lignes lues = total TTC imprimé ≠ total HT -> `montant_tva_comprise` (cas trouvé : GZ0125, gabarit qui n'imprime que
+  des TTC, D3 et D4 protégés sur le dev par la seule lecture OCR douteuse). Écarté : « montant = attendu × 1,2 » seul,
+  qui ferait perdre le vrai D4 de BX0201 (écart injecté de 20 % exactement) ;
+- **autre envoi** : la ligne (à défaut la facture) cite des MRN lus dont aucun n'est celui d'une déclaration du dossier
+  (`famille_c.ligne_d_un_autre_envoi`) -> `attribution_non_univoque`, `details.envoi_hors_dossier` (BX0111 : prestation
+  d'un envoi déjà facturée dans un autre dossier) ;
+- **ligne répétée** (même facture, nature, libellé, montant, référence d'envoi) : comparée une seule fois, les copies
+  `non_applicable` (`couvert_par_autre_controle`, D5), comme D-2705 pour D2 ; vaut aussi pour D4.
+
+Les mêmes conditions (sauf le forfait / l'unitaire) s'appliquent à D4.
+
+## D-4214 — D4 : assiette du FAF, compléments
+
+`_d4_ambiguites` (raison `assiette_non_etablie`) ajoute : quantité imprimée > 1 sur la ligne de FAF
+(`faf_par_envoi_quantite`) ; MRN distincts cités par la facture plus nombreux que les déclarations de l'assiette, ligne
+sans MRN (`envois_hors_assiette`, `famille_c.nombre_envois_cites`) ; ligne de débours « droits et taxes » combinée
+qu'une assiette « droits » ou « hors TVA » ne peut ventiler, ou que l'assiette « total » ne reprend pas
+(`debours_combines` ; GX0018 : assiette 0,00 face à 1 266,22 de débours combinés). Assiettes alternatives de D-2213
+complétées : débours de **toutes** les factures du même émetteur du dossier (facture complémentaire, facture de débours
+non rapprochée ; total, hors TVA, droits) et montants liquidés de **toutes** les déclarations du dossier (cas GZ0073 :
+FAF de 3 % du total liquidé, qui reprend les droits d'une facture complémentaire).
+
+## D-4215 — Mesures (dev seulement)
+
+Bancs `*_dev_m3g` -> `*_dev_d34` : D3 / D4 certains 25 -> 25 (g4 5 + 4, g2 4 + 5, origine 4 + 3), tous appariés ;
+aucun certain perdu ni gagné ; VP / FP certains, rappel, rappel certain, bruit (« à vérifier » non appariés : 150, 193,
+159) et pièges déclenchés (27, 13, 27) identiques. Les gardes nouvelles s'ajoutent aux raisons de 3 constats déjà « à
+vérifier » (GZ0073 D3 au kilo sans quantité, GX0018 D4, BX0111 D3 d'un autre envoi). Sur le dev, les seuls écarts
+D3 / D4 hors erreur protégés uniquement par une lecture OCR douteuse sont ceux de GZ0125 (TTC), couverts par
+D-4213 quand toutes les lignes sont lues. Tests : `tests/controls/test_precision_d42.py` (23 cas, données fictives) ;
+`test_famille_d.py` (unitaire sans prix unitaire) et `test_precision_c_d.py` (avoir d'un autre MRN) mis à jour.
+
 ### D-4404 — Plus aucun corpus versionné ; nettoyage de l'historique (décision du fondateur 4A)
 
 Les corpus `bench/corpus_g3`, `corpus_g4` et `corpus_g5` ne sont plus suivis par Git. Les 9 corpus sont tous

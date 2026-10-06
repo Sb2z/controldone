@@ -119,3 +119,24 @@ Mesures sur les seuls jeux de développement (`bench/out/*_dev_m3base` -> `*_dev
 - **Totaux par code absents (34 / 46 / 133).** L4 n'imprime aucun total par code (36 des 133 du corpus d'origine) ;
   les autres sont des récapitulatifs OCR non confirmés par l'identité « somme des codes = total ». Rien de sûr sans
   lecture nouvelle. **Constat.**
+
+## Bloc D3 / D4 (faux certains au tarif sur jeu tenu à l'écart) — 6 octobre 2026
+
+Mesures sur les seuls jeux de développement (`bench/out/*_dev_m3g` -> `*_dev_d34`). Détail : D-4212 à D-4215.
+
+- **D3 certain sur un piège « avoir » (jeu tenu à l'écart).** Avoir du dossier non imputé (référence mal lue, autre
+  nature, sans ligne, orphelin du lot), ligne négative, avoir lu comme une facture : jamais certain (D-4212). **Fait.**
+- **D4 certain hors erreur (jeu tenu à l'écart).** Assiette : quantité > 1, envois hors assiette, débours combinés,
+  assiettes alternatives sur toutes les factures et déclarations du dossier (D-4214) ; montants TTC non marqués,
+  ligne d'un autre envoi, grilles concurrentes, version de facture, ligne répétée (D-4213). **Fait**, à confirmer sur
+  les jeux tenus à l'écart (orchestrateur).
+- **D6 / D7 (même comparaison `_comparer_tarif`).** Les gardes D-4212 / D-4213 ne s'appliquent qu'à D3 et D4 ; à
+  étendre à D6 (magasinage) et D7 (surcharges) après mesure. **À faire.**
+- **Bruit D3 sur pièges « écart entièrement soldé par un avoir » (GZ0103, GX0035).** L'avoir rattaché n'est pas
+  ventilé (lignes illisibles) : « à vérifier » au lieu de conforme. Piste : total crédité lu égal à l'écart et seul
+  écart ouvert de la facture -> conforme expliqué. **À faire** (décision du fondateur : un avoir non ventilé peut-il
+  solder un écart ?).
+- **Extraction G13 (montants TTC seuls).** GZ0125 : la colonne TTC est lue comme montant HT sans marque
+  `montant_tva_comprise` ; D-4213 rattrape l'écart par l'identité Σ lignes = TTC, mais l'extraction devrait marquer la
+  ligne (D-2701). **À faire** (extraction).
+

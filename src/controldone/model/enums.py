@@ -140,6 +140,9 @@ class RaisonCode(StrEnum):
     assiette_non_etablie = "assiette_non_etablie"
     grille_non_attestee = "grille_non_attestee"
     perimetre_non_etabli = "perimetre_non_etabli"
+    # Ajouts moteur (D-4212, D-4213) : avoir du dossier non imputé ; tarif attendu d'une ligne non établi (D3, D4)
+    avoir_non_impute = "avoir_non_impute"
+    tarif_non_etabli = "tarif_non_etabli"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -234,6 +237,15 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
         "déclaration, autre déclaration de l'envoi), d'un total de page pris pour le total de la facture, ou "
         "d'une lecture de l'échelle (séparateur décimal) ou du signe d'un montant ; les montants comparés ne "
         "couvrent peut-être pas le même périmètre"
+    ),
+    RaisonCode.avoir_non_impute: (
+        "à vérifier : un avoir du même transitaire figure dans le dossier sans avoir pu être imputé à cette ligne "
+        "(rattachement ou nature non établis) ; il peut couvrir tout ou partie de l'écart"
+    ),
+    RaisonCode.tarif_non_etabli: (
+        "à vérifier : le tarif attendu pour cette ligne n'est pas établi sans ambiguïté (quantité ou prix unitaire "
+        "non lus, prestation facturée plusieurs fois sur une ligne, plusieurs grilles possibles, autre version de "
+        "la facture) ; l'écart dépend du tarif retenu"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

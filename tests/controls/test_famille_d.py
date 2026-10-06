@@ -395,8 +395,11 @@ def test_d3_forfait():
 
 def test_d3_unitaire_et_quantite_absente():
     g = grille(poste("MAN", N.manutention, ModePoste.unitaire, prix="10.00", unite_base="colis"))
-    r = un(run([ft(ligne(N.manutention, "36.00", quantite="3"))], g=g), "D3")
+    r = un(run([ft(ligne(N.manutention, "36.00", quantite="3", prix_unitaire="12.00"))], g=g), "D3")
     assert r.constat.montant_en_jeu == D("6.00") and r.outcome is Outcome.ecart_certain
+    # D-4213 : sans prix unitaire imprimé, l'unité de la quantité n'est pas établie.
+    r1 = un(run([ft(ligne(N.manutention, "36.00", quantite="3"))], g=g), "D3")
+    assert r1.outcome is Outcome.a_verifier and RaisonCode.tarif_non_etabli in r1.constat.raisons
     r2 = un(run([ft(ligne(N.manutention, "16.00"))], g=g), "D3")
     assert r2.outcome is Outcome.a_verifier and RaisonCode.valeur_absente in r2.constat.raisons
 

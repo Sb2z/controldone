@@ -102,9 +102,11 @@ __all__ = [
     "facture_multi_envois",
     "grille_pour_facture",
     "libelle_facture",
+    "ligne_d_un_autre_envoi",
     "ligne_evaluee_ici",
     "ligne_hors_dossier",
     "mrns_cites",
+    "nombre_envois_cites",
     "page_txt",
     "reference_declaration",
     "unites_c",
@@ -590,6 +592,29 @@ def _cles_mrn_lus(ctx: ControlContext, f: Document) -> set[str]:
     vals = list(ft.refs_mrn) + [t.mrn for t in ft.tableau_mrn if t.mrn is not None]
     vals += [lg.mrn for lg in ft.lignes if lg.mrn is not None]
     return {cle_confusion_ocr(p) for v in vals if ctx.utilisable(v) and (p := _prefixe_lu(v))}
+
+
+def nombre_envois_cites(ctx: ControlContext, f: Document) -> int:
+    """Nombre de MRN distincts (aux confusions OCR près) lus sur la facture du transitaire (D-4214)."""
+    return len(_cles_mrn_lus(ctx, f))
+
+
+def ligne_d_un_autre_envoi(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire) -> bool:
+    """D-4213 : la ligne (à défaut la facture, si la ligne ne cite pas de MRN) cite un ou des MRN lus dont aucun n'est
+    celui d'une déclaration du dossier (aux confusions OCR près) : la prestation se rapporte à un autre envoi (facture
+    d'un autre dossier rangée ici, prestation déjà facturée ailleurs)."""
+    ici = {
+        cle_confusion_ocr(d.dec.mrn_prefixe)
+        for d in ctx.declarations(dernieres_versions=False)
+        if d.dec.mrn_prefixe
+    }
+    if not ici:
+        return False
+    p = _prefixe_lu(ligne.mrn) if ligne.mrn is not None and ctx.utilisable(ligne.mrn) else ""
+    if p:
+        return cle_confusion_ocr(p) not in ici
+    cles = _cles_mrn_lus(ctx, f)
+    return bool(cles) and not (cles & ici)
 
 
 def facture_multi_envois(ctx: ControlContext, f: Document) -> bool:
