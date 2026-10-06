@@ -1,8 +1,7 @@
 # ControlDOne — ce qui reste à faire
 
 Ce fichier consolide les constats notés en cours de route dans `docs/backlog/` : un fichier par bloc, avec le détail
-de chaque point (fichiers, mesures). Il est mis à jour le 6 octobre 2026, à la fin du lot 2 (production, sécurité,
-moteur, interface, outillage). Les points sont classés par priorité. **Décision** signale ce qui demande l'accord ou
+de chaque point (fichiers, mesures). Il est mis à jour le 7 octobre 2026, à la fin du lot 3. Les points sont classés par priorité. **Décision** signale ce qui demande l'accord ou
 l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a été fait est listé en fin de fichier.
 
 ## 1. Décisions du fondateur
@@ -69,3 +68,14 @@ D-3701 à D-3705) · outil d'analyse du bruit (D-3701) · progression fine du tr
 filtres, pagination, filtres en SQL, retour filtré (D-3401, D-3801, D-3802) · suivi en direct, graphiques,
 accessibilité (D-3402 à D-3404) · interface en anglais (D-3803) · pre-commit, couverture, tests de propriétés,
 corpus régénérables (D-3901 à D-3904) · CI rapide à chaque push, complète à la demande ; TIFF déterministes ; recettes et empreintes de tous les corpus (D-4401 à D-4403).
+
+## Ajouts du lot 3 (7 octobre 2026)
+
+| Point | Nature |
+|---|---|
+| **Décision** : un avoir illisible peut-il solder un écart de prix (pièges D3 sur avoirs) ? | moteur |
+| Étendre aux contrôles D6 / D7 les garde-fous D3 / D4 (D-4212 à D-4215) | moteur, petit |
+| Signaler dès l'extraction les lignes imprimées seulement TTC | extraction, petit |
+| Un C1 certain au montant inexact sur le dernier jeu vierge (`corpus_g9`) | moteur, à étudier sur les jeux de développement |
+| Mesurer la lecture par Claude dès la clé fournie (`scripts/mesure_llm.py`) | dès la clé |
+| GitHub conserve un temps l'ancien historique (objets non référencés) : sans action de notre part | information |
