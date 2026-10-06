@@ -51,6 +51,7 @@ __all__ = [
     "Job",
     "Lot",
     "Membership",
+    "NotificationAlerte",
     "Outbox",
     "PageTexte",
     "Reclamation",
@@ -129,6 +130,12 @@ class AuditLog(AppendOnly, Base):
     """Journal append-only chaîné : ``hash = sha256(prev_hash + contenu canonique)``."""
 
     __tablename__ = "audit_log"
+    # Filtres du journal (/admin/journal) : action, acteur, période ; tri par clé primaire (migration 2, D-3503)
+    __table_args__ = (
+        Index("ix_audit_log_action", "action", "id"),
+        Index("ix_audit_log_actor", "actor", "id"),
+        Index("ix_audit_log_ts", "ts"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ts: Mapped[datetime] = mapped_column(default=maintenant)
@@ -158,13 +165,39 @@ class Alerte(Base):
     details: Mapped[dict[str, Any]] = mapped_column(default=dict)
     cree_le: Mapped[datetime] = mapped_column(default=maintenant)
     lue_le: Mapped[datetime | None] = mapped_column(default=None)
+    #: traitée par l'envoi des notifications (envoyée, regroupée ou écartée) — migration 3, D-3502
+    notifiee_le: Mapped[datetime | None] = mapped_column(default=None, index=True)
+
+
+class NotificationAlerte(Base):
+    """Notification poussée au fondateur (webhook, courriel) : **une par type d'alerte et par jour** (``cle`` =
+    ``<kind>:<AAAA-MM-JJ>``). Aucune donnée client : type, nombre, horodatage, canaux (D-3502)."""
+
+    __tablename__ = "notifications_alertes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    cle: Mapped[str] = mapped_column(String(120), unique=True)
+    kind: Mapped[str] = mapped_column(String(64))
+    nombre: Mapped[int] = mapped_column(Integer, default=0)
+    canaux: Mapped[str] = mapped_column(String(100), default="")
+    #: ``envoyee`` | ``echec`` (nouvel essai au passage suivant)
+    statut: Mapped[str] = mapped_column(String(16), default="echec")
+    essais: Mapped[int] = mapped_column(Integer, default=0)
+    cree_le: Mapped[datetime] = mapped_column(default=maintenant)
+    envoyee_le: Mapped[datetime | None] = mapped_column(default=None)
 
 
 class Job(Base):
     """File de tâches en base (D-004)."""
 
     __tablename__ = "jobs"
-    __table_args__ = (Index("ix_jobs_prets", "statut", "run_after"),)
+    __table_args__ = (
+        Index("ix_jobs_prets", "statut", "run_after"),
+        # liste des tâches (/admin/taches) : filtres statut / type, tri par création (migration 2, D-3503)
+        Index("ix_jobs_statut_cree", "statut", "cree_le"),
+        Index("ix_jobs_kind_statut", "kind", "statut", "run_after"),
+        Index("ix_jobs_cree", "cree_le"),
+    )
 
     id: Mapped[str] = mapped_column(_ID, primary_key=True)
     kind: Mapped[str] = mapped_column(String(64))

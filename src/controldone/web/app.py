@@ -37,6 +37,7 @@ from controldone.web.securite import (
     EtatSecurite,
     LimiteCorps,
     NonConnecte,
+    hotes_autorises,
     recevoir_rapport_csp,
 )
 
@@ -182,6 +183,11 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     app.add_middleware(BaseHTTPMiddleware, dispatch=_middleware_session(app))
     app.add_middleware(LimiteCorps, limite=2 * 1024 * 1024, limite_depot=p.limites.taille_lot + 16 * 1024 * 1024,
                        chemins_depot=CHEMINS_DEPOT)
+    hotes = hotes_autorises()
+    if hotes:  # domaine configuré : un en-tête Host étranger est refusé (400), RS-18
+        from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=hotes, www_redirect=False)
     app.add_middleware(EnTetesSecurite, https=https)
 
     return app

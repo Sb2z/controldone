@@ -19,7 +19,6 @@ from controldone.web.rendu import page, redirection
 from controldone.web.securite import EtatSecurite, acteur_de, formulaire_sync
 
 routeur = APIRouter()
-COOKIE_2FA = "cd_2fa"
 
 
 def _etat(request: Request) -> EtatSecurite:
@@ -32,10 +31,9 @@ def _ip(request: Request) -> str:
 
 def _ouvrir_session(request: Request, acteur, *, deux_facteurs: bool) -> Response:
     etat = _etat(request)
-    jeton = etat.sessions.emettre(acteur, deux_facteurs=deux_facteurs)
     rep = redirection(request, "/admin" if acteur.role is Role.fondateur else "/espace")
-    etat.poser_session(rep, jeton)
-    rep.delete_cookie(COOKIE_2FA, path="/")
+    etat.ouvrir_session(request, rep, acteur, deux_facteurs=deux_facteurs)  # enregistrée (sessions actives)
+    etat.effacer_2fa(rep)
     return rep
 
 
@@ -75,8 +73,7 @@ def connexion(request: Request) -> Response:
         _succes(etat, request, email or "-")
         if role == Role.fondateur.value:
             rep = redirection(request, "/connexion/totp")
-            rep.set_cookie(COOKIE_2FA, etat.jeton_2fa(user_id), max_age=300, httponly=True,
-                           secure=etat.cookie["secure"], samesite="strict" if etat.prod else "lax", path="/")
+            etat.poser_2fa(rep, user_id)  # __Host-cd_2fa en production (D-3604)
             return rep
         acteur = acteur_client(pf.db, user_id, ip=_ip(request))
     except EchecAuthentification:
@@ -87,7 +84,7 @@ def connexion(request: Request) -> Response:
 
 @routeur.get("/connexion/totp")
 def totp_form(request: Request) -> Response:
-    if _etat(request).lire_2fa(request.cookies.get(COOKIE_2FA)) is None:
+    if _etat(request).lire_2fa_requete(request) is None:
         return redirection(request, "/connexion")
     return page(request, "totp.html.j2", titre="Code de vérification")
 
@@ -96,7 +93,7 @@ def totp_form(request: Request) -> Response:
 def totp(request: Request) -> Response:
     form = formulaire_sync(request)
     etat = _etat(request)
-    user_id = etat.lire_2fa(request.cookies.get(COOKIE_2FA))
+    user_id = etat.lire_2fa_requete(request)
     if user_id is None:
         return redirection(request, "/connexion", erreur="Étape expirée : reconnectez-vous.")
     if not etat.limiteur_connexion_compte.autoriser("2fa:" + user_id):
@@ -159,6 +156,5 @@ def mdp(request: Request) -> Response:
     etat.sessions.revoquer_utilisateur(acteur.id)
     etat.limiteur_connexion_compte.effacer("mdp:" + acteur.id)
     rep = redirection(request, "/", message="Mot de passe modifié. Vos autres sessions sont fermées.")
-    etat.poser_session(rep, etat.sessions.emettre(Acteur(s.user_id, s.role, s.tenant_id),
-                                                  deux_facteurs=s.deux_facteurs))
+    etat.ouvrir_session(request, rep, Acteur(s.user_id, s.role, s.tenant_id), deux_facteurs=s.deux_facteurs)
     return rep

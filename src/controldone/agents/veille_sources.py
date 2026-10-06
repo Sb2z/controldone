@@ -16,7 +16,11 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 __all__ = ["DOMAINES_AUTORISES", "SOURCES", "THEMES", "DomaineNonAutorise", "Source", "domaine_autorise",
-           "empreinte_contenu", "telecharger"]
+           "TAILLE_MAX_REPONSE", "empreinte_contenu", "telecharger"]
+
+#: Taille maximale d'une page téléchargée (lue en flux ; au-delà : ``non_verifie``, motif ``trop_volumineux``).
+#: Les pages officielles suivies font moins de 1 Mo (RS-19).
+TAILLE_MAX_REPONSE = 10 * 1024 * 1024
 
 DOMAINES_AUTORISES: tuple[str, ...] = (
     "eur-lex.europa.eu",
@@ -93,11 +97,31 @@ def empreinte_contenu(contenu: str) -> tuple[str, int]:
     return hashlib.sha256(texte.encode("utf-8")).hexdigest(), len(texte)
 
 
-def telecharger(url: str, *, client: Any = None, max_redirections: int = 3, timeout: float = 20.0) -> dict[str, Any]:
+def _lire_borne(http: Any, url: str, taille_max: int) -> tuple[int, str | None, str | None]:
+    """``(statut, location, texte)`` : corps lu **en flux** (jamais en entier en mémoire au-delà de
+    ``taille_max`` octets, ``Content-Length`` annoncé ou non) ; ``texte`` vaut ``None`` au-delà, ou pour une
+    réponse autre que 200."""
+    with http.stream("GET", url) as rep:
+        if rep.status_code != 200:
+            return rep.status_code, rep.headers.get("location"), None
+        annonce = rep.headers.get("content-length", "")
+        if annonce.isascii() and annonce.isdigit() and int(annonce) > taille_max:
+            return 200, None, None
+        corps = bytearray()
+        for morceau in rep.iter_bytes():
+            corps += morceau
+            if len(corps) > taille_max:
+                return 200, None, None
+        return 200, None, bytes(corps).decode(rep.charset_encoding or "utf-8", errors="replace")
+
+
+def telecharger(url: str, *, client: Any = None, max_redirections: int = 3, timeout: float = 20.0,
+                taille_max: int = TAILLE_MAX_REPONSE) -> dict[str, Any]:
     """Télécharge ``url`` si elle est sous liste blanche (chaque redirection est revérifiée).
 
     Renvoie ``{"url", "statut": "ok", "sha256", "taille", "titre"}`` ou ``{"statut": "non_verifie",
-    "motif"}`` (erreur réseau, code HTTP, redirection hors liste blanche — jamais suivie).
+    "motif"}`` (erreur réseau, code HTTP, redirection hors liste blanche — jamais suivie, réponse au-delà de
+    ``taille_max`` octets — lue en flux et abandonnée, RS-19).
     ``DomaineNonAutorise`` si l'URL demandée sort de la liste blanche.
     """
     import httpx
@@ -111,18 +135,21 @@ def telecharger(url: str, *, client: Any = None, max_redirections: int = 3, time
     try:
         for _ in range(max_redirections + 1):
             try:
-                rep = http.get(courante)
+                lu = _lire_borne(http, courante, taille_max)
             except Exception as exc:
                 return {"url": url, "statut": "non_verifie", "motif": type(exc).__name__}
-            if rep.status_code in (301, 302, 303, 307, 308) and rep.headers.get("location"):
-                suivante = urljoin(courante, rep.headers["location"])
+            statut, location, corps = lu
+            if statut in (301, 302, 303, 307, 308) and location:
+                suivante = urljoin(courante, location)
                 if not domaine_autorise(suivante):
                     return {"url": url, "statut": "non_verifie", "motif": "redirection_hors_liste_blanche"}
                 courante = suivante
                 continue
-            if rep.status_code != 200:
-                return {"url": url, "statut": "non_verifie", "motif": f"http_{rep.status_code}"}
-            contenu = rep.text
+            if statut != 200:
+                return {"url": url, "statut": "non_verifie", "motif": f"http_{statut}"}
+            if corps is None:
+                return {"url": url, "statut": "non_verifie", "motif": "trop_volumineux"}
+            contenu = corps
             sha, taille = empreinte_contenu(contenu)
             m = _TITRE_RE.search(contenu)
             titre = " ".join(html.unescape(m.group(1)).split())[:150] if m else None

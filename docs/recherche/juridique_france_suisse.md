@@ -130,7 +130,7 @@ Source pour l'ensemble de ce paragraphe : vade-mecum CNB 2023, lu, p. 55-62.
   - les actes contentieux et non contentieux ;
   - les demandes d'autorisation ;
   - « tout acte ou formalité requis(e) pour permettre l'application de la législation douanière ».
-  
+
   — fiche douane lue : https://www.douane.gouv.fr/fiche/le-representant-en-douane-enregistre ; arrêté du 13 avril 2016 (vu en recherche) : https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000032482257 ; C. douanes art. 86-87 (section vue en recherche) : https://www.legifrance.gouv.fr/codes/section_lc/LEGITEXT000006071570/LEGISCTA000006138873/
 - **Analyse de documents.** La fiche douane ne dit rien d'une activité de **lecture et analyse** de déclarations déjà déposées. Le statut de RDE vise les actes accomplis **auprès de la douane**.
 
@@ -164,7 +164,7 @@ Source pour l'ensemble de ce paragraphe : vade-mecum CNB 2023, lu, p. 55-62.
   - pas de clause d'exclusivité opposable ;
   - pas de concurrence avec l'employeur ;
   - activité exercée hors du temps de travail.
-  
+
   La loyauté s'applique même sans clause : discrétion, ne pas nuire, ne pas concurrencer. — https://entreprendre.service-public.gouv.fr/vosdroits/F23264 (vu en recherche) ; https://www.economie.gouv.fr/entreprises/gerer-sa-micro-entreprise/peut-cumuler-un-emploi-salarie-et-une-micro-entreprise (vu en recherche)
 - **Cass. soc., 14 janv. 2026, n° 24-20.799.** Licenciement pour faute grave validé pour la création d'une micro-entreprise concurrente dans le même secteur, même sans clause de non-concurrence. — actualité Service-Public du 20 mars 2026, lue : https://entreprendre.service-public.gouv.fr/actualites/A18850
 - **Art. L1222-5 C. trav.** « L'employeur ne peut opposer aucune clause d'exclusivité pendant une durée d'un an au salarié qui crée ou reprend une entreprise ». — lu : https://code.travail.gouv.fr/code-du-travail/l1222-5
@@ -179,7 +179,7 @@ Source pour l'ensemble de ce paragraphe : vade-mecum CNB 2023, lu, p. 55-62.
 - **Agent public des douanes (DGDDI).** S'il l'est, le régime est différent :
   - autorisation préalable de temps partiel pour créer une entreprise (art. L123-8 CGFP, au moins un mi-temps, 3 ans + 1 an) ;
   - saisine du référent déontologue ou de la HATVP en cas de doute sur la compatibilité avec les fonctions des 3 dernières années.
-  
+
   — https://www.fonction-publique.gouv.fr/etre-agent-public/mes-droits-et-obligations/le-cumul-dactivites-et-les-passages-entre-les-secteurs-public-et-prive (vu en recherche) ; https://www.doctrine.fr/l/texts/codes/LEGITEXT000044416551/articles/LEGIARTI000044427801 (vu en recherche)
 
 **Verdict selon l'employeur.**
@@ -353,18 +353,18 @@ Source pour l'ensemble de ce paragraphe : vade-mecum CNB 2023, lu, p. 55-62.
   - employant **5 salariés au plus** ;
   - pour un contrat **conclu hors établissement** (présence physique, hors des locaux du prestataire) ;
   - dont l'objet n'entre pas dans son **activité principale**.
-  
+
   Selon la Cour de cassation (Cass. com. 4 sept. 2024, n° 23-16.886, d'après la source secondaire), les **contrats à distance** (e-mail, en ligne, téléphone) ne sont pas concernés. — https://kohenavocats.fr/2026/09/18/droit-retractation-entre-professionnels-article-l221-3-code-consommation-nullite/ (lu) ; https://dunan-avocats.fr/2026/03/02/champ-activite-principale-l221-3-contrat-hors-etablissement-professionnels/ (vu en recherche)
-  
+
   **Conséquence** : faire signer à distance (devis accepté par e-mail ou en ligne), jamais sur place chez un client de 5 salariés au plus. Sinon, remettre le formulaire de rétractation. La phrase des CGV « Elles ne s'appliquent pas aux consommateurs » ne suffit pas à écarter ce régime.
 - **Recouvrement amiable pour autrui.** Quiconque procède, même occasionnellement, au recouvrement amiable de créances pour autrui doit :
   - avoir une assurance RC ;
   - avoir un compte bancaire dédié ;
   - signer une convention écrite avec le créancier ;
   - faire une déclaration préalable au procureur (art. R124-1 s. CPCE).
-  
+
   — https://www.legifrance.gouv.fr/codes/section_lc/LEGITEXT000025024948/LEGISCTA000025938360/ (vu en recherche)
-  
+
   **Conséquence** : ControlDOne ne doit jamais relancer le transitaire, encaisser ou recevoir des fonds. Les textes doivent dire « suivi des avoirs », pas « suivi du recouvrement ».
 
 ### 6.2 Prescripteurs : experts-comptables
@@ -389,7 +389,7 @@ Source pour l'ensemble de ce paragraphe : vade-mecum CNB 2023, lu, p. 55-62.
 - **Mentions légales (art. 1-1 LCEN depuis la loi SREN).** Le brouillon `mentions-legales.html` est complet dans sa structure. Deux ajouts :
   - pour un entrepreneur individuel, le nom suivi de « EI » ;
   - l'immatriculation au **RNE** (une micro-entreprise BNC n'est pas au RCS).
-  
+
   Sources dans `legal_market.md` §4.
 - **Cookies.** Aucun cookie ni traceur : pas de bandeau nécessaire. **OK.**
 - **Accessibilité (directive (UE) 2019/882, en application depuis le 28 juin 2025).** Elle vise certains services **aux consommateurs** (commerce électronique…). Les **micro-entreprises qui fournissent des services** en sont exclues (moins de 10 salariés et moins de 2 M€). — https://www.august-debouzy.com/fr/blog/2215-entree-en-vigueur-de-la-directive-ue-2019882-laccessibilite-by-design (vu en recherche) ; https://www.fevad.com/e-commerce-et-accessibilite-numerique-ce-qui-change-a-partir-de-juin-2025/ (vu en recherche). **Verdict : non applicable** (B2B et micro). Bonne pratique : viser le RGAA sans le déclarer.
@@ -397,7 +397,7 @@ Source pour l'ensemble de ce paragraphe : vade-mecum CNB 2023, lu, p. 55-62.
   - bases INPI (data.inpi.fr), EUIPO (TMview) et Swissreg ;
   - noms de domaine ;
   - RNE.
-  
+
   Déposer au moins en France, classes 35, 36 et 42 (choix des classes à faire confirmer par un conseil en propriété industrielle). Aucune recherche d'antériorité n'a été faite ici.
 
 ---

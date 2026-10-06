@@ -38,7 +38,10 @@ _RETOUR = "/admin/finances"
 
 
 def _url_base(request: Request) -> str:
-    return f"{request.url.scheme}://{request.url.netloc}"
+    """URL publique configurée (jamais l'en-tête ``Host`` en production, RS-18) ; ``ValueError`` si absente."""
+    from controldone.web.securite import url_publique
+
+    return url_publique(request)
 
 
 @routeur.get("")

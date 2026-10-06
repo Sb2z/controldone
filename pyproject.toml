@@ -43,7 +43,9 @@ dependencies = [
 controldone = "controldone.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.4"]
+# Outils de développement seulement (jamais dans l'image) ; licences : pytest MIT, ruff MIT, pytest-cov MIT, coverage
+# Apache-2.0, hypothesis MPL-2.0 (copyleft faible au fichier, non distribué), pre-commit MIT (D-3901–D-3903).
+dev = ["pytest>=8.0", "ruff>=0.4", "pytest-cov>=5.0", "coverage[toml]>=7.4", "hypothesis>=6.100", "pre-commit>=3.5"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/controldone"]
@@ -52,7 +54,10 @@ packages = ["src/controldone"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
-markers = ["lent: test long (exercice de restauration de bout en bout) ; exclure avec -m 'not lent'"]
+markers = [
+  "lent: test long (exercice de restauration de bout en bout) ; exclure avec -m 'not lent'",
+  "proprietes: test de propriétés Hypothesis (tests/proprietes, profil HYPOTHESIS_PROFILE)",
+]
 
 [tool.ruff]
 line-length = 110
@@ -71,3 +76,26 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B011"]
+
+# Couverture des tests (D-3902) : `make couverture` (pytest-cov) ; HTML dans var/couverture/html, résumé par paquet
+# dans var/couverture/paquets.md (scripts/couverture_paquets.py). Base de référence : docs/QUALITE.md.
+[tool.coverage.run]
+source = ["controldone"]
+branch = true
+data_file = "var/couverture/.coverage"
+omit = ["*/controldone/web/static/*"]
+
+[tool.coverage.report]
+skip_empty = true
+precision = 1
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  "raise NotImplementedError",
+]
+
+[tool.coverage.html]
+directory = "var/couverture/html"
+
+[tool.coverage.json]
+output = "var/couverture/couverture.json"

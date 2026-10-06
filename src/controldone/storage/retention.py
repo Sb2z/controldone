@@ -134,9 +134,20 @@ PURGE_PAR_TRANSACTION = 500
 GARDE_REDEPOT_S = 3600
 
 
-def purger_expires(db: Database, vault: FileVault, now: datetime | None = None) -> RapportPurge:
+def purger_expires(db: Database, vault: FileVault, now: datetime | None = None, *,
+                   attente_verrou_s: float = 0.0) -> RapportPurge:
     """Purge des contenus expirés. Une transaction par client et par paquet de ``PURGE_PAR_TRANSACTION``
-    fichiers ; textes de page chargés par paquet (pas une requête par fichier)."""
+    fichiers ; textes de page chargés par paquet (pas une requête par fichier).
+
+    Sous le verrou de maintenance (``storage.verrou``, D-3504), partagé avec la sauvegarde et la restauration :
+    lève ``VerrouOccupe`` si l'une d'elles est en cours (le handler reporte alors le job)."""
+    from controldone.storage.verrou import verrou_maintenance
+
+    with verrou_maintenance(vault.racine.parent, "purge", attente_s=attente_verrou_s):
+        return _purger_expires(db, vault, now)
+
+
+def _purger_expires(db: Database, vault: FileVault, now: datetime | None) -> RapportPurge:
     now = now or maintenant()
     rapport = RapportPurge()
     with db.transaction_systeme() as s:

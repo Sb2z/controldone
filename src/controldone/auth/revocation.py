@@ -1,4 +1,5 @@
-"""Registre persistant des révocations de session (D-3202, RS-17) : table ``sessions_revoquees``.
+"""Registre persistant des sessions : révocations (D-3202, RS-17, table ``sessions_revoquees``) et sessions
+ouvertes (D-3603, table ``sessions_actives`` : « mes sessions actives », « fermer mes autres sessions »).
 
 Partagé par tous les processus web et conservé au redémarrage. Une base indisponible n'interrompt pas la
 requête : la révocation locale du processus reste appliquée, l'incident est journalisé (nom d'exception
@@ -62,6 +63,34 @@ class RegistreRevocations:
             revoquer_sessions_utilisateur(self.db, user_id, apres=apres, expire=expire)
         except Exception as exc:
             self._panne("revoquer_utilisateur", exc)
+
+    def ouvrir(self, sid: str, user_id: str, *, debut: float, vu: float, expire: float, appareil: str = "",
+               reseau: str = "") -> None:
+        from controldone.storage.securite import enregistrer_session
+
+        try:
+            enregistrer_session(self.db, sid=sid, user_id=user_id, debut=debut, vu=vu, expire=expire,
+                                appareil=appareil, reseau=reseau)
+        except Exception as exc:
+            self._panne("ouvrir", exc)
+
+    def toucher(self, sid: str, *, vu: float, expire: float) -> None:
+        from controldone.storage.securite import toucher_session
+
+        try:
+            toucher_session(self.db, sid, vu=vu, expire=expire)
+        except Exception as exc:
+            self._panne("toucher", exc)
+
+    def sessions(self, user_id: str, *, maintenant: float, sid_courant: str | None = None) -> list:
+        """``storage.securite.SessionActive`` de ``user_id`` (liste vide si la base est indisponible)."""
+        from controldone.storage.securite import sessions_utilisateur
+
+        try:
+            return sessions_utilisateur(self.db, user_id, maintenant=maintenant, sid_courant=sid_courant)
+        except Exception as exc:
+            self._panne("lister", exc)
+            return []
 
     def est_revoquee(self, sid: str, user_id: str, debut: float) -> bool:
         from controldone.storage.securite import session_revoquee

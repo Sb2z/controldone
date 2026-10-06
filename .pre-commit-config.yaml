@@ -1,0 +1,52 @@
+# Vérifications avant enregistrement (D-3901). Installation : `make hooks` (jamais automatique).
+# Tout est local (repo: local) : aucun téléchargement de dépôt de crochets, fonctionne hors ligne.
+# Lancer à la main sur tout le dépôt : `make pre-commit` (= pre-commit run --all-files).
+# `ruff format` n'est pas vérifié : le code n'est pas formaté par ruff (301 fichiers sur 363, D-3901).
+minimum_pre_commit_version: "3.5.0"
+default_install_hook_types: [pre-commit]
+# Corpus de banc : générés, jamais retouchés à la main (bench/README.md).
+exclude: ^bench/corpus[^/]*/
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check (src, tests, scripts)
+        entry: scripts/precommit/lancer.sh ruff
+        language: script
+        types: [python]
+        files: ^(src|tests|scripts)/
+        require_serial: true
+
+      - id: espaces-fin-de-ligne
+        name: espaces en fin de ligne
+        entry: scripts/precommit/lancer.sh espaces
+        language: script
+        types: [text]
+        exclude: \.(svg|min\.js|pdf|eml)$
+
+      - id: fichiers-lourds
+        name: fichiers de plus de 2 Mo
+        entry: scripts/precommit/lancer.sh lourds --max-ko 2048
+        language: script
+        # vidéo de démonstration déjà versionnée (2,2 Mo), acceptée telle quelle
+        exclude: ^docs/interface/demo_interface\.mp4$
+
+      - id: secrets
+        name: clés privées et jetons d'API
+        entry: scripts/precommit/lancer.sh secrets
+        language: script
+        types: [text]
+
+      - id: syntaxe-json-yaml
+        name: syntaxe JSON et YAML
+        entry: scripts/precommit/lancer.sh syntaxe
+        language: script
+        files: \.(json|ya?ml)$
+
+      - id: pas-de-print
+        name: pas de print() dans les paquets cœur
+        entry: scripts/precommit/lancer.sh print
+        language: script
+        types: [python]
+        files: ^src/controldone/(controls|normalize|extract|model|web|rapport|ingest/(?!demo\.py))

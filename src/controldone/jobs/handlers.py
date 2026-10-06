@@ -270,8 +270,14 @@ def purger_retention(ctx: JobContext) -> dict[str, Any]:
 
     reglages = get_settings()
     now = maintenant()
+    from controldone.jobs.registre import Reporter
+    from controldone.storage.verrou import VerrouOccupe
+
     clotures = cloturer_inactifs(ctx.db, now, jours=reglages.cloture_auto_jours)
-    rapport = purger_expires(ctx.db, _vault(ctx), now)
+    try:  # sauvegarde ou restauration en cours : purge reportée de 10 minutes, sans consommer d'essai (D-3504)
+        rapport = purger_expires(ctx.db, _vault(ctx), now)
+    except VerrouOccupe as exc:
+        raise Reporter(str(exc), 600) from None
     jobs = JobStore(ctx.db).purger_termines(jours=reglages.jobs_conservation_jours, now=now)
     return {"fichiers": sum(rapport.fichiers.values()), "textes": sum(rapport.textes.values()),
             "contenus_epargnes": rapport.epargnes, "dossiers_clos": clotures["dossiers"], "lots_clos": clotures["lots"],

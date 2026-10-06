@@ -100,7 +100,7 @@ def page(request: Request, nom: str, *, titre: str, statut: int = 200, demo: boo
         chemin=request.url.path, **contexte)
     rep = HTMLResponse(html, status_code=statut)
     if flash:
-        rep.delete_cookie("cd_flash", path="/")
+        etat.effacer_flash(rep)
     etat.poser_presession(request, rep)
     return rep
 

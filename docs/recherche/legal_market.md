@@ -30,7 +30,7 @@
   - aider le client à répondre aux demandes des personnes concernées ;
   - supprimer ou restituer les données en fin de service ;
   - pouvoir démontrer sa conformité.
-  
+
   — https://www.cnil.fr/sites/cnil/files/atoms/files/rgpd-guide_sous-traitant-cnil.pdf
 - **Clauses du contrat art. 28.**
   - objet et durée ;
@@ -41,14 +41,14 @@
   - transferts hors UE ;
   - assistance au client ;
   - sort des données en fin de contrat.
-  
+
   — même URL
 - **Qui tient un registre.** Tout organisme doit tenir un registre (art. 30). — https://www.cnil.fr/fr/RGDP-le-registre-des-activites-de-traitement
 - **Dérogation des moins de 250 salariés.** Elle est partielle. Il faut tout de même inscrire :
   - les traitements non occasionnels (gestion clients, paie) ;
   - les traitements à risque ;
   - les traitements portant sur des données sensibles.
-  
+
   La CNIL conseille, en cas de doute, d'inscrire le traitement. — même URL
 - **Registre du sous-traitant (art. 30.2).** Il contient :
   - l'identité de chaque client ;
@@ -56,7 +56,7 @@
   - les sous-traitants ultérieurs ;
   - les transferts hors UE ;
   - les mesures de sécurité.
-  
+
   — même URL
 - **Modèle CNIL.** La CNIL fournit un modèle simplifié de registre au format ODS. — même URL
 
@@ -80,14 +80,14 @@
   - Personne physique : nom, prénoms, adresse, téléphone, n° RCS ou RM le cas échéant.
   - Personne morale : dénomination, siège, téléphone, immatriculation, capital.
   - Dans tous les cas : directeur de la publication, et hébergeur (nom ou raison sociale, adresse, téléphone).
-  
+
   — https://www.legifrance.gouv.fr/loda/article_lc/LEGIARTI000049568614
 - **Prestataires de stockage.** Il faut aussi identifier ceux qui stockent les données directement utilisées pour faire fonctionner le service. — https://www.legifrance.gouv.fr/loda/article_lc/LEGIARTI000049568614 (extrait de recherche)
 - **Fiche Service-Public.**
   - L'entrepreneur individuel ajoute « EI » ou « entrepreneur individuel » à son nom.
   - Il indique aussi email, téléphone, n° TVA, hébergeur, et l'autorité qui l'a autorisé si l'activité est réglementée.
   - Sanction : 1 an d'emprisonnement et 75 000 € d'amende.
-  
+
   — https://entreprendre.service-public.gouv.fr/vosdroits/F31228
 - **CGV en B2B.** Les publier n'est pas obligatoire, mais il faut les communiquer à tout acheteur professionnel qui les demande. Refus : 15 000 € d'amende. — https://entreprendre.service-public.gouv.fr/vosdroits/F31228
 - **Résiliation des abonnements.** Depuis le 1er juin 2023, il faut une fonction de résiliation en ligne, visible et gratuite (amende 15 000 €). La source ne précise pas si cela vise aussi le B2B. — même URL
@@ -97,13 +97,13 @@
   - conditions d'escompte ;
   - taux des pénalités exigibles le lendemain de l'échéance ;
   - montant de l'indemnité forfaitaire pour frais de recouvrement.
-  
+
   — https://www.legifrance.gouv.fr/codes/section_lc/LEGITEXT000005634379/LEGISCTA000038411051/
 - **Délais et pénalités (L441-10).**
   - Délai maximal : 60 jours à compter de la facture, ou 45 jours fin de mois si c'est expressément prévu.
   - Pénalités : au moins le taux de refinancement de la BCE + 10 points, sauf clause fixant au moins 3 fois le taux d'intérêt légal.
   - Une indemnité forfaitaire de recouvrement est due de plein droit.
-  
+
   — même URL
 - **Montant de 40 €.** L'indemnité est due par facture payée en retard, sans mise en demeure. Elle doit figurer dans les CGV et sur la facture. — https://kohenavocats.fr/2026/05/12/penalite-retard-facture-calcul-indemnite-40-euros-recouvrement-2026/ ; https://www.assistant-juridique.fr/indemnite_forfaitaire.jsp
 - **Limite.** Le montant de 40 € vient de D441-5, cité par des sources secondaires. Je n'ai pas lu le texte sur Légifrance.
@@ -118,7 +118,7 @@
   - fonds insuffisants : 4000000000009995 ;
   - 3DS exigé : 4000000000003220 ;
   - méthodes de paiement API : `pm_card_visa`.
-  
+
   — https://docs.stripe.com/testing
 - **Durée de vie en test.** Les abonnements créés en test sont annulés automatiquement après 90 jours, puis supprimés 30 jours plus tard. — https://support.stripe.com/questions/test-mode-subscription-data-retention (extrait de recherche)
 - **Test clocks.** Ils permettent d'avancer le temps pour simuler les renouvellements. — https://docs.stripe.com/billing/testing/test-clocks/simulate-subscriptions (vu en recherche)
@@ -131,13 +131,13 @@
   - `invoice.payment_action_required` ;
   - `invoice.finalization_failed` ;
   - `charge.dispute.created`, `charge.refunded`.
-  
+
   — même URL
 - **Statuts.**
   - `incomplete` : il reste 23 h pour payer, sinon `incomplete_expired` ;
   - `past_due` ;
   - `canceled` et `unpaid` : retirer l'accès.
-  
+
   En sandbox, un webhook en échec est réessayé 3 fois en quelques heures (jusqu'à 3 jours en live). — même URL
 - **Outils pratiques.** `stripe trigger` (CLI) déclenche des événements de test. Le Customer Portal permet au client de gérer lui-même son abonnement. — même URL
 
@@ -148,18 +148,18 @@
   - STARDUST1-S : environ 0,43 €/mois (1 vCPU, 1 Go) ;
   - DEV1-S : environ 6,55 €/mois (2 vCPU, 2 Go) ;
   - IPv4 publique et stockage facturés en plus.
-  
+
   — https://www.scaleway.com/en/pricing/virtual-instances/
 - **OVHcloud.** Hausse au 1er avril 2026 :
   - VPS-1 : 4,49 → 6,49 € HT/mois ;
   - VPS-2 : 6,99 → 9,99 € HT/mois ;
   - VPS-3 : 13,99 → 19,99 € HT/mois.
-  
+
   — https://blog.ovhcloud.com/evolutions-tarifaires-de-public-cloud-bare-metal-et-vps-chez-ovhcloud/
 - **Hetzner.**
   - Datacenters : Falkenstein et Nuremberg (Allemagne), Helsinki (Finlande), plus États-Unis et Singapour.
   - Certification ISO 27001.
-  
+
   — https://www.hetzner.com/cloud/
 - **Hausse Hetzner.** Effective le 15 juin 2026 : en Allemagne et Finlande, le CAX11 passe de 4,49 à 5,99 €/mois. — https://docs.hetzner.com/general/infrastructure-and-availability/price-adjustment/
 - **Clever Cloud.** PaaS français, facturation à la seconde, crédits gratuits à l'inscription sans carte. — https://www.clever.cloud/pricing/

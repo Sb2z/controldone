@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 from dataclasses import dataclass, field
 from typing import Any
@@ -43,6 +44,10 @@ from controldone.auth.roles import Acteur, Role
 
 __all__ = [
     "CHEMIN_RAPPORT_CSP",
+    "ModeIncoherent",
+    "hotes_autorises",
+    "url_publique",
+    "verifier_mode_service",
     "CSP",
     "PERMISSIONS_POLICY",
     "CsrfInvalide",
@@ -75,6 +80,112 @@ PERMISSIONS_POLICY = ", ".join(f"{f}=()" for f in (
     "accelerometer", "autoplay", "browsing-topics", "camera", "display-capture", "encrypted-media", "geolocation",
     "gyroscope", "hid", "idle-detection", "magnetometer", "microphone", "midi", "payment", "screen-wake-lock",
     "serial", "usb", "xr-spatial-tracking"))
+
+
+# --- URL publique et hôtes admis (RS-18, D-3602) -------------------------------------------------------------------
+
+_HOTE_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
+
+
+def _domaine_configure() -> str | None:
+    from controldone.config import env
+
+    d = env("CONTROLDONE_DOMAIN", "").strip().lower().rstrip(".")
+    return d if d and _HOTE_RE.match(d) else None
+
+
+def url_publique(request: Request | None = None) -> str:
+    """URL publique du service (liens de paiement Stripe, liens envoyés aux clients) : ``CONTROLDONE_URL_PUBLIQUE``
+    (``https://hôte[:port]``), sinon ``https://CONTROLDONE_DOMAIN``. **Jamais** l'en-tête ``Host`` de la requête
+    en production (un ``Host`` forgé ne doit pas produire un lien vers un autre site, RS-18) ; en développement,
+    à défaut de configuration, l'URL de la requête. ``ValueError`` si rien n'est configuré en production."""
+    from controldone.config import env
+    from controldone.storage.cles import mode_execution
+
+    brut = env("CONTROLDONE_URL_PUBLIQUE", "").strip().rstrip("/")
+    if brut:
+        u = urlsplit(brut)
+        if (u.scheme not in ("https", "http") or not u.hostname or not _HOTE_RE.match(u.hostname)
+                or u.path or u.query or u.fragment or u.username or u.password):
+            raise ValueError("CONTROLDONE_URL_PUBLIQUE invalide (attendu : https://hôte[:port])")
+        if u.scheme != "https" and mode_execution() == "prod":
+            raise ValueError("CONTROLDONE_URL_PUBLIQUE doit être en https en production")
+        return brut
+    domaine = _domaine_configure()
+    if domaine:
+        return f"https://{domaine}"
+    if mode_execution() == "prod" or request is None:
+        raise ValueError("URL publique non configurée : définir CONTROLDONE_DOMAIN (ou CONTROLDONE_URL_PUBLIQUE)")
+    return f"{request.url.scheme}://{request.url.netloc}"
+
+
+def hotes_autorises() -> list[str] | None:
+    """Hôtes admis dans l'en-tête ``Host`` (``TrustedHostMiddleware``) quand le domaine est configuré : le domaine,
+    l'hôte de ``CONTROLDONE_URL_PUBLIQUE``, ``CONTROLDONE_HOTES_AUTORISES`` (liste séparée par des virgules) et la
+    boucle locale (sonde de santé). ``None`` : aucun domaine configuré (développement), pas de filtrage."""
+    from controldone.config import env
+
+    hotes: list[str] = []
+    if d := _domaine_configure():
+        hotes.append(d)
+    brut = env("CONTROLDONE_URL_PUBLIQUE", "").strip()
+    if brut and (h := (urlsplit(brut).hostname or "").lower()) and _HOTE_RE.match(h):
+        hotes.append(h)
+    if not hotes:
+        return None
+    hotes += [h.strip().lower() for h in env("CONTROLDONE_HOTES_AUTORISES", "").split(",") if h.strip()]
+    hotes += ["127.0.0.1", "localhost", "::1"]
+    return list(dict.fromkeys(hotes))
+
+
+# --- mode d'exécution du service web (RS-16, D-3601) -----------------------------------------------------------------
+
+
+class ModeIncoherent(RuntimeError):
+    """Le service web est lancé en mode ``dev``/``test`` dans une configuration de production."""
+
+
+def _boucle_locale(hote: str) -> bool:
+    import ipaddress
+
+    h = hote.strip().strip("[]").lower()
+    if h == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+def verifier_mode_service(*, hote: str, https: bool = False, proxy: bool = False, mode: str | None = None) -> None:
+    """Refuse (``ModeIncoherent``) de servir en mode ``dev``/``test`` — clé maîtresse générée sur le disque, cookies
+    sans ``Secure`` ni ``__Host-``, pas de HSTS — sur une interface autre que la boucle locale, ou derrière un
+    mandataire TLS (``--https`` / ``--proxy``) : c'est le signe d'un ``CONTROLDONE_ENV=prod`` oublié (RS-16).
+    ``CONTROLDONE_DEV_RESEAU=1`` lève le refus (démonstration sur un réseau local de confiance), avec un
+    avertissement."""
+    from controldone.config import env
+    from controldone.storage.cles import mode_execution
+
+    mode = mode or mode_execution()
+    if mode == "prod":
+        return
+    motifs = []
+    if not _boucle_locale(hote):
+        motifs.append(f"écoute sur {hote} (hors boucle locale)")
+    if https:
+        motifs.append("--https (servi derrière TLS)")
+    if proxy:
+        motifs.append("--proxy (derrière un mandataire)")
+    if not motifs:
+        return
+    message = (f"mode {mode} ({'CONTROLDONE_ENV absent' if not env('CONTROLDONE_ENV', '').strip() else 'CONTROLDONE_ENV=' + mode}) "
+               f"avec une configuration de production : {', '.join(motifs)}. Définir CONTROLDONE_ENV=prod "
+               "(clé maîtresse et secret de session obligatoires), ou CONTROLDONE_DEV_RESEAU=1 pour une "
+               "démonstration volontaire sur un réseau de confiance.")
+    if env("CONTROLDONE_DEV_RESEAU", "").strip() == "1":
+        log.warning("mode_dev_expose %s", message)
+        return
+    raise ModeIncoherent(message)
 
 
 class NonConnecte(Exception):
@@ -123,6 +234,33 @@ class EtatSecurite:
     def nom_presession(self) -> str:
         return "__Host-cd_pre" if self.prod else "cd_pre"
 
+    #: Cookies secondaires (D-3604) : préfixe ``__Host-`` en production comme le cookie de session (``Secure``,
+    #: ``Path=/``, sans ``Domain`` : ni un sous-domaine ni une page HTTP ne peuvent le poser ou l'écraser).
+    @property
+    def nom_2fa(self) -> str:
+        return "__Host-cd_2fa" if self.prod else "cd_2fa"
+
+    @property
+    def nom_flash(self) -> str:
+        return "__Host-cd_flash" if self.prod else "cd_flash"
+
+    def _effacer(self, reponse: Response, nom: str, samesite: str) -> None:
+        # un cookie ``__Host-`` n'est effacé que par un Set-Cookie ``Secure`` ``Path=/`` (sinon refusé)
+        reponse.delete_cookie(nom, path="/", secure=self.cookie["secure"], httponly=True, samesite=samesite)
+
+    def ouvrir_session(self, request: Request, reponse: Response, acteur: Acteur, *,
+                       deux_facteurs: bool = False) -> str:
+        """Nouvelle session (connexion, changement de mot de passe) : jeton posé sur ``reponse``, session
+        enregistrée pour la liste « mes sessions actives » (appareil et réseau réduits, D-3603). Renvoie le
+        ``sid``."""
+        from controldone.storage.securite import reduire_appareil, reduire_reseau
+
+        jeton = self.sessions.emettre(
+            acteur, deux_facteurs=deux_facteurs, appareil=reduire_appareil(request.headers.get("user-agent")),
+            reseau=reduire_reseau(request.client.host if request.client else None))
+        self.poser_session(reponse, jeton)
+        return self.sessions.lire(jeton).sid
+
     def _ser(self, sel: str) -> URLSafeTimedSerializer:
         return URLSafeTimedSerializer(self.secret_signature, salt=sel)
 
@@ -135,6 +273,16 @@ class EtatSecurite:
                               samesite=self.cookie["samesite"])
 
     # --- second facteur en attente (5 minutes) ---
+    def poser_2fa(self, reponse: Response, user_id: str) -> None:
+        reponse.set_cookie(self.nom_2fa, self.jeton_2fa(user_id), max_age=300, httponly=True,
+                           secure=self.cookie["secure"], samesite="strict" if self.prod else "lax", path="/")
+
+    def lire_2fa_requete(self, request: Request) -> str | None:
+        return self.lire_2fa(request.cookies.get(self.nom_2fa))
+
+    def effacer_2fa(self, reponse: Response) -> None:
+        self._effacer(reponse, self.nom_2fa, "strict" if self.prod else "lax")
+
     def jeton_2fa(self, user_id: str) -> str:
         return self._ser("controldone.2fa").dumps({"u": user_id, "n": secrets.token_urlsafe(8)})
 
@@ -148,11 +296,14 @@ class EtatSecurite:
 
     # --- messages flash ---
     def flash(self, reponse: Response, message: str, *, erreur: bool = False) -> None:
-        reponse.set_cookie("cd_flash", self._ser("controldone.flash").dumps({"m": message[:500], "e": erreur}),
+        reponse.set_cookie(self.nom_flash, self._ser("controldone.flash").dumps({"m": message[:500], "e": erreur}),
                            max_age=60, httponly=True, secure=self.cookie["secure"], samesite="lax", path="/")
 
+    def effacer_flash(self, reponse: Response) -> None:
+        self._effacer(reponse, self.nom_flash, "lax")
+
     def lire_flash(self, request: Request) -> dict[str, Any] | None:
-        brut = request.cookies.get("cd_flash")
+        brut = request.cookies.get(self.nom_flash)
         if not brut:
             return None
         try:

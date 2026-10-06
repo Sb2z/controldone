@@ -73,6 +73,13 @@ def _serve(args: argparse.Namespace) -> int:
     from controldone.services.plateforme import Plateforme
     from controldone.web import ParametresWeb, create_app
 
+    from controldone.web.securite import ModeIncoherent, verifier_mode_service
+
+    try:  # mode dev oublié en production (RS-16, D-3601)
+        verifier_mode_service(hote=args.host, https=args.https, proxy=args.proxy)
+    except ModeIncoherent as exc:
+        print(f"ControlDOne : démarrage refusé — {exc}", file=sys.stderr)
+        return 2
     # Téléversements multipart (Starlette) et fichiers temporaires sur le volume de données, pas sur un
     # tmpfs /tmp en mémoire (D-1305) : ``CONTROLDONE_TMP_DIR``, défaut ``<data_dir>/tmp``.
     get_settings().appliquer_repertoire_temporaire()
@@ -86,6 +93,9 @@ def _serve(args: argparse.Namespace) -> int:
     except SchemaPerime as exc:
         print(f"ControlDOne : {exc}", file=sys.stderr)
         return 3
+    from controldone.storage.securite import signaler_volume_non_chiffre
+
+    signaler_volume_non_chiffre(plateforme.db)  # RS-21, D-3605 : alerte en production seulement
     app = create_app(ParametresWeb(plateforme=plateforme, worker_integre=not args.sans_worker,
                                    https=True if args.https else None))
     print(f"ControlDOne — http://{args.host}:{args.port}/ (worker intégré : {'non' if args.sans_worker else 'oui'})")
