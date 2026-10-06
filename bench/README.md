@@ -37,6 +37,7 @@ make corpus GRAINE=20261101 PREFIXE=GU [NOMBRE=160] [PAR_CONTROLE=3] [SORTIE=ben
 | `corpus_g5` | `python -m bench.generator2 --out bench/corpus_g5 --prefix GW --ext --all-holdout --count 110 --seed 20261007 --split holdout` | 110 |
 | `corpus_g6` | `python -m bench.generator2 --out bench/corpus_g6 --prefix GV --ext --all-holdout --per-control 3 --count 160 --seed 20261008 --split holdout` | 160 |
 | `corpus_g7` | `python -m bench.generator2 --out bench/corpus_g7 --prefix GU --ext --all-holdout --per-control 3 --count 160 --seed 20261009 --split holdout` | 160 |
+| `corpus_g8` | `python -m bench.generator2 --out bench/corpus_g8 --prefix GT --ext --all-holdout --per-control 3 --count 160 --seed 20261010 --split holdout` | 160 |
 
 `--jobs N` ne change pas le résultat. Toutes ces recettes ont été rejouées le 2026-10-06 avec le générateur
 actuel (un seul passage `--split all` reproduit un corpus généré autrefois en deux passages `dev` puis `holdout`) :
