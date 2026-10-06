@@ -30,18 +30,58 @@ MRN = "26FR00000000000001"
 TRA = "tra_fictif"
 
 
-def lc(montant, nature=NatureLigne.debours_droits, *, avoir="av1", ligne=0, origine=("FT-001",), mrns=(),
-       transport=(), emetteur=TRA, le=date(2026, 9, 1), numero="AV-1"):
-    return LigneCredit(avoir_id=avoir, ligne=ligne, nature=nature, montant=D(montant), emetteur=emetteur,
-                       date_avoir=le, numero_avoir=numero, factures_origine=tuple(origine), mrns=tuple(mrns),
-                       refs_transport=tuple(transport))
+def lc(
+    montant,
+    nature=NatureLigne.debours_droits,
+    *,
+    avoir="av1",
+    ligne=0,
+    origine=("FT-001",),
+    mrns=(),
+    transport=(),
+    emetteur=TRA,
+    le=date(2026, 9, 1),
+    numero="AV-1",
+):
+    return LigneCredit(
+        avoir_id=avoir,
+        ligne=ligne,
+        nature=nature,
+        montant=D(montant),
+        emetteur=emetteur,
+        date_avoir=le,
+        numero_avoir=numero,
+        factures_origine=tuple(origine),
+        mrns=tuple(mrns),
+        refs_transport=tuple(transport),
+    )
 
 
-def ec(id_, reste, comp=Composante.droit, *, statut=StatutEcart.ouvert, quand=None, facture="FT-001", mrn=None,
-       transport=None, emetteur=TRA, constat=""):
-    return EcartImputable(id=id_, composante=comp, reste=D(reste), emetteur=emetteur, statut=statut,
-                          date_constat=quand, constat_id=constat or id_, facture_ref=facture, mrn=mrn,
-                          ref_transport=transport)
+def ec(
+    id_,
+    reste,
+    comp=Composante.droit,
+    *,
+    statut=StatutEcart.ouvert,
+    quand=None,
+    facture="FT-001",
+    mrn=None,
+    transport=None,
+    emetteur=TRA,
+    constat="",
+):
+    return EcartImputable(
+        id=id_,
+        composante=comp,
+        reste=D(reste),
+        emetteur=emetteur,
+        statut=statut,
+        date_constat=quand,
+        constat_id=constat or id_,
+        facture_ref=facture,
+        mrn=mrn,
+        ref_transport=transport,
+    )
 
 
 def test_imputation_totale_et_statut_credite():
@@ -74,7 +114,9 @@ def test_ordre_reclame_avant_ouvert_puis_date_puis_constat():
     ]
     r = imputer_avoirs([lc("25.00")], ecarts)
     assert [(i.ecart_id, i.montant) for i in r.imputations] == [
-        ("reclame_ancien_a", D("10.00")), ("reclame_ancien_b", D("10.00")), ("reclame_recent", D("5.00")),
+        ("reclame_ancien_a", D("10.00")),
+        ("reclame_ancien_b", D("10.00")),
+        ("reclame_recent", D("5.00")),
     ]
     assert r.credit_pour("ouvert_ancien") == D("0.00")
     # déterminisme : l'ordre d'entrée est indifférent
@@ -99,8 +141,10 @@ def test_paliers_facture_puis_mrn_puis_transport():
     # L'avoir cite une facture sans écart : à défaut, rattachement par MRN.
     e_mrn = ec("par_mrn", "20.00", facture="FT-999", mrn=MRN)
     e_tr = ec("par_transport", "20.00", facture=None, transport="999-11112222")
-    r = imputer_avoirs([lc("15.00", origine=("FT-001",), mrns=(MRN[:15] + "XYZ",), transport=("99911112222",))],
-                       [e_mrn, e_tr])
+    r = imputer_avoirs(
+        [lc("15.00", origine=("FT-001",), mrns=(MRN[:15] + "XYZ",), transport=("99911112222",))],
+        [e_mrn, e_tr],
+    )
     assert [(i.ecart_id, i.palier) for i in r.imputations] == [("par_mrn", "mrn")]
     r = imputer_avoirs([lc("15.00", origine=(), transport=("999 1111 2222",))], [e_mrn, e_tr])
     assert [(i.ecart_id, i.palier) for i in r.imputations] == [("par_transport", "transport")]
@@ -124,7 +168,9 @@ def test_ligne_combinee_droit_autre_taxe_tva_forfait():
     ]
     r = imputer_avoirs([lc("45.00", NatureLigne.debours_combines)], ecarts)
     assert [(i.ecart_id, i.montant) for i in r.imputations] == [
-        ("droit", D("10.00")), ("autre", D("10.00")), ("tva", D("25.00")),
+        ("droit", D("10.00")),
+        ("autre", D("10.00")),
+        ("tva", D("25.00")),
     ]
     assert composantes_de_nature(NatureLigne.magasinage) == (Composante.prestation,)
     assert composantes_de_nature(None) == ()
@@ -139,7 +185,9 @@ def test_plusieurs_avoirs_par_date_puis_lignes_par_nature():
     ecarts = [ec("d", "12.00"), ec("p", "50.00", comp=Composante.prestation)]
     r = imputer_avoirs(lignes, ecarts)
     assert [(i.avoir_id, i.ecart_id, i.montant) for i in r.imputations] == [
-        ("av1", "d", D("8.00")), ("av2", "d", D("4.00")), ("av2", "p", D("10.00")),
+        ("av1", "d", D("8.00")),
+        ("av2", "d", D("4.00")),
+        ("av2", "p", D("10.00")),
     ]
     assert r.reliquat_avoir("av2") == D("6.00") and r.reliquat_avoir("av1") == D("0.00")
 
@@ -152,8 +200,16 @@ def test_ligne_sans_nature_jamais_imputee_et_identifiants_uniques():
 
 
 def test_depuis_ecart_registre():
-    e = EcartARecouvrer(constat_id="f_1", transitaire_id=TRA, composante=Composante.droit, montant_initial=D("40.00"),
-                        montant_credite=D("10.00"), reste=D("30.00"), statut=StatutEcart.reclame, mrn=MRN)
+    e = EcartARecouvrer(
+        constat_id="f_1",
+        transitaire_id=TRA,
+        composante=Composante.droit,
+        montant_initial=D("40.00"),
+        montant_credite=D("10.00"),
+        reste=D("30.00"),
+        statut=StatutEcart.reclame,
+        mrn=MRN,
+    )
     ei = EcartImputable.depuis_ecart(e, facture_ref="FT-001")
     assert ei.reste == D("30.00") and ei.emetteur == TRA and ei.statut is StatutEcart.reclame
     assert EcartImputable.depuis_ecart(e, reste=e.montant_initial).reste == D("40.00")
@@ -168,14 +224,17 @@ def _avoir(lignes=(), **champs):
         emetteur=Partie(nom=vs("avoir.emetteur.nom", "Transit Fictif SA", document_id="doc_av")),
         refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-001", document_id="doc_av")],
         refs_mrn=[vs("avoir.refs_mrn[]", MRN, document_id="doc_av")],
-        lignes=list(lignes), **champs,
+        lignes=list(lignes),
+        **champs,
     )
     return document(TypeDocument.avoir, c, id="doc_av")
 
 
 def test_lignes_credit_depuis_avoir_et_cle_emetteur():
-    ligne = LigneFactureTransitaire(nature=NatureLigne.debours_tva,
-                                    montant_ht=vs("avoir.lignes[].montant_ht", "12.50", document_id="doc_av"))
+    ligne = LigneFactureTransitaire(
+        nature=NatureLigne.debours_tva,
+        montant_ht=vs("avoir.lignes[].montant_ht", "12.50", document_id="doc_av"),
+    )
     doc = _avoir([ligne])
     t = Transitaire(id="tra_x", nom="TRANSIT FICTIF SA")
     cle = cle_emetteur(doc.av.emetteur, [t])
@@ -193,9 +252,21 @@ def test_lignes_credit_depuis_avoir_et_cle_emetteur():
 def test_prestation_de_meme_nature_imputee_d_abord():
     # D-2208 : deux écarts « prestation » de la même facture ; la ligne d'avoir « dédouanement » va d'abord à
     # l'écart dont la ligne facturée est de même nature, quel que soit l'ordre des identifiants.
-    surcharge = EcartImputable(id="a_surcharge", composante=Composante.prestation, reste=D("45.00"), emetteur=TRA,
-                               facture_ref="FT-001", nature=NatureLigne.surcharge)
-    dedou = EcartImputable(id="b_dedou", composante=Composante.prestation, reste=D("15.00"), emetteur=TRA,
-                           facture_ref="FT-001", nature=NatureLigne.frais_dedouanement)
+    surcharge = EcartImputable(
+        id="a_surcharge",
+        composante=Composante.prestation,
+        reste=D("45.00"),
+        emetteur=TRA,
+        facture_ref="FT-001",
+        nature=NatureLigne.surcharge,
+    )
+    dedou = EcartImputable(
+        id="b_dedou",
+        composante=Composante.prestation,
+        reste=D("15.00"),
+        emetteur=TRA,
+        facture_ref="FT-001",
+        nature=NatureLigne.frais_dedouanement,
+    )
     r = imputer_avoirs([lc("15.00", NatureLigne.frais_dedouanement)], [surcharge, dedou])
     assert r.credit_pour("b_dedou") == D("15.00") and r.credit_pour("a_surcharge") == D("0.00")

@@ -35,7 +35,10 @@ def control(controle_id: str) -> Callable[[ControlFn], ControlFn]:
 
     def decorateur(fn: ControlFn) -> ControlFn:
         existant = _REGISTRE.get(controle_id)
-        if existant is not None and (existant.__module__, existant.__qualname__) != (fn.__module__, fn.__qualname__):
+        if existant is not None and (existant.__module__, existant.__qualname__) != (
+            fn.__module__,
+            fn.__qualname__,
+        ):
             raise ValueError(
                 f"contrôle {controle_id} déjà enregistré par {existant.__module__}.{existant.__qualname__}"
             )

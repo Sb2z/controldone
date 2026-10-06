@@ -46,9 +46,11 @@ def _diagnostic(args: argparse.Namespace) -> int:
     resultats = traiter_lot(source, profil, grilles, options=options)
     sorties = generer_rapport(resultats, profil, args.out)
     v = sorties.vue
-    print(f"{len(resultats)} dossier(s) — recouvrable certain {v.recouvrable_certain} ; "
-          f"à vérifier {v.recouvrable_a_verifier} ; points professionnels {v.nb_renvois} ; "
-          f"non lus {len(v.non_lus)}")
+    print(
+        f"{len(resultats)} dossier(s) — recouvrable certain {v.recouvrable_certain} ; "
+        f"à vérifier {v.recouvrable_a_verifier} ; points professionnels {v.nb_renvois} ; "
+        f"non lus {len(v.non_lus)}"
+    )
     for nom in ("html", "pdf", "json", "findings", "xlsx"):
         print(f"  {nom:9s} {sorties[nom]}")
     return 0
@@ -91,18 +93,32 @@ def _serve(args: argparse.Namespace) -> int:
 
     try:  # colonnes ajoutées par une version plus récente sans migration : arrêt explicite (D-1322) ; migration
         # en attente en production : attente du service « migrer », puis arrêt unique (D-4102)
-        plateforme.db.attendre_schema_a_jour(journal=lambda m: print(f"ControlDOne : {m}", file=sys.stderr, flush=True))
+        plateforme.db.attendre_schema_a_jour(
+            journal=lambda m: print(f"ControlDOne : {m}", file=sys.stderr, flush=True)
+        )
     except SchemaPerime as exc:
         print(f"ControlDOne : {exc}", file=sys.stderr)
         return 3
     from controldone.storage.securite import signaler_volume_non_chiffre
 
     signaler_volume_non_chiffre(plateforme.db)  # RS-21, D-3605 : alerte en production seulement
-    app = create_app(ParametresWeb(plateforme=plateforme, worker_integre=not args.sans_worker,
-                                   https=True if args.https else None))
-    print(f"ControlDOne — http://{args.host}:{args.port}/ (worker intégré : {'non' if args.sans_worker else 'oui'})")
-    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=args.proxy, forwarded_allow_ips=args.forwarded_allow_ips,
-                log_level="warning", server_header=False)
+    app = create_app(
+        ParametresWeb(
+            plateforme=plateforme, worker_integre=not args.sans_worker, https=True if args.https else None
+        )
+    )
+    print(
+        f"ControlDOne — http://{args.host}:{args.port}/ (worker intégré : {'non' if args.sans_worker else 'oui'})"
+    )
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        proxy_headers=args.proxy,
+        forwarded_allow_ips=args.forwarded_allow_ips,
+        log_level="warning",
+        server_header=False,
+    )
     return 0
 
 
@@ -163,8 +179,15 @@ def _creer_fondateur(args: argparse.Namespace) -> int:
         return 2
     uid = f"usr_{_secrets.token_hex(8)}"
     fondateur = Acteur(uid, Role.fondateur)
-    creer_utilisateur(db, user_id=uid, email=args.email, mot_de_passe_hash=empreinte, role=Role.fondateur,
-                      acteur=fondateur, nom=args.nom)
+    creer_utilisateur(
+        db,
+        user_id=uid,
+        email=args.email,
+        mot_de_passe_hash=empreinte,
+        role=Role.fondateur,
+        acteur=fondateur,
+        nom=args.nom,
+    )
     secret = generer_secret()
     enregistrer_totp(db, uid, chiffrer_secret(plateforme.cles_maitresses, secret), acteur=fondateur)
     print("Compte fondateur créé.")
@@ -196,7 +219,9 @@ def _migrer(args: argparse.Namespace) -> int:
         attente = db.migrations_en_attente()
         neuve = _base_neuve(db)
         print(f"base : {db.engine.url.render_as_string(hide_password=True)}")
-        print("migrations en attente : " + (", ".join(f"{m.version:04d} {m.nom}" for m in attente) or "aucune"))
+        print(
+            "migrations en attente : " + (", ".join(f"{m.version:04d} {m.nom}" for m in attente) or "aucune")
+        )
         traces = _traces_en_clair()
         if traces:
             print(f"traces d'envoi en clair à chiffrer : {traces}")
@@ -209,10 +234,15 @@ def _migrer(args: argparse.Namespace) -> int:
 
             print("sauvegarde avant migration…", flush=True)
             destination = env("BACKUP_DIR")  # conteneur scheduler : /backups ; sinon <data_dir>/sauvegardes
-            code = sauvegarde(["sauvegarder", "--sans-rotation", *(["--destination", destination] if destination else [])])
+            code = sauvegarde(
+                ["sauvegarder", "--sans-rotation", *(["--destination", destination] if destination else [])]
+            )
             if code != 0:
-                print(f"sauvegarde en échec (code {code}) : migration abandonnée (--sans-sauvegarde pour passer "
-                      "outre, après une sauvegarde faite autrement)", file=sys.stderr)
+                print(
+                    f"sauvegarde en échec (code {code}) : migration abandonnée (--sans-sauvegarde pour passer "
+                    "outre, après une sauvegarde faite autrement)",
+                    file=sys.stderr,
+                )
                 return 1
         db.creer_schema(migrer=False)  # tables manquantes ; base neuve : migrations inscrites
         db.migrer(journal=print)
@@ -232,7 +262,9 @@ def _traces_en_clair() -> int:
     racine = racine_par_defaut()
     if not racine.is_dir():
         return 0
-    return sum(1 for p in racine.glob("*/*") if p.is_file() and not p.name.startswith(".") and p.suffix != ".enc")
+    return sum(
+        1 for p in racine.glob("*/*") if p.is_file() and not p.name.startswith(".") and p.suffix != ".enc"
+    )
 
 
 def _chiffrer_traces() -> int:
@@ -295,15 +327,20 @@ def _alertes(args: argparse.Namespace) -> int:
         finally:
             db.fermer()
         print("notifications : " + ("actives" if h.actif else f"inactives ({h.motif_inactif})"))
+
         def dernier(d: object) -> str:
             return d.strftime("%Y-%m-%d %H:%M") if d else "jamais"  # type: ignore[attr-defined]
 
         for etat in h.canaux.values():
-            print(f"  canal {etat.canal:9s} : {'EN ÉCHEC' if etat.en_echec else 'ok'} — dernier succès "
-                  f"{dernier(etat.dernier_succes)}, dernier échec {dernier(etat.dernier_echec)}")
+            print(
+                f"  canal {etat.canal:9s} : {'EN ÉCHEC' if etat.en_echec else 'ok'} — dernier succès "
+                f"{dernier(etat.dernier_succes)}, dernier échec {dernier(etat.dernier_echec)}"
+            )
         for n in h.notifications:
             canaux = ", ".join(f"{c} {r}" for c, r in n.canaux.items()) or "-"
-            print(f"  {n.jour}  {h.libelle(n.kind):32s} ({n.nombre})  {n.statut:8s} essais {n.essais}  [{canaux}]")
+            print(
+                f"  {n.jour}  {h.libelle(n.kind):32s} ({n.nombre})  {n.statut:8s} essais {n.essais}  [{canaux}]"
+            )
         if not h.notifications:
             print("  (aucune notification sur 30 jours)")
         return 0
@@ -325,21 +362,38 @@ def _llm(args: argparse.Namespace) -> int:
     s = get_settings()
     if args.action == "verifier":
         etat = verifier_cle(s, appel=not args.sans_appel)
-        print(f"clé Anthropic : {'présente' if etat['cle_presente'] else 'absente'}"
-              + ("" if etat["cle_presente"] else " (ANTHROPIC_API_KEY ou CONTROLDONE_ANTHROPIC_API_KEY dans .env) "
-                 "— extraction 100 % déterministe"))
-        print(f"modèle : {etat['modele']} ; effort : {etat['effort']} ; tarifs du {etat['date_tarifs']}"
-              + ("" if etat["tarif_connu"] else " (modèle absent de config/llm_tarifs.yaml : tarif le plus élevé)"))
+        print(
+            f"clé Anthropic : {'présente' if etat['cle_presente'] else 'absente'}"
+            + (
+                ""
+                if etat["cle_presente"]
+                else " (ANTHROPIC_API_KEY ou CONTROLDONE_ANTHROPIC_API_KEY dans .env) "
+                "— extraction 100 % déterministe"
+            )
+        )
+        print(
+            f"modèle : {etat['modele']} ; effort : {etat['effort']} ; tarifs du {etat['date_tarifs']}"
+            + (
+                ""
+                if etat["tarif_connu"]
+                else " (modèle absent de config/llm_tarifs.yaml : tarif le plus élevé)"
+            )
+        )
         appel = etat["appel"]
         if appel is None:
             print("appel de test : non effectué")
             return 0 if etat["cle_presente"] or args.sans_appel else 1
         if not appel["ok"]:
-            print(f"appel de test : ÉCHEC ({appel.get('erreur') or appel.get('stop_reason')}"
-                  + (f", HTTP {appel['statut']}" if appel.get("statut") else "") + ")")
+            print(
+                f"appel de test : ÉCHEC ({appel.get('erreur') or appel.get('stop_reason')}"
+                + (f", HTTP {appel['statut']}" if appel.get("statut") else "")
+                + ")"
+            )
             return 1
-        print(f"appel de test : OK — modèle servi {appel['modele_servi']}, {appel['jetons_entree']} + "
-              f"{appel['jetons_sortie']} jetons, {appel['cout_eur']} EUR, {appel['duree_s']} s")
+        print(
+            f"appel de test : OK — modèle servi {appel['modele_servi']}, {appel['jetons_entree']} + "
+            f"{appel['jetons_sortie']} jetons, {appel['cout_eur']} EUR, {appel['duree_s']} s"
+        )
         return 0
     from controldone.auth.roles import Acteur, Role
     from controldone.jobs.couts import etat_plafond, mois_courant
@@ -352,8 +406,11 @@ def _llm(args: argparse.Namespace) -> int:
         print(f"mois {mois_courant()} — clé {'présente' if s.llm_disponible else 'absente'}")
         for t in clients:
             e = etat_plafond(t.id, db=db)
-            etat = "désactivé (client)" if e.desactive else ("ARRÊT 100 %" if e.arret else
-                                                             ("alerte 80 %" if e.alerte else "actif"))
+            etat = (
+                "désactivé (client)"
+                if e.desactive
+                else ("ARRÊT 100 %" if e.arret else ("alerte 80 %" if e.alerte else "actif"))
+            )
             print(f"  {t.id} : {e.cout} / {e.plafond} EUR — {etat}")
     finally:
         db.fermer()
@@ -361,8 +418,10 @@ def _llm(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="controldone", description="ControlDOne — contrôle technique de cohérence "
-                                 "des documents d'import.")
+    ap = argparse.ArgumentParser(
+        prog="controldone",
+        description="ControlDOne — contrôle technique de cohérence des documents d'import.",
+    )
     ap.add_argument("-v", "--verbeux", action="store_true")
     sous = ap.add_subparsers(dest="commande", required=True)
 
@@ -384,19 +443,32 @@ def main(argv: list[str] | None = None) -> int:
     sv = sous.add_parser("serve", help="interface web et API (uvicorn)")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
-    sv.add_argument("--sans-worker", dest="sans_worker", action="store_true",
-                    help="ne pas lancer le worker intégré (production : python -m controldone.jobs.worker)")
-    sv.add_argument("--init-schema", dest="init_schema", action="store_true", help="créer les tables manquantes")
+    sv.add_argument(
+        "--sans-worker",
+        dest="sans_worker",
+        action="store_true",
+        help="ne pas lancer le worker intégré (production : python -m controldone.jobs.worker)",
+    )
+    sv.add_argument(
+        "--init-schema", dest="init_schema", action="store_true", help="créer les tables manquantes"
+    )
     sv.add_argument("--https", action="store_true", help="servi derrière TLS : en-tête HSTS")
-    sv.add_argument("--proxy", action="store_true", help="faire confiance aux en-têtes X-Forwarded-* du mandataire local")
-    sv.add_argument("--forwarded-allow-ips", dest="forwarded_allow_ips",
-                    default=env("CONTROLDONE_FORWARDED_ALLOW_IPS", "127.0.0.1"),
-                    help="adresses du mandataire dont les en-têtes X-Forwarded-* sont crus (avec --proxy)")
+    sv.add_argument(
+        "--proxy", action="store_true", help="faire confiance aux en-têtes X-Forwarded-* du mandataire local"
+    )
+    sv.add_argument(
+        "--forwarded-allow-ips",
+        dest="forwarded_allow_ips",
+        default=env("CONTROLDONE_FORWARDED_ALLOW_IPS", "127.0.0.1"),
+        help="adresses du mandataire dont les en-têtes X-Forwarded-* sont crus (avec --proxy)",
+    )
     sv.set_defaults(fn=_serve)
 
     di = sous.add_parser("init-demo", help="base de démonstration (données fictives, deux clients)")
     di.add_argument("--force", action="store_true", help="supprimer la base SQLite et le coffre existants")
-    di.add_argument("--si-absente", dest="si_absente", action="store_true", help="ne rien faire si déjà initialisée")
+    di.add_argument(
+        "--si-absente", dest="si_absente", action="store_true", help="ne rien faire si déjà initialisée"
+    )
     di.set_defaults(fn=_init_demo)
 
     from controldone.auth.cli_securite import ajouter_commandes
@@ -406,35 +478,59 @@ def main(argv: list[str] | None = None) -> int:
     cf = sous.add_parser("creer-fondateur", help="compte fondateur de production (mot de passe saisi + TOTP)")
     cf.add_argument("--email", required=True)
     cf.add_argument("--nom", default="Fondateur")
-    cf.add_argument("--mot-de-passe-stdin", dest="mot_de_passe_stdin", action="store_true",
-                    help="lire le mot de passe sur l'entrée standard (scripts) au lieu de le demander")
+    cf.add_argument(
+        "--mot-de-passe-stdin",
+        dest="mot_de_passe_stdin",
+        action="store_true",
+        help="lire le mot de passe sur l'entrée standard (scripts) au lieu de le demander",
+    )
     cf.set_defaults(fn=_creer_fondateur)
 
-    sg = sous.add_parser("sauvegarde", add_help=False,
-                         help="sauvegarder | verifier | restaurer | controler | rotation | alerter | exercice")
+    sg = sous.add_parser(
+        "sauvegarde",
+        add_help=False,
+        help="sauvegarder | verifier | restaurer | controler | rotation | alerter | exercice",
+    )
     sg.add_argument("arguments", nargs=argparse.REMAINDER)
     sg.set_defaults(fn=_sauvegarde)
 
-    mg = sous.add_parser("migrer", help="migrations de schéma (sauvegarde préalable par défaut) et chiffrement des "
-                         "traces d'envoi encore en clair")
+    mg = sous.add_parser(
+        "migrer",
+        help="migrations de schéma (sauvegarde préalable par défaut) et chiffrement des "
+        "traces d'envoi encore en clair",
+    )
     mg.add_argument("--etat", action="store_true", help="afficher les migrations en attente sans rien faire")
-    mg.add_argument("--sans-sauvegarde", dest="sans_sauvegarde", action="store_true",
-                    help="ne pas sauvegarder avant (sauvegarde déjà faite autrement)")
+    mg.add_argument(
+        "--sans-sauvegarde",
+        dest="sans_sauvegarde",
+        action="store_true",
+        help="ne pas sauvegarder avant (sauvegarde déjà faite autrement)",
+    )
     mg.set_defaults(fn=_migrer)
 
-    al = sous.add_parser("alertes", help="notifications poussées des alertes : notifier | essai | etat | historique")
+    al = sous.add_parser(
+        "alertes", help="notifications poussées des alertes : notifier | essai | etat | historique"
+    )
     al.add_argument("action", choices=["notifier", "essai", "etat", "historique"])
     al.add_argument("--limite", type=int, default=30, help="historique : nombre de lignes (défaut 30)")
     al.set_defaults(fn=_alertes)
 
-    ll = sous.add_parser("llm", help="lecture par modèle de langage : verifier (clé + un appel minimal) | couts")
+    ll = sous.add_parser(
+        "llm", help="lecture par modèle de langage : verifier (clé + un appel minimal) | couts"
+    )
     ll.add_argument("action", choices=["verifier", "couts"])
-    ll.add_argument("--sans-appel", dest="sans_appel", action="store_true",
-                    help="verifier : seulement la présence de la clé, aucun appel")
+    ll.add_argument(
+        "--sans-appel",
+        dest="sans_appel",
+        action="store_true",
+        help="verifier : seulement la présence de la clé, aucun appel",
+    )
     ll.set_defaults(fn=_llm)
 
     args = ap.parse_args(argv)
-    logging.basicConfig(level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s"
+    )
     return args.fn(args)
 
 

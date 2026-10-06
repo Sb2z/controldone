@@ -102,7 +102,9 @@ _RANG_EXTRACTEUR = {"structure": 0, "deterministe": 1, "llm": 2}
 
 
 def _h(*parties: object) -> str:
-    return hashlib.sha256("\x1f".join("" if p is None else str(p) for p in parties).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        "\x1f".join("" if p is None else str(p) for p in parties).encode("utf-8")
+    ).hexdigest()
 
 
 def cle_pages(sha256_fichier: str, numero: int, version_ocr: str) -> str:
@@ -115,7 +117,9 @@ def cle_classement(textes_pages: Iterable[str], version_classifieur: str) -> str
     return _h("classement", _h(*textes_pages), version_classifieur)
 
 
-def cle_extraction(identite: str | None, extracteur_id: str, version: str, *, normalisation: bool = True) -> str:
+def cle_extraction(
+    identite: str | None, extracteur_id: str, version: str, *, normalisation: bool = True
+) -> str:
     """Étapes 4 et 5 : ``document.identite + extracteur.id + version`` (+ ``version_normalisation``)."""
     return _h("extraction", identite, extracteur_id, version, VERSION_NORMALISATION if normalisation else "")
 
@@ -126,7 +130,9 @@ def cle_controles(
     """Étape 7 : ``dossier_id + dossier_version + version_regles + empreinte_tolerances`` + empreinte du
     contexte (grilles, sous-ensemble de contrôles, table de taux, entités, transitaires, paramètres petits
     envois) : un contexte différent ne rejoue jamais des résultats mémorisés (D-1203)."""
-    return _h("controles", dossier_id, dossier_version, VERSION_REGLES, empreinte_tolerances, empreinte_contexte)
+    return _h(
+        "controles", dossier_id, dossier_version, VERSION_REGLES, empreinte_tolerances, empreinte_contexte
+    )
 
 
 def empreinte_contexte_controles(
@@ -184,7 +190,9 @@ class Decoupeur(Protocol):
 
     version: str
 
-    def decouper(self, source: FichierSource, *, ids: IdGenerator, client_id: str | None) -> ResultatDecoupage: ...
+    def decouper(
+        self, source: FichierSource, *, ids: IdGenerator, client_id: str | None
+    ) -> ResultatDecoupage: ...
 
 
 Reception = Callable[..., Any]
@@ -332,7 +340,10 @@ class ResultatDossier:
 
 
 def _recevoir(
-    source: Any, client_id: str | None, ids: IdGenerator, racine: Path | None,
+    source: Any,
+    client_id: str | None,
+    ids: IdGenerator,
+    racine: Path | None,
     doublons: list[tuple[Fichier, str | None]] | None = None,
 ) -> tuple[Lot, list[FichierSource], list[NonLu]]:
     """Étape 1 : réception (dossier, fichier, liste de chemins).
@@ -366,9 +377,15 @@ def _recevoir(
                 if doublons is not None:
                     doublons.append((f, str(local) if local is not None else None))
                 continue
-            sources.append(FichierSource(fichier=f, contenu=fr.contenu, chemin_local=local,
-                                         courriel=(fr.origine if (fr.origine or "").startswith("courriel:") else None),
-                                         corps_courriel=fr.corps_courriel))
+            sources.append(
+                FichierSource(
+                    fichier=f,
+                    contenu=fr.contenu,
+                    chemin_local=local,
+                    courriel=(fr.origine if (fr.origine or "").startswith("courriel:") else None),
+                    corps_courriel=fr.corps_courriel,
+                )
+            )
     if lot is None:
         lot = Lot(id=ids.nouveau(Prefixe.lot), client_id=client_id)
     return lot, sources, non_lus
@@ -400,7 +417,10 @@ def _identite(doc: Document, fichier: Fichier | None, nb_docs_fichier: int) -> s
 
 
 def _extraire(
-    doc: Document, pages: Sequence[Page], extracteurs: Sequence[Extracteur], ctx: ExtractionContext,
+    doc: Document,
+    pages: Sequence[Page],
+    extracteurs: Sequence[Extracteur],
+    ctx: ExtractionContext,
     memo: dict[str, Any] | None,
 ) -> tuple[Document, CoutExtraction, list[str], dict[str, str], bool]:
     """Étapes 4 et 5 : extracteurs dans l'ordre de §7.3 (structure > déterministe > llm), fusion (§7.3).
@@ -415,8 +435,11 @@ def _extraire(
             if e.supports(doc, pages):
                 candidats.append(e)
         except Exception as ex:
-            log.warning("extracteur_supports_en_erreur extracteur=%s exception=%s", getattr(e, "id", "?"),
-                        type(ex).__name__)
+            log.warning(
+                "extracteur_supports_en_erreur extracteur=%s exception=%s",
+                getattr(e, "id", "?"),
+                type(ex).__name__,
+            )
     candidats.sort(key=lambda e: (_RANG_EXTRACTEUR.get(e.type, 9), e.id))
     resultats: list[ExtractionResult] = []
     avert: list[str] = []
@@ -424,8 +447,13 @@ def _extraire(
     cout = CoutExtraction()
     partielle = False
     for e in candidats:
-        if resultats and e.type != "structure" and any(
-            r.extracteur.type.value == "structure" and r.champs is not None and not r.partielle for r in resultats
+        if (
+            resultats
+            and e.type != "structure"
+            and any(
+                r.extracteur.type.value == "structure" and r.champs is not None and not r.partielle
+                for r in resultats
+            )
         ):
             break  # un export structuré complet fait foi
         if e.type == "llm":
@@ -440,8 +468,9 @@ def _extraire(
                 if memo is not None:
                     memo[cle] = r
         except Exception as ex:  # §20.6 : jamais bloquant
-            log.warning("extraction_en_erreur extracteur=%s document=%s exception=%s", e.id, doc.id,
-                        type(ex).__name__)
+            log.warning(
+                "extraction_en_erreur extracteur=%s document=%s exception=%s", e.id, doc.id, type(ex).__name__
+            )
             avert.append(f"extraction_en_erreur:{e.id}")
             partielle = True
             continue
@@ -552,7 +581,9 @@ def _preparer_lot(
             r = comp.decoupeur.decouper(s, ids=ids, client_id=profil.client_id)
         except Exception as e:
             log.warning("decoupage_en_erreur fichier=%s exception=%s", s.fichier.id, type(e).__name__)
-            non_lus.append(NonLu(fichier=s.fichier.chemin_relatif, motif=f"lecture_en_erreur:{type(e).__name__}"))
+            non_lus.append(
+                NonLu(fichier=s.fichier.chemin_relatif, motif=f"lecture_en_erreur:{type(e).__name__}")
+            )
             continue
         pages[s.fichier.id] = list(r.pages)
         avertissements.extend(r.avertissements)
@@ -560,8 +591,13 @@ def _preparer_lot(
         for p in r.pages:
             cles["pages"].append(cle_pages(s.fichier.sha256, p.numero, version))
         if not r.documents:
-            non_lus.append(NonLu(fichier=s.fichier.chemin_relatif, motif="aucun_document_reconnu",
-                                 pages=[p.numero for p in r.pages]))
+            non_lus.append(
+                NonLu(
+                    fichier=s.fichier.chemin_relatif,
+                    motif="aucun_document_reconnu",
+                    pages=[p.numero for p in r.pages],
+                )
+            )
         for d in r.documents:
             textes = [p.texte for p in r.pages if any(pr.numero == p.numero for pr in d.pages)]
             cles["classement"].append(cle_classement(textes, version))
@@ -579,9 +615,14 @@ def _preparer_lot(
         from controldone.extract.llm import CostGuard, RegistreCoutsMemoire
 
         mensuel = options.plafond_ia_client_mensuel_eur
-        registre = RegistreCoutsMemoire({profil.client_id: options.cout_ia_mois_eur} if profil.client_id else None)
-        cost_guard = CostGuard(registre, plafond_dossier=options.plafond_ia_dossier_eur,
-                               plafond_client_mensuel=mensuel if mensuel is not None else Decimal("Infinity"))
+        registre = RegistreCoutsMemoire(
+            {profil.client_id: options.cout_ia_mois_eur} if profil.client_id else None
+        )
+        cost_guard = CostGuard(
+            registre,
+            plafond_dossier=options.plafond_ia_dossier_eur,
+            plafond_client_mensuel=mensuel if mensuel is not None else Decimal("Infinity"),
+        )
     extracteurs = [e for e in comp.extracteurs if options.llm or e.type != "llm"]
     cout = CoutExtraction()
     versions: dict[str, str] = {}
@@ -599,9 +640,14 @@ def _preparer_lot(
         src = contenus.get(fid) if fid else None
         pages_doc = [p for p in pages.get(fid or "", []) if any(pr.numero == p.numero for pr in d.pages)]
         ctx = ExtractionContext(
-            client_id=profil.client_id, dossier_id=lot.id, lot_id=lot.id, entites=tuple(profil.entites),
-            contenu_fichier=src.contenu if src else None, type_mime=src.fichier.type_mime if src else None,
-            ids=ids, cost_guard=cost_guard,
+            client_id=profil.client_id,
+            dossier_id=lot.id,
+            lot_id=lot.id,
+            entites=tuple(profil.entites),
+            contenu_fichier=src.contenu if src else None,
+            type_mime=src.fichier.type_mime if src else None,
+            ids=ids,
+            cost_guard=cost_guard,
         )
         nouveau, c, av, vers, part = _extraire(d, pages_doc, extracteurs, ctx, memo)
         for e in extracteurs:
@@ -626,17 +672,30 @@ def _preparer_lot(
     for d in documents:
         if d.type is TypeDocument.inconnu:
             fic = fichiers.get(d.pages[0].fichier_id) if d.pages else None
-            non_lus.append(NonLu(fichier=fic.chemin_relatif if fic else "?", motif="document_non_reconnu",
-                                 document_id=d.id, pages=[p.numero for p in d.pages]))
+            non_lus.append(
+                NonLu(
+                    fichier=fic.chemin_relatif if fic else "?",
+                    motif="document_non_reconnu",
+                    document_id=d.id,
+                    pages=[p.numero for p in d.pages],
+                )
+            )
 
     # 6. regroupement
     _progresser(options, "regroupement", 0, 1)
     courriels = {s.fichier.id: s.courriel for s in sources if s.courriel}
     try:
         reg = regrouper(
-            documents, fichiers, profil=profil.tolerances, transitaires=profil.transitaires,
-            options=OptionsRegroupement(meme_source=options.meme_source, annee=options.annee or lot.recu_le.year,
-                                        courriels=courriels, lot_ids=(lot.id,)),
+            documents,
+            fichiers,
+            profil=profil.tolerances,
+            transitaires=profil.transitaires,
+            options=OptionsRegroupement(
+                meme_source=options.meme_source,
+                annee=options.annee or lot.recu_le.year,
+                courriels=courriels,
+                lot_ids=(lot.id,),
+            ),
         )
         dossiers = reg.dossiers
         for doc_id in reg.non_rattaches:
@@ -644,8 +703,14 @@ def _preparer_lot(
             if d.type is TypeDocument.inconnu:
                 continue  # déjà listé
             fic = fichiers.get(d.pages[0].fichier_id) if d.pages else None
-            non_lus.append(NonLu(fichier=fic.chemin_relatif if fic else "?", motif="document_non_rattache",
-                                 document_id=d.id, pages=[p.numero for p in d.pages]))
+            non_lus.append(
+                NonLu(
+                    fichier=fic.chemin_relatif if fic else "?",
+                    motif="document_non_rattache",
+                    document_id=d.id,
+                    pages=[p.numero for p in d.pages],
+                )
+            )
     except Exception as e:
         log.error("regroupement_en_erreur exception=%s", type(e).__name__)
         dossiers = []
@@ -654,16 +719,31 @@ def _preparer_lot(
     _progresser(options, "regroupement", 1, 1)
     cles["version_regroupement"] = VERSION_REGROUPEMENT
     return LotPrepare(
-        lot=lot, profil=profil, grilles=grilles, fichiers=fichiers, chemins=chemins, pages=pages,
-        documents={d.id: d for d in documents}, dossiers=dossiers, non_lus=non_lus, cout=cout,
-        versions_extracteurs=versions, duree_s=time.perf_counter() - debut, cles=cles,
-        extraction_partielle=partielle, avertissements=avertissements,
+        lot=lot,
+        profil=profil,
+        grilles=grilles,
+        fichiers=fichiers,
+        chemins=chemins,
+        pages=pages,
+        documents={d.id: d for d in documents},
+        dossiers=dossiers,
+        non_lus=non_lus,
+        cout=cout,
+        versions_extracteurs=versions,
+        duree_s=time.perf_counter() - debut,
+        cles=cles,
+        extraction_partielle=partielle,
+        avertissements=avertissements,
     )
 
 
 def _copies_fichiers_doublons(
-    doublons: Sequence[tuple[Fichier, str | None]], documents: Sequence[Document], fichiers: dict[str, Fichier],
-    chemins: dict[str, str], pages: dict[str, list[Page]], ids: IdGenerator,
+    doublons: Sequence[tuple[Fichier, str | None]],
+    documents: Sequence[Document],
+    fichiers: dict[str, Fichier],
+    chemins: dict[str, str],
+    pages: dict[str, list[Page]],
+    ids: IdGenerator,
 ) -> list[Document]:
     """Fichier identique déjà reçu (§7.1) : il n'est pas retraité, mais il est rattaché au lot comme copie.
 
@@ -674,21 +754,28 @@ def _copies_fichiers_doublons(
     """
     copies: list[Document] = []
     for f, local in doublons:
-        originaux = [d for d in documents if d.pages and d.pages[0].fichier_id == f.doublon_de
-                     and not d.doublon_de]
+        originaux = [
+            d for d in documents if d.pages and d.pages[0].fichier_id == f.doublon_de and not d.doublon_de
+        ]
         if not originaux:
             continue
         fichiers[f.id] = f
         if local is not None:
             chemins[f.id] = local
-        pages[f.id] = [p.model_copy(update={"id": ids.nouveau(Prefixe.page), "fichier_id": f.id})
-                       for p in pages.get(f.doublon_de or "", [])]
+        pages[f.id] = [
+            p.model_copy(update={"id": ids.nouveau(Prefixe.page), "fichier_id": f.id})
+            for p in pages.get(f.doublon_de or "", [])
+        ]
         for d in originaux:
-            copies.append(d.model_copy(update={
-                "id": ids.nouveau(Prefixe.document),
-                "pages": [pr.model_copy(update={"fichier_id": f.id}) for pr in d.pages],
-                "doublon_de": d.id,
-            }))
+            copies.append(
+                d.model_copy(
+                    update={
+                        "id": ids.nouveau(Prefixe.document),
+                        "pages": [pr.model_copy(update={"fichier_id": f.id}) for pr in d.pages],
+                        "doublon_de": d.id,
+                    }
+                )
+            )
     return copies
 
 
@@ -713,8 +800,11 @@ def autres_dossiers_de(prepares: Iterable[LotPrepare]) -> list[AutreDossier]:
     out = []
     for p in prepares:
         for d in p.dossiers:
-            out.append(AutreDossier(dossier=d, documents={i: p.documents[i] for i in d.document_ids()
-                                                           if i in p.documents}))
+            out.append(
+                AutreDossier(
+                    dossier=d, documents={i: p.documents[i] for i in d.document_ids() if i in p.documents}
+                )
+            )
     return out
 
 
@@ -764,10 +854,14 @@ def controler_lot(
     profil = prepare.profil
     empreinte = profil.tolerances.empreinte()
     execution = Execution.nouvelle(
-        id=ids.nouveau(Prefixe.execution), client_id=profil.client_id, empreinte_tolerances=empreinte,
+        id=ids.nouveau(Prefixe.execution),
+        client_id=profil.client_id,
+        empreinte_tolerances=empreinte,
         versions_extracteurs=dict(sorted(prepare.versions_extracteurs.items())),
-        modele_llm=prepare.cout.modele, cout_ia_eur=prepare.cout.cout_eur,
-        jetons_entree=prepare.cout.jetons_entree, jetons_sortie=prepare.cout.jetons_sortie,
+        modele_llm=prepare.cout.modele,
+        cout_ia_eur=prepare.cout.cout_eur,
+        jetons_entree=prepare.cout.jetons_entree,
+        jetons_sortie=prepare.cout.jetons_sortie,
     )
     freres = autres_dossiers_de([prepare])
     taux_reference = options.taux_reference or table_par_defaut()
@@ -791,8 +885,13 @@ def controler_lot(
                 resultats = memo[cles["controles"]]
             else:
                 ctx = ControlContext.construire(
-                    dossier, docs, profil.tolerances, grilles=prepare.grilles, entites=profil.entites,
-                    transitaires=profil.transitaires, autres_dossiers=autres,
+                    dossier,
+                    docs,
+                    profil.tolerances,
+                    grilles=prepare.grilles,
+                    entites=profil.entites,
+                    transitaires=profil.transitaires,
+                    autres_dossiers=autres,
                     taux_reference=taux_reference,
                     parametres_petits_envois=profil.parametres_petits_envois,
                     execution_id=execution.id,
@@ -816,14 +915,27 @@ def controler_lot(
         dossier = dossier.model_copy(update={"statut_global": statut})
         docs = {i: prepare.documents[i] for i in dossier.document_ids() if i in prepare.documents}
         findings = construire_findings(
-            dossier, docs.values(), resultats, execution, fichiers=prepare.fichiers,
-            dossier_id=options.dossier_id_sortie or dossier.reference or dossier.id, statut_global=statut,
+            dossier,
+            docs.values(),
+            resultats,
+            execution,
+            fichiers=prepare.fichiers,
+            dossier_id=options.dossier_id_sortie or dossier.reference or dossier.id,
+            statut_global=statut,
         )
         sortie.append(
             ResultatDossier(
-                dossier=dossier, documents=docs, fichiers=prepare.fichiers, chemins=prepare.chemins,
-                pages=prepare.pages, resultats=resultats, findings=findings, execution=execution,
-                statut_global=statut, non_lus=list(prepare.non_lus), profil=profil,
+                dossier=dossier,
+                documents=docs,
+                fichiers=prepare.fichiers,
+                chemins=prepare.chemins,
+                pages=prepare.pages,
+                resultats=resultats,
+                findings=findings,
+                execution=execution,
+                statut_global=statut,
+                non_lus=list(prepare.non_lus),
+                profil=profil,
                 cles={**{k: v for k, v in prepare.cles.items()}, **cles},
             )
         )
@@ -842,8 +954,10 @@ def traiter_lot(
     """Traite un lot de bout en bout (§7). ``source`` : dossier, fichier, liste de chemins, ou ``LotPrepare``
     déjà préparé. Ne lève pas pour un fichier ou un document difficile (§20.6)."""
     options = options or OptionsPipeline()
-    prepare = source if isinstance(source, LotPrepare) else preparer_lot(
-        source, client_profile, grilles, options=options, composants=composants
+    prepare = (
+        source
+        if isinstance(source, LotPrepare)
+        else preparer_lot(source, client_profile, grilles, options=options, composants=composants)
     )
     return controler_lot(prepare, autres_dossiers=autres_dossiers, options=options)
 

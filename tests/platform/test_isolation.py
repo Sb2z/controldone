@@ -58,9 +58,25 @@ def test_liste_ne_contient_jamais_autre_client(monde, nom):
 @pytest.mark.parametrize("nom", [n for n in NOMS if n not in APPEND_ONLY])
 def test_modification_croisee_refusee(monde, nom):
     modele = MODELES[nom]
-    colonne = next(c for c in ("nom", "statut", "type", "reference", "role", "outcome", "nom_original",
-                               "transitaire_id", "fichier_id", "numero", "raison_sociale", "kind", "niveau")
-                   if c in modele.__table__.columns)
+    colonne = next(
+        c
+        for c in (
+            "nom",
+            "statut",
+            "type",
+            "reference",
+            "role",
+            "outcome",
+            "nom_original",
+            "transitaire_id",
+            "fichier_id",
+            "numero",
+            "raison_sociale",
+            "kind",
+            "niveau",
+        )
+        if c in modele.__table__.columns
+    )
     with monde.db.tenant("cli_b", SYSTEME) as sc, pytest.raises(AccesRefuse):
         sc.modifier(modele, monde.ids["cli_a"][nom], **{colonne: "pirate"})
 
@@ -282,8 +298,16 @@ def test_admin_client_ne_peut_pas_ecrire_constats_ni_valider(monde):
     admin = monde.acteurs["admin_a"]
     with monde.db.tenant("cli_a", admin) as sc:
         with pytest.raises(AccesRefuse):
-            sc.ajouter(Constat(id="f_faux", dossier_id="dos_a", dossier_version=1, controle_id="C1",
-                               niveau="ecart_certain", statut_validation="valide"))
+            sc.ajouter(
+                Constat(
+                    id="f_faux",
+                    dossier_id="dos_a",
+                    dossier_version=1,
+                    controle_id="C1",
+                    niveau="ecart_certain",
+                    statut_validation="valide",
+                )
+            )
         with pytest.raises(AccesRefuse):
             sc.modifier(Constat, "fv_a", statut_validation="valide")
         with pytest.raises(AccesRefuse):
@@ -349,10 +373,19 @@ def test_coffre_cle_par_client(monde, tmp_path):
         v.lire("cli_b", sha)
 
 
-@pytest.mark.parametrize("tenant,sha", [
-    ("../cli_a", "a" * 64), ("cli_a/../cli_b", "a" * 64), ("/etc", "a" * 64), ("cli_b", "../" * 3 + "x"),
-    ("cli_b", "A" * 64), ("cli_b", "a" * 63), (".", "a" * 64), ("", "a" * 64),
-])
+@pytest.mark.parametrize(
+    "tenant,sha",
+    [
+        ("../cli_a", "a" * 64),
+        ("cli_a/../cli_b", "a" * 64),
+        ("/etc", "a" * 64),
+        ("cli_b", "../" * 3 + "x"),
+        ("cli_b", "A" * 64),
+        ("cli_b", "a" * 63),
+        (".", "a" * 64),
+        ("", "a" * 64),
+    ],
+)
 def test_coffre_traversee_impossible(monde, tenant, sha):
     with pytest.raises(ErreurCoffre):
         monde.vault.lire(tenant, sha)

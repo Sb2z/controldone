@@ -15,8 +15,10 @@ from controldone.config import reset_settings
 from controldone.storage import Database, SchemaPerime
 from controldone.storage.migrations import MIGRATIONS, appliquer, en_attente
 
-INDEX = {"audit_log": {"ix_audit_log_action", "ix_audit_log_actor", "ix_audit_log_ts"},
-         "jobs": {"ix_jobs_statut_cree", "ix_jobs_kind_statut", "ix_jobs_cree"}}
+INDEX = {
+    "audit_log": {"ix_audit_log_action", "ix_audit_log_actor", "ix_audit_log_ts"},
+    "jobs": {"ix_jobs_statut_cree", "ix_jobs_kind_statut", "ix_jobs_cree"},
+}
 TABLES_RECENTES = ("debit_compteurs", "sessions_revoquees", "sessions_actives", "notifications_alertes")
 
 
@@ -54,8 +56,13 @@ def _scenario(url: str, monkeypatch) -> None:
         assert db.migrations_en_attente() == []  # base neuve : toutes inscrites sans être exécutées
         _verifier_a_jour(db)
         with db.engine.begin() as c:  # alerte existante avant la mise à jour
-            c.execute(text("INSERT INTO alertes (cle, kind, message, details, cree_le) VALUES "
-                           "('k1', 'job_mort', 'FICTIF', '{}', :d)"), {"d": datetime(2026, 1, 1)})
+            c.execute(
+                text(
+                    "INSERT INTO alertes (cle, kind, message, details, cree_le) VALUES "
+                    "('k1', 'job_mort', 'FICTIF', '{}', :d)"
+                ),
+                {"d": datetime(2026, 1, 1)},
+            )
         _vieillir(db)
         assert [m.version for m in db.migrations_en_attente()] == [m.version for m in MIGRATIONS]
         monkeypatch.setenv("CONTROLDONE_ENV", "prod")
@@ -200,7 +207,9 @@ def test_defaut_d_attente_selon_le_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("CONTROLDONE_ENV", "prod")
     monkeypatch.delenv("CONTROLDONE_MIGRATION_ATTENTE_S", raising=False)
     attentes: list[float] = []
-    monkeypatch.setattr(_time, "sleep", lambda s: (attentes.append(s), (_ for _ in ()).throw(KeyboardInterrupt))[0])
+    monkeypatch.setattr(
+        _time, "sleep", lambda s: (attentes.append(s), (_ for _ in ()).throw(KeyboardInterrupt))[0]
+    )
     with pytest.raises(KeyboardInterrupt):
         db.attendre_schema_a_jour(intervalle_s=5)
     assert attentes == [5]
@@ -274,4 +283,3 @@ def test_index_declares_dans_les_modeles():
     for table, noms in INDEX.items():
         assert noms <= {i.name for i in Base.metadata.tables[table].indexes}
     assert "notifiee_le" in Base.metadata.tables["alertes"].c
-

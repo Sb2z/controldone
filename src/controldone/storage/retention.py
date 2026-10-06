@@ -91,38 +91,69 @@ def cloturer_inactifs(db: Database, now: datetime | None = None, *, jours: int =
         tenants = [t for (t,) in s.execute(select(Tenant.id).order_by(Tenant.id))]
     for tid in tenants:
         with db.transaction_systeme() as s:
-            ouverts_constats = set(s.execute(
-                select(Constat.dossier_id).join(Ecart, (Ecart.constat_id == Constat.id)
-                                                & (Ecart.tenant_id == Constat.tenant_id))
-                .where(Constat.tenant_id == tid, Ecart.statut.not_in(("credite", "abandonne")))).scalars())
-            en_attente = set(s.execute(
-                select(Constat.dossier_id).join(Dossier, (Dossier.id == Constat.dossier_id)
-                                                & (Dossier.tenant_id == Constat.tenant_id)
-                                                & (Dossier.version == Constat.dossier_version))
-                .where(Constat.tenant_id == tid, Constat.statut_validation == "propose")).scalars())
+            ouverts_constats = set(
+                s.execute(
+                    select(Constat.dossier_id)
+                    .join(Ecart, (Ecart.constat_id == Constat.id) & (Ecart.tenant_id == Constat.tenant_id))
+                    .where(Constat.tenant_id == tid, Ecart.statut.not_in(("credite", "abandonne")))
+                ).scalars()
+            )
+            en_attente = set(
+                s.execute(
+                    select(Constat.dossier_id)
+                    .join(
+                        Dossier,
+                        (Dossier.id == Constat.dossier_id)
+                        & (Dossier.tenant_id == Constat.tenant_id)
+                        & (Dossier.version == Constat.dossier_version),
+                    )
+                    .where(Constat.tenant_id == tid, Constat.statut_validation == "propose")
+                ).scalars()
+            )
             n_dos = 0
-            for d in s.execute(select(Dossier).where(Dossier.tenant_id == tid, Dossier.cloture_le.is_(None),
-                                                     Dossier.modifie_le <= limite)).scalars():
+            for d in s.execute(
+                select(Dossier).where(
+                    Dossier.tenant_id == tid, Dossier.cloture_le.is_(None), Dossier.modifie_le <= limite
+                )
+            ).scalars():
                 if d.id in ouverts_constats or d.id in en_attente:
                     continue
-                s.execute(update(Dossier).where(Dossier.tenant_id == tid, Dossier.id == d.id)
-                          .values(cloture_le=now, modifie_le=d.modifie_le)
-                          .execution_options(synchronize_session=False))
+                s.execute(
+                    update(Dossier)
+                    .where(Dossier.tenant_id == tid, Dossier.id == d.id)
+                    .values(cloture_le=now, modifie_le=d.modifie_le)
+                    .execution_options(synchronize_session=False)
+                )
                 n_dos += 1
-            vivants = set(s.execute(select(Dossier.lot_id).where(Dossier.tenant_id == tid,
-                                                                 Dossier.cloture_le.is_(None),
-                                                                 Dossier.lot_id.is_not(None))).scalars())
+            vivants = set(
+                s.execute(
+                    select(Dossier.lot_id).where(
+                        Dossier.tenant_id == tid, Dossier.cloture_le.is_(None), Dossier.lot_id.is_not(None)
+                    )
+                ).scalars()
+            )
             n_lot = 0
-            for lot in s.execute(select(Lot).where(Lot.tenant_id == tid, Lot.cloture_le.is_(None),
-                                                   Lot.recu_le <= limite,
-                                                   Lot.statut.in_(("en_erreur", "traite")))).scalars():
+            for lot in s.execute(
+                select(Lot).where(
+                    Lot.tenant_id == tid,
+                    Lot.cloture_le.is_(None),
+                    Lot.recu_le <= limite,
+                    Lot.statut.in_(("en_erreur", "traite")),
+                )
+            ).scalars():
                 if lot.statut == "traite" and lot.id in vivants:
                     continue
                 lot.cloture_le = now
                 n_lot += 1
             if n_dos or n_lot:
-                journaliser(s, actor="systeme:retention", role="systeme", action="cloture_auto", tenant_id=tid,
-                            details={"dossiers": n_dos, "lots": n_lot, "jours": jours})
+                journaliser(
+                    s,
+                    actor="systeme:retention",
+                    role="systeme",
+                    action="cloture_auto",
+                    tenant_id=tid,
+                    details={"dossiers": n_dos, "lots": n_lot, "jours": jours},
+                )
             total["dossiers"] += n_dos
             total["lots"] += n_lot
     return total
@@ -134,8 +165,9 @@ PURGE_PAR_TRANSACTION = 500
 GARDE_REDEPOT_S = 3600
 
 
-def purger_expires(db: Database, vault: FileVault, now: datetime | None = None, *,
-                   attente_verrou_s: float = 0.0) -> RapportPurge:
+def purger_expires(
+    db: Database, vault: FileVault, now: datetime | None = None, *, attente_verrou_s: float = 0.0
+) -> RapportPurge:
     """Purge des contenus expirés. Une transaction par client et par paquet de ``PURGE_PAR_TRANSACTION``
     fichiers ; textes de page chargés par paquet (pas une requête par fichier).
 
@@ -157,31 +189,54 @@ def _purger_expires(db: Database, vault: FileVault, now: datetime | None) -> Rap
         limite = now - timedelta(days=retention)
         with db.session(lecture=True) as s:
             s.info[garde.CLE_SYSTEME] = True
-            expires = set(s.execute(select(Dossier.id).where(Dossier.tenant_id == tid,
-                                                              Dossier.cloture_le.is_not(None),
-                                                              Dossier.cloture_le <= limite)).scalars())
+            expires = set(
+                s.execute(
+                    select(Dossier.id).where(
+                        Dossier.tenant_id == tid,
+                        Dossier.cloture_le.is_not(None),
+                        Dossier.cloture_le <= limite,
+                    )
+                ).scalars()
+            )
             liens: dict[str, set[str]] = {}
-            for fid, did in s.execute(select(DossierFichier.fichier_id, DossierFichier.dossier_id)
-                                      .where(DossierFichier.tenant_id == tid)):
+            for fid, did in s.execute(
+                select(DossierFichier.fichier_id, DossierFichier.dossier_id).where(
+                    DossierFichier.tenant_id == tid
+                )
+            ):
                 liens.setdefault(fid, set()).add(did)
-            lots_clos = set(s.execute(select(Lot.id).where(Lot.tenant_id == tid, Lot.cloture_le.is_not(None),
-                                                           Lot.cloture_le <= limite)).scalars())
-            candidats = [fid for fid, lot_id in s.execute(
-                select(Fichier.id, Fichier.lot_id).where(Fichier.tenant_id == tid, Fichier.purge_le.is_(None))
-                .order_by(Fichier.id))
-                if (liens[fid] <= expires if fid in liens else (lot_id or "") in lots_clos)]
+            lots_clos = set(
+                s.execute(
+                    select(Lot.id).where(
+                        Lot.tenant_id == tid, Lot.cloture_le.is_not(None), Lot.cloture_le <= limite
+                    )
+                ).scalars()
+            )
+            candidats = [
+                fid
+                for fid, lot_id in s.execute(
+                    select(Fichier.id, Fichier.lot_id)
+                    .where(Fichier.tenant_id == tid, Fichier.purge_le.is_(None))
+                    .order_by(Fichier.id)
+                )
+                if (liens[fid] <= expires if fid in liens else (lot_id or "") in lots_clos)
+            ]
         n_fic = n_txt = 0
         for i in range(0, len(candidats), PURGE_PAR_TRANSACTION):
-            paquet = candidats[i:i + PURGE_PAR_TRANSACTION]
+            paquet = candidats[i : i + PURGE_PAR_TRANSACTION]
             with db.transaction_systeme() as s:
-                for p in s.execute(select(PageTexte).where(PageTexte.tenant_id == tid,
-                                                           PageTexte.fichier_id.in_(paquet))).scalars():
+                for p in s.execute(
+                    select(PageTexte).where(PageTexte.tenant_id == tid, PageTexte.fichier_id.in_(paquet))
+                ).scalars():
                     if p.texte_ref:
                         a_effacer.append((tid, p.texte_ref, "textes"))
                         n_txt += 1
                     p.texte_ref, p.purge_le = None, now
-                for f in s.execute(select(Fichier).where(Fichier.tenant_id == tid, Fichier.id.in_(paquet),
-                                                         Fichier.purge_le.is_(None))).scalars():
+                for f in s.execute(
+                    select(Fichier).where(
+                        Fichier.tenant_id == tid, Fichier.id.in_(paquet), Fichier.purge_le.is_(None)
+                    )
+                ).scalars():
                     if f.coffre_ref:
                         a_effacer.append((tid, f.coffre_ref, "fichiers"))
                     f.coffre_ref, f.purge_le = None, now
@@ -189,8 +244,14 @@ def _purger_expires(db: Database, vault: FileVault, now: datetime | None) -> Rap
         if n_fic or n_txt:
             rapport.fichiers[tid], rapport.textes[tid] = n_fic, n_txt
             with db.transaction_systeme() as s:
-                journaliser(s, actor="systeme:retention", role="systeme", action="purge_retention",
-                            tenant_id=tid, details={"fichiers": n_fic, "textes": n_txt, "retention_jours": retention})
+                journaliser(
+                    s,
+                    actor="systeme:retention",
+                    role="systeme",
+                    action="purge_retention",
+                    tenant_id=tid,
+                    details={"fichiers": n_fic, "textes": n_txt, "retention_jours": retention},
+                )
     # Adressage par contenu : un contenu encore référencé par une ligne non purgée est conservé. Vérification
     # et suppression **sous le verrou d'écriture** (un dépôt enregistre ses fichiers dans une transaction
     # d'écriture : il voit la suppression, ou la purge voit sa ligne), et un contenu redéposé à l'identique
@@ -199,7 +260,7 @@ def _purger_expires(db: Database, vault: FileVault, now: datetime | None) -> Rap
     tries = sorted(set(a_effacer))
     for i in range(0, len(tries), PURGE_PAR_TRANSACTION):
         with db.transaction_systeme() as s:
-            for tenant, sha, espace in tries[i:i + PURGE_PAR_TRANSACTION]:
+            for tenant, sha, espace in tries[i : i + PURGE_PAR_TRANSACTION]:
                 if espace == "fichiers":
                     q = select(Fichier.id).where(Fichier.tenant_id == tenant, Fichier.coffre_ref == sha)
                 else:
@@ -219,9 +280,16 @@ def _purger_expires(db: Database, vault: FileVault, now: datetime | None) -> Rap
 ATTENTE_VERROU_EFFACEMENT_S = 10.0
 
 
-def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, motif: str, *,
-                     dossier_sorties: Path | str | None = None,
-                     attente_verrou_s: float = ATTENTE_VERROU_EFFACEMENT_S) -> dict[str, int]:
+def supprimer_client(
+    db: Database,
+    vault: FileVault,
+    tenant_id: str,
+    acteur: Acteur,
+    motif: str,
+    *,
+    dossier_sorties: Path | str | None = None,
+    attente_verrou_s: float = ATTENTE_VERROU_EFFACEMENT_S,
+) -> dict[str, int]:
     """Efface toutes les données d'un client (base + coffre + traces des envois mis à disposition, chiffrées dans
     ``dossier_sorties``, défaut ``<data_dir>/outbox_envoyee``). Réservé au fondateur ; motif obligatoire.
 
@@ -238,16 +306,28 @@ def supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Act
         return _supprimer_client(db, vault, tenant_id, acteur, motif, dossier_sorties)
 
 
-def _supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, motif: str,
-                      dossier_sorties: Path | str | None) -> dict[str, int]:
+def _supprimer_client(
+    db: Database,
+    vault: FileVault,
+    tenant_id: str,
+    acteur: Acteur,
+    motif: str,
+    dossier_sorties: Path | str | None,
+) -> dict[str, int]:
     comptes: dict[str, int] = {}
     with db.transaction_systeme(effacement=True) as s:
         if s.get(Tenant, tenant_id) is None:
             raise AccesRefuse("client introuvable")
-        membres = [m.user_id for m in s.execute(select(Membership).where(Membership.tenant_id == tenant_id)).scalars()]
+        membres = [
+            m.user_id
+            for m in s.execute(select(Membership).where(Membership.tenant_id == tenant_id)).scalars()
+        ]
         for modele in MODELES_CLIENT:
-            res = s.execute(delete(modele).where(modele.tenant_id == tenant_id)  # type: ignore[attr-defined]
-                            .execution_options(synchronize_session=False))
+            res = s.execute(
+                delete(modele)
+                .where(modele.tenant_id == tenant_id)  # type: ignore[attr-defined]
+                .execution_options(synchronize_session=False)
+            )
             comptes[modele.__tablename__] = res.rowcount or 0  # type: ignore[attr-defined]
         utilisateurs = 0
         for uid in membres:
@@ -260,9 +340,16 @@ def _supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Ac
         comptes["jobs"] = JobStore(db).supprimer_client(s, tenant_id)
         comptes["alertes"] = s.execute(delete(Alerte).where(Alerte.tenant_id == tenant_id)).rowcount or 0
         s.execute(delete(Tenant).where(Tenant.id == tenant_id))
-        journaliser(s, actor=acteur.id, role=acteur.role.value, action="supprimer_client", tenant_id=tenant_id,
-                    target=f"tenants:{tenant_id}", ip=acteur.ip,
-                    details={"motif": motif[:200], "lignes": {k: v for k, v in comptes.items() if v}})
+        journaliser(
+            s,
+            actor=acteur.id,
+            role=acteur.role.value,
+            action="supprimer_client",
+            tenant_id=tenant_id,
+            target=f"tenants:{tenant_id}",
+            ip=acteur.ip,
+            details={"motif": motif[:200], "lignes": {k: v for k, v in comptes.items() if v}},
+        )
     vault.supprimer_client(tenant_id)
     if dossier_sorties is None:
         from controldone.config import get_settings
@@ -270,7 +357,9 @@ def _supprimer_client(db: Database, vault: FileVault, tenant_id: str, acteur: Ac
         dossier_sorties = Path(get_settings().data_dir) / "outbox_envoyee"
     from controldone.storage.traces_envoi import TracesEnvoi
 
-    comptes["traces_envoi"] = TracesEnvoi(Path(dossier_sorties), vault.cles_maitresses).supprimer_client(tenant_id)
+    comptes["traces_envoi"] = TracesEnvoi(Path(dossier_sorties), vault.cles_maitresses).supprimer_client(
+        tenant_id
+    )
     return comptes
 
 
@@ -302,8 +391,9 @@ def _json(data: Any) -> bytes:
     return json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str).encode("utf-8")
 
 
-def exporter_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acteur,
-                    destination: Path | str) -> Path:
+def exporter_client(
+    db: Database, vault: FileVault, tenant_id: str, acteur: Acteur, destination: Path | str
+) -> Path:
     """Archive de restitution. Fondateur (export complet, accès tracé) ou ``client_admin`` du client
     (constats publiés seulement)."""
     if not peut(acteur, Action.exporter, Ressource("client", tenant_id)):
@@ -323,14 +413,21 @@ def exporter_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acte
     manifeste: dict[str, str] = {}
     try:
         with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as z:
+
             def ecrire(nom: str, data: bytes) -> None:
                 z.writestr(nom, data)
                 manifeste[nom] = hashlib.sha256(data).hexdigest()
 
             ecrire("client.json", _json(_ligne(scope.client())))
             voit_resultats = acteur.role is Role.fondateur
-            for nom, modele in (("entites", Entite), ("transitaires", Transitaire), ("grilles", Grille),
-                                ("lots", Lot), ("fichiers", Fichier), ("couts_ia", AiUsage)):
+            for nom, modele in (
+                ("entites", Entite),
+                ("transitaires", Transitaire),
+                ("grilles", Grille),
+                ("lots", Lot),
+                ("fichiers", Fichier),
+                ("couts_ia", AiUsage),
+            ):
                 ecrire(f"{nom}.json", _json([_ligne(o) for o in scope.lister(modele)]))
             # Actions sortantes : un rôle client ne voit que celles mises à disposition (``envoye``), comme dans
             # son espace ; brouillons, refus et corrections internes restent au fondateur (revue RS-06).
@@ -342,14 +439,20 @@ def exporter_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acte
                     "documents": [_ligne(o) for o in scope.lister(Document, dossier_id=d.id)],
                     "constats": [_ligne(o) for o in scope.constats(d.id)],
                     "resultats": [_ligne(o) for o in scope.lister(Resultat, dossier_id=d.id)]
-                    if voit_resultats else [],
+                    if voit_resultats
+                    else [],
                 }
                 ecrire(f"dossiers/{_nom_sur(d.id)}.json", _json(bloc))
-            ecrire("recouvrement.json", _json({
-                "ecarts": [_ligne(o) for o in scope.lister(Ecart)],
-                "evenements": [_ligne(o) for o in scope.lister(EvenementRecouvrement)],
-                "reclamations": [_ligne(o) for o in scope.lister(Reclamation)],
-            }))
+            ecrire(
+                "recouvrement.json",
+                _json(
+                    {
+                        "ecarts": [_ligne(o) for o in scope.lister(Ecart)],
+                        "evenements": [_ligne(o) for o in scope.lister(EvenementRecouvrement)],
+                        "reclamations": [_ligne(o) for o in scope.lister(Reclamation)],
+                    }
+                ),
+            )
             if voit_resultats:
                 ecrire("constats_tous.json", _json([_ligne(o) for o in scope.lister(Constat)]))
             for f in scope.lister(Fichier, ordre=Fichier.id):
@@ -360,10 +463,18 @@ def exporter_client(db: Database, vault: FileVault, tenant_id: str, acteur: Acte
                 except FileNotFoundError:
                     continue
                 ecrire(f"pieces/{_nom_sur(f.id)}/{_nom_sur(f.nom_original)}", contenu)
-            z.writestr("manifest.json", _json({
-                "schema": "controldone.export/1.0.0", "client": tenant_id, "genere_le": maintenant().isoformat(),
-                "genere_par": acteur.id, "contenu": manifeste,
-            }))
+            z.writestr(
+                "manifest.json",
+                _json(
+                    {
+                        "schema": "controldone.export/1.0.0",
+                        "client": tenant_id,
+                        "genere_le": maintenant().isoformat(),
+                        "genere_par": acteur.id,
+                        "contenu": manifeste,
+                    }
+                ),
+            )
         scope._auditer("exporter_client", f"tenants:{tenant_id}", {"entrees": len(manifeste)}, toujours=True)
         scope.commit()
     finally:

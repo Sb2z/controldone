@@ -30,12 +30,22 @@ class LigneFacture:
         return (self.prix_unitaire_ht * self.quantite).quantize(_CENTIME, rounding=ROUND_HALF_UP)
 
     def en_json(self) -> dict[str, str]:
-        return {"libelle": self.libelle, "quantite": str(self.quantite),
-                "prix_unitaire_ht": str(self.prix_unitaire_ht.quantize(_CENTIME)), "montant_ht": str(self.montant_ht)}
+        return {
+            "libelle": self.libelle,
+            "quantite": str(self.quantite),
+            "prix_unitaire_ht": str(self.prix_unitaire_ht.quantize(_CENTIME)),
+            "montant_ht": str(self.montant_ht),
+        }
 
 
-def payload_facture(type_facture: str, lignes: Sequence[LigneFacture], *, destinataires: list[str],
-                    raison_sociale: str, references: dict[str, Any] | None = None) -> dict[str, Any]:
+def payload_facture(
+    type_facture: str,
+    lignes: Sequence[LigneFacture],
+    *,
+    destinataires: list[str],
+    raison_sociale: str,
+    references: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Contenu d'un brouillon ``facture_emise`` (le fondateur relit, corrige ou refuse)."""
     total = sum((x.montant_ht for x in lignes), Decimal("0.00"))
     detail = "\n".join(f"- {x.libelle} : {format_montant(x.montant_ht, 'EUR')} HT" for x in lignes)

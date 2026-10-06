@@ -18,19 +18,28 @@ from controldone.referentiel.export import en_csv, en_json
 # --- relevé d'écarts et modèle à adapter ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("texte", [
-    "Nous réclamons le remboursement.", "Valant mise en demeure.", "Sous huitaine, à défaut de régularisation.",
-    "Conformément aux dispositions du code des douanes.", "En application de l'article L. 441-10.",
-    "Des pénalités de retard s'appliqueront.", "Suivi du recouvrement",
-])
+@pytest.mark.parametrize(
+    "texte",
+    [
+        "Nous réclamons le remboursement.",
+        "Valant mise en demeure.",
+        "Sous huitaine, à défaut de régularisation.",
+        "Conformément aux dispositions du code des douanes.",
+        "En application de l'article L. 441-10.",
+        "Des pénalités de retard s'appliqueront.",
+        "Suivi du recouvrement",
+    ],
+)
 def test_modele_sans_formulation_d_acte_juridique(texte):
     with pytest.raises(FormulationInterdite):
         verifier_modele(texte)
 
 
 def test_modele_neutre_accepte():
-    verifier_modele("Pourriez-vous vérifier ces montants et nous indiquer si vous émettrez un avoir ? "
-                    "Article 12 de la déclaration.")
+    verifier_modele(
+        "Pourriez-vous vérifier ces montants et nous indiquer si vous émettrez un avoir ? "
+        "Article 12 de la déclaration."
+    )
 
 
 # --- référentiel : prix seulement pour un transitaire nommé, accord écrit obligatoire -----------------------------
@@ -41,8 +50,12 @@ def test_transitaire_nomme_sans_taux_d_ecart():
     enr = [_enr(i, ecart=i % 2 == 0, prix={"frais_dedouanement": Decimal("50")}) for i in range(12)]
     nomme = agreger(enr, sel=SEL, alias_publics=alias).agregats
     assert nomme and nomme[0].transitaire == "Transitaire public FICTIF"
-    assert nomme[0].taux_dossiers_avec_ecart is None and nomme[0].prix  # avant : taux d'écart publié sous le nom
-    assert en_json(agreger(enr, sel=SEL, alias_publics=alias))["agregats"][0]["taux_dossiers_avec_ecart"] is None
+    assert (
+        nomme[0].taux_dossiers_avec_ecart is None and nomme[0].prix
+    )  # avant : taux d'écart publié sous le nom
+    assert (
+        en_json(agreger(enr, sel=SEL, alias_publics=alias))["agregats"][0]["taux_dossiers_avec_ecart"] is None
+    )
     assert en_csv(agreger(enr, sel=SEL, alias_publics=alias)).splitlines()[1].split(",")[6] == ""
     anonyme = agreger(enr, sel=SEL, alias_publics={}).agregats
     assert anonyme[0].transitaire.startswith("T-") and anonyme[0].taux_dossiers_avec_ecart is not None
@@ -50,9 +63,11 @@ def test_transitaire_nomme_sans_taux_d_ecart():
 
 def test_alias_sans_accord_ecrit_ignore(tmp_path):
     f = tmp_path / "alias.yaml"
-    f.write_text('version: 1\nalias:\n  "Sans accord FICTIF":\n    tva: ["FR00000000001"]\n'
-                 '  "Avec accord FICTIF":\n    accord_ecrit: "accord-FICTIF-1, 2026-10-01"\n    tva: ["FR00000000002"]\n',
-                 encoding="utf-8")
+    f.write_text(
+        'version: 1\nalias:\n  "Sans accord FICTIF":\n    tva: ["FR00000000001"]\n'
+        '  "Avec accord FICTIF":\n    accord_ecrit: "accord-FICTIF-1, 2026-10-01"\n    tva: ["FR00000000002"]\n',
+        encoding="utf-8",
+    )
     assert list(charger_alias_publics(f)) == ["Avec accord FICTIF"]
 
 
@@ -78,7 +93,9 @@ def test_f16_dossier_surveille_ne_lit_pas_les_gros_fichiers(tmp_path, monkeypatc
     depots = c.relever()
     assert lus == []  # avant : read_bytes de chaque fichier au relevé, même de plusieurs Go
     assert all(isinstance(d.elements, ElementsParesseux) for d in depots)
-    assert len(depots) == 2 and depots[0].meta["ignores_trop_gros"] == ["gros.pdf"]  # 260 o par fichier, 600 o max
+    assert len(depots) == 2 and depots[0].meta["ignores_trop_gros"] == [
+        "gros.pdf"
+    ]  # 260 o par fichier, 600 o max
     assert [r for d in depots for r, _ in d.elements] == ["petit0.xml", "petit1.xml", "petit2.xml"]
     assert "gros.pdf" not in lus
 
@@ -130,12 +147,18 @@ def test_planificateur_rattrape_le_referentiel_du_mois(tmp_path):
         f = tmp_path / "deploy" / nom
         f.write_text(f'#!/usr/bin/env bash\necho "{nom} $*" >> {journal}\n', encoding="utf-8")
         f.chmod(0o700)
-    env = {**os.environ, "CONTROLDONE_PYTHON": str(tmp_path / "deploy" / "faux_python"), "SCHED_TICK_S": "3600",
-           "SCHED_BACKUP_HHMM": "0000"}
+    env = {
+        **os.environ,
+        "CONTROLDONE_PYTHON": str(tmp_path / "deploy" / "faux_python"),
+        "SCHED_TICK_S": "3600",
+        "SCHED_BACKUP_HHMM": "0000",
+    }
     p = subprocess.Popen([str(script)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         fin = time.monotonic() + 20
-        while time.monotonic() < fin and (not journal.exists() or "backup-cron.sh" not in journal.read_text()):
+        while time.monotonic() < fin and (
+            not journal.exists() or "backup-cron.sh" not in journal.read_text()
+        ):
             time.sleep(0.1)
         time.sleep(0.5)
     finally:

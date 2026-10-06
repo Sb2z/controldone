@@ -20,79 +20,127 @@ from controldone.normalize.text import cle_texte
 __all__ = ["NATURES_LIBELLES", "nature_libelle", "renvoie_a_une_annexe"]
 
 NATURES_LIBELLES: tuple[tuple[NatureLigne, re.Pattern[str]], ...] = (
-    (NatureLigne.frais_avance_fonds, re.compile(
-        r"avance de fonds|av\.? (?:de )?fonds|frais d'avance|advance (?:fee|of funds)|disbursement fee|cash advance|"
-        r"commission d'avance|commission (?:sur|de) debours|frais financiers|finance fee|anticipo de fondos|"
-        r"frais de debours|"
-        # de / it / es / nl
-        r"vorlageprovision|vorlagegebuhr|auslagenprovision|kapitalbereitstellung|"
-        r"(?:commissione|diritti?) (?:di |per )?anticip|anticipazione (?:diritti|fondi)|"
-        r"comision (?:por|de) anticipo|anticipo de (?:derechos|fondos|suplidos)|"
-        r"voorschotprovisie|voorschotkosten|provisie voorschot|"
-        # pt / pl (D-2501)
-        r"comissao de adiantamento|adiantamento de (?:fundos|despesas)|taxa de adiantamento|"
-        r"prowizja (?:za|od) (?:kredytowanie|wylozenie|zaliczk|kredyt)|oplata za kredytowanie")),
-    (NatureLigne.frais_ligne_supplementaire, re.compile(
-        r"lignes? sup|articles? supp|additional (?:lines?|items?|articles?)|add\.? lines?|extra (?:lines?|items?)|"
-        r"ligne additionnelle|ligne(?:s)? (?:de )?(?:declaration )?sup|partida adicional|"
-        r"additional (?:entry|declaration|customs) (?:lines?|items?)|"
-        r"zusatzliche (?:positionen|zollpositionen|tarifpositionen)|zusatzposition|weitere positionen|"
-        r"voci (?:doganali )?aggiuntive|voce aggiuntiva|righe aggiuntive|partidas adicionales|lineas adicionales|"
-        r"extra aangifteregels|aanvullende (?:regels|posten)|extra (?:regels|posten)|"
-        r"adicoes (?:suplementares|adicionais)|linhas adicionais|artigos adicionais|"
-        r"dodatkowe (?:pozycje|linie|artykuly)|dodatkowa pozycja")),
-    (NatureLigne.debours_forfait_petits_envois, re.compile(
-        r"droit forfaitaire|forfait (?:petits? envois|par article)|petits envois|flat[- ]?(?:rate )?dut|"
-        r"low[- ]value|droit fixe par article|per item duty|derecho (?:a tanto alzado|fijo)|"
-        r"pauschalzoll|zollpauschale|kleinsendung|dazio forfettario|piccole spedizioni|"
-        r"pequenos envios|forfaitair recht|kleine zendingen|direito fixo|pequenas remessas|"
-        r"oplata ryczaltowa|ryczalt (?:za|od) artykul|male przesylki")),
-    (NatureLigne.debours_autres_taxes, re.compile(
-        r"autres? (?:tx|taxes?|droits)|other (?:taxes|duties)|accises?|excise|anti-?dumping|compensat|octroi|"
-        r"taxe (?:speciale|interieure|additionnelle)|impuestos especiales|"
-        r"verbrauchsteuer|antidumpingzoll|andere abgaben|sonstige abgaben|altri (?:dazi|diritti|tributi)|"
-        r"otros (?:impuestos|derechos)|accijns|overige (?:heffingen|rechten)|antydumping|"
-        r"outros (?:impostos|direitos)|imposto especial|akcyza")),
-    (NatureLigne.debours_combines, re.compile(
-        r"droits? (?:et|&) (?:taxes|tva)|duties (?:and|&) taxes|duty (?:and|&) tax|droits/taxes|taxes et droits|"
-        r"derechos e impuestos|"
-        r"zolle und (?:steuern|abgaben)|zoll und einfuhrumsatzsteuer|dazi e (?:iva|imposte|tributi)|"
-        r"aranceles e (?:iva|impuestos)|rechten en (?:btw|belastingen)|invoerrechten en btw|"
-        r"direitos e (?:impostos|iva)|cla? i podatki")),
-    (NatureLigne.debours_tva, re.compile(
-        r"tva (?:a l'|a l |de l')?import|import vat|vat on import|tva douane|tva sur import|tva debours|"
-        r"tva avancee|iva (?:de )?importacion|^tva$|"
-        r"einfuhrumsatzsteuer|\beust\b|iva (?:all'|alla |di |sull')?importazion|"
-        r"btw (?:bij|op) invoer|invoer-?btw|iva (?:na |de |sobre a )?importacao|"
-        r"vat (?:z tytulu|od) importu|vat importowy|podatek vat (?:z tytulu|od) importu")),
-    (NatureLigne.debours_droits, re.compile(
-        r"droits? de douane|customs dut|\bdut(?:y|ies)\b|^droits?\b|aranceles?|derechos de aduana|"
-        r"zollabgaben|^zoll\b|einfuhrzoll|^zolle\b|dazi[oe]? (?:doganal|all'importazione)|^dazi[oe]?\b|"
-        r"invoerrechten|douanerechten|direitos (?:aduaneiros|de importacao|alfandegarios)|^direitos\b|"
-        r"^clo\b|clo (?:importowe|przywozowe)|^cla\b")),
-    (NatureLigne.magasinage, re.compile(
-        r"magasinage|storage|entreposage|stockage|warehous|stationnement|demurrage|almacenaje|"
-        r"lagergeld|lagerung|lagerkosten|magazzinaggio|giacenza|deposito|bodegaje|opslag|"
-        r"\bstalling|armazenagem|armazenamento|skladowanie|magazynowanie|przechowywanie")),
-    (NatureLigne.surcharge, re.compile(
-        r"surcharge|carburant|\bfuel\b|surete|security|haute saison|peak season|\bbaf\b|\bcaf\b|recargo|"
-        r"zuschlag|supplemento|maggiorazione|sobrecargo|toeslag|sobretaxa|doplata")),
-    (NatureLigne.manutention, re.compile(
-        r"manutention|handling|chargement|dechargement|manipulacion|"
-        r"^umschlag|umschlaggebuhr|\bumschlag\b|movimentazione|manipolazione|carico e scarico|"
-        r"carga y descarga|^behandeling|overslag|laden en lossen|manuseamento|manuseio|movimentacao|"
-        r"obsluga (?:ladunku|towaru)|przeladunek")),
-    (NatureLigne.transport, re.compile(
-        r"livraison|delivery|enlevement|pick-? ?up|collection|\btransport|acheminement|camionnage|trucking|"
-        r"\bfret\b|freight|\bentrega\b|recogida|"
-        r"zustellung|anlieferung|abholung|\bfracht|consegna|ritiro|trasporto|bezorging|levering|"
-        r"afhaling|\bvervoer|dostawa|przewoz|odbior")),
-    (NatureLigne.frais_dedouanement, re.compile(
-        r"dedouan|clearance|declaration en douane|customs (?:entry|declaration|formalities)|"
-        r"formalites? (?:de )?douan|despacho (?:de )?aduan|representation en douane|"
-        r"verzollung|zollabfertigung|zollanmeldung|sdoganamento|dichiarazione doganale|"
-        r"inklaring|douaneaangifte|aangifte ten invoer|desalfandegamento|despacho aduaneiro|desembaraco|"
-        r"odprawa celna|zgloszenie celne")),
+    (
+        NatureLigne.frais_avance_fonds,
+        re.compile(
+            r"avance de fonds|av\.? (?:de )?fonds|frais d'avance|advance (?:fee|of funds)|disbursement fee|cash advance|"
+            r"commission d'avance|commission (?:sur|de) debours|frais financiers|finance fee|anticipo de fondos|"
+            r"frais de debours|"
+            # de / it / es / nl
+            r"vorlageprovision|vorlagegebuhr|auslagenprovision|kapitalbereitstellung|"
+            r"(?:commissione|diritti?) (?:di |per )?anticip|anticipazione (?:diritti|fondi)|"
+            r"comision (?:por|de) anticipo|anticipo de (?:derechos|fondos|suplidos)|"
+            r"voorschotprovisie|voorschotkosten|provisie voorschot|"
+            # pt / pl (D-2501)
+            r"comissao de adiantamento|adiantamento de (?:fundos|despesas)|taxa de adiantamento|"
+            r"prowizja (?:za|od) (?:kredytowanie|wylozenie|zaliczk|kredyt)|oplata za kredytowanie"
+        ),
+    ),
+    (
+        NatureLigne.frais_ligne_supplementaire,
+        re.compile(
+            r"lignes? sup|articles? supp|additional (?:lines?|items?|articles?)|add\.? lines?|extra (?:lines?|items?)|"
+            r"ligne additionnelle|ligne(?:s)? (?:de )?(?:declaration )?sup|partida adicional|"
+            r"additional (?:entry|declaration|customs) (?:lines?|items?)|"
+            r"zusatzliche (?:positionen|zollpositionen|tarifpositionen)|zusatzposition|weitere positionen|"
+            r"voci (?:doganali )?aggiuntive|voce aggiuntiva|righe aggiuntive|partidas adicionales|lineas adicionales|"
+            r"extra aangifteregels|aanvullende (?:regels|posten)|extra (?:regels|posten)|"
+            r"adicoes (?:suplementares|adicionais)|linhas adicionais|artigos adicionais|"
+            r"dodatkowe (?:pozycje|linie|artykuly)|dodatkowa pozycja"
+        ),
+    ),
+    (
+        NatureLigne.debours_forfait_petits_envois,
+        re.compile(
+            r"droit forfaitaire|forfait (?:petits? envois|par article)|petits envois|flat[- ]?(?:rate )?dut|"
+            r"low[- ]value|droit fixe par article|per item duty|derecho (?:a tanto alzado|fijo)|"
+            r"pauschalzoll|zollpauschale|kleinsendung|dazio forfettario|piccole spedizioni|"
+            r"pequenos envios|forfaitair recht|kleine zendingen|direito fixo|pequenas remessas|"
+            r"oplata ryczaltowa|ryczalt (?:za|od) artykul|male przesylki"
+        ),
+    ),
+    (
+        NatureLigne.debours_autres_taxes,
+        re.compile(
+            r"autres? (?:tx|taxes?|droits)|other (?:taxes|duties)|accises?|excise|anti-?dumping|compensat|octroi|"
+            r"taxe (?:speciale|interieure|additionnelle)|impuestos especiales|"
+            r"verbrauchsteuer|antidumpingzoll|andere abgaben|sonstige abgaben|altri (?:dazi|diritti|tributi)|"
+            r"otros (?:impuestos|derechos)|accijns|overige (?:heffingen|rechten)|antydumping|"
+            r"outros (?:impostos|direitos)|imposto especial|akcyza"
+        ),
+    ),
+    (
+        NatureLigne.debours_combines,
+        re.compile(
+            r"droits? (?:et|&) (?:taxes|tva)|duties (?:and|&) taxes|duty (?:and|&) tax|droits/taxes|taxes et droits|"
+            r"derechos e impuestos|"
+            r"zolle und (?:steuern|abgaben)|zoll und einfuhrumsatzsteuer|dazi e (?:iva|imposte|tributi)|"
+            r"aranceles e (?:iva|impuestos)|rechten en (?:btw|belastingen)|invoerrechten en btw|"
+            r"direitos e (?:impostos|iva)|cla? i podatki"
+        ),
+    ),
+    (
+        NatureLigne.debours_tva,
+        re.compile(
+            r"tva (?:a l'|a l |de l')?import|import vat|vat on import|tva douane|tva sur import|tva debours|"
+            r"tva avancee|iva (?:de )?importacion|^tva$|"
+            r"einfuhrumsatzsteuer|\beust\b|iva (?:all'|alla |di |sull')?importazion|"
+            r"btw (?:bij|op) invoer|invoer-?btw|iva (?:na |de |sobre a )?importacao|"
+            r"vat (?:z tytulu|od) importu|vat importowy|podatek vat (?:z tytulu|od) importu"
+        ),
+    ),
+    (
+        NatureLigne.debours_droits,
+        re.compile(
+            r"droits? de douane|customs dut|\bdut(?:y|ies)\b|^droits?\b|aranceles?|derechos de aduana|"
+            r"zollabgaben|^zoll\b|einfuhrzoll|^zolle\b|dazi[oe]? (?:doganal|all'importazione)|^dazi[oe]?\b|"
+            r"invoerrechten|douanerechten|direitos (?:aduaneiros|de importacao|alfandegarios)|^direitos\b|"
+            r"^clo\b|clo (?:importowe|przywozowe)|^cla\b"
+        ),
+    ),
+    (
+        NatureLigne.magasinage,
+        re.compile(
+            r"magasinage|storage|entreposage|stockage|warehous|stationnement|demurrage|almacenaje|"
+            r"lagergeld|lagerung|lagerkosten|magazzinaggio|giacenza|deposito|bodegaje|opslag|"
+            r"\bstalling|armazenagem|armazenamento|skladowanie|magazynowanie|przechowywanie"
+        ),
+    ),
+    (
+        NatureLigne.surcharge,
+        re.compile(
+            r"surcharge|carburant|\bfuel\b|surete|security|haute saison|peak season|\bbaf\b|\bcaf\b|recargo|"
+            r"zuschlag|supplemento|maggiorazione|sobrecargo|toeslag|sobretaxa|doplata"
+        ),
+    ),
+    (
+        NatureLigne.manutention,
+        re.compile(
+            r"manutention|handling|chargement|dechargement|manipulacion|"
+            r"^umschlag|umschlaggebuhr|\bumschlag\b|movimentazione|manipolazione|carico e scarico|"
+            r"carga y descarga|^behandeling|overslag|laden en lossen|manuseamento|manuseio|movimentacao|"
+            r"obsluga (?:ladunku|towaru)|przeladunek"
+        ),
+    ),
+    (
+        NatureLigne.transport,
+        re.compile(
+            r"livraison|delivery|enlevement|pick-? ?up|collection|\btransport|acheminement|camionnage|trucking|"
+            r"\bfret\b|freight|\bentrega\b|recogida|"
+            r"zustellung|anlieferung|abholung|\bfracht|consegna|ritiro|trasporto|bezorging|levering|"
+            r"afhaling|\bvervoer|dostawa|przewoz|odbior"
+        ),
+    ),
+    (
+        NatureLigne.frais_dedouanement,
+        re.compile(
+            r"dedouan|clearance|declaration en douane|customs (?:entry|declaration|formalities)|"
+            r"formalites? (?:de )?douan|despacho (?:de )?aduan|representation en douane|"
+            r"verzollung|zollabfertigung|zollanmeldung|sdoganamento|dichiarazione doganale|"
+            r"inklaring|douaneaangifte|aangifte ten invoer|desalfandegamento|despacho aduaneiro|desembaraco|"
+            r"odprawa celna|zgloszenie celne"
+        ),
+    ),
 )
 
 
@@ -129,7 +177,8 @@ _RX_MOT = re.compile(r"[a-z0-9]+")
 #: Mots courts du vocabulaire (3 à 5 lettres : « clo », « zoll », « dazi ») ; corrigés seulement par confusion
 #: de glyphes typique de l'OCR (D-2515).
 _VOCABULAIRE_COURT: frozenset[str] = frozenset(
-    w for _, motif in NATURES_LIBELLES
+    w
+    for _, motif in NATURES_LIBELLES
     for w in re.findall(r"(?<![a-z])[a-z]{3,5}(?![a-z])", re.sub(r"\\[a-z]", " ", motif.pattern))
 )
 #: Classes de glyphes que l'OCR confond (« ł » lu « t », « l » lu « 1 » ou « i »).
@@ -143,9 +192,14 @@ def _meme_classe(a: str, b: str) -> bool:
 def _candidat_court(mot: str) -> str | None:
     """Mot court du vocabulaire dont ``mot`` ne diffère que par des glyphes confondus par l'OCR (une seule
     différence) ; ``None`` si aucun ou plusieurs."""
-    trouves = {v for v in _VOCABULAIRE_COURT if len(v) == len(mot) and v != mot
-               and sum(x != y for x, y in zip(v, mot, strict=True)) == 1
-               and all(_meme_classe(x, y) for x, y in zip(v, mot, strict=True))}
+    trouves = {
+        v
+        for v in _VOCABULAIRE_COURT
+        if len(v) == len(mot)
+        and v != mot
+        and sum(x != y for x, y in zip(v, mot, strict=True)) == 1
+        and all(_meme_classe(x, y) for x, y in zip(v, mot, strict=True))
+    }
     return trouves.pop() if len(trouves) == 1 else None
 
 
@@ -159,7 +213,7 @@ def _une_edition(a: str, b: str) -> bool:
     i = 0
     while i < len(court) and court[i] == long_[i]:
         i += 1
-    return court[i:] == long_[i + 1:]
+    return court[i:] == long_[i + 1 :]
 
 
 def _candidat(mot: str) -> str | None:
@@ -194,7 +248,8 @@ def _corriger_ocr(t: str) -> str:
 
 #: Libellé d'une ligne qui renvoie au détail d'une annexe (« Suplidos según anexo », « Disbursements as per annex »).
 _RX_RENVOI_ANNEXE = re.compile(
-    r"\b(annexe|annex|anexo|anlage|allegato|bijlage|appendix|see attached|ci-joint|siehe|vedi|zie)\b")
+    r"\b(annexe|annex|anexo|anlage|allegato|bijlage|appendix|see attached|ci-joint|siehe|vedi|zie)\b"
+)
 
 
 def renvoie_a_une_annexe(libelle: str | None) -> bool:

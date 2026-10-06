@@ -20,8 +20,12 @@ from controldone.taux_reference import convertir_historique_bce
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("source", type=Path, help="eurofxref-hist.csv ou eurofxref-hist.zip (BCE)")
-    ap.add_argument("--depuis", type=date.fromisoformat, default=None, help="première date conservée (AAAA-MM-JJ)")
-    ap.add_argument("--sortie", type=Path, default=Path(__file__).resolve().parents[1] / "ref" / "taux_bce.csv")
+    ap.add_argument(
+        "--depuis", type=date.fromisoformat, default=None, help="première date conservée (AAAA-MM-JJ)"
+    )
+    ap.add_argument(
+        "--sortie", type=Path, default=Path(__file__).resolve().parents[1] / "ref" / "taux_bce.csv"
+    )
     args = ap.parse_args(argv)
     texte = convertir_historique_bce(args.source.read_bytes(), depuis=args.depuis)
     args.sortie.write_text(texte, encoding="utf-8")

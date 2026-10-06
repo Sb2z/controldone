@@ -41,15 +41,22 @@ CLASSES_CONFUSION: tuple[frozenset[str], ...] = (
     frozenset("147"),
 )
 #: Lettre lue -> chiffre voulu (et réciproquement, §8.5.4).
-LETTRES_CHIFFRES: dict[str, str] = {"O": "0", "D": "0", "l": "1", "I": "1", "S": "5", "B": "8", "Z": "2", "G": "6"}
+LETTRES_CHIFFRES: dict[str, str] = {
+    "O": "0",
+    "D": "0",
+    "l": "1",
+    "I": "1",
+    "S": "5",
+    "B": "8",
+    "Z": "2",
+    "G": "6",
+}
 _SUBSTITUTIONS: dict[str, tuple[str, ...]] = {
     c: tuple(sorted({x for cl in CLASSES_CONFUSION if c in cl for x in cl} - {c})) for c in "0123456789"
 }
 _CONFONDABLES = "0-9" + "".join(LETTRES_CHIFFRES)
 # Noyau numérique : chiffres et lettres confondables collés, séparateurs internes.
-_NOYAU_RE = re.compile(
-    rf"[{_CONFONDABLES}]*\d(?:[{_CONFONDABLES}]|[.,'’    ](?=[{_CONFONDABLES}]))*"
-)
+_NOYAU_RE = re.compile(rf"[{_CONFONDABLES}]*\d(?:[{_CONFONDABLES}]|[.,'’    ](?=[{_CONFONDABLES}]))*")
 _METHODES_SUJETTES = (Methode.ocr, Methode.llm)
 _QUALITES_SUJETTES = (QualiteTexte.ocr, QualiteTexte.natif_faible)
 
@@ -89,7 +96,7 @@ def variantes_chaine(brut: str) -> Iterator[str]:
         elif c in LETTRES_CHIFFRES:
             remplacements = (LETTRES_CHIFFRES[c],)
         for r in remplacements:
-            v = brut[:i] + r + brut[i + 1:]
+            v = brut[:i] + r + brut[i + 1 :]
             if v not in vues:
                 vues.add(v)
                 yield v
@@ -97,7 +104,7 @@ def variantes_chaine(brut: str) -> Iterator[str]:
 
 def _lire(brut: str, separateur_decimal: str | None) -> Decimal | None:
     pos = _noyau(brut)
-    if pos is not None and any(c in LETTRES_CHIFFRES for c in brut[pos[0]: pos[1]]):
+    if pos is not None and any(c in LETTRES_CHIFFRES for c in brut[pos[0] : pos[1]]):
         return None  # lettre dans le nombre : lecture brute non numérique
     lu = parse_nombre(brut, separateur_decimal=separateur_decimal)
     return lu.valeur if lu is not None else None
@@ -113,7 +120,7 @@ def variantes_numeriques(brut: str, *, separateur_decimal: str | None = None) ->
     if base is None:
         return
     pos = _noyau(brut)
-    noyau = brut[pos[0]: pos[1]] if pos else ""
+    noyau = brut[pos[0] : pos[1]] if pos else ""
     sans_decimales = not re.search(r"[.,]\d{1,2}$", noyau)
     if sans_decimales:
         # perte ou ajout d'un zéro final (codes, quantités entières)
@@ -140,7 +147,12 @@ def est_transposition_adjacente(a: Decimal, b: Decimal) -> bool:
     if len(sa) != len(sb) or sa == sb:
         return False
     diff = [i for i in range(len(sa)) if sa[i] != sb[i]]
-    return len(diff) == 2 and diff[1] == diff[0] + 1 and sa[diff[0]] == sb[diff[1]] and sa[diff[1]] == sb[diff[0]]
+    return (
+        len(diff) == 2
+        and diff[1] == diff[0] + 1
+        and sa[diff[0]] == sb[diff[1]]
+        and sa[diff[1]] == sb[diff[0]]
+    )
 
 
 def confusion_test_fn(
@@ -179,7 +191,9 @@ def confusion_test(
     base = _lire(brut, separateur_decimal)
     if base is not None and est_transposition_adjacente(base, autre):
         return False
-    return confusion_test_fn(brut, lambda v: abs(v - autre) <= tolerance, separateur_decimal=separateur_decimal)
+    return confusion_test_fn(
+        brut, lambda v: abs(v - autre) <= tolerance, separateur_decimal=separateur_decimal
+    )
 
 
 def codes_confondables(a: str, b: str, *, max_differences: int = 2) -> bool:
@@ -191,6 +205,11 @@ def codes_confondables(a: str, b: str, *, max_differences: int = 2) -> bool:
     diff = [i for i in range(len(ca)) if ca[i] != cb[i]]
     if len(diff) > max_differences:
         return False
-    if len(diff) == 2 and diff[1] == diff[0] + 1 and ca[diff[0]] == cb[diff[1]] and ca[diff[1]] == cb[diff[0]]:
+    if (
+        len(diff) == 2
+        and diff[1] == diff[0] + 1
+        and ca[diff[0]] == cb[diff[1]]
+        and ca[diff[1]] == cb[diff[0]]
+    ):
         return False
     return all(cb[i] in _SUBSTITUTIONS[ca[i]] for i in diff)

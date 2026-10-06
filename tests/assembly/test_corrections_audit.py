@@ -25,14 +25,21 @@ def test_f4_contexte_en_erreur_donne_a_verifier(lot, monkeypatch):  # noqa: F811
     r = res[0]
     assert r.statut_global is StatutGlobal.a_verifier
     assert r.findings.statut_global == "a_verifier"
-    assert [(x.outcome, x.raison_code) for x in r.resultats] == [(Outcome.non_verifiable, RaisonCode.erreur_interne)]
+    assert [(x.outcome, x.raison_code) for x in r.resultats] == [
+        (Outcome.non_verifiable, RaisonCode.erreur_interne)
+    ]
 
 
 def test_f10_memo_ne_rejoue_pas_un_sous_ensemble_de_controles(lot):  # noqa: F811
     memo: dict = {}
     comp = _composants()
-    a = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, memo=memo, controles=["A1"]),
-                    composants=comp)
+    a = traiter_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1, memo=memo, controles=["A1"]),
+        composants=comp,
+    )
     b = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, memo=memo), composants=comp)
     assert {x.controle_id for x in a[0].resultats} == {"A1"}
     assert {x.controle_id for x in b[0].resultats} > {"A1", "B1"}
@@ -52,6 +59,7 @@ def test_f10_memo_depend_des_grilles_et_du_profil(lot):  # noqa: F811
     assert e1 != empreinte_contexte_controles(p1, [], controles=["A1"], taux_reference=t)
     from datetime import date
     from decimal import Decimal
+
     t2 = TableTauxReference({"USD": {date(2026, 1, 2): Decimal("1.1")}})
     assert e1 != empreinte_contexte_controles(p1, [], controles=None, taux_reference=t2)
 
@@ -62,8 +70,11 @@ if __name__ == "__main__":  # pragma: no cover
 
 # --- F1, F8 : totaux du rapport ; F5 : JSON publiés ; F14 : tableur sans float ---------------------------
 
+
 def _rd(lot):  # noqa: F811
-    return traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, annee=2026), composants=_composants())[0]
+    return traiter_lot(
+        lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, annee=2026), composants=_composants()
+    )[0]
 
 
 def _resultat(rd, cid, niveau, montant, nature, *, docs=(), details=None, unite="u"):
@@ -74,10 +85,25 @@ def _resultat(rd, cid, niveau, montant, nature, *, docs=(), details=None, unite=
 
     niv = Niveau(niveau)
     raisons = [RaisonCode.controle_signal_seulement] if niv is Niveau.a_verifier else []
-    c = Constat(controle_id=cid, niveau=niv, raisons=raisons, libelle=f"constat fictif {cid}",
-                montant_en_jeu=Decimal(montant), nature_montant=NatureMontant(nature), documents_concernes=list(docs))
-    return ResultatControle(controle_id=cid, unite=unite, dossier_id=rd.dossier.id, dossier_version=1,
-                            outcome=niv.outcome, constat=c, details=details or {}, documents_concernes=list(docs))
+    c = Constat(
+        controle_id=cid,
+        niveau=niv,
+        raisons=raisons,
+        libelle=f"constat fictif {cid}",
+        montant_en_jeu=Decimal(montant),
+        nature_montant=NatureMontant(nature),
+        documents_concernes=list(docs),
+    )
+    return ResultatControle(
+        controle_id=cid,
+        unite=unite,
+        dossier_id=rd.dossier.id,
+        dossier_version=1,
+        outcome=niv.outcome,
+        constat=c,
+        details=details or {},
+        documents_concernes=list(docs),
+    )
 
 
 def test_f1_e6_remplace_le_constat_d_origine_dans_les_totaux(lot):  # noqa: F811
@@ -87,8 +113,9 @@ def test_f1_e6_remplace_le_constat_d_origine_dans_les_totaux(lot):  # noqa: F811
     rd = _rd(lot)
     rd.resultats = [r for r in rd.resultats if r.constat is None]
     d3 = _resultat(rd, "D3", "ecart_certain", "29.56", "recouvrable")
-    e6 = _resultat(rd, "E6", "a_verifier", "10.63", "recouvrable",
-                   details={"remplace_constat_id": d3.constat.id})
+    e6 = _resultat(
+        rd, "E6", "a_verifier", "10.63", "recouvrable", details={"remplace_constat_id": d3.constat.id}
+    )
     rd.resultats += [d3, e6]
     v = construire_vue([rd], rd.profil)
     dv = v.dossiers[0]
@@ -123,7 +150,9 @@ def test_f5_libelle_bloque_absent_des_json_publies(lot):  # noqa: F811
 
     rd = _rd(lot)
     c0 = rd.findings.constats[0]
-    bloque = c0.model_copy(update={"libelle": "Le droit dû est de 9,54 EUR", "motif_blocage": "formulation_interdite"})
+    bloque = c0.model_copy(
+        update={"libelle": "Le droit dû est de 9,54 EUR", "motif_blocage": "formulation_interdite"}
+    )
     rd.findings = rd.findings.model_copy(update={"constats": [bloque, *rd.findings.constats[1:]]})
     texte = json.dumps(findings_lot_json([rd]), ensure_ascii=False)
     assert "droit dû" not in texte and "Libellé retenu pour relecture" in texte
@@ -166,6 +195,7 @@ def test_f14_tableur_montants_sans_float(lot, tmp_path):  # noqa: F811
 
 
 # --- F12 : rejeu identique octet pour octet (hors horodatages) -----------------------------------------
+
 
 def test_f12_rejeu_identique_et_annee_du_lot(lot, monkeypatch):  # noqa: F811
     from datetime import UTC, datetime

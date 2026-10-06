@@ -22,8 +22,14 @@ from controldone.storage import listes_sql as requetes
 from controldone.storage.scope import TenantScope
 from controldone.web.listes import Page, Requete, normaliser, paginer
 
-__all__ = ["Indicateurs", "indicateurs", "page_dossiers", "page_registre", "totaux_registre",
-           "transitaires_registre"]
+__all__ = [
+    "Indicateurs",
+    "indicateurs",
+    "page_dossiers",
+    "page_registre",
+    "totaux_registre",
+    "transitaires_registre",
+]
 
 
 def _mots(q: str | None) -> list[str]:
@@ -33,8 +39,9 @@ def _mots(q: str | None) -> list[str]:
 def page_dossiers(scope: TenantScope, req: Requete) -> tuple[Page, int]:
     """Page de la liste des dossiers : ``(page de DossierLigne, nombre total de dossiers du client)``."""
     f = req.filtres
-    ids, total, total_client = requetes.dossiers_page(scope, statut=f.get("statut"), mots=_mots(f.get("q")),
-                                                      tri=req.tri, page=req.page, taille=req.taille)
+    ids, total, total_client = requetes.dossiers_page(
+        scope, statut=f.get("statut"), mots=_mots(f.get("q")), tri=req.tri, page=req.page, taille=req.taille
+    )
     client = scope.actor.est_client
     lignes = [ligne_dossier(d, cs, client=client) for d, cs in requetes.lignes_dossiers(scope, ids)]
     return paginer(lignes, req, total=total), total_client
@@ -68,8 +75,14 @@ def indicateurs(scope: TenantScope) -> Indicateurs:
             certain += montant
         elif niveau == "a_verifier" and statut != "rejete":
             a_verifier += montant
-    return Indicateurs(dossiers=requetes.compter_dossiers(scope), constats=len(lignes), proposes=proposes,
-                       certain=certain, a_verifier=a_verifier, lignes=lignes)
+    return Indicateurs(
+        dossiers=requetes.compter_dossiers(scope),
+        constats=len(lignes),
+        proposes=proposes,
+        certain=certain,
+        a_verifier=a_verifier,
+        lignes=lignes,
+    )
 
 
 def transitaires_registre(scope: TenantScope) -> dict[str, str]:
@@ -90,6 +103,13 @@ def page_registre(scope: TenantScope, req: Requete, transitaires: dict[str, str]
         composantes = [c.value for c in Composante if mot in normaliser(LIBELLES_COMPOSANTE.get(c, c.value))]
         ids_transitaires = [i for i, nom in transitaires.items() if mot in normaliser(nom)]
         mots.append((mot, composantes, ids_transitaires, mot in normaliser("transitaire non identifié")))
-    ids, total = requetes.ecarts_page(scope, statut=f.get("statut"), transitaire=f.get("transitaire"), mots=mots,
-                                      tri=req.tri, page=req.page, taille=req.taille)
+    ids, total = requetes.ecarts_page(
+        scope,
+        statut=f.get("statut"),
+        transitaire=f.get("transitaire"),
+        mots=mots,
+        tri=req.tri,
+        page=req.page,
+        taille=req.taille,
+    )
     return paginer(registre(scope, ecart_ids=ids), req, total=total)

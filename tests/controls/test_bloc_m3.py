@@ -49,55 +49,113 @@ TVA_CLIENT = "FR32000123459"
 
 def ligne(fid, nature, montant, *, mrn=None, methode="texte_natif", confiance=0.99):
     def v(nom, val):
-        return None if val is None else vs(f"facture_transitaire.lignes[].{nom}", val, document_id=fid,
-                                            methode=methode, confiance=confiance)
+        return (
+            None
+            if val is None
+            else vs(
+                f"facture_transitaire.lignes[].{nom}",
+                val,
+                document_id=fid,
+                methode=methode,
+                confiance=confiance,
+            )
+        )
 
-    return LigneFactureTransitaire(libelle=v("libelle", nature.value), nature=nature, montant_ht=v("montant_ht", montant),
-                                   mrn=v("mrn", mrn))
+    return LigneFactureTransitaire(
+        libelle=v("libelle", nature.value),
+        nature=nature,
+        montant_ht=v("montant_ht", montant),
+        mrn=v("mrn", mrn),
+    )
 
 
 def ft(fid, *lignes, **kw):
     return facture_transitaire(
-        id=fid, numero=vs("facture_transitaire.numero", "FT-FICTIF-001", document_id=fid),
+        id=fid,
+        numero=vs("facture_transitaire.numero", "FT-FICTIF-001", document_id=fid),
         refs_mrn=[vs("facture_transitaire.refs_mrn[]", "26FR00000000000001", document_id=fid)],
         client_facture=Partie(tva=vs("facture_transitaire.client_facture.tva", TVA_CLIENT, document_id=fid)),
-        lignes=list(lignes), **kw)
+        lignes=list(lignes),
+        **kw,
+    )
 
 
 def dec(did, *taxes):
-    tx = [taxation(did, categorie=cat, type_taxe={CategorieTaxe.droit: "A00", CategorieTaxe.tva: "B00"}[cat],
-                   montant=m, paiement=PaiementNormalise.comptant) for cat, m in taxes]
-    return declaration(id=did, mrn="26FR00000000000001", taxations=tx,
-                       importateur=Partie(tva=vs("declaration.importateur.tva", TVA_CLIENT, document_id=did)))
+    tx = [
+        taxation(
+            did,
+            categorie=cat,
+            type_taxe={CategorieTaxe.droit: "A00", CategorieTaxe.tva: "B00"}[cat],
+            montant=m,
+            paiement=PaiementNormalise.comptant,
+        )
+        for cat, m in taxes
+    ]
+    return declaration(
+        id=did,
+        mrn="26FR00000000000001",
+        taxations=tx,
+        importateur=Partie(tva=vs("declaration.importateur.tva", TVA_CLIENT, document_id=did)),
+    )
+
 
 # --- A13 : un seul constat par dossier (D-4201) ----------------------------------------------------------------
 
 
 def _fc(fid, numero, *codes):
-    lignes = [LigneFactureCommerciale(code_marchandise_imprime=vs("facture_commerciale.lignes[].code_marchandise_imprime",
-                                                                  c, document_id=fid)) for c in codes]
-    return document(TypeDocument.facture_commerciale, ChampsFactureCommerciale(
-        numero=vs("facture_commerciale.numero", numero, document_id=fid),
-        devise=vs("facture_commerciale.devise", "EUR", document_id=fid),
-        total_facture=vs("facture_commerciale.total_facture", "100.00", document_id=fid), lignes=lignes), id=fid)
+    lignes = [
+        LigneFactureCommerciale(
+            code_marchandise_imprime=vs(
+                "facture_commerciale.lignes[].code_marchandise_imprime", c, document_id=fid
+            )
+        )
+        for c in codes
+    ]
+    return document(
+        TypeDocument.facture_commerciale,
+        ChampsFactureCommerciale(
+            numero=vs("facture_commerciale.numero", numero, document_id=fid),
+            devise=vs("facture_commerciale.devise", "EUR", document_id=fid),
+            total_facture=vs("facture_commerciale.total_facture", "100.00", document_id=fid),
+            lignes=lignes,
+        ),
+        id=fid,
+    )
 
 
 def _dec(did, mrn, *codes):
-    arts = [ArticleDeclaration(numero_article=vs("declaration.articles[].numero_article", str(i + 1), document_id=did),
-                               code_marchandise=vs("declaration.articles[].code_marchandise", c, document_id=did))
-            for i, c in enumerate(codes)]
-    return document(TypeDocument.declaration, ChampsDeclaration(
-        mrn=vs("declaration.mrn", mrn, document_id=did), articles=arts), id=did)
+    arts = [
+        ArticleDeclaration(
+            numero_article=vs("declaration.articles[].numero_article", str(i + 1), document_id=did),
+            code_marchandise=vs("declaration.articles[].code_marchandise", c, document_id=did),
+        )
+        for i, c in enumerate(codes)
+    ]
+    return document(
+        TypeDocument.declaration,
+        ChampsDeclaration(mrn=vs("declaration.mrn", mrn, document_id=did), articles=arts),
+        id=did,
+    )
 
 
 def test_a13_un_constat_par_dossier_tous_les_couples():
     f1, f2 = _fc("doc_fc1", "INV-FICTIF-1", "8471300000"), _fc("doc_fc2", "INV-FICTIF-2", "9401710000")
     d1 = _dec("doc_dec1", "26FRK7Q2ZX9PLM3VB2", "8517620000")
     d2 = _dec("doc_dec2", "26FRW3H8JN5TQ4CX7M", "9401710000", "7318159590")
-    allocs = [Allocation(id="alc_1", source_document_id="doc_fc1", cible_document_id="doc_dec1",
-                         methode=MethodeAllocation.reference_explicite),
-              Allocation(id="alc_2", source_document_id="doc_fc2", cible_document_id="doc_dec2",
-                         methode=MethodeAllocation.reference_explicite)]
+    allocs = [
+        Allocation(
+            id="alc_1",
+            source_document_id="doc_fc1",
+            cible_document_id="doc_dec1",
+            methode=MethodeAllocation.reference_explicite,
+        ),
+        Allocation(
+            id="alc_2",
+            source_document_id="doc_fc2",
+            cible_document_id="doc_dec2",
+            methode=MethodeAllocation.reference_explicite,
+        ),
+    ]
     docs = [f1, f2, d1, d2]
     dossier = dossier_pour(docs).model_copy(update={"allocations": allocs})
     ctx = ControlContext.construire(dossier, docs, ProfilTolerances(id="tol_test"))
@@ -118,10 +176,18 @@ def test_a13_un_constat_par_dossier_tous_les_couples():
 
 
 def test_a13_sens_unique_signale_a_verifier():
-    r = [x for x in fa.a13_codes_marchandise(contexte([_fc("doc_fc1", "INV-FICTIF-1", "8471300000"),
-                                                       _dec("doc_dec1", "26FRK7Q2ZX9PLM3VB2", "8471300000",
-                                                            "9401710000")]))
-         if x.constat is not None]
+    r = [
+        x
+        for x in fa.a13_codes_marchandise(
+            contexte(
+                [
+                    _fc("doc_fc1", "INV-FICTIF-1", "8471300000"),
+                    _dec("doc_dec1", "26FRK7Q2ZX9PLM3VB2", "8471300000", "9401710000"),
+                ]
+            )
+        )
+        if x.constat is not None
+    ]
     assert len(r) == 1 and r[0].details["a_sens_unique"] is True and r[0].outcome is Outcome.a_verifier
 
 
@@ -129,8 +195,11 @@ def test_a13_sens_unique_signale_a_verifier():
 
 
 def _c5(docs):
-    return next(r for r in run_controls(contexte(docs), controles=["C1", "C2", "C3", "C4", "C5"])
-                if r.controle_id == "C5")
+    return next(
+        r
+        for r in run_controls(contexte(docs), controles=["C1", "C2", "C3", "C4", "C5"])
+        if r.controle_id == "C5"
+    )
 
 
 def test_c5_tva_non_refacturee_non_verifiable():
@@ -141,25 +210,52 @@ def test_c5_tva_non_refacturee_non_verifiable():
 
 
 def test_c5_debours_possiblement_non_lus():
-    f = ft("doc_ft1", ligne("doc_ft1", NatureLigne.debours_droits, "100.00", mrn="26FR00000000000001",
-                            methode="ocr", confiance=0.7))
+    f = ft(
+        "doc_ft1",
+        ligne(
+            "doc_ft1",
+            NatureLigne.debours_droits,
+            "100.00",
+            mrn="26FR00000000000001",
+            methode="ocr",
+            confiance=0.7,
+        ),
+    )
     d = dec("doc_dec1", (CategorieTaxe.droit, "130.00"))
     r = _c5([f, d])
     assert r.outcome is Outcome.non_verifiable and r.details["motif"] == "debours_possiblement_non_lus"
 
 
 def test_c5_debours_prouves_complets_reste_a_verifier():
-    f = ft("doc_ft1", ligne("doc_ft1", NatureLigne.debours_droits, "100.00", mrn="26FR00000000000001",
-                            methode="ocr", confiance=0.7),
-           total_debours=vs("facture_transitaire.total_debours", "100.00", document_id="doc_ft1"))
+    f = ft(
+        "doc_ft1",
+        ligne(
+            "doc_ft1",
+            NatureLigne.debours_droits,
+            "100.00",
+            mrn="26FR00000000000001",
+            methode="ocr",
+            confiance=0.7,
+        ),
+        total_debours=vs("facture_transitaire.total_debours", "100.00", document_id="doc_ft1"),
+    )
     d = dec("doc_dec1", (CategorieTaxe.droit, "130.00"))
     r = _c5([f, d])
     assert r.outcome is Outcome.a_verifier and RaisonCode.ecart_en_faveur_client in r.constat.raisons
 
 
 def test_c5_surfacturation_jamais_concernee():
-    f = ft("doc_ft1", ligne("doc_ft1", NatureLigne.debours_droits, "160.00", mrn="26FR00000000000001",
-                            methode="ocr", confiance=0.7))
+    f = ft(
+        "doc_ft1",
+        ligne(
+            "doc_ft1",
+            NatureLigne.debours_droits,
+            "160.00",
+            mrn="26FR00000000000001",
+            methode="ocr",
+            confiance=0.7,
+        ),
+    )
     d = dec("doc_dec1", (CategorieTaxe.droit, "130.00"))
     assert _c5([f, d]).outcome is Outcome.a_verifier
 
@@ -168,13 +264,18 @@ def test_c5_surfacturation_jamais_concernee():
 
 
 def _fc_simple(fid):
-    return document(TypeDocument.facture_commerciale, ChampsFactureCommerciale(
-        numero=vs("facture_commerciale.numero", fid.upper(), document_id=fid)), id=fid)
+    return document(
+        TypeDocument.facture_commerciale,
+        ChampsFactureCommerciale(numero=vs("facture_commerciale.numero", fid.upper(), document_id=fid)),
+        id=fid,
+    )
 
 
 def _ctx_lot(docs_ici, autres, *, lot="lot_1", dossier_id="dos_b", force=ForceLien.forte):
     dossier = dossier_pour(docs_ici, force=force).model_copy(update={"id": dossier_id, "lot_ids": [lot]})
-    return ControlContext.construire(dossier, docs_ici, ProfilTolerances(id="tol_test"), autres_dossiers=autres)
+    return ControlContext.construire(
+        dossier, docs_ici, ProfilTolerances(id="tol_test"), autres_dossiers=autres
+    )
 
 
 def _autre(docs, dossier_id, lot="lot_1", force=ForceLien.forte):
@@ -212,20 +313,31 @@ def test_p1_autre_lot_ignore():
 def test_p4_lien_faible_partage_porte_une_fois():
     f_b, f_a = _fc_simple("doc_fcb"), _fc_simple("doc_fca")
     av = document(TypeDocument.avoir, None, id="doc_av")
-    lien_faible = LienDocument(document_id="doc_av", role=RoleLien.avoir, force=ForceLien.faible,
-                               signaux=[SignalLien.meme_fichier_source])
-    dos_a = dossier_pour([f_a], force=ForceLien.forte).model_copy(update={"id": "dos_a", "lot_ids": ["lot_1"]})
+    lien_faible = LienDocument(
+        document_id="doc_av",
+        role=RoleLien.avoir,
+        force=ForceLien.faible,
+        signaux=[SignalLien.meme_fichier_source],
+    )
+    dos_a = dossier_pour([f_a], force=ForceLien.forte).model_copy(
+        update={"id": "dos_a", "lot_ids": ["lot_1"]}
+    )
     dos_a.liens.append(lien_faible)
     autres = [AutreDossier(dossier=dos_a, documents={"doc_fca": f_a, "doc_av": av})]
-    dos_b = dossier_pour([f_b], force=ForceLien.forte).model_copy(update={"id": "dos_b", "lot_ids": ["lot_1"]})
+    dos_b = dossier_pour([f_b], force=ForceLien.forte).model_copy(
+        update={"id": "dos_b", "lot_ids": ["lot_1"]}
+    )
     dos_b.liens.append(lien_faible.model_copy())
     ctx = ControlContext.construire(dos_b, [f_b, av], ProfilTolerances(id="tol_test"), autres_dossiers=autres)
     par = {r.documents_concernes[0]: r for r in fp.p4_rattachement_faible(ctx)}
     assert par["doc_av"].outcome is Outcome.non_applicable and par["doc_av"].details["dossier"] == "dos_a"
     # le premier dossier du lot porte le constat
-    ctx_a = ControlContext.construire(dos_a, [f_a, av], ProfilTolerances(id="tol_test"),
-                                      autres_dossiers=[AutreDossier(dossier=dos_b, documents={"doc_fcb": f_b,
-                                                                                              "doc_av": av})])
+    ctx_a = ControlContext.construire(
+        dos_a,
+        [f_a, av],
+        ProfilTolerances(id="tol_test"),
+        autres_dossiers=[AutreDossier(dossier=dos_b, documents={"doc_fcb": f_b, "doc_av": av})],
+    )
     par = {r.documents_concernes[0]: r for r in fp.p4_rattachement_faible(ctx_a)}
     assert par["doc_av"].outcome is Outcome.a_verifier
 
@@ -243,14 +355,32 @@ def test_references_facture_ocr():
 
 
 def _a2(numero, cite, *, methode="ocr"):
-    fc = document(TypeDocument.facture_commerciale, ChampsFactureCommerciale(
-        numero=vs("facture_commerciale.numero", numero, document_id="doc_fc1")), id="doc_fc1")
-    d = document(TypeDocument.declaration, ChampsDeclaration(
-        mrn=vs("declaration.mrn", "26FRK7Q2ZX9PLM3VB2", document_id="doc_dec1"),
-        documents_references=[DocumentReference(
-            type_code=vs("declaration.documents_references[].type_code", "N380", document_id="doc_dec1"),
-            reference=vs("declaration.documents_references[].reference", cite, document_id="doc_dec1",
-                         methode=methode, confiance=0.95))]), id="doc_dec1")
+    fc = document(
+        TypeDocument.facture_commerciale,
+        ChampsFactureCommerciale(numero=vs("facture_commerciale.numero", numero, document_id="doc_fc1")),
+        id="doc_fc1",
+    )
+    d = document(
+        TypeDocument.declaration,
+        ChampsDeclaration(
+            mrn=vs("declaration.mrn", "26FRK7Q2ZX9PLM3VB2", document_id="doc_dec1"),
+            documents_references=[
+                DocumentReference(
+                    type_code=vs(
+                        "declaration.documents_references[].type_code", "N380", document_id="doc_dec1"
+                    ),
+                    reference=vs(
+                        "declaration.documents_references[].reference",
+                        cite,
+                        document_id="doc_dec1",
+                        methode=methode,
+                        confiance=0.95,
+                    ),
+                )
+            ],
+        ),
+        id="doc_dec1",
+    )
     return fa.a2_reference_facture(contexte([fc, d]))[0]
 
 

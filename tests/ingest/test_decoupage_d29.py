@@ -56,9 +56,16 @@ def test_numero_de_page_en_fin_de_ligne():
 
 
 def _page(numero, type_=FT, *, num=None, pn=None, pt=None, jetons=(), conf=0.95, suite=False, mrns=()):
-    return ClassementPage(numero=numero, type=type_, confiance=conf, intitulee=True, suite=suite,
-                          refs=RefsPage(mrns=tuple(mrns), numero_facture=num, page_n=pn, page_total=pt,
-                                        jetons=frozenset(jetons)))
+    return ClassementPage(
+        numero=numero,
+        type=type_,
+        confiance=conf,
+        intitulee=True,
+        suite=suite,
+        refs=RefsPage(
+            mrns=tuple(mrns), numero_facture=num, page_n=pn, page_total=pt, jetons=frozenset(jetons)
+        ),
+    )
 
 
 def test_numero_lu_sur_la_page_2_et_imprime_sur_la_page_1():
@@ -72,21 +79,37 @@ def test_numero_de_page_2_absent_de_la_page_1_nouveau_document():
 
 
 def test_meme_numero_autre_type_de_facture():
-    groupes = _regrouper([_page(1, num="FV03342072026"),
-                          _page(2, TypeDocument.facture_commerciale, num="FV03342072026", conf=0.78)])
+    groupes = _regrouper(
+        [
+            _page(1, num="FV03342072026"),
+            _page(2, TypeDocument.facture_commerciale, num="FV03342072026", conf=0.78),
+        ]
+    )
     assert [(g.type, g.pages) for g in groupes] == [(FT, [1, 2])]
     # page sûre de son type : deux documents
-    groupes = _regrouper([_page(1, num="FV03342072026"),
-                          _page(2, TypeDocument.facture_commerciale, num="FV03342072026", conf=0.97)])
+    groupes = _regrouper(
+        [
+            _page(1, num="FV03342072026"),
+            _page(2, TypeDocument.facture_commerciale, num="FV03342072026", conf=0.97),
+        ]
+    )
     assert len(groupes) == 2
 
 
 def test_page_2_sur_2_numero_voisin():
-    groupes = _regrouper([_page(1, TypeDocument.facture_commerciale, num="IHM2026001860", pn=1, pt=2),
-                          _page(2, TypeDocument.facture_commerciale, num="IHM2026001869", pn=2, pt=2)])
+    groupes = _regrouper(
+        [
+            _page(1, TypeDocument.facture_commerciale, num="IHM2026001860", pn=1, pt=2),
+            _page(2, TypeDocument.facture_commerciale, num="IHM2026001869", pn=2, pt=2),
+        ]
+    )
     assert [g.pages for g in groupes] == [[1, 2]]
-    groupes = _regrouper([_page(1, TypeDocument.facture_commerciale, num="IHM2026001860", pn=1, pt=2),
-                          _page(2, TypeDocument.facture_commerciale, num="IHM2026007777", pn=2, pt=2)])
+    groupes = _regrouper(
+        [
+            _page(1, TypeDocument.facture_commerciale, num="IHM2026001860", pn=1, pt=2),
+            _page(2, TypeDocument.facture_commerciale, num="IHM2026007777", pn=2, pt=2),
+        ]
+    )
     assert len(groupes) == 2
 
 
@@ -97,12 +120,23 @@ def test_suite_de_declaration_dont_le_mrn_de_tete_est_illisible():
 
 
 def test_facture_en_deux_pages_pdf():
-    p1 = ["Transports Fictifs SAS   FACTURE FIC2026-47293", "Émise le 12 juillet 2026 — page 1",
-          "MRN: 26FR000000000000A1", "Désignation Qté P.U. HT Montant HT TVA % TVA",
-          "Frais de dédouanement 1 72,00 72,00 20,00 14,40", "Droits de douane 1 15,44 15,44 0,00 0,00"]
-    p2 = ["Transports Fictifs SAS   FACTURE FIC2026-47293", "Émise le 12 juillet 2026 — page 2",
-          "RÉCAPITULATIF DE LA FACTURE", "Total débours 15,44 €", "Total HT 87,44 €", "TVA 20 % 14,40 €",
-          "Total TTC 101,84 €"]
+    p1 = [
+        "Transports Fictifs SAS   FACTURE FIC2026-47293",
+        "Émise le 12 juillet 2026 — page 1",
+        "MRN: 26FR000000000000A1",
+        "Désignation Qté P.U. HT Montant HT TVA % TVA",
+        "Frais de dédouanement 1 72,00 72,00 20,00 14,40",
+        "Droits de douane 1 15,44 15,44 0,00 0,00",
+    ]
+    p2 = [
+        "Transports Fictifs SAS   FACTURE FIC2026-47293",
+        "Émise le 12 juillet 2026 — page 2",
+        "RÉCAPITULATIF DE LA FACTURE",
+        "Total débours 15,44 €",
+        "Total HT 87,44 €",
+        "TVA 20 % 14,40 €",
+        "Total TTC 101,84 €",
+    ]
     r = _decouper(fab.pdf([p1, p2]))
     assert [[p.numero for p in d.pages] for d in r.documents] == [[1, 2]]
 
@@ -111,23 +145,32 @@ def test_facture_en_deux_pages_pdf():
 
 
 def _ligne(*mots):
-    return Ligne(texte=" ".join(m[0] for m in mots), mots=tuple(Mot(t, x0, y, x1, y + 0.01) for t, x0, x1, y in mots))
+    return Ligne(
+        texte=" ".join(m[0] for m in mots), mots=tuple(Mot(t, x0, y, x1, y + 0.01) for t, x0, x1, y in mots)
+    )
 
 
 def test_moities_separees_par_des_marges():
-    lignes = [_ligne(("Facture", 0.05, 0.15, 0.1), ("FIC-1", 0.16, 0.45, 0.1)),
-              _ligne(("Invoice", 0.55, 0.65, 0.1), ("FIC-2", 0.66, 0.95, 0.1))]
+    lignes = [
+        _ligne(("Facture", 0.05, 0.15, 0.1), ("FIC-1", 0.16, 0.45, 0.1)),
+        _ligne(("Invoice", 0.55, 0.65, 0.1), ("FIC-2", 0.66, 0.95, 0.1)),
+    ]
     assert moities_separees(lignes, 0.5)
 
 
 def test_texte_qui_touche_la_coupure_page_unique():
     # colonne « Unité » qui finit juste avant la coupure, colonne « P.U. HT » juste après : un seul tableau
-    lignes = [_ligne(("Désignation", 0.05, 0.2, 0.3), ("Unité", 0.45, 0.495, 0.3)),
-              _ligne(("P.U.", 0.51, 0.55, 0.3), ("HT", 0.56, 0.6, 0.3))]
+    lignes = [
+        _ligne(("Désignation", 0.05, 0.2, 0.3), ("Unité", 0.45, 0.495, 0.3)),
+        _ligne(("P.U.", 0.51, 0.55, 0.3), ("HT", 0.56, 0.6, 0.3)),
+    ]
     assert not moities_separees(lignes, 0.5)
     # un trait isolé près de la coupure ne compte pas
-    lignes = [_ligne(("Désignation", 0.05, 0.2, 0.3)), _ligne(("—", 0.499, 0.501, 0.5)),
-              _ligne(("Montant", 0.6, 0.7, 0.3))]
+    lignes = [
+        _ligne(("Désignation", 0.05, 0.2, 0.3)),
+        _ligne(("—", 0.499, 0.501, 0.5)),
+        _ligne(("Montant", 0.6, 0.7, 0.3)),
+    ]
     assert moities_separees(lignes, 0.5)
 
 
@@ -139,7 +182,12 @@ def test_deux_declarations_au_meme_titre_dans_un_pdf():
         c.titre = titre
         return c
 
-    groupes = _regrouper([page(1, "document administratif unique", False, ("26FR000000000000A1",)),
-                          page(2, "dau-bis (suite)", True), page(3, "document administratif unique", False),
-                          page(4, "dau-bis (suite)", True)])
+    groupes = _regrouper(
+        [
+            page(1, "document administratif unique", False, ("26FR000000000000A1",)),
+            page(2, "dau-bis (suite)", True),
+            page(3, "document administratif unique", False),
+            page(4, "dau-bis (suite)", True),
+        ]
+    )
     assert [g.pages for g in groupes] == [[1, 2], [3, 4]]

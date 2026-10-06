@@ -14,17 +14,71 @@ from controldone.normalize.dates import parse_date, parse_date_detail
 pytestmark = pytest.mark.proprietes
 
 dates = st.dates(min_value=date(1970, 1, 1), max_value=date(2069, 12, 31))
-MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
-           "novembre", "décembre"]
-MOIS_EN = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
-           "November", "December"]
-MOIS_DE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
-           "November", "Dezember"]
+MOIS_FR = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+]
+MOIS_EN = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+]
+MOIS_DE = [
+    "Januar",
+    "Februar",
+    "März",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
+]
 
 
-@given(d=dates, fmt=st.sampled_from(["iso", "iso_slash", "dmy_slash", "dmy_point", "dmy_tiret", "dmy_court",
-                                     "compact", "fr", "fr_maj", "en_us", "en_uk", "de", "es"]),
-       prefixe=st.sampled_from(["", "Date : ", "Invoice date ", "Le "]))
+@given(
+    d=dates,
+    fmt=st.sampled_from(
+        [
+            "iso",
+            "iso_slash",
+            "dmy_slash",
+            "dmy_point",
+            "dmy_tiret",
+            "dmy_court",
+            "compact",
+            "fr",
+            "fr_maj",
+            "en_us",
+            "en_uk",
+            "de",
+            "es",
+        ]
+    ),
+    prefixe=st.sampled_from(["", "Date : ", "Invoice date ", "Le "]),
+)
 def test_date_ecrite_relue(d, fmt, prefixe):
     j, m, a = d.day, d.month, d.year
     texte = {

@@ -41,24 +41,30 @@ def analyser(chemin: Path, *, options: OptionsPages, verbeux: bool = True, truth
     for fr in rec.fichiers:
         f = fr.fichier
         if verbeux:
-            print(f"- {f.chemin_relatif} [{f.type_mime}] {f.statut.value}"
-                  f"{' (' + f.motif_refus + ')' if f.motif_refus else ''}{' doublon' if f.doublon_de else ''}")
+            print(
+                f"- {f.chemin_relatif} [{f.type_mime}] {f.statut.value}"
+                f"{' (' + f.motif_refus + ')' if f.motif_refus else ''}{' doublon' if f.doublon_de else ''}"
+            )
         if not fr.a_traiter:
             continue
         r = decouper_fichier(f, fr.contenu, options=options, corps_courriel=fr.corps_courriel)
         if verbeux:
             for c in r.classements:
                 t = r.textes.get(c.numero)
-                print(f"    p{c.numero}: {t.qualite.value if t else '?'}"
-                      f" natif={t.score_natif if t else None} ocr={t.score_ocr if t else None}"
-                      f" rot={t.rotation if t else 0} -> {c.type if isinstance(c.type, str) else c.type.value}"
-                      f"/{c.sous_type or c.motif_non_exploitable or ''} conf={c.confiance}"
-                      f" refs={c.refs.numero_facture or ''} {','.join(c.refs.mrn_prefixes)} {c.indices}")
+                print(
+                    f"    p{c.numero}: {t.qualite.value if t else '?'}"
+                    f" natif={t.score_natif if t else None} ocr={t.score_ocr if t else None}"
+                    f" rot={t.rotation if t else 0} -> {c.type if isinstance(c.type, str) else c.type.value}"
+                    f"/{c.sous_type or c.motif_non_exploitable or ''} conf={c.confiance}"
+                    f" refs={c.refs.numero_facture or ''} {','.join(c.refs.mrn_prefixes)} {c.indices}"
+                )
             if r.structure is not None:
                 print(f"    structure: {r.structure.format}")
             for d in r.documents:
-                print(f"    => {d.type.value}/{d.sous_type or (d.motif_non_exploitable or '')} pages="
-                      f"{[p.numero for p in d.pages]} conf={d.confiance_classement} langue={d.langue}")
+                print(
+                    f"    => {d.type.value}/{d.sous_type or (d.motif_non_exploitable or '')} pages="
+                    f"{[p.numero for p in d.pages]} conf={d.confiance_classement} langue={d.langue}"
+                )
         if vrai:
             for d in r.documents:
                 for p in d.pages:
@@ -73,12 +79,18 @@ def analyser(chemin: Path, *, options: OptionsPages, verbeux: bool = True, truth
                     stats[f"ok:{t_vrai}"] += ok
                     if ok and st_vrai is not None:
                         stats["sous_type_n"] += 1
-                        stats["sous_type_ok"] += (d.sous_type == st_vrai or
-                                                  (d.motif_non_exploitable or "") == st_vrai)
+                        stats["sous_type_ok"] += (
+                            d.sous_type == st_vrai or (d.motif_non_exploitable or "") == st_vrai
+                        )
                     if not ok:
                         stats[f"confusion:{t_vrai}->{d.type.value}"] += 1
-            n_vrai = len({(d["file"], d["doc_id"]) for d in json.loads(
-                (chemin / "truth.json").read_text("utf-8")).get("documents", []) if d["file"] == f.chemin_relatif})
+            n_vrai = len(
+                {
+                    (d["file"], d["doc_id"])
+                    for d in json.loads((chemin / "truth.json").read_text("utf-8")).get("documents", [])
+                    if d["file"] == f.chemin_relatif
+                }
+            )
             stats["docs_vrais"] += n_vrai
             stats["docs_produits"] += len(r.documents)
             stats["fichiers_nb_docs_ok"] += n_vrai == len(r.documents)
@@ -101,15 +113,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"# {ch}")
         total += analyser(ch, options=opts, verbeux=not a.quiet, truth=a.truth)
     if a.truth and total["pages"]:
-        print(f"\nPages comparées : {total['pages']} ; type exact : {total['type_ok']} "
-              f"({100 * total['type_ok'] / total['pages']:.1f} %)")
+        print(
+            f"\nPages comparées : {total['pages']} ; type exact : {total['type_ok']} "
+            f"({100 * total['type_ok'] / total['pages']:.1f} %)"
+        )
         if total["sous_type_n"]:
             print(f"Sous-type exact (type juste) : {total['sous_type_ok']}/{total['sous_type_n']}")
-        print(f"Fichiers avec le bon nombre de documents : {total['fichiers_nb_docs_ok']}/{total['fichiers']}")
+        print(
+            f"Fichiers avec le bon nombre de documents : {total['fichiers_nb_docs_ok']}/{total['fichiers']}"
+        )
         for k in sorted(k for k in total if k.startswith("vrai:")):
             t = k[5:]
             print(f"  {t}: {total['ok:' + t]}/{total[k]}")
-        for k, v in sorted(((k, v) for k, v in total.items() if k.startswith("confusion:")), key=lambda kv: -kv[1]):
+        for k, v in sorted(
+            ((k, v) for k, v in total.items() if k.startswith("confusion:")), key=lambda kv: -kv[1]
+        ):
             print(f"  {k[10:]}: {v}")
     return 0
 

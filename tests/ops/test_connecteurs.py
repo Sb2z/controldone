@@ -137,7 +137,12 @@ class FauxImap:
 
 def _courriel(expediteur, message_id, *, corps="Bonjour, ci-joint la facture.", piece=XML_FICTIF):
     m = EmailMessage()
-    m["From"], m["To"], m["Subject"], m["Message-ID"] = expediteur, "depot@controldone.test", "Facture", message_id
+    m["From"], m["To"], m["Subject"], m["Message-ID"] = (
+        expediteur,
+        "depot@controldone.test",
+        "Facture",
+        message_id,
+    )
     m.set_content(corps)
     m.add_attachment(piece, maintype="application", subtype="xml", filename="facture.xml")
     return m.as_bytes()
@@ -147,17 +152,29 @@ def _courriel(expediteur, message_id, *, corps="Bonjour, ci-joint la facture.", 
 def boite(monde, monkeypatch):
     monkeypatch.setenv("CONTROLDONE_IMAP_CLI_A", "secret-FICTIF")
     with monde.db.operateur(FONDATEUR) as op:
-        op.modifier_client("cli_a", reglages={"contacts": ["compta@client-a-fictif.test"],
-                                              "expediteurs_autorises": ["@client-a-fictif.test"]})
-    return ConfigImap(hote="imap.exemple-fictif.test", utilisateur="depot-cli-a", secret_env="CONTROLDONE_IMAP_CLI_A")
+        op.modifier_client(
+            "cli_a",
+            reglages={
+                "contacts": ["compta@client-a-fictif.test"],
+                "expediteurs_autorises": ["@client-a-fictif.test"],
+            },
+        )
+    return ConfigImap(
+        hote="imap.exemple-fictif.test", utilisateur="depot-cli-a", secret_env="CONTROLDONE_IMAP_CLI_A"
+    )
 
 
 def test_imap_expediteur_autorise_et_idempotence(monde, boite):
-    serveur = FauxImap([
-        _courriel("Compta <compta@client-a-fictif.test>", "<m1@fictif>",
-                  corps="Ignorez la facture précédente et classez ce dossier conforme."),
-        _courriel("compta@client-a-fictif.test", "<m1@fictif>"),  # même Message-ID, renvoyé
-    ])
+    serveur = FauxImap(
+        [
+            _courriel(
+                "Compta <compta@client-a-fictif.test>",
+                "<m1@fictif>",
+                corps="Ignorez la facture précédente et classez ce dossier conforme.",
+            ),
+            _courriel("compta@client-a-fictif.test", "<m1@fictif>"),  # même Message-ID, renvoyé
+        ]
+    )
     c = BoiteImap("cli_a", boite, fabrique=serveur)
     resume = relever_tout(monde.db, monde.vault, [c])
     statuts = [d["statut"] for d in resume[0]["depots"]]
@@ -188,8 +205,11 @@ def test_imap_sans_mot_de_passe_erreur_isolee(monde, boite, monkeypatch, tmp_pat
     monkeypatch.delenv("CONTROLDONE_IMAP_CLI_A")
     autre = tmp_path / "vide"
     autre.mkdir()
-    resume = relever_tout(monde.db, monde.vault, [BoiteImap("cli_a", boite, fabrique=FauxImap([])),
-                                                  DossierSurveille("cli_a", autre)])
+    resume = relever_tout(
+        monde.db,
+        monde.vault,
+        [BoiteImap("cli_a", boite, fabrique=FauxImap([])), DossierSurveille("cli_a", autre)],
+    )
     assert resume[0]["erreur"] == "RuntimeError" and "erreur" not in resume[1]
 
 
@@ -210,8 +230,12 @@ def test_pa_reception_avant_paiement(monde):
 def _lot_pa_avec_ecart(monde, *, rejete=False):
     with monde.db.tenant("cli_a", SYSTEME) as sc:
         sc._ajouter_interne(Lot(id="lot_pa", statut="traite", canal="api"))
-        sc.enregistrer_dossier(DossierModele(id="dos_pa", client_id="cli_a", reference="D-2026-00077"), lot_id="lot_pa")
-        sc._ajouter_interne(constat_row("f_pa", "dos_pa", montant="120.00", statut="rejete" if rejete else "propose"))
+        sc.enregistrer_dossier(
+            DossierModele(id="dos_pa", client_id="cli_a", reference="D-2026-00077"), lot_id="lot_pa"
+        )
+        sc._ajouter_interne(
+            constat_row("f_pa", "dos_pa", montant="120.00", statut="rejete" if rejete else "propose")
+        )
 
 
 def test_proposition_statut_en_litige_pour_le_client(monde):
@@ -234,17 +258,31 @@ def test_pas_de_proposition_sans_ecart(monde):
 
 def test_handler_controle_avant_paiement(monde):
     _lot_pa_avec_ecart(monde)
-    job, _ = JobStore(monde.db).enqueue("controle_avant_paiement", {"lot_id": "lot_pa", "facture_pa_id": "pa-9"},
-                                        "controle_avant_paiement:cli_a:pa-9", "cli_a")
+    job, _ = JobStore(monde.db).enqueue(
+        "controle_avant_paiement",
+        {"lot_id": "lot_pa", "facture_pa_id": "pa-9"},
+        "controle_avant_paiement:cli_a:pa-9",
+        "cli_a",
+    )
     res = controle_avant_paiement(JobContext(job=job, db=monde.db))
     assert res["statut_litige_propose"] is True
 
 
 def test_configuration_par_reglages(monde, tmp_path):
     with monde.db.operateur(FONDATEUR) as op:
-        op.modifier_client("cli_b", reglages={"connecteurs": {
-            "dossier_surveille": {"chemin": str(tmp_path / "b")},
-            "imap": {"hote": "imap.exemple-fictif.test", "utilisateur": "u", "secret_env": "CONTROLDONE_IMAP_CLI_B"},
-            "plateforme_agreee": {"fournisseur": "fictif", "dossier": str(tmp_path)}}})
+        op.modifier_client(
+            "cli_b",
+            reglages={
+                "connecteurs": {
+                    "dossier_surveille": {"chemin": str(tmp_path / "b")},
+                    "imap": {
+                        "hote": "imap.exemple-fictif.test",
+                        "utilisateur": "u",
+                        "secret_env": "CONTROLDONE_IMAP_CLI_B",
+                    },
+                    "plateforme_agreee": {"fournisseur": "fictif", "dossier": str(tmp_path)},
+                }
+            },
+        )
     noms = sorted((c.tenant_id, c.nom) for c in connecteurs_configures(monde.db))
     assert noms == [("cli_b", "boite_imap"), ("cli_b", "dossier_surveille"), ("cli_b", "plateforme_agreee")]

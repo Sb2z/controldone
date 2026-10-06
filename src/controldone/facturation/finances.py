@@ -69,8 +69,12 @@ class EncaissementLu:
     montant: Decimal
 
 
-def calculer_marges(factures: Iterable[FactureLue], encaissements: Iterable[EncaissementLu],
-                    usages: Iterable[UsageIA], noms: dict[str, str] | None = None) -> list[LigneMarge]:
+def calculer_marges(
+    factures: Iterable[FactureLue],
+    encaissements: Iterable[EncaissementLu],
+    usages: Iterable[UsageIA],
+    noms: dict[str, str] | None = None,
+) -> list[LigneMarge]:
     """Lignes (mois, client) triées par mois puis client. Fonction pure."""
     noms = noms or {}
     lignes: dict[tuple[str, str], LigneMarge] = {}
@@ -109,8 +113,14 @@ def _cumul(lignes: list[LigneMarge], cle: str) -> list[LigneMarge]:
     out: dict[str, LigneMarge] = {}
     for x in lignes:
         k = x.mois if cle == "mois" else x.client_id
-        t = out.setdefault(k, LigneMarge(x.mois if cle == "mois" else "tous", "tous" if cle == "mois" else x.client_id,
-                                         "Tous clients" if cle == "mois" else x.raison_sociale))
+        t = out.setdefault(
+            k,
+            LigneMarge(
+                x.mois if cle == "mois" else "tous",
+                "tous" if cle == "mois" else x.client_id,
+                "Tous clients" if cle == "mois" else x.raison_sociale,
+            ),
+        )
         t.ca_ht += x.ca_ht
         t.encaisse_ttc += x.encaisse_ttc
         t.cout_ia += x.cout_ia
@@ -146,18 +156,49 @@ def synthese(db: Database, *, acteur_id: str, acteur_role: str) -> SyntheseFinan
     lignes = calculer_marges(
         [FactureLue(_mois(f.date_emission), f.client_id, f.total_ht) for f in fs],
         [EncaissementLu(_mois(e.le), e.client_id, e.montant) for e in evts if e.montant],
-        usages, noms)
-    vues = [{"id": f.id, "numero": f.numero, "type": "Avoir" if f.type_code == "381" else "Facture",
-             "type_facture": f.type_facture, "client_id": f.client_id, "client": noms.get(f.client_id, f.client_id),
-             "date": f.date_emission, "echeance": f.date_echeance, "total_ht": f.total_ht, "total_ttc": f.total_ttc,
-             "net_a_payer": Decimal(str((f.contenu or {}).get("net_a_payer", f.total_ttc))),
-             "encaisse": payes.get(f.id, _ZERO), "statut_pa": statuts.get(f.id, "non déposée"),
-             "vendeur_complet": bool((f.contenu or {}).get("vendeur_complet"))} for f in reversed(fs)]
-    enc = [{"id": e.id, "le": e.le, "type": e.type, "client": noms.get(e.client_id or "", e.client_id or "—"),
-            "montant": e.montant, "fournisseur": e.fournisseur, "facture_id": e.facture_id} for e in reversed(evts)]
+        usages,
+        noms,
+    )
+    vues = [
+        {
+            "id": f.id,
+            "numero": f.numero,
+            "type": "Avoir" if f.type_code == "381" else "Facture",
+            "type_facture": f.type_facture,
+            "client_id": f.client_id,
+            "client": noms.get(f.client_id, f.client_id),
+            "date": f.date_emission,
+            "echeance": f.date_echeance,
+            "total_ht": f.total_ht,
+            "total_ttc": f.total_ttc,
+            "net_a_payer": Decimal(str((f.contenu or {}).get("net_a_payer", f.total_ttc))),
+            "encaisse": payes.get(f.id, _ZERO),
+            "statut_pa": statuts.get(f.id, "non déposée"),
+            "vendeur_complet": bool((f.contenu or {}).get("vendeur_complet")),
+        }
+        for f in reversed(fs)
+    ]
+    enc = [
+        {
+            "id": e.id,
+            "le": e.le,
+            "type": e.type,
+            "client": noms.get(e.client_id or "", e.client_id or "—"),
+            "montant": e.montant,
+            "fournisseur": e.fournisseur,
+            "facture_id": e.facture_id,
+        }
+        for e in reversed(evts)
+    ]
     couts = sorted([u for u in usages if u.dossier_id], key=lambda u: -u.cout_eur)
-    return SyntheseFinances(lignes=lignes, par_mois=_cumul(lignes, "mois"), par_client=_cumul(lignes, "client"),
-                            factures=vues, encaissements=enc, couts_dossiers=couts)
+    return SyntheseFinances(
+        lignes=lignes,
+        par_mois=_cumul(lignes, "mois"),
+        par_client=_cumul(lignes, "client"),
+        factures=vues,
+        encaissements=enc,
+        couts_dossiers=couts,
+    )
 
 
 def _fr(x: Decimal | None) -> str:
@@ -168,12 +209,36 @@ def export_csv(lignes: Iterable[LigneMarge]) -> bytes:
     """CSV (séparateur « ; », virgule décimale, UTF-8 avec BOM : ouverture directe dans un tableur)."""
     tampon = io.StringIO()
     w = csv.writer(tampon, delimiter=";", lineterminator="\r\n")
-    w.writerow(["mois", "client_id", "client", "factures", "ca_ht_eur", "encaisse_ttc_eur", "cout_ia_eur",
-                "dossiers_avec_cout_ia", "marge_brute_eur", "taux_marge_pct"])
+    w.writerow(
+        [
+            "mois",
+            "client_id",
+            "client",
+            "factures",
+            "ca_ht_eur",
+            "encaisse_ttc_eur",
+            "cout_ia_eur",
+            "dossiers_avec_cout_ia",
+            "marge_brute_eur",
+            "taux_marge_pct",
+        ]
+    )
     for x in lignes:
         nom = x.raison_sociale
         if nom[:1] in ("=", "+", "-", "@"):  # neutralise une formule de tableur (injection CSV)
             nom = "'" + nom
-        w.writerow([x.mois, x.client_id, nom, x.nb_factures, _fr(x.ca_ht), _fr(x.encaisse_ttc), _fr(x.cout_ia),
-                    x.nb_dossiers_ia, _fr(x.marge_brute), "" if x.taux_marge is None else str(x.taux_marge).replace(".", ",")])
+        w.writerow(
+            [
+                x.mois,
+                x.client_id,
+                nom,
+                x.nb_factures,
+                _fr(x.ca_ht),
+                _fr(x.encaisse_ttc),
+                _fr(x.cout_ia),
+                x.nb_dossiers_ia,
+                _fr(x.marge_brute),
+                "" if x.taux_marge is None else str(x.taux_marge).replace(".", ","),
+            ]
+        )
     return ("﻿" + tampon.getvalue()).encode("utf-8")

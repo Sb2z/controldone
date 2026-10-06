@@ -72,8 +72,13 @@ def _modele(tmp_path_factory) -> Modele:
                 ids[a.tenant_id].setdefault("sortie_envoyee", []).append(a.id)
     pf.db.fermer()
     mp.undo()
-    return Modele(racine=racine, totp=res.totp_secret, comptes={c.email: c.mot_de_passe for c in res.comptes},
-                  cles=cles, ids=ids)
+    return Modele(
+        racine=racine,
+        totp=res.totp_secret,
+        comptes={c.email: c.mot_de_passe for c in res.comptes},
+        cles=cles,
+        ids=ids,
+    )
 
 
 @pytest.fixture

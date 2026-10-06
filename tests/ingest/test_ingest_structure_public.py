@@ -36,19 +36,28 @@ def _extraire(contenu: bytes, nom: str):
     fr = rec.fichiers[0]
     r = decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, fiches=())
     doc = r.documents[0]
-    ctx = ExtractionContext(contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime, ids=IdGenerator.deterministe(3))
+    ctx = ExtractionContext(
+        contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime, ids=IdGenerator.deterministe(3)
+    )
     return doc, ExtracteurFactureXML().extract(doc, r.pages, ctx)
 
 
 # --- ZUGFeRD 1.0 ---------------------------------------------------------------------------------------------
 
 
-def zf1(*, total: str = "134.00", ligne: str = "100.00", logistique: str | None = "15.00", extra: str = "") -> bytes:
+def zf1(
+    *, total: str = "134.00", ligne: str = "100.00", logistique: str | None = "15.00", extra: str = ""
+) -> bytes:
     """ZUGFeRD 1.0 COMFORT minimal, valide au schéma ZUGFeRD 1.0 (données fictives)."""
-    log = (f'<ram:SpecifiedLogisticsServiceCharge><ram:Description>Transportkosten FICTIF</ram:Description>'
-           f'<ram:AppliedAmount currencyID="EUR">{logistique}</ram:AppliedAmount></ram:SpecifiedLogisticsServiceCharge>'
-           ) if logistique else ""
-    return f'''<?xml version="1.0" encoding="UTF-8"?>
+    log = (
+        (
+            f"<ram:SpecifiedLogisticsServiceCharge><ram:Description>Transportkosten FICTIF</ram:Description>"
+            f'<ram:AppliedAmount currencyID="EUR">{logistique}</ram:AppliedAmount></ram:SpecifiedLogisticsServiceCharge>'
+        )
+        if logistique
+        else ""
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryDocument xmlns:rsm="urn:ferd:CrossIndustryDocument:invoice:1p0"
  xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:12"
  xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:15">
@@ -94,7 +103,7 @@ def zf1(*, total: str = "134.00", ligne: str = "100.00", logistique: str | None 
 <ram:SpecifiedTradeProduct><ram:SellerAssignedID>ART-1</ram:SellerAssignedID><ram:Name>Article fictif</ram:Name>
 </ram:SpecifiedTradeProduct></ram:IncludedSupplyChainTradeLineItem>
 </rsm:SpecifiedSupplyChainTradeTransaction>
-</rsm:CrossIndustryDocument>'''.encode()
+</rsm:CrossIndustryDocument>""".encode()
 
 
 def test_zugferd1_lu_et_valide_au_schema():
@@ -159,11 +168,17 @@ def test_pdf_zugferd1_embarque_extrait():
 
 def test_tva_totale_dans_la_devise_de_facture_cii():
     """BT-110 (devise de facture) et non BT-111 (devise de comptabilisation), quel que soit l'ordre."""
-    xml = fab.cii(type_code="381", devise="USD", incoterm=None,
-                  lignes=[("Frais de dédouanement", "1", "100.00", "100.00", None, None, "20")])
-    xml = xml.replace(b'<ram:TaxTotalAmount currencyID="USD">',
-                      b'<ram:TaxTotalAmount currencyID="EUR">18.40</ram:TaxTotalAmount>'
-                      b'<ram:TaxTotalAmount currencyID="USD">')
+    xml = fab.cii(
+        type_code="381",
+        devise="USD",
+        incoterm=None,
+        lignes=[("Frais de dédouanement", "1", "100.00", "100.00", None, None, "20")],
+    )
+    xml = xml.replace(
+        b'<ram:TaxTotalAmount currencyID="USD">',
+        b'<ram:TaxTotalAmount currencyID="EUR">18.40</ram:TaxTotalAmount>'
+        b'<ram:TaxTotalAmount currencyID="USD">',
+    )
     _doc, res = _extraire(xml, "av.xml")
     assert res.champs.total_tva.valeur == "20.00" and res.champs.total_tva.unite == "USD"
 
@@ -171,13 +186,17 @@ def test_tva_totale_dans_la_devise_de_facture_cii():
 def test_ubl_tva_totale_et_schema_vat():
     xml = fab.ubl(avoir=True, devise="USD", lignes=[("Frais de dédouanement", "1", "65.00", None, None)])
     # BT-111 placé avant BT-110 ; immatriculation fiscale (schéma FC) avant le numéro de TVA
-    xml = xml.replace(b'<cac:TaxTotal><cbc:TaxAmount currencyID="USD">0.00',
-                      b'<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">9.99</cbc:TaxAmount></cac:TaxTotal>'
-                      b'<cac:TaxTotal><cbc:TaxAmount currencyID="USD">0.00')
-    xml = xml.replace(b"<cac:PartyTaxScheme><cbc:CompanyID>CN000000000000001",
-                      b"<cac:PartyTaxScheme><cbc:CompanyID>FICTIF-123</cbc:CompanyID><cac:TaxScheme><cbc:ID>FC"
-                      b"</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme><cac:PartyTaxScheme><cbc:CompanyID>"
-                      b"DE000000001")
+    xml = xml.replace(
+        b'<cac:TaxTotal><cbc:TaxAmount currencyID="USD">0.00',
+        b'<cac:TaxTotal><cbc:TaxAmount currencyID="EUR">9.99</cbc:TaxAmount></cac:TaxTotal>'
+        b'<cac:TaxTotal><cbc:TaxAmount currencyID="USD">0.00',
+    )
+    xml = xml.replace(
+        b"<cac:PartyTaxScheme><cbc:CompanyID>CN000000000000001",
+        b"<cac:PartyTaxScheme><cbc:CompanyID>FICTIF-123</cbc:CompanyID><cac:TaxScheme><cbc:ID>FC"
+        b"</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme><cac:PartyTaxScheme><cbc:CompanyID>"
+        b"DE000000001",
+    )
     _doc, res = _extraire(xml, "cn.xml")
     assert res.champs.total_tva.valeur == "0.00" and res.champs.total_tva.unite == "USD"
     assert res.champs.emetteur.tva.valeur == "DE000000001"
@@ -190,17 +209,25 @@ def test_facture_380_a_total_negatif_classee_avoir():
     doc, res = _extraire(xml, "f.xml")
     assert doc.type is TypeDocument.avoir
     c = res.champs
-    assert c.total_credite_ttc.valeur == "100.00" and c.total_credite_ttc.signe_imprime is SigneImprime.negatif
+    assert (
+        c.total_credite_ttc.valeur == "100.00" and c.total_credite_ttc.signe_imprime is SigneImprime.negatif
+    )
     ligne = c.lignes[0]
     assert ligne.montant_ht.valeur == "100.00" and ligne.montant_ht.signe_imprime is SigneImprime.negatif
     assert ligne.quantite.valeur == "2"
 
 
 def test_avoir_381_quantites_negatives():
-    xml = fab.cii(type_code="381", devise="EUR", incoterm=None,
-                  lignes=[("Retour article fictif", "-3", "10.00", "30.00", None, None, "0")])
+    xml = fab.cii(
+        type_code="381",
+        devise="EUR",
+        incoterm=None,
+        lignes=[("Retour article fictif", "-3", "10.00", "30.00", None, None, "0")],
+    )
     _doc, res = _extraire(xml, "av.xml")
-    assert res.champs.total_credite_ttc.valeur == "30.00" and res.champs.total_credite_ttc.signe_imprime is None
+    assert (
+        res.champs.total_credite_ttc.valeur == "30.00" and res.champs.total_credite_ttc.signe_imprime is None
+    )
     assert res.champs.lignes[0].montant_ht.valeur == "30.00"
 
 
@@ -212,10 +239,14 @@ def test_codes_motif_de_frais_ubl():
         b'<cbc:Amount currencyID="EUR">40.00</cbc:Amount></cac:AllowanceCharge>'
         b"<cac:AllowanceCharge><cbc:ChargeIndicator>false</cbc:ChargeIndicator>"
         b"<cbc:AllowanceChargeReasonCode>95</cbc:AllowanceChargeReasonCode>"
-        b'<cbc:Amount currencyID="EUR">5.00</cbc:Amount></cac:AllowanceCharge><cac:TaxTotal>', 1)
+        b'<cbc:Amount currencyID="EUR">5.00</cbc:Amount></cac:AllowanceCharge><cac:TaxTotal>',
+        1,
+    )
     _doc, res = _extraire(xml, "f.xml")
     assert [(s.type, s.montant.valeur) for s in res.champs.sous_totaux] == [
-        (TypeSousTotal.fret, "40.00"), (TypeSousTotal.remise, "5.00")]
+        (TypeSousTotal.fret, "40.00"),
+        (TypeSousTotal.remise, "5.00"),
+    ]
 
 
 # --- réception, classement -----------------------------------------------------------------------------------
@@ -224,19 +255,23 @@ def test_codes_motif_de_frais_ubl():
 def test_xml_avec_commentaire_de_tete_reconnu():
     xml = fab.ubl().split(b"?>", 1)[1]
     assert detecter_type(b"<!--\n  Licence FICTIVE, ligne, avec, virgules\n-->\n" + xml) == MIME_XML
-    assert detecter_type(b"\xef\xbb\xbf\r\n<!-- a --><!-- b -->\r\n<racine attr=\"1\">x</racine>") == MIME_XML
+    assert detecter_type(b'\xef\xbb\xbf\r\n<!-- a --><!-- b -->\r\n<racine attr="1">x</racine>') == MIME_XML
     assert detecter_type(b"<!-- seulement un commentaire -->\nbonjour") != MIME_XML
     doc, res = _extraire(b"<!-- Licence FICTIVE -->\n" + xml, "facture.xml")
     assert doc.type is TypeDocument.facture_commerciale and res.champs.total_facture.valeur == "12540.00"
 
 
 def test_order_x_classe_bon_de_commande():
-    order = (b'<?xml version="1.0"?><rsm:SCRDMCCBDACIOMessageStructure '
-             b'xmlns:rsm="urn:un:unece:uncefact:data:SCRDMCCBDACIOMessageStructure:100">'
-             b"<rsm:ExchangedDocument/></rsm:SCRDMCCBDACIOMessageStructure>")
-    ubl_order = (b'<Order xmlns="urn:oasis:names:specification:ubl:schema:xsd:Order-2" '
-                 b'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
-                 b"<cbc:ID>PO-FICTIF-1</cbc:ID></Order>")
+    order = (
+        b'<?xml version="1.0"?><rsm:SCRDMCCBDACIOMessageStructure '
+        b'xmlns:rsm="urn:un:unece:uncefact:data:SCRDMCCBDACIOMessageStructure:100">'
+        b"<rsm:ExchangedDocument/></rsm:SCRDMCCBDACIOMessageStructure>"
+    )
+    ubl_order = (
+        b'<Order xmlns="urn:oasis:names:specification:ubl:schema:xsd:Order-2" '
+        b'xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+        b"<cbc:ID>PO-FICTIF-1</cbc:ID></Order>"
+    )
     for contenu in (order, ubl_order):
         rec = recevoir_octets([("commande.xml", contenu)])
         fr = rec.fichiers[0]
@@ -248,9 +283,15 @@ def test_order_x_classe_bon_de_commande():
 
 
 def test_csv_a_champ_demesure_sans_exception():
-    fiche = FicheCorrespondance.depuis_dict({
-        "format_id": "fictif_csv", "type": "csv", "detection": {"colonnes_requises": ["MRN"]},
-        "entete": {"mrn": "MRN"}, "listes": {}})
+    fiche = FicheCorrespondance.depuis_dict(
+        {
+            "format_id": "fictif_csv",
+            "type": "csv",
+            "detection": {"colonnes_requises": ["MRN"]},
+            "entete": {"mrn": "MRN"},
+            "listes": {},
+        }
+    )
     contenu = b"MRN;X\n26FR000000000000F1;" + b"A" * 200_000 + b"\n"
     assert not fiche.reconnait(contenu, MIME_CSV)
     assert analyser_contenu_structure(contenu, MIME_CSV, fiches=[fiche]) is None
@@ -274,17 +315,25 @@ def test_facture_ubl_de_2000_lignes():
     contenu = fab.ubl(lignes=lignes)
     info = analyser_contenu_structure(contenu, MIME_XML, fiches=())
     doc = Document(type=info.type, pages=[])
-    res = ExtracteurFactureXML().extract(doc, [], ExtractionContext(contenu_fichier=contenu, type_mime=MIME_XML))
+    res = ExtracteurFactureXML().extract(
+        doc, [], ExtractionContext(contenu_fichier=contenu, type_mime=MIME_XML)
+    )
     assert len(res.champs.lignes) == 2000
-    assert res.champs.lignes[-1].montant_ligne.texte_contexte == "/Invoice/InvoiceLine[2000]/LineExtensionAmount"
+    assert (
+        res.champs.lignes[-1].montant_ligne.texte_contexte == "/Invoice/InvoiceLine[2000]/LineExtensionAmount"
+    )
 
 
 def test_ligne_de_texte_seul_ignoree():
     """Une ligne qui ne porte qu'une note (ZUGFeRD 1.0) ne crée pas de ligne vide dans le modèle."""
-    note = (b"<ram:IncludedSupplyChainTradeLineItem><ram:AssociatedDocumentLineDocument><ram:IncludedNote>"
-            b"<ram:Content>Texte fictif</ram:Content></ram:IncludedNote></ram:AssociatedDocumentLineDocument>"
-            b"<ram:SpecifiedSupplyChainTradeSettlement/></ram:IncludedSupplyChainTradeLineItem>")
-    xml = zf1().replace(b"<ram:IncludedSupplyChainTradeLineItem>", note + b"<ram:IncludedSupplyChainTradeLineItem>", 1)
+    note = (
+        b"<ram:IncludedSupplyChainTradeLineItem><ram:AssociatedDocumentLineDocument><ram:IncludedNote>"
+        b"<ram:Content>Texte fictif</ram:Content></ram:IncludedNote></ram:AssociatedDocumentLineDocument>"
+        b"<ram:SpecifiedSupplyChainTradeSettlement/></ram:IncludedSupplyChainTradeLineItem>"
+    )
+    xml = zf1().replace(
+        b"<ram:IncludedSupplyChainTradeLineItem>", note + b"<ram:IncludedSupplyChainTradeLineItem>", 1
+    )
     _doc, res = _extraire(xml, "rechnung.xml")
     assert len(res.champs.lignes) == 1 and res.champs.lignes[0].montant_ligne.valeur == "100.00"
 
@@ -295,27 +344,43 @@ def test_ligne_de_texte_seul_ignoree():
 def test_codes_type_261_avoir_et_389_facture():
     """261 (avoir autofacturé) est un avoir ; 389 (autofacture) reste une facture."""
     lignes = [("Article fictif", "1", "50.00", "50.00", None, None, "20")]
-    for code, attendu in (("261", TypeDocument.avoir), ("389", TypeDocument.facture_commerciale),
-                          ("384", TypeDocument.facture_commerciale)):
-        info = analyser_contenu_structure(fab.cii(type_code=code, devise="EUR", lignes=lignes), MIME_XML, fiches=())
+    for code, attendu in (
+        ("261", TypeDocument.avoir),
+        ("389", TypeDocument.facture_commerciale),
+        ("384", TypeDocument.facture_commerciale),
+    ):
+        info = analyser_contenu_structure(
+            fab.cii(type_code=code, devise="EUR", lignes=lignes), MIME_XML, fiches=()
+        )
         assert info is not None and info.type is attendu, code
 
 
 def _ft_cii(*, arrondi: str | None, acompte: str | None) -> bytes:
     """Facture de transitaire CII à deux taux (0 et 20 %), avec acompte BT-113 et arrondi BT-114 facultatifs."""
-    xml = fab.cii(numero="FT-ARR-1", devise="EUR", incoterm=None,
-                  lignes=[("Droits de douane", "1", "313.50", "313.50", None, None, "0"),
-                          ("Frais de dédouanement", "1", "65.33", "65.33", None, None, "20")],
-                  vendeur="FICTIF TRANSIT SARL", tva_vendeur="FR40000987651")
+    xml = fab.cii(
+        numero="FT-ARR-1",
+        devise="EUR",
+        incoterm=None,
+        lignes=[
+            ("Droits de douane", "1", "313.50", "313.50", None, None, "0"),
+            ("Frais de dédouanement", "1", "65.33", "65.33", None, None, "20"),
+        ],
+        vendeur="FICTIF TRANSIT SARL",
+        tva_vendeur="FR40000987651",
+    )
     # TTC = 313.50 + 65.33 + 13.07 = 391.90
     net = "391.90"
     if acompte:
-        xml = xml.replace(b"<ram:DuePayableAmount>", f"<ram:TotalPrepaidAmount>{acompte}</ram:TotalPrepaidAmount>"
-                                                     "<ram:DuePayableAmount>".encode())
+        xml = xml.replace(
+            b"<ram:DuePayableAmount>",
+            f"<ram:TotalPrepaidAmount>{acompte}</ram:TotalPrepaidAmount><ram:DuePayableAmount>".encode(),
+        )
         net = f"{391.90 - float(acompte):.2f}"
     if arrondi:
-        xml = xml.replace(b"<ram:GrandTotalAmount>",
-                          f"<ram:RoundingAmount>{arrondi}</ram:RoundingAmount><ram:GrandTotalAmount>".encode())
+        xml = xml.replace(
+            b"<ram:GrandTotalAmount>",
+            f"<ram:RoundingAmount>{arrondi}</ram:RoundingAmount><ram:GrandTotalAmount>".encode(),
+        )
         net = f"{float(net) + float(arrondi):.2f}"
     return xml.replace(b"<ram:DuePayableAmount>391.90<", f"<ram:DuePayableAmount>{net}<".encode())
 

@@ -237,7 +237,8 @@ class ControlContext:
     def factures_commerciales(self) -> list[Document]:
         """Factures commerciales exploitables (type ``facture_commerciale`` avec champs)."""
         return [
-            d for d in self.documents_par_role(RoleLien.facture_commerciale)
+            d
+            for d in self.documents_par_role(RoleLien.facture_commerciale)
             if d.type is TypeDocument.facture_commerciale and d.champs is not None
         ]
 
@@ -246,7 +247,8 @@ class ControlContext:
         retenue (§5.3.2 : ne jamais additionner deux versions). Dernière = ``version`` imprimée la plus
         haute, puis ``date_acceptation`` la plus récente, puis ordre des liens."""
         decs = [
-            d for d in self.documents_par_role(RoleLien.declaration)
+            d
+            for d in self.documents_par_role(RoleLien.declaration)
             if d.type is TypeDocument.declaration and d.champs is not None
         ]
         if not dernieres_versions:
@@ -272,9 +274,16 @@ class ControlContext:
         if not p or len(p) != 15:
             return None
         cle = cle_confusion_ocr(p)
-        return next((d for d in self.declarations()
-                     if d.dec.mrn_prefixe and len(d.dec.mrn_prefixe) == 15
-                     and cle_confusion_ocr(d.dec.mrn_prefixe) == cle), None)
+        return next(
+            (
+                d
+                for d in self.declarations()
+                if d.dec.mrn_prefixe
+                and len(d.dec.mrn_prefixe) == 15
+                and cle_confusion_ocr(d.dec.mrn_prefixe) == cle
+            ),
+            None,
+        )
 
     def versions_anterieures(self, declaration: Document) -> list[Document]:
         """Autres versions (rectificatives ou initiales) du même préfixe MRN (condition 7 de §8.5.1), préfixes
@@ -284,9 +293,12 @@ class ControlContext:
             return []
         cle = cle_confusion_ocr(p) if len(p) == 15 else p
         return [
-            d for d in self.declarations(dernieres_versions=False)
-            if d.id != declaration.id and d.dec.mrn_prefixe
-            and (cle_confusion_ocr(d.dec.mrn_prefixe) if len(d.dec.mrn_prefixe) == 15 else d.dec.mrn_prefixe) == cle
+            d
+            for d in self.declarations(dernieres_versions=False)
+            if d.id != declaration.id
+            and d.dec.mrn_prefixe
+            and (cle_confusion_ocr(d.dec.mrn_prefixe) if len(d.dec.mrn_prefixe) == 15 else d.dec.mrn_prefixe)
+            == cle
         ]
 
     def _rang_version(self, d: Document) -> tuple:
@@ -298,12 +310,15 @@ class ControlContext:
 
     def factures_transitaires(self) -> list[Document]:
         return [
-            d for d in self.documents_par_role(RoleLien.facture_transitaire)
+            d
+            for d in self.documents_par_role(RoleLien.facture_transitaire)
             if d.type is TypeDocument.facture_transitaire and d.champs is not None
         ]
 
     def avoirs(self) -> list[Document]:
-        return [d for d in self.documents_par_role(RoleLien.avoir) if d.type is TypeDocument.avoir and d.champs]
+        return [
+            d for d in self.documents_par_role(RoleLien.avoir) if d.type is TypeDocument.avoir and d.champs
+        ]
 
     def supports(self) -> list[Document]:
         return self.documents_par_role(RoleLien.support)
@@ -323,8 +338,7 @@ class ControlContext:
 
     def allocations_pour(self, document_id: str) -> list[Allocation]:
         return [
-            a for a in self.dossier.allocations
-            if document_id in (a.source_document_id, a.cible_document_id)
+            a for a in self.dossier.allocations if document_id in (a.source_document_id, a.cible_document_id)
         ]
 
     # --- référentiels ------------------------------------------------------------------------------
@@ -358,10 +372,13 @@ class ControlContext:
 
     # --- résultats antérieurs (exécution ordonnée, Annexe A) ---------------------------------------
 
-    def anterieurs(self, controle_id: str | None = None, *, unite: str | None = None) -> tuple[ResultatControle, ...]:
+    def anterieurs(
+        self, controle_id: str | None = None, *, unite: str | None = None
+    ) -> tuple[ResultatControle, ...]:
         """Résultats déjà produits par les contrôles exécutés avant celui-ci (ordre de l'Annexe A)."""
         return tuple(
-            r for r in self._journal
+            r
+            for r in self._journal
             if (controle_id is None or r.controle_id == controle_id) and (unite is None or r.unite == unite)
         )
 
@@ -391,7 +408,9 @@ class ControlContext:
             if c.accepte is not None:
                 if confusion_test_fn(brut, c.accepte):
                     return True
-            elif c.autre is not None and c.tolerance is not None and confusion_test(brut, c.autre, c.tolerance):
+            elif (
+                c.autre is not None and c.tolerance is not None and confusion_test(brut, c.autre, c.tolerance)
+            ):
                 return True
         return False
 
@@ -507,11 +526,16 @@ class ControlContext:
         ids = {v.id for v in valeurs_cles}
         out = []
         for v in valeurs_cles:
-            if (seuil > v.confiance >= C_LECTURE_CONFIRMABLE and v.methode in _METHODES_LUES
-                    and not v.est_reconstruite and v.est_lisible):
+            if (
+                seuil > v.confiance >= C_LECTURE_CONFIRMABLE
+                and v.methode in _METHODES_LUES
+                and not v.est_reconstruite
+                and v.est_lisible
+            ):
                 doc = self.document_de(v)
                 if doc is not None and any(
-                    i.tient and v.id in i.confirmes and not i.membres <= ids for i in self.reseau_identites(doc)
+                    i.tient and v.id in i.confirmes and not i.membres <= ids
+                    for i in self.reseau_identites(doc)
                 ):
                     v = v.model_copy(update={"confiance": seuil})
             out.append(v)
@@ -551,25 +575,37 @@ class ControlContext:
             if not groupe or doc is None or doc.type is not TypeDocument.facture_transitaire:
                 return False
             cites = {mrn_prefixe(v.valeur) for v in doc.ft.refs_mrn if v is not None and v.valeur}
-            cites |= {mrn_prefixe(lg.mrn.valeur) for lg in doc.ft.lignes if lg.mrn is not None and lg.mrn.valeur}
+            cites |= {
+                mrn_prefixe(lg.mrn.valeur) for lg in doc.ft.lignes if lg.mrn is not None and lg.mrn.valeur
+            }
             cites.discard("")
-            return (all(x.cible_document_id in ids and x.montant_alloue is not None for x in groupe)
-                    and cites <= prefixes)
+            return (
+                all(x.cible_document_id in ids and x.montant_alloue is not None for x in groupe)
+                and cites <= prefixes
+            )
 
         out = []
         for a in allocations:
-            if a.source_document_id not in ids or (a.cible_document_id is not None and a.cible_document_id not in ids):
+            if a.source_document_id not in ids or (
+                a.cible_document_id is not None and a.cible_document_id not in ids
+            ):
                 continue
             lignes = lignes_cles.get(a.source_document_id)
             if lignes and a.source_ligne is not None and a.source_ligne not in lignes:
                 continue
-            if (a.methode is MethodeAllocation.prorata and lignes and a.source_ligne in lignes
-                    and repartition_neutre(a)):
+            if (
+                a.methode is MethodeAllocation.prorata
+                and lignes
+                and a.source_ligne in lignes
+                and repartition_neutre(a)
+            ):
                 continue
             out.append(a)
         return out
 
-    def _avoir_non_ventile(self, spec: ControlSpec | str, doc_ids: Sequence[str], kwargs: Mapping[str, Any]) -> bool:
+    def _avoir_non_ventile(
+        self, spec: ControlSpec | str, doc_ids: Sequence[str], kwargs: Mapping[str, Any]
+    ) -> bool:
         """§8.5.1 condition 7 (D-2205) : un montant ``recouvrable`` sur une facture du transitaire n'est pas
         certain quand un avoir du même émetteur, rattaché à cette facture, n'a pu être ventilé (il pourrait
         couvrir l'écart sans pouvoir être déduit)."""
@@ -581,7 +617,11 @@ class ControlContext:
 
         for i in dict.fromkeys(doc_ids):
             doc = self.document(i)
-            if doc is not None and doc.type is TypeDocument.facture_transitaire and avoirs_non_ventiles_pour(self, doc):
+            if (
+                doc is not None
+                and doc.type is TypeDocument.facture_transitaire
+                and avoirs_non_ventiles_pour(self, doc)
+            ):
                 return True
         return False
 
@@ -640,13 +680,17 @@ class ControlContext:
     def non_applicable(
         self, controle_id: str, raison: RaisonCode, *, unite: str = "dossier", **kwargs: Any
     ) -> ResultatControle:
-        return self.resultat(controle_id, outcome=Outcome.non_applicable, unite=unite, raison_code=raison, **kwargs)
+        return self.resultat(
+            controle_id, outcome=Outcome.non_applicable, unite=unite, raison_code=raison, **kwargs
+        )
 
     def non_verifiable(
         self, controle_id: str, raison: RaisonCode, *, unite: str = "dossier", **kwargs: Any
     ) -> ResultatControle:
         """P8 : « impossible de conclure » n'est jamais « conforme »."""
-        return self.resultat(controle_id, outcome=Outcome.non_verifiable, unite=unite, raison_code=raison, **kwargs)
+        return self.resultat(
+            controle_id, outcome=Outcome.non_verifiable, unite=unite, raison_code=raison, **kwargs
+        )
 
     def constat(
         self,
@@ -683,18 +727,30 @@ class ControlContext:
         spec = get_spec(controle_id)
         docs = list(dict.fromkeys([*documents, *(p.document_id for p in preuves if p.document_id)]))
         commun = dict(
-            unite=unite, sous_controle=sous_controle, entrees=entrees, attendu=attendu, constate=constate,
-            ecart=ecart, tolerance=tolerance, seuil_certitude=seuil_certitude, documents=docs, details=details,
+            unite=unite,
+            sous_controle=sous_controle,
+            entrees=entrees,
+            attendu=attendu,
+            constate=constate,
+            ecart=ecart,
+            tolerance=tolerance,
+            seuil_certitude=seuil_certitude,
+            documents=docs,
+            details=details,
         )
         if classement.niveau is None:
             return self.resultat(controle_id, outcome=Outcome.conforme, **commun)
         if lecture_improbable(controle_id, classement.raisons):
             # D-2310 : l'écart ne repose que sur des lectures peu sûres qu'une seule confusion de caractère
             # explique : impossible de conclure (P8), le résultat garde les raisons ; pas de constat.
-            commun["details"] = {**(details or {}), "motif": "ecart_explique_par_une_lecture_douteuse",
-                                 "raisons": [r.value for r in classement.raisons]}
-            return self.resultat(controle_id, outcome=Outcome.non_verifiable,
-                                 raison_code=RaisonCode.lecture_douteuse, **commun)
+            commun["details"] = {
+                **(details or {}),
+                "motif": "ecart_explique_par_une_lecture_douteuse",
+                "raisons": [r.value for r in classement.raisons],
+            }
+            return self.resultat(
+                controle_id, outcome=Outcome.non_verifiable, raison_code=RaisonCode.lecture_douteuse, **commun
+            )
         if spec.nature_montant is None:
             raise ValueError(f"{controle_id} ne produit jamais de constat (Annexe A)")
         renvoi = renvoi or spec.est_renvoi
@@ -745,8 +801,11 @@ def lecture_improbable(controle_id: str, raisons: Iterable[RaisonCode]) -> bool:
     jeux de développement, cette conjonction ne correspond à aucune erreur réelle (bruit de lecture OCR).
     Une lecture douteuse sur des valeurs sûres reste un constat ``a_verifier``."""
     rs = set(raisons)
-    return (not controle_id.startswith(_FAMILLES_PROTEGEES) and RaisonCode.lecture_douteuse in rs
-            and RaisonCode.confiance_insuffisante in rs)
+    return (
+        not controle_id.startswith(_FAMILLES_PROTEGEES)
+        and RaisonCode.lecture_douteuse in rs
+        and RaisonCode.confiance_insuffisante in rs
+    )
 
 
 #: Confiance minimale d'une lecture que l'arithmétique imprimée du document peut confirmer (D-2314).

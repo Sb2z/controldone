@@ -18,7 +18,12 @@ from controldone.pipeline import ResultatDossier
 from controldone.rapport.vue import LIBELLE_RETENU, VERSION_RAPPORT, RapportVue
 
 __all__ = [
-    "SCHEMA_RAPPORT", "ecrire_xlsx", "findings_lot_json", "findings_publiables", "neutraliser_formules", "rapport_json"
+    "SCHEMA_RAPPORT",
+    "ecrire_xlsx",
+    "findings_lot_json",
+    "findings_publiables",
+    "neutraliser_formules",
+    "rapport_json",
 ]
 
 SCHEMA_RAPPORT = f"controldone.rapport/{VERSION_RAPPORT}"
@@ -38,8 +43,11 @@ def findings_publiables(rd: ResultatDossier) -> dict[str, Any]:
         if c.get("motif_blocage"):
             c["libelle"] = LIBELLE_RETENU
             c["prochaine_action"] = ""
-    violations = check_text(" \n".join(t for c in data.get("constats", [])
-                                        for t in (c.get("libelle", ""), c.get("prochaine_action", ""))))
+    violations = check_text(
+        " \n".join(
+            t for c in data.get("constats", []) for t in (c.get("libelle", ""), c.get("prochaine_action", ""))
+        )
+    )
     if violations:
         raise FormulationInterdite(violations)
     return data
@@ -57,18 +65,28 @@ def rapport_json(vue: RapportVue, resultats: Sequence[ResultatDossier]) -> dict[
         "versions": vue.versions,
         "executions": vue.execution_ids,
         "empreinte_tolerances": vue.empreinte,
-        "dossiers_figes": [{"dossier_id": rd.dossier.id, "reference": rd.dossier.reference,
-                            "version": rd.dossier.version} for rd in resultats],
+        "dossiers_figes": [
+            {"dossier_id": rd.dossier.id, "reference": rd.dossier.reference, "version": rd.dossier.version}
+            for rd in resultats
+        ],
         "synthese": {
             "statuts": {code: n for _lib, code, n in vue.statuts},
             "recouvrable_certain": vue.recouvrable_certain,
             "recouvrable_a_verifier": vue.recouvrable_a_verifier,
-            "ecarts_documentaires": {"nombre": vue.ecarts_documentaires_nb, "montant_absolu": vue.ecarts_documentaires},
-            "ecarts_calcul_declaration": {"nombre": vue.ecarts_calcul_nb, "montant_absolu": vue.ecarts_calcul},
+            "ecarts_documentaires": {
+                "nombre": vue.ecarts_documentaires_nb,
+                "montant_absolu": vue.ecarts_documentaires,
+            },
+            "ecarts_calcul_declaration": {
+                "nombre": vue.ecarts_calcul_nb,
+                "montant_absolu": vue.ecarts_calcul,
+            },
             "points_professionnel": vue.nb_renvois,
             "mention": vue.mention_validation,
         },
-        "prochaines_actions": [{"priorite": a.priorite, "titre": a.titre, "details": a.details} for a in vue.actions],
+        "prochaines_actions": [
+            {"priorite": a.priorite, "titre": a.titre, "details": a.details} for a in vue.actions
+        ],
         "non_lus": [{"fichier": f, "motif": m, "pages": p} for f, m, p in vue.non_lus],
         "dossiers": [findings_publiables(rd) for rd in resultats],
         "avertissement": AVERTISSEMENT,
@@ -104,7 +122,9 @@ def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: P
     entete_fill = PatternFill("solid", fgColor="1D3557")
     revue_fill = PatternFill("solid", fgColor="FFF4E0")
 
-    def feuille(titre: str, entetes: list[str], lignes: list[list[Any]], *, revue: bool = False, premiere=False):
+    def feuille(
+        titre: str, entetes: list[str], lignes: list[list[Any]], *, revue: bool = False, premiere=False
+    ):
         ws = wb.active if premiere else wb.create_sheet()
         ws.title = titre
         cols = entetes + (COLONNES_REVUE if revue else [])
@@ -127,46 +147,140 @@ def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: P
         neutraliser_formules(ws)
         return ws
 
-    synth = [["Client", vue.client], ["Période", vue.periode], ["Offre", vue.offre], ["Date", vue.date],
-             ["Données fictives", "oui" if vue.demo else "non"], ["Dossiers", vue.nb_dossiers]]
+    synth = [
+        ["Client", vue.client],
+        ["Période", vue.periode],
+        ["Offre", vue.offre],
+        ["Date", vue.date],
+        ["Données fictives", "oui" if vue.demo else "non"],
+        ["Dossiers", vue.nb_dossiers],
+    ]
     synth += [[f"Dossiers — {lib}", n] for lib, _c, n in vue.statuts]
-    synth += [["Montant recouvrable certain", vue.recouvrable_certain],
-              ["Montant recouvrable à vérifier (jamais additionné au précédent)", vue.recouvrable_a_verifier],
-              ["Écarts de valeur entre documents (nombre)", vue.ecarts_documentaires_nb],
-              ["Écarts de valeur entre documents (montant absolu)", vue.ecarts_documentaires],
-              ["Écarts de calcul sur la déclaration (nombre)", vue.ecarts_calcul_nb],
-              ["Écarts de calcul sur la déclaration (montant absolu)", vue.ecarts_calcul],
-              ["Points à faire vérifier par un professionnel", vue.nb_renvois],
-              ["Mention", vue.mention_validation], ["Avertissement", vue.avertissement]]
+    synth += [
+        ["Montant recouvrable certain", vue.recouvrable_certain],
+        ["Montant recouvrable à vérifier (jamais additionné au précédent)", vue.recouvrable_a_verifier],
+        ["Écarts de valeur entre documents (nombre)", vue.ecarts_documentaires_nb],
+        ["Écarts de valeur entre documents (montant absolu)", vue.ecarts_documentaires],
+        ["Écarts de calcul sur la déclaration (nombre)", vue.ecarts_calcul_nb],
+        ["Écarts de calcul sur la déclaration (montant absolu)", vue.ecarts_calcul],
+        ["Points à faire vérifier par un professionnel", vue.nb_renvois],
+        ["Mention", vue.mention_validation],
+        ["Avertissement", vue.avertissement],
+    ]
     feuille("Synthèse", ["Indicateur", "Valeur"], synth, premiere=True)
-    feuille("Dossiers", ["Dossier", "Facture transitaire", "Transport", "MRN", "Facture commerciale", "TVA acheteur",
-                         "TVA importateur", "Montant facturé", "Montant déclaré", "Statut", "Raisons",
-                         "Recouvrable certain (EUR)", "Recouvrable à vérifier (EUR)"],
-            [[d.reference, *[v for _k, v in d.cles], d.tva_acheteur, d.tva_importateur, d.montant_facture,
-              d.montant_declare, d.statut, d.raisons, d.recouvrable_certain, d.recouvrable_a_verifier]
-             for d in vue.dossiers], revue=True)
+    feuille(
+        "Dossiers",
+        [
+            "Dossier",
+            "Facture transitaire",
+            "Transport",
+            "MRN",
+            "Facture commerciale",
+            "TVA acheteur",
+            "TVA importateur",
+            "Montant facturé",
+            "Montant déclaré",
+            "Statut",
+            "Raisons",
+            "Recouvrable certain (EUR)",
+            "Recouvrable à vérifier (EUR)",
+        ],
+        [
+            [
+                d.reference,
+                *[v for _k, v in d.cles],
+                d.tva_acheteur,
+                d.tva_importateur,
+                d.montant_facture,
+                d.montant_declare,
+                d.statut,
+                d.raisons,
+                d.recouvrable_certain,
+                d.recouvrable_a_verifier,
+            ]
+            for d in vue.dossiers
+        ],
+        revue=True,
+    )
     constats = []
     for rd in resultats:
         for r in rd.resultats:
             c = r.constat
             if c is None:
                 continue
-            constats.append([rd.dossier.reference, c.id, c.controle_id, c.niveau.value, c.nature_montant.value,
-                             c.composante.value if c.composante else "", _d(c.montant_en_jeu) or "",
-                             "oui" if c.renvoi else "non", ", ".join(x.value for x in c.raisons),
-                             c.libelle if c.motif_blocage is None else LIBELLE_RETENU,
-                             c.prochaine_action if c.motif_blocage is None else "",
-                             _d(r.tolerance_appliquee) or "", _d(r.seuil_certitude_applique) or "",
-                             " | ".join(f"{p.role.value}: {p.valeur_brute or p.calcul or ''} (p. {p.page or '-'})"
-                                        for p in c.preuves)])
-    feuille("Constats", ["Dossier", "Constat", "Contrôle", "Niveau", "Nature du montant", "Composante",
-                         "Montant en jeu (EUR)", "Renvoi", "Raisons", "Libellé", "Prochaine action", "Tolérance",
-                         "Seuil de certitude", "Preuves"], constats, revue=True)
-    feuille("Contrôles", ["Dossier", "Contrôle", "Sous-contrôle", "Unité", "Résultat", "Raison", "Attendu",
-                          "Constaté", "Écart", "Tolérance"],
-            [[rd.dossier.reference, r.controle_id, r.sous_controle or "", r.unite, r.outcome.value,
-              r.raison_code.value if r.raison_code else "", r.attendu or "", r.constate or "", _d(r.ecart) or "",
-              _d(r.tolerance_appliquee) or ""] for rd in resultats for r in rd.resultats])
+            constats.append(
+                [
+                    rd.dossier.reference,
+                    c.id,
+                    c.controle_id,
+                    c.niveau.value,
+                    c.nature_montant.value,
+                    c.composante.value if c.composante else "",
+                    _d(c.montant_en_jeu) or "",
+                    "oui" if c.renvoi else "non",
+                    ", ".join(x.value for x in c.raisons),
+                    c.libelle if c.motif_blocage is None else LIBELLE_RETENU,
+                    c.prochaine_action if c.motif_blocage is None else "",
+                    _d(r.tolerance_appliquee) or "",
+                    _d(r.seuil_certitude_applique) or "",
+                    " | ".join(
+                        f"{p.role.value}: {p.valeur_brute or p.calcul or ''} (p. {p.page or '-'})"
+                        for p in c.preuves
+                    ),
+                ]
+            )
+    feuille(
+        "Constats",
+        [
+            "Dossier",
+            "Constat",
+            "Contrôle",
+            "Niveau",
+            "Nature du montant",
+            "Composante",
+            "Montant en jeu (EUR)",
+            "Renvoi",
+            "Raisons",
+            "Libellé",
+            "Prochaine action",
+            "Tolérance",
+            "Seuil de certitude",
+            "Preuves",
+        ],
+        constats,
+        revue=True,
+    )
+    feuille(
+        "Contrôles",
+        [
+            "Dossier",
+            "Contrôle",
+            "Sous-contrôle",
+            "Unité",
+            "Résultat",
+            "Raison",
+            "Attendu",
+            "Constaté",
+            "Écart",
+            "Tolérance",
+        ],
+        [
+            [
+                rd.dossier.reference,
+                r.controle_id,
+                r.sous_controle or "",
+                r.unite,
+                r.outcome.value,
+                r.raison_code.value if r.raison_code else "",
+                r.attendu or "",
+                r.constate or "",
+                _d(r.ecart) or "",
+                _d(r.tolerance_appliquee) or "",
+            ]
+            for rd in resultats
+            for r in rd.resultats
+        ],
+    )
     docs = []
     for rd in resultats:
         for lien in rd.dossier.liens:
@@ -174,17 +288,48 @@ def ecrire_xlsx(vue: RapportVue, resultats: Sequence[ResultatDossier], chemin: P
             if d is None:
                 continue
             fic = rd.fichiers.get(d.pages[0].fichier_id) if d.pages else None
-            docs.append([rd.dossier.reference, d.id, d.type.value, d.sous_type or "",
-                         fic.chemin_relatif if fic else "", ", ".join(str(p.numero) for p in d.pages),
-                         d.confiance_classement, lien.role.value, lien.force.value,
-                         ", ".join(s.value for s in lien.signaux), lien.score])
-    feuille("Documents", ["Dossier", "Document", "Type", "Sous-type", "Fichier", "Pages", "Confiance classement",
-                          "Rôle", "Rattachement", "Signaux", "Score"], docs, revue=True)
+            docs.append(
+                [
+                    rd.dossier.reference,
+                    d.id,
+                    d.type.value,
+                    d.sous_type or "",
+                    fic.chemin_relatif if fic else "",
+                    ", ".join(str(p.numero) for p in d.pages),
+                    d.confiance_classement,
+                    lien.role.value,
+                    lien.force.value,
+                    ", ".join(s.value for s in lien.signaux),
+                    lien.score,
+                ]
+            )
+    feuille(
+        "Documents",
+        [
+            "Dossier",
+            "Document",
+            "Type",
+            "Sous-type",
+            "Fichier",
+            "Pages",
+            "Confiance classement",
+            "Rôle",
+            "Rattachement",
+            "Signaux",
+            "Score",
+        ],
+        docs,
+        revue=True,
+    )
     feuille("Non lus", ["Fichier", "Motif", "Pages"], [list(x) for x in vue.non_lus], revue=True)
     meth = [[x, ""] for x in vue.limites] + [[k, v] for k, v in vue.tolerances]
-    meth += [["Empreinte des tolérances", vue.empreinte]] + [[f"Version {k}", v] for k, v in vue.versions.items()]
-    meth += [[f"Extracteur {k}", v] for k, v in vue.extracteurs] + [["Modèle de langage", vue.modele_llm],
-                                                                     ["Avertissement", vue.avertissement]]
+    meth += [["Empreinte des tolérances", vue.empreinte]] + [
+        [f"Version {k}", v] for k, v in vue.versions.items()
+    ]
+    meth += [[f"Extracteur {k}", v] for k, v in vue.extracteurs] + [
+        ["Modèle de langage", vue.modele_llm],
+        ["Avertissement", vue.avertissement],
+    ]
     feuille("Méthode", ["Élément", "Valeur"], meth)
     p = Path(chemin)
     p.parent.mkdir(parents=True, exist_ok=True)

@@ -31,19 +31,26 @@ couverture = _module("scripts/couverture_paquets.py")
 
 # --- vérifications avant enregistrement ------------------------------------------------------------------------
 
+
 def test_secrets_detectes(tmp_path):
     f = tmp_path / "conf.py"
-    cle_stripe = "sk_" + "live_" + "A1b2C3d4E5f6G7h8I9j0"  # assemblée : ce fichier ne doit pas déclencher le crochet
+    cle_stripe = (
+        "sk_" + "live_" + "A1b2C3d4E5f6G7h8I9j0"
+    )  # assemblée : ce fichier ne doit pas déclencher le crochet
     cle_pem = "-----BEGIN " + "RSA PRIVATE KEY-----"
-    f.write_text(f'X = "{cle_stripe}"\nY = 1\n{cle_pem}\nZ = "{cle_stripe}"  # pragma: allowlist secret\n',
-                 encoding="utf-8")
+    f.write_text(
+        f'X = "{cle_stripe}"\nY = 1\n{cle_pem}\nZ = "{cle_stripe}"  # pragma: allowlist secret\n',
+        encoding="utf-8",
+    )
     constats = verifs.secrets([f])
     assert [c.split(":")[1] for c in constats] == ["1", "3"]
 
 
 def test_secrets_valeurs_fictives_du_depot_tolerees(tmp_path):
     f = tmp_path / "t.py"
-    f.write_text('k = "sk_live_FICTIVE"\nm = "sk-ant-fictif"\nr = r"sk_live_[A-Za-z0-9]{8,}"\n', encoding="utf-8")
+    f.write_text(
+        'k = "sk_live_FICTIVE"\nm = "sk-ant-fictif"\nr = r"sk_live_[A-Za-z0-9]{8,}"\n', encoding="utf-8"
+    )
     assert verifs.secrets([f]) == []
 
 
@@ -79,7 +86,14 @@ def test_print_interdit_dans_le_coeur(tmp_path):
 def test_configuration_pre_commit():
     conf = yaml.safe_load((RACINE / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
     crochets = {h["id"]: h for r in conf["repos"] for h in r["hooks"]}
-    assert {"ruff", "espaces-fin-de-ligne", "fichiers-lourds", "secrets", "syntaxe-json-yaml", "pas-de-print"} <= set(crochets)
+    assert {
+        "ruff",
+        "espaces-fin-de-ligne",
+        "fichiers-lourds",
+        "secrets",
+        "syntaxe-json-yaml",
+        "pas-de-print",
+    } <= set(crochets)
     assert all(r["repo"] == "local" for r in conf["repos"])  # hors ligne
     assert re.search(conf["exclude"], "bench/corpus_g6/holdout/GV0001/truth.json")
     for h in crochets.values():
@@ -97,6 +111,7 @@ def test_main_verifs_code_retour(tmp_path, capsys):
 
 # --- corpus non versionnés --------------------------------------------------------------------------------------
 
+
 def _faux_corpus(racine: Path) -> None:
     for i, contenu in enumerate(["a", "b", "c"]):
         d = racine / "holdout" / f"GV000{i}"
@@ -109,11 +124,19 @@ def test_empreinte_identique_au_pipeline_shell(tmp_path):
     attendu, n = corpus.empreinte(tmp_path)
     assert n == 3
     if shutil.which("sha256sum") and shutil.which("xargs"):
-        shell = subprocess.run("find holdout -name truth.json | LC_ALL=C sort | xargs sha256sum | sha256sum",
-                               shell=True, cwd=tmp_path, capture_output=True, text=True, check=True).stdout.split()[0]
+        shell = subprocess.run(
+            "find holdout -name truth.json | LC_ALL=C sort | xargs sha256sum | sha256sum",
+            shell=True,
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()[0]
         assert shell == attendu
-    lignes = "".join(f"{hashlib.sha256((tmp_path / p).read_bytes()).hexdigest()}  {p}\n"
-                     for p in sorted(f"holdout/GV000{i}/truth.json" for i in range(3)))
+    lignes = "".join(
+        f"{hashlib.sha256((tmp_path / p).read_bytes()).hexdigest()}  {p}\n"
+        for p in sorted(f"holdout/GV000{i}/truth.json" for i in range(3))
+    )
     assert attendu == hashlib.sha256(lignes.encode()).hexdigest()
 
 
@@ -132,8 +155,17 @@ def test_recette_g6_conforme_au_backlog():
     backlog = (RACINE / "docs" / "backlog" / "orchestrateur.md").read_text(encoding="utf-8")
     assert r.get("sha256_historique", r["sha256"]) in backlog
     cmd = " ".join(corpus.commande(r, Path("bench/corpus_g6"), 2)[1:])
-    for morceau in ["-m bench.generator2", "--out bench/corpus_g6", "--prefix GV", "--count 160", "--seed 20261008",
-                    "--split holdout", "--per-control 3", "--ext", "--all-holdout"]:
+    for morceau in [
+        "-m bench.generator2",
+        "--out bench/corpus_g6",
+        "--prefix GV",
+        "--count 160",
+        "--seed 20261008",
+        "--split holdout",
+        "--per-control 3",
+        "--ext",
+        "--all-holdout",
+    ]:
         assert morceau in cmd
         assert morceau.split()[-1] in re.sub(r"\s+", " ", backlog)
 
@@ -147,24 +179,47 @@ def test_corpus_futurs_ignores_anciens_suivis():
 
     assert ignore("bench/corpus_g9/holdout/GX0001/truth.json")
     assert ignore("bench/corpus_g6/manifest.json")
-    for suivi in ("bench/corpus_g3/x.json", "bench/corpus_g4/x.json", "bench/corpus_g5/x.json",
-                  "bench/corpus_empreintes.json", "bench/README.md"):
+    for suivi in (
+        "bench/corpus_g3/x.json",
+        "bench/corpus_g4/x.json",
+        "bench/corpus_g5/x.json",
+        "bench/corpus_empreintes.json",
+        "bench/README.md",
+    ):
         assert not ignore(suivi), suivi
 
 
 # --- résumé de couverture --------------------------------------------------------------------------------------
 
+
 def test_resume_couverture_par_paquet(tmp_path):
     def f(cl, n, cb=0, nb=0):
-        return {"summary": {"covered_lines": cl, "num_statements": n, "covered_branches": cb, "num_branches": nb,
-                            "percent_covered": 100 * (cl + cb) / (n + nb), "missing_lines": n - cl,
-                            "num_partial_branches": 0}}
+        return {
+            "summary": {
+                "covered_lines": cl,
+                "num_statements": n,
+                "covered_branches": cb,
+                "num_branches": nb,
+                "percent_covered": 100 * (cl + cb) / (n + nb),
+                "missing_lines": n - cl,
+                "num_partial_branches": 0,
+            }
+        }
 
-    donnees = {"files": {"src/controldone/controls/famille_a.py": f(50, 100, 10, 20),
-                         "src/controldone/normalize/amounts.py": f(95, 100),
-                         "src/controldone/cli.py": f(10, 100)},
-               "totals": {"covered_lines": 155, "num_statements": 300, "covered_branches": 10, "num_branches": 20,
-                          "percent_covered": 51.5}}
+    donnees = {
+        "files": {
+            "src/controldone/controls/famille_a.py": f(50, 100, 10, 20),
+            "src/controldone/normalize/amounts.py": f(95, 100),
+            "src/controldone/cli.py": f(10, 100),
+        },
+        "totals": {
+            "covered_lines": 155,
+            "num_statements": 300,
+            "covered_branches": 10,
+            "num_branches": 20,
+            "percent_covered": 51.5,
+        },
+    }
     texte, global_ = couverture.resumer(donnees, 2)
     assert global_ == 51.5
     assert "| `controls` | 50.0 % (50/100) | 50.0 % (10/20) | 50.0 % |" in texte
@@ -187,8 +242,9 @@ def test_empreinte_pixels_insensible_a_l_encodage_tiff(tmp_path, capsys):
         (d / "docs").mkdir(parents=True)
         Image.new("L", (16, 8), couleur).save(d / "docs" / "scan.tif", compression=compression)
         sha = hashlib.sha256((d / "docs" / "scan.tif").read_bytes()).hexdigest()
-        (d / "truth.json").write_text(json.dumps({"files": [{"path": "docs/scan.tif", "sha256": sha}]}),
-                                      encoding="utf-8")
+        (d / "truth.json").write_text(
+            json.dumps({"files": [{"path": "docs/scan.tif", "sha256": sha}]}), encoding="utf-8"
+        )
 
     a, b, c = tmp_path / "a", tmp_path / "b", tmp_path / "c"
     corpus_tiff(a, "raw", 200)
@@ -206,14 +262,17 @@ def test_empreinte_pixels_insensible_a_l_encodage_tiff(tmp_path, capsys):
 
 # --- TIFF déterministes et recettes de tous les corpus (D-4402, D-4403) ----------------------------------------
 
+
 def _pixels(data: bytes) -> list:
     import io
 
     from PIL import Image, ImageSequence
 
     with Image.open(io.BytesIO(data)) as im:
-        return [(p.mode, p.size, p.tobytes(), sorted((k, v) for k, v in p.tag_v2.items() if k not in (273, 279)))
-                for p in ImageSequence.Iterator(im)]
+        return [
+            (p.mode, p.size, p.tobytes(), sorted((k, v) for k, v in p.tag_v2.items() if k not in (273, 279)))
+            for p in ImageSequence.Iterator(im)
+        ]
 
 
 @pytest.mark.parametrize("encodage", ["png", "png1"])
@@ -259,8 +318,14 @@ def _corpus_avec_tiff(racine: Path, compression: str) -> None:
     sha = hashlib.sha256((d / "docs" / "scan.tif").read_bytes()).hexdigest()
     verite = json.dumps({"files": [{"path": "docs/scan.tif", "sha256": sha}]}).encode()
     (d / "truth.json").write_bytes(verite)
-    manifeste = {"dossiers": [{"truth_sha256": hashlib.sha256(verite).hexdigest(),
-                               "files": [{"path": "holdout/GV0001/docs/scan.tif", "sha256": sha}]}]}
+    manifeste = {
+        "dossiers": [
+            {
+                "truth_sha256": hashlib.sha256(verite).hexdigest(),
+                "files": [{"path": "holdout/GV0001/docs/scan.tif", "sha256": sha}],
+            }
+        ]
+    }
     (racine / "manifest.json").write_text(json.dumps(manifeste), encoding="utf-8")
     (racine / "stats_generation.json").write_text(json.dumps({"seconds": len(compression)}), encoding="utf-8")
 
@@ -276,15 +341,25 @@ def test_empreinte_arbre_complete_et_pixels(tmp_path, capsys):
     assert corpus.verifier(b, e["sha256"], 1, e["sha256_pixels"], e["sha256_arbre"], e["sha256_arbre_pixels"])
     assert "pixels" in capsys.readouterr().out
     (b / "holdout" / "GV0001" / "docs" / "a.pdf").write_bytes(b"%PDF-1.4 autre")  # hors truth.json
-    assert not corpus.verifier(b, e["sha256"], 1, e["sha256_pixels"], e["sha256_arbre"], e["sha256_arbre_pixels"])
+    assert not corpus.verifier(
+        b, e["sha256"], 1, e["sha256_pixels"], e["sha256_arbre"], e["sha256_arbre_pixels"]
+    )
     assert corpus.verifier(a, ["0" * 64, e["sha256"]], 1)  # plusieurs empreintes exactes admises
 
 
 def test_recettes_de_tous_les_corpus():
     """Chaque corpus du banc a sa recette et toutes ses empreintes ; commande du générateur 1 sans options 2."""
     rs = corpus.recettes()
-    assert {"corpus", "corpus_h2", "corpus_g2", "corpus_g3", "corpus_g4", "corpus_g5", "corpus_g6",
-            "corpus_g7"} <= set(rs)
+    assert {
+        "corpus",
+        "corpus_h2",
+        "corpus_g2",
+        "corpus_g3",
+        "corpus_g4",
+        "corpus_g5",
+        "corpus_g6",
+        "corpus_g7",
+    } <= set(rs)
     for nom, r in rs.items():
         assert r["sortie"] == f"bench/{nom}"
         for cle in ("dossiers", "sha256", "sha256_pixels", "sha256_arbre", "sha256_arbre_pixels"):

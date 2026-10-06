@@ -92,9 +92,22 @@ def _pas(maxi: Decimal) -> Decimal:
     return puissance * 10
 
 
-def colonnes(id_: str, titre: str, series: Sequence[tuple[str, Decimal]], *, monnaie: bool = True,
-             colonne_libelle: str = N_("Mois"), colonne_valeur: str = N_("Montant"), note: str = "") -> Graphe:
-    titre, colonne_libelle, colonne_valeur, note = _(titre), _(colonne_libelle), _(colonne_valeur), _(note) if note else ""
+def colonnes(
+    id_: str,
+    titre: str,
+    series: Sequence[tuple[str, Decimal]],
+    *,
+    monnaie: bool = True,
+    colonne_libelle: str = N_("Mois"),
+    colonne_valeur: str = N_("Montant"),
+    note: str = "",
+) -> Graphe:
+    titre, colonne_libelle, colonne_valeur, note = (
+        _(titre),
+        _(colonne_libelle),
+        _(colonne_valeur),
+        _(note) if note else "",
+    )
     """Histogramme vertical (série temporelle)."""
     L, H, g, d, h, b = 640, 240, 56, 12, 16, 34
     vals = [v for _l, v in series]
@@ -108,24 +121,67 @@ def colonnes(id_: str, titre: str, series: Sequence[tuple[str, Decimal]], *, mon
     for i, (lib, v) in enumerate(series):
         hh = float(v / plafond) * zone_h if plafond else 0
         x = g + i * larg + larg * 0.18
-        out.append(Barre(lib, v, _texte(v, monnaie), x=round(x, 1), y=round(h + zone_h - hh, 1),
-                         largeur=round(larg * 0.64, 1), hauteur=round(max(hh, 0), 1),
-                         tx=round(g + i * larg + larg / 2, 1), ty=H - b + 18))
+        out.append(
+            Barre(
+                lib,
+                v,
+                _texte(v, monnaie),
+                x=round(x, 1),
+                y=round(h + zone_h - hh, 1),
+                largeur=round(larg * 0.64, 1),
+                hauteur=round(max(hh, 0), 1),
+                tx=round(g + i * larg + larg / 2, 1),
+                ty=H - b + 18,
+            )
+        )
     grad = []
     k = Decimal(0)
     while k <= plafond:
         grad.append((round(h + zone_h - float(k / plafond) * zone_h, 1), _court(k, monnaie)))
         k += pas
     total = sum(vals, Decimal(0))
-    desc = (_("{n} mois ; total {total} ; maximum {maxi}.", n=len(series), total=_texte(total, monnaie),
-              maxi=_texte(maxi, monnaie)) if series else _("Aucune donnée."))
-    return Graphe(id_, titre, desc, "colonnes", L, H, out, colonne_libelle, colonne_valeur, grad,
-                  vide=not any(vals), note=note)
+    desc = (
+        _(
+            "{n} mois ; total {total} ; maximum {maxi}.",
+            n=len(series),
+            total=_texte(total, monnaie),
+            maxi=_texte(maxi, monnaie),
+        )
+        if series
+        else _("Aucune donnée.")
+    )
+    return Graphe(
+        id_,
+        titre,
+        desc,
+        "colonnes",
+        L,
+        H,
+        out,
+        colonne_libelle,
+        colonne_valeur,
+        grad,
+        vide=not any(vals),
+        note=note,
+    )
 
 
-def barres(id_: str, titre: str, series: Sequence[tuple[str, Decimal]], *, monnaie: bool = False,
-           colonne_libelle: str = N_("Catégorie"), colonne_valeur: str = N_("Nombre"), note: str = "") -> Graphe:
-    titre, colonne_libelle, colonne_valeur, note = _(titre), _(colonne_libelle), _(colonne_valeur), _(note) if note else ""
+def barres(
+    id_: str,
+    titre: str,
+    series: Sequence[tuple[str, Decimal]],
+    *,
+    monnaie: bool = False,
+    colonne_libelle: str = N_("Catégorie"),
+    colonne_valeur: str = N_("Nombre"),
+    note: str = "",
+) -> Graphe:
+    titre, colonne_libelle, colonne_valeur, note = (
+        _(titre),
+        _(colonne_libelle),
+        _(colonne_valeur),
+        _(note) if note else "",
+    )
     """Barres horizontales classées (catégories), valeur écrite au bout de chaque barre."""
     series = sorted(series, key=lambda s: -s[1])[:8]
     L, g, d, ligne = 640, 230, 110, 30
@@ -136,14 +192,37 @@ def barres(id_: str, titre: str, series: Sequence[tuple[str, Decimal]], *, monna
     for i, (lib, v) in enumerate(series):
         w = float(v / maxi) * zone_l if maxi else 0
         y = 8 + i * ligne
-        out.append(Barre(lib, v, _texte(v, monnaie), court=lib if len(lib) <= 34 else lib[:33] + "…", x=g, y=y + 5,
-                         largeur=round(max(w, 2 if v else 0), 1), hauteur=ligne - 12, tx=g - 10, ty=y + ligne / 2 + 4,
-                         vx=round(g + w + 8, 1), vy=y + ligne / 2 + 4))
+        out.append(
+            Barre(
+                lib,
+                v,
+                _texte(v, monnaie),
+                court=lib if len(lib) <= 34 else lib[:33] + "…",
+                x=g,
+                y=y + 5,
+                largeur=round(max(w, 2 if v else 0), 1),
+                hauteur=ligne - 12,
+                tx=g - 10,
+                ty=y + ligne / 2 + 4,
+                vx=round(g + w + 8, 1),
+                vy=y + ligne / 2 + 4,
+            )
+        )
     total = sum((v for _l, v in series), Decimal(0))
-    desc = (_("{n} catégorie(s) ; total {total} ; la plus élevée : {nom} ({valeur}).", n=len(series),
-              total=_texte(total, monnaie), nom=series[0][0], valeur=_texte(series[0][1], monnaie))
-            if series else _("Aucune donnée."))
-    return Graphe(id_, titre, desc, "barres", L, H, out, colonne_libelle, colonne_valeur, vide=not maxi, note=note)
+    desc = (
+        _(
+            "{n} catégorie(s) ; total {total} ; la plus élevée : {nom} ({valeur}).",
+            n=len(series),
+            total=_texte(total, monnaie),
+            nom=series[0][0],
+            valeur=_texte(series[0][1], monnaie),
+        )
+        if series
+        else _("Aucune donnée.")
+    )
+    return Graphe(
+        id_, titre, desc, "barres", L, H, out, colonne_libelle, colonne_valeur, vide=not maxi, note=note
+    )
 
 
 def _mois_libelle(m: str) -> str:
@@ -151,7 +230,9 @@ def _mois_libelle(m: str) -> str:
     return f"{(_MOIS_EN if courante() == 'en' else _MOIS)[int(n) - 1]} {a[2:]}"
 
 
-def _serie_mois(par_mois: dict[str, Decimal], *, nb: int = 12, aujourd_hui: date | None = None) -> list[tuple[str, Decimal]]:
+def _serie_mois(
+    par_mois: dict[str, Decimal], *, nb: int = 12, aujourd_hui: date | None = None
+) -> list[tuple[str, Decimal]]:
     """Les ``nb`` derniers mois jusqu'au mois courant (Paris), mois sans montant compris."""
     courant = mois_paris(aujourd_hui) if aujourd_hui else mois_paris()
     a, m = int(courant[:4]), int(courant[5:7])
@@ -194,12 +275,26 @@ def donnees_client(scope: Any, lignes: Sequence[Any] | None = None) -> list[Grap
         lib = noms.get(tid or "", _("Transitaire non identifié"))
         par_transitaire[lib] = par_transitaire.get(lib, Decimal(0)) + montant
     return [
-        colonnes("g-mois", N_("Montant recouvrable certain par mois"), _serie_mois(par_mois),
-                 note=N_("Écarts certains validés, par mois de traitement du dossier (12 derniers mois).")),
-        barres("g-familles", N_("Constats publiés par famille de contrôles"),
-               [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in par_famille.items()], colonne_libelle=N_("Famille")),
-        barres("g-transitaires", N_("Montant recouvrable certain par transitaire"), list(par_transitaire.items()),
-               monnaie=True, colonne_libelle=N_("Transitaire"), colonne_valeur=N_("Montant")),
+        colonnes(
+            "g-mois",
+            N_("Montant recouvrable certain par mois"),
+            _serie_mois(par_mois),
+            note=N_("Écarts certains validés, par mois de traitement du dossier (12 derniers mois)."),
+        ),
+        barres(
+            "g-familles",
+            N_("Constats publiés par famille de contrôles"),
+            [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in par_famille.items()],
+            colonne_libelle=N_("Famille"),
+        ),
+        barres(
+            "g-transitaires",
+            N_("Montant recouvrable certain par transitaire"),
+            list(par_transitaire.items()),
+            monnaie=True,
+            colonne_libelle=N_("Transitaire"),
+            colonne_valeur=N_("Montant"),
+        ),
     ]
 
 
@@ -216,10 +311,22 @@ def donnees_fondateur(stats: dict[str, dict[str, Any]]) -> list[Graphe]:
         for fam, n in (b.get("familles_valides") or {}).items():
             valides[fam] = valides.get(fam, Decimal(0)) + n
     return [
-        colonnes("g-mois", N_("Montant recouvrable certain validé par mois (tous clients)"), _serie_mois(par_mois),
-                 note=N_("Par mois de traitement du dossier (12 derniers mois).")),
-        barres("g-proposes", N_("Constats à valider par famille de contrôles"),
-               [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in proposes.items()], colonne_libelle=N_("Famille")),
-        barres("g-valides", N_("Constats validés par famille de contrôles"),
-               [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in valides.items()], colonne_libelle=N_("Famille")),
+        colonnes(
+            "g-mois",
+            N_("Montant recouvrable certain validé par mois (tous clients)"),
+            _serie_mois(par_mois),
+            note=N_("Par mois de traitement du dossier (12 derniers mois)."),
+        ),
+        barres(
+            "g-proposes",
+            N_("Constats à valider par famille de contrôles"),
+            [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in proposes.items()],
+            colonne_libelle=N_("Famille"),
+        ),
+        barres(
+            "g-valides",
+            N_("Constats validés par famille de contrôles"),
+            [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in valides.items()],
+            colonne_libelle=N_("Famille"),
+        ),
     ]

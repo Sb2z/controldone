@@ -57,8 +57,14 @@ def _traiter(monde, horloge, monkeypatch, cle: str) -> list:
     appels: list = []
     monkeypatch.setattr(handlers_mod, "charger_pipeline", lambda: (_capturer(appels), OptionsPipeline))
     enqueue("traiter_lot", {"lot_id": "lot_a"}, cle, "cli_a", db=monde.db)
-    w = Worker(monde.db, handlers={"traiter_lot": handlers_mod.traiter_lot}, services={"vault": monde.vault},
-               horloge=horloge, worker_id="w_llm", poll_s=0.01)
+    w = Worker(
+        monde.db,
+        handlers={"traiter_lot": handlers_mod.traiter_lot},
+        services={"vault": monde.vault},
+        horloge=horloge,
+        worker_id="w_llm",
+        poll_s=0.01,
+    )
     w.executer_un()
     return appels
 

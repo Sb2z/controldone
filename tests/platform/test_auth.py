@@ -53,16 +53,34 @@ def test_argon2():
 _SECRET_RFC = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # base32("12345678901234567890")
 
 
-@pytest.mark.parametrize("t,attendu", [
-    (59, "94287082"), (1111111109, "07081804"), (1111111111, "14050471"),
-    (1234567890, "89005924"), (2000000000, "69279037"), (20000000000, "65353130"),
-])
+@pytest.mark.parametrize(
+    "t,attendu",
+    [
+        (59, "94287082"),
+        (1111111109, "07081804"),
+        (1111111111, "14050471"),
+        (1234567890, "89005924"),
+        (2000000000, "69279037"),
+        (20000000000, "65353130"),
+    ],
+)
 def test_totp_vecteurs_rfc6238(t, attendu):
     assert code_totp(_SECRET_RFC, t, chiffres=8) == attendu
 
 
 def test_hotp_vecteurs_rfc4226():
-    attendus = ["755224", "287082", "359152", "969429", "338314", "254676", "287922", "162583", "399871", "520489"]
+    attendus = [
+        "755224",
+        "287082",
+        "359152",
+        "969429",
+        "338314",
+        "254676",
+        "287922",
+        "162583",
+        "399871",
+        "520489",
+    ]
     assert [code_hotp(b"12345678901234567890", i) for i in range(10)] == attendus
 
 
@@ -83,8 +101,14 @@ def test_totp_fenetre_et_formats():
 @pytest.fixture
 def fondateur_totp(monde, cles):
     secret = generer_secret()
-    creer_utilisateur(monde.db, user_id=FONDATEUR.id, email="fondateur@exemple-fictif.test",
-                      mot_de_passe_hash=hacher_mot_de_passe(MDP), role=Role.fondateur, acteur=FONDATEUR)
+    creer_utilisateur(
+        monde.db,
+        user_id=FONDATEUR.id,
+        email="fondateur@exemple-fictif.test",
+        mot_de_passe_hash=hacher_mot_de_passe(MDP),
+        role=Role.fondateur,
+        acteur=FONDATEUR,
+    )
     enregistrer_totp(monde.db, FONDATEUR.id, chiffrer_secret(cles, secret), acteur=FONDATEUR)
     return secret
 
@@ -95,15 +119,28 @@ def test_fondateur_exige_le_second_facteur(monde, cles, fondateur_totp):
     for kwargs in ({}, {"code_totp": "000000"}):
         with pytest.raises(EchecAuthentification):
             authentifier(monde.db, email, MDP, cles_maitresses=cles, t=t, **kwargs)
-    a = authentifier(monde.db, email, MDP, cles_maitresses=cles, code_totp=code_totp(fondateur_totp, t), t=t,
-                     ip="198.51.100.1")
+    a = authentifier(
+        monde.db,
+        email,
+        MDP,
+        cles_maitresses=cles,
+        code_totp=code_totp(fondateur_totp, t),
+        t=t,
+        ip="198.51.100.1",
+    )
     assert a.role is Role.fondateur and a.ip == "198.51.100.1"
     with pytest.raises(EchecAuthentification):  # rejeu du même code refusé
         authentifier(monde.db, email, MDP, cles_maitresses=cles, code_totp=code_totp(fondateur_totp, t), t=t)
     with pytest.raises(EchecAuthentification):  # code plus ancien que le dernier utilisé
-        authentifier(monde.db, email, MDP, cles_maitresses=cles, code_totp=code_totp(fondateur_totp, t - 30), t=t)
-    assert authentifier(monde.db, email, MDP, cles_maitresses=cles, code_totp=code_totp(fondateur_totp, t + 30),
-                        t=t + 30).role is Role.fondateur
+        authentifier(
+            monde.db, email, MDP, cles_maitresses=cles, code_totp=code_totp(fondateur_totp, t - 30), t=t
+        )
+    assert (
+        authentifier(
+            monde.db, email, MDP, cles_maitresses=cles, code_totp=code_totp(fondateur_totp, t + 30), t=t + 30
+        ).role
+        is Role.fondateur
+    )
 
 
 def test_utilisateur_client(monde, cles):
@@ -119,11 +156,23 @@ def test_utilisateur_client(monde, cles):
 
 def test_creation_de_compte_droits(monde):
     with pytest.raises(AccesRefuse):
-        creer_utilisateur(monde.db, user_id="u_x", email="x@x.test", mot_de_passe_hash="h",
-                          role=Role.fondateur, acteur=monde.acteurs["admin_a"])
+        creer_utilisateur(
+            monde.db,
+            user_id="u_x",
+            email="x@x.test",
+            mot_de_passe_hash="h",
+            role=Role.fondateur,
+            acteur=monde.acteurs["admin_a"],
+        )
     with pytest.raises(AccesRefuse):
-        creer_utilisateur(monde.db, user_id="u_y", email="y@x.test", mot_de_passe_hash="h",
-                          role=Role.client_lecteur, acteur=monde.acteurs["lecteur_a"])
+        creer_utilisateur(
+            monde.db,
+            user_id="u_y",
+            email="y@x.test",
+            mot_de_passe_hash="h",
+            role=Role.client_lecteur,
+            acteur=monde.acteurs["lecteur_a"],
+        )
 
 
 # --- jetons de session -------------------------------------------------------------------------------
@@ -239,8 +288,14 @@ def test_cles_api(monde):
         assert cree.cle.split("_", 2)[2] not in stockee.hash and stockee.prefixe == cree.prefixe
     acteur = verifier_cle_api(monde.db, cree.cle)
     assert acteur.role is Role.client_admin and acteur.tenant_id == "cli_a"
-    for mauvaise in (cree.cle + "x", cree.cle.replace(cree.prefixe, "000000000000"), "cdk_", "", "abc",
-                     f"cdk_{cree.prefixe}_"):
+    for mauvaise in (
+        cree.cle + "x",
+        cree.cle.replace(cree.prefixe, "000000000000"),
+        "cdk_",
+        "",
+        "abc",
+        f"cdk_{cree.prefixe}_",
+    ):
         assert verifier_cle_api(monde.db, mauvaise) is None
     with monde.db.tenant("cli_a", monde.acteurs["admin_a"]) as sc:
         revoquer_cle_api(sc, cree.id)
@@ -274,36 +329,39 @@ ADMIN_A = Acteur("u1", Role.client_admin, "cli_a")
 LECTEUR_A = Acteur("u2", Role.client_lecteur, "cli_a")
 
 
-@pytest.mark.parametrize("acteur,action,ressource,attendu", [
-    (FONDATEUR, Action.valider_constat, A, True),
-    (FONDATEUR, Action.changer_autonomie, PLATEFORME, True),
-    (FONDATEUR, Action.supprimer_client, B, True),
-    (ADMIN_A, Action.lire, A, True),
-    (ADMIN_A, Action.deposer, A, True),
-    (ADMIN_A, Action.declarer_recouvrement, A, True),
-    (ADMIN_A, Action.gerer_cles_api, A, True),
-    (ADMIN_A, Action.lire, B, False),
-    (ADMIN_A, Action.deposer, B, False),
-    (ADMIN_A, Action.valider_constat, A, False),
-    (ADMIN_A, Action.publier_rapport, A, False),
-    (ADMIN_A, Action.valider_grille, A, False),
-    (ADMIN_A, Action.approuver_sortie, A, False),
-    (ADMIN_A, Action.supprimer_client, A, False),
-    (ADMIN_A, Action.lire_constats_proposes, A, False),
-    (ADMIN_A, Action.lire, PLATEFORME, False),
-    (ADMIN_A, Action.lire, None, False),
-    (LECTEUR_A, Action.lire, A, True),
-    (LECTEUR_A, Action.ecrire, A, False),
-    (LECTEUR_A, Action.deposer, A, False),
-    (LECTEUR_A, Action.exporter, A, False),
-    (Acteur.systeme(), Action.ecrire, A, True),
-    (Acteur.systeme(), Action.valider_constat, A, False),
-    (Acteur.systeme(), Action.approuver_sortie, A, False),
-    (Acteur.systeme(), Action.changer_autonomie, PLATEFORME, False),
-    (None, Action.lire, A, False),
-    (Acteur("u", Role.client_admin, None), Action.lire, A, False),
-    (ADMIN_A, "action_inconnue", A, False),
-])
+@pytest.mark.parametrize(
+    "acteur,action,ressource,attendu",
+    [
+        (FONDATEUR, Action.valider_constat, A, True),
+        (FONDATEUR, Action.changer_autonomie, PLATEFORME, True),
+        (FONDATEUR, Action.supprimer_client, B, True),
+        (ADMIN_A, Action.lire, A, True),
+        (ADMIN_A, Action.deposer, A, True),
+        (ADMIN_A, Action.declarer_recouvrement, A, True),
+        (ADMIN_A, Action.gerer_cles_api, A, True),
+        (ADMIN_A, Action.lire, B, False),
+        (ADMIN_A, Action.deposer, B, False),
+        (ADMIN_A, Action.valider_constat, A, False),
+        (ADMIN_A, Action.publier_rapport, A, False),
+        (ADMIN_A, Action.valider_grille, A, False),
+        (ADMIN_A, Action.approuver_sortie, A, False),
+        (ADMIN_A, Action.supprimer_client, A, False),
+        (ADMIN_A, Action.lire_constats_proposes, A, False),
+        (ADMIN_A, Action.lire, PLATEFORME, False),
+        (ADMIN_A, Action.lire, None, False),
+        (LECTEUR_A, Action.lire, A, True),
+        (LECTEUR_A, Action.ecrire, A, False),
+        (LECTEUR_A, Action.deposer, A, False),
+        (LECTEUR_A, Action.exporter, A, False),
+        (Acteur.systeme(), Action.ecrire, A, True),
+        (Acteur.systeme(), Action.valider_constat, A, False),
+        (Acteur.systeme(), Action.approuver_sortie, A, False),
+        (Acteur.systeme(), Action.changer_autonomie, PLATEFORME, False),
+        (None, Action.lire, A, False),
+        (Acteur("u", Role.client_admin, None), Action.lire, A, False),
+        (ADMIN_A, "action_inconnue", A, False),
+    ],
+)
 def test_matrice_des_permissions(acteur, action, ressource, attendu):
     assert peut(acteur, action, ressource) is attendu
 
@@ -312,4 +370,6 @@ def test_ressource_objet_avec_tenant_id(monde):
     class Obj:
         tenant_id = "cli_a"
 
-    assert peut(ADMIN_A, Action.lire, Obj()) and not peut(Acteur("u", Role.client_admin, "cli_b"), Action.lire, Obj())
+    assert peut(ADMIN_A, Action.lire, Obj()) and not peut(
+        Acteur("u", Role.client_admin, "cli_b"), Action.lire, Obj()
+    )

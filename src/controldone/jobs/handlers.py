@@ -48,8 +48,11 @@ def charger_pipeline() -> tuple[Callable[..., Any], type]:
 
 def chemin_sur(racine: Path, chemin_relatif: str, defaut: str) -> Path:
     """Chemin sous ``racine`` construit depuis un chemin relatif non fiable (``..``, absolu, NUL rejetés)."""
-    parties = [p for p in PurePosixPath(chemin_relatif.replace("\\", "/")).parts
-               if p not in ("", ".", "..", "/") and "\x00" not in p]
+    parties = [
+        p
+        for p in PurePosixPath(chemin_relatif.replace("\\", "/")).parts
+        if p not in ("", ".", "..", "/") and "\x00" not in p
+    ]
     parties = [p[:150] for p in parties][-6:] or [defaut]
     cible = (racine.joinpath(*parties)).resolve()
     if not cible.is_relative_to(racine.resolve()):
@@ -72,16 +75,33 @@ def _profil(scope: Any) -> Any:
     from controldone.storage.models import Transitaire as TransitaireRow
 
     t = scope.client()
-    client = Client(id=t.id, raison_sociale=t.raison_sociale, offre=t.offre,
-                    plafond_cout_ia_mensuel_eur=t.plafond_cout_ia_mensuel_eur, retention_jours=t.retention_jours)
+    client = Client(
+        id=t.id,
+        raison_sociale=t.raison_sociale,
+        offre=t.offre,
+        plafond_cout_ia_mensuel_eur=t.plafond_cout_ia_mensuel_eur,
+        retention_jours=t.retention_jours,
+    )
     return ProfilClient(
         client=client,
-        entites=[Entite.model_validate({"id": e.id, "raison_sociale": e.raison_sociale, "tva": e.tva,
-                                        **(e.contenu or {}), "client_id": t.id})
-                 for e in scope.lister(EntiteRow)],
-        transitaires=[Transitaire.model_validate({"id": x.id, "nom": x.nom, "tva": x.tva, **(x.contenu or {}),
-                                                  "client_id": t.id})
-                      for x in scope.lister(TransitaireRow)],
+        entites=[
+            Entite.model_validate(
+                {
+                    "id": e.id,
+                    "raison_sociale": e.raison_sociale,
+                    "tva": e.tva,
+                    **(e.contenu or {}),
+                    "client_id": t.id,
+                }
+            )
+            for e in scope.lister(EntiteRow)
+        ],
+        transitaires=[
+            Transitaire.model_validate(
+                {"id": x.id, "nom": x.nom, "tva": x.tva, **(x.contenu or {}), "client_id": t.id}
+            )
+            for x in scope.lister(TransitaireRow)
+        ],
     )
 
 
@@ -96,8 +116,13 @@ def _rattacher_fichiers(doc: Any, fichiers_pipeline: dict[str, Any], par_sha: di
     return doc.model_copy(update={"pages": pages})
 
 
-def _pipeline_fils(conn: Any, pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any],
-                   avec_progression: bool = False) -> None:
+def _pipeline_fils(
+    conn: Any,
+    pipeline: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    avec_progression: bool = False,
+) -> None:
     try:
         options = kwargs.get("options")
         if avec_progression and options is not None and hasattr(options, "progression"):
@@ -110,9 +135,15 @@ def _pipeline_fils(conn: Any, pipeline: Callable[..., Any], args: tuple[Any, ...
         conn.close()
 
 
-def executer_avec_delai(pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any],
-                        delai_s: float, *, battement: Callable[[], bool] | None = None,
-                        progression: Callable[[str, int, int], None] | None = None) -> Any:
+def executer_avec_delai(
+    pipeline: Callable[..., Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    delai_s: float,
+    *,
+    battement: Callable[[], bool] | None = None,
+    progression: Callable[[str, int, int], None] | None = None,
+) -> Any:
     """Exécute ``pipeline`` dans un processus fils (``spawn`` : aucun verrou hérité du parent) ; au-delà de
     ``delai_s`` secondes le fils est tué et ``ErreurDefinitive`` est levée. ``battement`` est appelé
     pendant l'attente (bail du job) ; s'il renvoie ``False`` le fils est tué aussi. ``progression`` reçoit, dans
@@ -121,8 +152,9 @@ def executer_avec_delai(pipeline: Callable[..., Any], args: tuple[Any, ...], kwa
 
     mp = multiprocessing.get_context("spawn")
     recu, envoi = mp.Pipe(duplex=False)
-    fils = mp.Process(target=_pipeline_fils, args=(envoi, pipeline, args, kwargs, progression is not None),
-                      daemon=True)
+    fils = mp.Process(
+        target=_pipeline_fils, args=(envoi, pipeline, args, kwargs, progression is not None), daemon=True
+    )
     fils.start()
     envoi.close()
     fin = time.monotonic() + delai_s
@@ -153,22 +185,30 @@ def executer_avec_delai(pipeline: Callable[..., Any], args: tuple[Any, ...], kwa
         recu.close()
 
 
-def _executer_pipeline(ctx: JobContext, pipeline: Callable[..., Any], racine: Path, profil: Any, grilles: Any,
-                       options: Any) -> Any:
+def _executer_pipeline(
+    ctx: JobContext, pipeline: Callable[..., Any], racine: Path, profil: Any, grilles: Any, options: Any
+) -> Any:
     from controldone.config import get_settings
 
     delai = get_settings().lot_duree_max_s
     relais = relais_progression(ctx)
     if delai and delai > 0 and getattr(pipeline, "__module__", "") == "controldone.pipeline":
-        return executer_avec_delai(pipeline, (racine, profil, grilles), {"options": options}, float(delai),
-                                   battement=ctx.heartbeat, progression=relais)
+        return executer_avec_delai(
+            pipeline,
+            (racine, profil, grilles),
+            {"options": options},
+            float(delai),
+            battement=ctx.heartbeat,
+            progression=relais,
+        )
     if hasattr(options, "progression"):
         options.progression = relais
     return pipeline(racine, profil, grilles, options=options)
 
 
-def relais_progression(ctx: JobContext, *, intervalle_s: float = 2.0,
-                       horloge: Callable[[], float] | None = None) -> Callable[[str, int, int], None]:
+def relais_progression(
+    ctx: JobContext, *, intervalle_s: float = 2.0, horloge: Callable[[], float] | None = None
+) -> Callable[[str, int, int], None]:
     """Étapes fines du pipeline (D-3709) écrites par ``JobContext.etape`` : ``"<etape> <fait>/<total>"``
     (``pages``, ``classement``, ``extraction``, ``regroupement``, ``controles`` ; ``regroupement`` sans compteur).
     Une écriture à chaque changement d'étape, sinon au plus une toutes les ``intervalle_s`` secondes (et la
@@ -203,8 +243,10 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
         lot = scope.obtenir(Lot, lot_id)
         if lot.statut == "traite":
             return {"deja_traite": True, **(lot.resume or {})}
-        fichiers = [(f.id, f.chemin_relatif, f.nom_original, f.coffre_ref, f.sha256)
-                    for f in scope.lister(Fichier, lot_id=lot_id, statut="ok", ordre=Fichier.id)]
+        fichiers = [
+            (f.id, f.chemin_relatif, f.nom_original, f.coffre_ref, f.sha256)
+            for f in scope.lister(Fichier, lot_id=lot_id, statut="ok", ordre=Fichier.id)
+        ]
         profil = _profil(scope)
         grilles = scope.grilles_validees()
         plafond = etat_plafond(scope)
@@ -228,7 +270,9 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
         options = options_cls(llm=plafond.llm_autorise)
         if hasattr(options, "plafond_ia_dossier_eur"):
             options.plafond_ia_dossier_eur = reglages.llm_plafond_dossier_eur
-        if hasattr(options, "plafond_ia_client_mensuel_eur"):  # D-4004 : plafond mensuel vérifié avant chaque appel
+        if hasattr(
+            options, "plafond_ia_client_mensuel_eur"
+        ):  # D-4004 : plafond mensuel vérifié avant chaque appel
             options.plafond_ia_client_mensuel_eur = plafond.plafond
             options.cout_ia_mois_eur = plafond.cout
         resultats = _executer_pipeline(ctx, pipeline, racine, profil, grilles, options)
@@ -258,25 +302,42 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
                     pages_vues.add(cle)
                     ref = vault.deposer_texte(tenant_id, p.texte) if p.texte else None
                     scope.enregistrer_page(
-                        "pag_" + hashlib.sha256(f"{tenant_id}:{cle}".encode()).hexdigest()[:32], notre,
-                        p.numero, qualite_texte=str(p.qualite_texte), sha256_texte=p.sha256_texte, texte_ref=ref,
+                        "pag_" + hashlib.sha256(f"{tenant_id}:{cle}".encode()).hexdigest()[:32],
+                        notre,
+                        p.numero,
+                        qualite_texte=str(p.qualite_texte),
+                        sha256_texte=p.sha256_texte,
+                        texte_ref=ref,
                     )
-            scope.enregistrer_dossier(rd.dossier, lot_id=lot_id,
-                                      documents=[_rattacher_fichiers(d, rd.fichiers, par_sha)
-                                                 for d in rd.documents.values()],
-                                      fichier_ids=fichier_ids)
+            scope.enregistrer_dossier(
+                rd.dossier,
+                lot_id=lot_id,
+                documents=[_rattacher_fichiers(d, rd.fichiers, par_sha) for d in rd.documents.values()],
+                fichier_ids=fichier_ids,
+            )
             scope.enregistrer_resultats(rd.resultats)
             n_constats += sum(1 for r in rd.resultats if r.constat is not None)
             ex = rd.execution
             if ex.id not in executions:
                 executions.add(ex.id)
                 if ex.cout_ia_eur or ex.jetons_entree or ex.jetons_sortie:
-                    enregistrer_cout(scope, cout_eur=ex.cout_ia_eur, jetons_entree=ex.jetons_entree,
-                                     jetons_sortie=ex.jetons_sortie, modele=ex.modele_llm, lot_id=lot_id,
-                                     execution_id=ex.id)
+                    enregistrer_cout(
+                        scope,
+                        cout_eur=ex.cout_ia_eur,
+                        jetons_entree=ex.jetons_entree,
+                        jetons_sortie=ex.jetons_sortie,
+                        modele=ex.modele_llm,
+                        lot_id=lot_id,
+                        execution_id=ex.id,
+                    )
         non_lus = _non_lus(resultats, fichiers)
-        resume = {"dossiers": len(resultats), "constats": n_constats, "non_lus": len(non_lus),
-                  "non_lus_detail": non_lus[:200], "llm": plafond.llm_autorise}
+        resume = {
+            "dossiers": len(resultats),
+            "constats": n_constats,
+            "non_lus": len(non_lus),
+            "non_lus_detail": non_lus[:200],
+            "llm": plafond.llm_autorise,
+        }
         lot.statut, lot.resume = "traite", resume
         scope.flush()
         ctx.exiger_bail(scope.session)  # jeton de clôture, dans la transaction qui valide les résultats
@@ -296,7 +357,11 @@ def _non_lus(resultats: list[Any], fichiers: list[tuple[str, str, str, str, str]
                 if not str(n.motif).startswith("refuse:"):  # refus de réception : déjà dans ``refuses``
                     vus[(str(n.fichier), str(n.motif))] = None
         return [{"fichier": f, "motif": m} for f, m in vus]
-    return [{"fichier": chemin or nom, "motif": "aucun_dossier"} for _fid, chemin, nom, ref, _sha in fichiers if ref]
+    return [
+        {"fichier": chemin or nom, "motif": "aucun_dossier"}
+        for _fid, chemin, nom, ref, _sha in fichiers
+        if ref
+    ]
 
 
 def _tmp(reglages: Any) -> str | None:
@@ -325,9 +390,14 @@ def purger_retention(ctx: JobContext) -> dict[str, Any]:
     except VerrouOccupe as exc:
         raise Reporter(str(exc), 600) from None
     jobs = JobStore(ctx.db).purger_termines(jours=reglages.jobs_conservation_jours, now=now)
-    return {"fichiers": sum(rapport.fichiers.values()), "textes": sum(rapport.textes.values()),
-            "contenus_epargnes": rapport.epargnes, "dossiers_clos": clotures["dossiers"], "lots_clos": clotures["lots"],
-            "jobs_purges": jobs}
+    return {
+        "fichiers": sum(rapport.fichiers.values()),
+        "textes": sum(rapport.textes.values()),
+        "contenus_epargnes": rapport.epargnes,
+        "dossiers_clos": clotures["dossiers"],
+        "lots_clos": clotures["lots"],
+        "jobs_purges": jobs,
+    }
 
 
 # Handlers de la plateforme web (recontrôle après correction, §6.2.11) : enregistrés au chargement.

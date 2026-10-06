@@ -30,12 +30,21 @@ def _dossier_sans_suite(monde, tenant="cli_a", p="x"):
     with monde.db.tenant(tenant, SYSTEME) as sc:
         sha = monde.vault.deposer(tenant, f"PDF FICTIF {p}".encode())
         txt = monde.vault.deposer_texte(tenant, f"texte FICTIF {p}")
-        for o in (Lot(id=f"lot_{p}", statut="traite"),
-                  Fichier(id=f"fic_{p}", lot_id=f"lot_{p}", nom_original="f.pdf", chemin_relatif="f.pdf", sha256=sha,
-                          taille=1, coffre_ref=sha),
-                  PageTexte(id=f"pag_{p}", fichier_id=f"fic_{p}", numero=1, texte_ref=txt),
-                  Dossier(id=f"dos_{p}", lot_id=f"lot_{p}", reference="D-X", version=1),
-                  DossierFichier(dossier_id=f"dos_{p}", fichier_id=f"fic_{p}")):
+        for o in (
+            Lot(id=f"lot_{p}", statut="traite"),
+            Fichier(
+                id=f"fic_{p}",
+                lot_id=f"lot_{p}",
+                nom_original="f.pdf",
+                chemin_relatif="f.pdf",
+                sha256=sha,
+                taille=1,
+                coffre_ref=sha,
+            ),
+            PageTexte(id=f"pag_{p}", fichier_id=f"fic_{p}", numero=1, texte_ref=txt),
+            Dossier(id=f"dos_{p}", lot_id=f"lot_{p}", reference="D-X", version=1),
+            DossierFichier(dossier_id=f"dos_{p}", fichier_id=f"fic_{p}"),
+        ):
             sc._ajouter_interne(o)
     return sha, txt
 
@@ -64,8 +73,13 @@ def test_f01_handler_purger_retention_cloture_et_purge_les_jobs(monde):
     from controldone.jobs import handlers
 
     enqueue("purger_retention", {}, "purge:test", db=monde.db)
-    w = Worker(monde.db, worker_id="w1", handlers={"purger_retention": handlers.purger_retention},
-               services={"vault": monde.vault}, poll_s=0.01)
+    w = Worker(
+        monde.db,
+        worker_id="w1",
+        handlers={"purger_retention": handlers.purger_retention},
+        services={"vault": monde.vault},
+        poll_s=0.01,
+    )
     assert w.executer_un() == "done"
     res = JobStore(monde.db).par_cle("purge:test").resultat
     assert {"dossiers_clos", "lots_clos", "jobs_purges", "fichiers"} <= set(res)
@@ -126,8 +140,15 @@ def test_f07_registre_unique_et_worker_integre(monde):
     from controldone.web.app import _worker
 
     kinds = set(charger_handlers())
-    assert {"traiter_lot", "purger_retention", "recontroler_dossier", "controle_avant_paiement", "agent",
-            "preparer_reclamation", "referentiel_recalculer"} <= kinds
+    assert {
+        "traiter_lot",
+        "purger_retention",
+        "recontroler_dossier",
+        "controle_avant_paiement",
+        "agent",
+        "preparer_reclamation",
+        "referentiel_recalculer",
+    } <= kinds
     w = _worker(Plateforme(db=monde.db, vault=monde.vault, cles_maitresses=[]))
     assert set(w.kinds) == kinds and w.worker_id.startswith("web-integre:")
     inconnu = enqueue("kind_inconnu", {}, "k-inconnu", db=monde.db)
@@ -194,8 +215,9 @@ def test_f12_job_annule_avec_la_transaction(monde):
         raise RuntimeError("échec après la correction")
     assert JobStore(monde.db).par_cle("recontroler:test") is None
     with monde.db.operateur(FONDATEUR) as op:
-        op.client("cli_a", "correction (test)").mettre_en_file("recontroler_dossier", {"dossier_id": "dos_a"},
-                                                               "recontroler:test")
+        op.client("cli_a", "correction (test)").mettre_en_file(
+            "recontroler_dossier", {"dossier_id": "dos_a"}, "recontroler:test"
+        )
     assert JobStore(monde.db).par_cle("recontroler:test").tenant_id == "cli_a"
 
 
@@ -276,12 +298,28 @@ def test_f06_lecture_operateur_sans_begin_immediate(monde):
 def test_f15_file_validation_triee_avant_la_limite(monde):
     with monde.db.tenant("cli_a", SYSTEME) as sc:
         for i in range(30):
-            sc._ajouter_interne(Constat(id=f"p_{i:02d}", dossier_id="dos_a", dossier_version=1, controle_id="C9",
-                                        niveau="a_verifier", statut_validation="propose",
-                                        montant_en_jeu=Decimal(i)))
-        sc._ajouter_interne(Constat(id="p_zz", dossier_id="dos_a", dossier_version=1, controle_id="C1",
-                                    niveau="ecart_certain", statut_validation="propose",
-                                    montant_en_jeu=Decimal("5000.00")))
+            sc._ajouter_interne(
+                Constat(
+                    id=f"p_{i:02d}",
+                    dossier_id="dos_a",
+                    dossier_version=1,
+                    controle_id="C9",
+                    niveau="a_verifier",
+                    statut_validation="propose",
+                    montant_en_jeu=Decimal(i),
+                )
+            )
+        sc._ajouter_interne(
+            Constat(
+                id="p_zz",
+                dossier_id="dos_a",
+                dossier_version=1,
+                controle_id="C1",
+                niveau="ecart_certain",
+                statut_validation="propose",
+                montant_en_jeu=Decimal("5000.00"),
+            )
+        )
         assert sc.compter(Constat, statut_validation="propose") == 33  # + fv_a
     with monde.db.operateur(FONDATEUR) as op:
         premiers = op.file_validation(limite=5)  # avant : LIMIT puis tri -> p_zz (inséré en dernier) absent
@@ -298,8 +336,9 @@ def test_f02_sauvegarde_en_flux_memoire_bornee(monde, tmp_path, cles):
     for _ in range(6):  # 30 Mo incompressibles dans le coffre
         monde.vault.deposer("cli_a", os.urandom(5 * 1024 * 1024))
     tracemalloc.start()
-    archive = sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles,
-                          tmp_dir=tmp_path / "tmp_sauv")
+    archive = sauvegarder(
+        monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles, tmp_dir=tmp_path / "tmp_sauv"
+    )
     _, pic = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     assert pic < 12 * 1024 * 1024, pic  # avant : > 3 × la taille du coffre (tar en mémoire + jeton Fernet)
@@ -322,8 +361,8 @@ def test_f02_archive_tronquee_ou_reordonnee_refusee(monde, tmp_path, cles):
     brut = archive.read_bytes()
     segments, pos = [], len(MAGIE)
     while pos < len(brut):
-        (n,) = struct.unpack(">I", brut[pos:pos + 4])
-        segments.append(brut[pos:pos + 4 + n])
+        (n,) = struct.unpack(">I", brut[pos : pos + 4])
+        segments.append(brut[pos : pos + 4 + n])
         pos += 4 + n
     assert len(segments) >= 3
     tronquee = tmp_path / "t.tar.gz.enc"
@@ -365,7 +404,9 @@ def test_f13_env_prod_dans_le_fichier_env(tmp_path, monkeypatch):
     from controldone.storage.cles import mode_execution
 
     fichier = tmp_path / ".env"
-    fichier.write_text("CONTROLDONE_ENV=prod\nexport CONTROLDONE_JOB_LEASE_S=300\n# commentaire\n", encoding="utf-8")
+    fichier.write_text(
+        "CONTROLDONE_ENV=prod\nexport CONTROLDONE_JOB_LEASE_S=300\n# commentaire\n", encoding="utf-8"
+    )
     monkeypatch.delenv("CONTROLDONE_ENV", raising=False)
     monkeypatch.delenv("CONTROLDONE_JOB_LEASE_S", raising=False)
     monkeypatch.setenv("CONTROLDONE_ENV_FILE", str(fichier))
@@ -414,12 +455,28 @@ def test_insertion_sortante_course_rattrapee(monde):
     from controldone.storage import sorties
 
     with monde.db.transaction_systeme() as s:
-        _a, cree_a = sorties.inserer_ou_lire(s, id="out_course1", kind="email_client", statut="brouillon", payload={},
-                                            idempotency_key="cle-course", cree_par="t", cree_le=maintenant())
+        _a, cree_a = sorties.inserer_ou_lire(
+            s,
+            id="out_course1",
+            kind="email_client",
+            statut="brouillon",
+            payload={},
+            idempotency_key="cle-course",
+            cree_par="t",
+            cree_le=maintenant(),
+        )
     with monde.db.transaction_systeme() as s:
         # simule la transaction concurrente qui n'a pas vu la ligne avant d'insérer
-        b, cree_b = sorties.inserer_ou_lire(s, id="out_course2", kind="email_client", statut="brouillon", payload={},
-                                            idempotency_key="cle-course", cree_par="t", cree_le=maintenant())
+        b, cree_b = sorties.inserer_ou_lire(
+            s,
+            id="out_course2",
+            kind="email_client",
+            statut="brouillon",
+            payload={},
+            idempotency_key="cle-course",
+            cree_par="t",
+            cree_le=maintenant(),
+        )
     assert cree_a and not cree_b and b.id == "out_course1"
 
 
@@ -443,8 +500,14 @@ def test_battement_dans_un_fil_ne_meurt_pas(monde, monkeypatch):
 
     monkeypatch.setattr(JobStore, "prolonger", toujours_en_panne)
     enqueue("court", {}, "k-court", db=monde.db)
-    w = Worker(monde.db, worker_id="w1", handlers={"court": lambda ctx: time.sleep(0.5) or {}}, lease_s=60,
-               heartbeat_s=0.1, poll_s=0.01)
+    w = Worker(
+        monde.db,
+        worker_id="w1",
+        handlers={"court": lambda ctx: time.sleep(0.5) or {}},
+        lease_s=60,
+        heartbeat_s=0.1,
+        poll_s=0.01,
+    )
     assert w.executer_un() == "done" and erreurs == []
 
 
@@ -493,12 +556,22 @@ def test_controle_avant_paiement_reporte_pendant_traiter_lot(monde, monkeypatch)
     monkeypatch.setattr(cjobs, "proposer_statut_litige", lambda *a, **kw: None)
     store = JobStore(monde.db)
     enqueue("traiter_lot", {"lot_id": "lot_pa"}, "traiter_lot:cli_a:lot_pa", "cli_a", db=monde.db)
-    controle = enqueue("controle_avant_paiement", {"lot_id": "lot_pa", "facture_pa_id": "api:lot_pa"},
-                       "controle_avant_paiement:cli_a:api:lot_pa", "cli_a", db=monde.db)
+    controle = enqueue(
+        "controle_avant_paiement",
+        {"lot_id": "lot_pa", "facture_pa_id": "api:lot_pa"},
+        "controle_avant_paiement:cli_a:api:lot_pa",
+        "cli_a",
+        db=monde.db,
+    )
     decalage = {"s": 0}
-    w2 = Worker(monde.db, worker_id="w2", kinds=["controle_avant_paiement"], poll_s=0.01,
-                handlers={"controle_avant_paiement": cjobs.controle_avant_paiement},
-                horloge=lambda: maintenant() + timedelta(seconds=decalage["s"]))
+    w2 = Worker(
+        monde.db,
+        worker_id="w2",
+        kinds=["controle_avant_paiement"],
+        poll_s=0.01,
+        handlers={"controle_avant_paiement": cjobs.controle_avant_paiement},
+        horloge=lambda: maintenant() + timedelta(seconds=decalage["s"]),
+    )
     # traiter_lot encore en file : le contrôle attend (avant : pipeline lancé ici, puis une seconde fois)
     assert w2.executer_un() == "reporte" and appels == []
     j = store.obtenir(controle.id)
@@ -553,8 +626,15 @@ def test_envoi_sortant_hors_verrou_d_ecriture(monde):
     from controldone.outbox import FileSortante, TransitionInterdite, TypeAction
 
     fs = FileSortante(monde.db)
-    a = fs.approuver(fs.proposer(TypeAction.rapport_publication, {"objet": "Rapport FICTIF", "corps": "Disponible."},
-                                 SYSTEME, tenant_id="cli_a").id, FONDATEUR)
+    a = fs.approuver(
+        fs.proposer(
+            TypeAction.rapport_publication,
+            {"objet": "Rapport FICTIF", "corps": "Disponible."},
+            SYSTEME,
+            tenant_id="cli_a",
+        ).id,
+        FONDATEUR,
+    )
     vu = {}
 
     class PALente:
@@ -577,8 +657,15 @@ def test_envoi_sortant_hors_verrou_d_ecriture(monde):
     assert fs.envoyer(a.id, PALente(), FONDATEUR).reference_envoi == "pa:FICTIF-1"
     assert vu == {"autre_ecrivain": True}
 
-    b = fs.approuver(fs.proposer(TypeAction.rapport_publication, {"objet": "Rapport FICTIF 2", "corps": "Ok."},
-                                 SYSTEME, tenant_id="cli_a").id, FONDATEUR)
+    b = fs.approuver(
+        fs.proposer(
+            TypeAction.rapport_publication,
+            {"objet": "Rapport FICTIF 2", "corps": "Ok."},
+            SYSTEME,
+            tenant_id="cli_a",
+        ).id,
+        FONDATEUR,
+    )
 
     class PAEnPanne:
         nom = "pa_en_panne"
@@ -613,7 +700,9 @@ def test_purge_epargne_un_contenu_redepose_et_depot_reverifie(monde):
     assert monde.vault.deposer("cli_a", b"PDF FICTIF x") == blobs["x"][0]
     rapport = purger_expires(monde.db, monde.vault, t)
     assert rapport.fichiers["cli_a"] == 2 and rapport.epargnes == 1
-    assert monde.vault.existe("cli_a", blobs["x"][0])  # avant : supprimé, le dépôt référençait un contenu absent
+    assert monde.vault.existe(
+        "cli_a", blobs["x"][0]
+    )  # avant : supprimé, le dépôt référençait un contenu absent
     assert not monde.vault.existe("cli_a", blobs["y"][0])
     # filet : contenu retiré entre la réception et l'enregistrement -> dépôt refusé proprement, rien d'enregistré
     pf = Plateforme(db=monde.db, vault=monde.vault, cles_maitresses=[])

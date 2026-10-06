@@ -14,17 +14,20 @@ from controldone.services.plateforme import RequeteInvalide
 from controldone.services.saisie import montant_saisi
 
 
-@pytest.mark.parametrize("noyau", [
-    "1 234.5.6",     # espaces de milliers puis deux séparateurs restants
-    "1  234",        # groupe vide (deux espaces)
-    "1234 567",      # premier groupe de plus de 3 chiffres
-    "1 23",          # groupe final de 2 chiffres
-    "1 2345 678",    # groupe intermédiaire de 4 chiffres
-    "1,234,5",       # groupes de milliers invalides
-    "1234,567.12",   # partie entière mal groupée avec virgule de milliers
-    "1.234,56,7",    # séparateur décimal répété
-    "12,34,5",       # groupement indien incomplet
-])
+@pytest.mark.parametrize(
+    "noyau",
+    [
+        "1 234.5.6",  # espaces de milliers puis deux séparateurs restants
+        "1  234",  # groupe vide (deux espaces)
+        "1234 567",  # premier groupe de plus de 3 chiffres
+        "1 23",  # groupe final de 2 chiffres
+        "1 2345 678",  # groupe intermédiaire de 4 chiffres
+        "1,234,5",  # groupes de milliers invalides
+        "1234,567.12",  # partie entière mal groupée avec virgule de milliers
+        "1.234,56,7",  # séparateur décimal répété
+        "12,34,5",  # groupement indien incomplet
+    ],
+)
 def test_noyaux_incoherents_refuses(noyau):
     assert _lire_noyau(noyau, None, False) is None
 
@@ -62,11 +65,22 @@ def test_code_marchandise_non_numerique():
     assert code_marchandise("") is None and code_marchandise(None) is None
 
 
-@pytest.mark.parametrize("texte, message", [
-    (None, "obligatoire"), ("1" * 41, "trop longue"), ("€", "obligatoire"), ("-", "obligatoire"),
-    ("1,234.567", "nombre attendu"), ("1.234,5,6", "nombre attendu"), ("1 234 5", "nombre attendu"),
-    ("12,345", "décimales"), ("-5", "positive"), ("0", "non nulle"), ("2 000 000 000", "trop élevée"),
-])
+@pytest.mark.parametrize(
+    "texte, message",
+    [
+        (None, "obligatoire"),
+        ("1" * 41, "trop longue"),
+        ("€", "obligatoire"),
+        ("-", "obligatoire"),
+        ("1,234.567", "nombre attendu"),
+        ("1.234,5,6", "nombre attendu"),
+        ("1 234 5", "nombre attendu"),
+        ("12,345", "décimales"),
+        ("-5", "positive"),
+        ("0", "non nulle"),
+        ("2 000 000 000", "trop élevée"),
+    ],
+)
 def test_saisie_refus_lisibles(texte, message):
     with pytest.raises(RequeteInvalide, match=message):
         montant_saisi(texte)

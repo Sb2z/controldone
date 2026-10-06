@@ -35,8 +35,13 @@ def test_composants_par_defaut_complets():
     c = composants_par_defaut()
     assert isinstance(c.decoupeur, Decoupeur)
     ids = {e.id for e in c.extracteurs}
-    assert {"declaration_regles", "facture_commerciale_regles", "ft_regles", "avoir_regles",
-            "support_regles"} <= ids
+    assert {
+        "declaration_regles",
+        "facture_commerciale_regles",
+        "ft_regles",
+        "avoir_regles",
+        "support_regles",
+    } <= ids
     assert {"structure_facture_xml", "structure_declaration_export"} <= ids
 
 

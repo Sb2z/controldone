@@ -37,7 +37,9 @@ def test_formats(texte, valeur):
     assert m.negatif is False
 
 
-@pytest.mark.parametrize("texte", ["(1 234,56)", "-1 234,56", "1 234,56-", "−12,00", "EUR -12.50", "(EUR 12.00)", "-€12"])
+@pytest.mark.parametrize(
+    "texte", ["(1 234,56)", "-1 234,56", "1 234,56-", "−12,00", "EUR -12.50", "(EUR 12.00)", "-€12"]
+)
 def test_negatifs_valeur_absolue(texte):
     m = parse_amount(texte)
     assert m is not None and m.negatif is True and m.valeur > 0

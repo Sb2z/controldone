@@ -15,8 +15,13 @@ PAGES = sorted(SITE.glob("*.html"))
 DEMO = SITE / "demo" / "report.html"
 PAGES_JURIDIQUES = ["mentions-legales.html", "cgv.html", "confidentialite.html", "dpa.html"]
 PAGES_ATTENDUES = [
-    "index.html", "tarifs.html", "demonstration.html", "methode.html", "experts-comptables.html",
-    "contact.html", *PAGES_JURIDIQUES,
+    "index.html",
+    "tarifs.html",
+    "demonstration.html",
+    "methode.html",
+    "experts-comptables.html",
+    "contact.html",
+    *PAGES_JURIDIQUES,
 ]
 BANDEAU_AVOCAT = "BROUILLON — À RELIRE PAR UN AVOCAT"
 
@@ -168,13 +173,27 @@ def test_prix_annonces():
 
 def test_cgv_clauses_essentielles():
     cgv = _lire(SITE / "cgv.html").visible.replace(" ", " ")
-    for attendu in ("audit technique de cohérence", "40 EUR", "L441-10", "opposer", "envoie lui-même",
-                    "droit français", "Confidentialité"):
+    for attendu in (
+        "audit technique de cohérence",
+        "40 EUR",
+        "L441-10",
+        "opposer",
+        "envoie lui-même",
+        "droit français",
+        "Confidentialité",
+    ):
         assert attendu in cgv, attendu
 
 
 def test_dpa_sous_traitants():
     dpa = _lire(SITE / "dpa.html").visible
-    for attendu in ("Union européenne", "modèle de langage", "Désactivable", "Stripe", "Mesures de sécurité",
-                    "Sort des données", "audit"):
+    for attendu in (
+        "Union européenne",
+        "modèle de langage",
+        "Désactivable",
+        "Stripe",
+        "Mesures de sécurité",
+        "Sort des données",
+        "audit",
+    ):
         assert attendu in dpa, attendu

@@ -56,15 +56,25 @@ class ElementsParesseux(Sequence[tuple[str, bytes]]):
         for i in range(len(self)):
             yield self[i]
 
+
 _SUFFIXES_TEMP = (".part", ".tmp", ".crdownload", ".partial")
 
 
 class DossierSurveille:
     nom = "dossier_surveille"
 
-    def __init__(self, tenant_id: str, racine: Path | str, *, stabilite_s: float = 10.0,
-                 archive: str = "_archive", horloge: Callable[[], float] = time.time,
-                 max_fichiers: int = 2000, taille_fichier: int = 50 * _MO, taille_lot: int = 500 * _MO) -> None:
+    def __init__(
+        self,
+        tenant_id: str,
+        racine: Path | str,
+        *,
+        stabilite_s: float = 10.0,
+        archive: str = "_archive",
+        horloge: Callable[[], float] = time.time,
+        max_fichiers: int = 2000,
+        taille_fichier: int = 50 * _MO,
+        taille_lot: int = 500 * _MO,
+    ) -> None:
         self.taille_fichier = taille_fichier
         self.taille_lot = taille_lot
         self.tenant_id = tenant_id
@@ -121,7 +131,9 @@ class DossierSurveille:
             prets.append((rel, st.st_size))
         self._ecrire_etat(etat)
         if trop_gros:
-            log.warning("dossier_surveille_fichiers_trop_gros client=%s nombre=%d", self.tenant_id, len(trop_gros))
+            log.warning(
+                "dossier_surveille_fichiers_trop_gros client=%s nombre=%d", self.tenant_id, len(trop_gros)
+            )
         if not prets:
             return []
         # dépôts d'au plus ``taille_lot`` octets
@@ -138,8 +150,15 @@ class DossierSurveille:
             meta: dict[str, object] = {"chemins": chemins}
             if i == 0 and trop_gros:
                 meta["ignores_trop_gros"] = trop_gros
-            depots.append(Depot(tenant_id=self.tenant_id, canal="depot", source=self.nom,
-                                elements=ElementsParesseux(self.racine, chemins), meta=meta))  # type: ignore[arg-type]
+            depots.append(
+                Depot(
+                    tenant_id=self.tenant_id,
+                    canal="depot",
+                    source=self.nom,
+                    elements=ElementsParesseux(self.racine, chemins),
+                    meta=meta,
+                )
+            )  # type: ignore[arg-type]
         return depots
 
     def acquitter(self, depot: Depot, resultat: ResultatDepot) -> None:
@@ -160,7 +179,9 @@ class DossierSurveille:
                 n += 1
             shutil.move(str(source), str(cible))
         # répertoires de dépôt vidés : supprimés (hors racine et archive)
-        for d in sorted((x for x in self.racine.rglob("*") if x.is_dir()), key=lambda x: len(x.parts), reverse=True):
+        for d in sorted(
+            (x for x in self.racine.rglob("*") if x.is_dir()), key=lambda x: len(x.parts), reverse=True
+        ):
             rel = d.relative_to(self.racine)
             if rel.parts[0] != self.archive and not any(d.iterdir()):
                 d.rmdir()

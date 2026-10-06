@@ -26,8 +26,15 @@ from .calcul import EnregistrementFlux
 __all__ = ["NATURES_PRIX", "collecter", "opt_out"]
 
 #: Prestations du transitaire dont le prix est agrégé (les débours ne sont pas des prix).
-NATURES_PRIX = ("frais_dedouanement", "frais_avance_fonds", "frais_ligne_supplementaire", "magasinage", "transport",
-                "manutention", "surcharge")
+NATURES_PRIX = (
+    "frais_dedouanement",
+    "frais_avance_fonds",
+    "frais_ligne_supplementaire",
+    "magasinage",
+    "transport",
+    "manutention",
+    "surcharge",
+)
 ACTEUR = Acteur.systeme("referentiel")
 
 
@@ -47,18 +54,24 @@ def _dec(champ: Any) -> Decimal | None:
         return None
 
 
-def _enregistrement(tenant: str, dossier: DossierRow, docs: list[Document], tra: Transitaire | None,
-                    constats: list[Constat]) -> EnregistrementFlux | None:
+def _enregistrement(
+    tenant: str, dossier: DossierRow, docs: list[Document], tra: Transitaire | None, constats: list[Constat]
+) -> EnregistrementFlux | None:
     par_type: dict[str, list[dict[str, Any]]] = {}
     for d in docs:
         par_type.setdefault(d.type, []).append(d.contenu or {})
     fc = (par_type.get("facture_commerciale") or [{}])[0]
     dec = (par_type.get("declaration") or [{}])[0]
     champs_fc, champs_dec = fc.get("champs") or {}, dec.get("champs") or {}
-    pays = Counter(_val(x.get("pays_origine")) for x in champs_fc.get("lignes") or [] if _val(x.get("pays_origine")))
+    pays = Counter(
+        _val(x.get("pays_origine")) for x in champs_fc.get("lignes") or [] if _val(x.get("pays_origine"))
+    )
     if not pays:
-        pays = Counter(_val(x.get("pays_origine")) for x in champs_dec.get("articles") or []
-                       if _val(x.get("pays_origine")))
+        pays = Counter(
+            _val(x.get("pays_origine"))
+            for x in champs_dec.get("articles") or []
+            if _val(x.get("pays_origine"))
+        )
     mois = (_val(champs_dec.get("date_acceptation")) or "")[:7] or dossier.cree_le.strftime("%Y-%m")
     prix: dict[str, Decimal] = {}
     for ft in par_type.get("facture_transitaire") or []:
@@ -70,11 +83,16 @@ def _enregistrement(tenant: str, dossier: DossierRow, docs: list[Document], tra:
     if tra is None:
         return None
     return EnregistrementFlux(
-        client_id=tenant, transitaire_nom=tra.nom, transitaire_tva=tra.tva,
+        client_id=tenant,
+        transitaire_nom=tra.nom,
+        transitaire_tva=tra.tva,
         pays_origine=pays.most_common(1)[0][0] if pays else None,
         incoterm=_val(champs_fc.get("incoterm")) or _val(champs_dec.get("incoterm")),
-        sous_type_declaration=dec.get("sous_type"), mois=mois,
-        avec_ecart=any(c.niveau == "ecart_certain" and c.statut_validation in ("valide", "modifie") for c in constats),
+        sous_type_declaration=dec.get("sous_type"),
+        mois=mois,
+        avec_ecart=any(
+            c.niveau == "ecart_certain" and c.statut_validation in ("valide", "modifie") for c in constats
+        ),
         prix=prix,
     )
 

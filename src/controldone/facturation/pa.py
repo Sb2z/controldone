@@ -40,10 +40,20 @@ __all__ = [
 
 #: Codes de statut (hypothèse : sources non officielles du brief ; à confirmer sur XP Z12-012).
 STATUTS_CYCLE_DE_VIE: dict[str, str] = {
-    "200": "Déposée", "201": "Émise par la plateforme", "202": "Reçue par la plateforme",
-    "203": "Mise à disposition", "204": "Prise en charge", "205": "Approuvée", "206": "Approuvée partiellement",
-    "207": "En litige", "208": "Suspendue", "209": "Complétée", "210": "Refusée", "211": "Paiement transmis",
-    "212": "Encaissée", "213": "Rejetée",
+    "200": "Déposée",
+    "201": "Émise par la plateforme",
+    "202": "Reçue par la plateforme",
+    "203": "Mise à disposition",
+    "204": "Prise en charge",
+    "205": "Approuvée",
+    "206": "Approuvée partiellement",
+    "207": "En litige",
+    "208": "Suspendue",
+    "209": "Complétée",
+    "210": "Refusée",
+    "211": "Paiement transmis",
+    "212": "Encaissée",
+    "213": "Rejetée",
 }
 STATUTS_OBLIGATOIRES = ("200", "210", "212", "213")
 
@@ -135,29 +145,49 @@ class PlateformeAgreeeBouchon:
             return AccuseDepot(ident, facture.numero, "200", m["horodatage"])
         h = _maintenant()
         _ecrire(self.racine / "deposees" / f"{ident}.pdf", facture.contenu)
-        _ecrire(meta, json.dumps({"identifiant_pa": ident, "numero": facture.numero, "facture_id": facture.facture_id,
-                                  "siren_acheteur": facture.siren_acheteur, "format": facture.format,
-                                  "horodatage": h}, ensure_ascii=False).encode())
+        _ecrire(
+            meta,
+            json.dumps(
+                {
+                    "identifiant_pa": ident,
+                    "numero": facture.numero,
+                    "facture_id": facture.facture_id,
+                    "siren_acheteur": facture.siren_acheteur,
+                    "format": facture.format,
+                    "horodatage": h,
+                },
+                ensure_ascii=False,
+            ).encode(),
+        )
         self.simuler_statut(ident, "200", horodatage=h)
         return AccuseDepot(ident, facture.numero, "200", h)
 
-    def simuler_statut(self, identifiant_pa: str, code: str, *, motif: str | None = None,
-                       horodatage: str | None = None) -> StatutCycleVie:
+    def simuler_statut(
+        self, identifiant_pa: str, code: str, *, motif: str | None = None, horodatage: str | None = None
+    ) -> StatutCycleVie:
         if code not in STATUTS_CYCLE_DE_VIE:
             raise ValueError(f"code de statut inconnu : {code}")
         meta = self.racine / "deposees" / f"{_NOM_RE.sub('_', identifiant_pa)}.json"
         if not meta.exists():
             raise KeyError("facture inconnue de la plateforme")
         numero = json.loads(meta.read_text(encoding="utf-8"))["numero"]
-        s = StatutCycleVie(identifiant_pa, numero, code, STATUTS_CYCLE_DE_VIE[code], horodatage or _maintenant(), motif)
-        n = len(list((self.racine / "statuts").glob("*.json"))) + len(list((self.racine / "statuts" / "lus").glob("*.json")))
-        _ecrire(self.racine / "statuts" / f"{n:06d}-{_NOM_RE.sub('_', identifiant_pa)}-{code}.json",
-                json.dumps(asdict(s), ensure_ascii=False).encode())
+        s = StatutCycleVie(
+            identifiant_pa, numero, code, STATUTS_CYCLE_DE_VIE[code], horodatage or _maintenant(), motif
+        )
+        n = len(list((self.racine / "statuts").glob("*.json"))) + len(
+            list((self.racine / "statuts" / "lus").glob("*.json"))
+        )
+        _ecrire(
+            self.racine / "statuts" / f"{n:06d}-{_NOM_RE.sub('_', identifiant_pa)}-{code}.json",
+            json.dumps(asdict(s), ensure_ascii=False).encode(),
+        )
         return s
 
     def _tous(self) -> list[tuple[Path, StatutCycleVie]]:
         out = []
-        fichiers = list((self.racine / "statuts").glob("*.json")) + list((self.racine / "statuts" / "lus").glob("*.json"))
+        fichiers = list((self.racine / "statuts").glob("*.json")) + list(
+            (self.racine / "statuts" / "lus").glob("*.json")
+        )
         for p in sorted(fichiers, key=lambda x: x.name):
             out.append((p, StatutCycleVie(**json.loads(p.read_text(encoding="utf-8")))))
         return out

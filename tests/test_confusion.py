@@ -31,15 +31,25 @@ def test_substitution_meme_classe(brut, autre):
     assert confusion_test(brut, D(autre.replace(" ", "").replace(",", ".")), D("0.01"))
 
 
-@pytest.mark.parametrize(("brut", "autre"), [("12 540,00", "13540.00"), ("2 000,00", "7000.00"), ("100,00", "200.00")])
+@pytest.mark.parametrize(
+    ("brut", "autre"), [("12 540,00", "13540.00"), ("2 000,00", "7000.00"), ("100,00", "200.00")]
+)
 def test_substitution_hors_classe_negative(brut, autre):
     assert not confusion_test(brut, D(autre), D("0.01"))
 
 
 @pytest.mark.parametrize(
     ("brut", "autre"),
-    [("1O5,00", "105"), ("1D5,00", "105"), ("l05,00", "105"), ("1I5,00", "115"), ("S00,00", "500"),
-     ("B00,00", "800"), ("Z00,00", "200"), ("G00,00", "600")],
+    [
+        ("1O5,00", "105"),
+        ("1D5,00", "105"),
+        ("l05,00", "105"),
+        ("1I5,00", "115"),
+        ("S00,00", "500"),
+        ("B00,00", "800"),
+        ("Z00,00", "200"),
+        ("G00,00", "600"),
+    ],
 )
 def test_lettre_chiffre(brut, autre):
     assert confusion_test(brut, D(autre), D("0.01"))
@@ -50,7 +60,9 @@ def test_zero_final():
     assert confusion_test("8471300", D("847130"), D("0"))  # zéro ajouté
 
 
-@pytest.mark.parametrize(("brut", "autre"), [("1254000", "12540.00"), ("125,40", "12540"), ("12,540", "12.54")])
+@pytest.mark.parametrize(
+    ("brut", "autre"), [("1254000", "12540.00"), ("125,40", "12540"), ("12,540", "12.54")]
+)
 def test_separateur_decimal_inverse(brut, autre):
     assert confusion_test(brut, D(autre), UN)
 

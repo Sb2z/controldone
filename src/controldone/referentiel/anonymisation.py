@@ -79,12 +79,16 @@ def charger_alias_publics(chemin: Path | str | None = None) -> dict[str, dict[st
 
             logging.getLogger("controldone.referentiel").warning("alias_sans_accord_ecrit_ignore")
             continue
-        sortie[str(k)] = {"tva": [str(x) for x in v.get("tva", [])], "noms": [str(x) for x in v.get("noms", [])]}
+        sortie[str(k)] = {
+            "tva": [str(x) for x in v.get("tva", [])],
+            "noms": [str(x) for x in v.get("noms", [])],
+        }
     return sortie
 
 
-def cle_transitaire(nom: str | None, tva: str | None, *, sel: bytes, alias_publics: AliasPublics | None = None
-                    ) -> str | None:
+def cle_transitaire(
+    nom: str | None, tva: str | None, *, sel: bytes, alias_publics: AliasPublics | None = None
+) -> str | None:
     """Alias public, sinon ``T-<12 hex>`` (HMAC salé) ; ``None`` sans nom ni TVA."""
     tva_n = normalize_vat(tva) if tva else None
     nom_n = cle_texte(nom) if nom else None

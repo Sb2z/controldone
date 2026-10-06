@@ -11,8 +11,15 @@ from collections.abc import Iterable, Mapping
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
-__all__ = ["ORIGINES_COMMISSIONNABLES", "ORIGINES_CREDIT", "TAUX_COMMISSION_DEFAUT", "base_commission",
-           "montant_commission", "taux_catalogue", "taux_commission"]
+__all__ = [
+    "ORIGINES_COMMISSIONNABLES",
+    "ORIGINES_CREDIT",
+    "TAUX_COMMISSION_DEFAUT",
+    "base_commission",
+    "montant_commission",
+    "taux_catalogue",
+    "taux_commission",
+]
 
 TAUX_COMMISSION_DEFAUT = Decimal("0.20")
 _CENTIME = Decimal("0.01")

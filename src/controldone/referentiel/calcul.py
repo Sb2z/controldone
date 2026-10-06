@@ -78,16 +78,26 @@ class ResultatReferentiel:
     seuils: Seuils
 
 
-def agreger(enregistrements: Iterable[EnregistrementFlux], *, sel: bytes, alias_publics: AliasPublics | None = None,
-            seuils: Seuils | None = None) -> ResultatReferentiel:
+def agreger(
+    enregistrements: Iterable[EnregistrementFlux],
+    *,
+    sel: bytes,
+    alias_publics: AliasPublics | None = None,
+    seuils: Seuils | None = None,
+) -> ResultatReferentiel:
     seuils = seuils or Seuils()
     groupes: dict[tuple[str, ...], list[EnregistrementFlux]] = defaultdict(list)
     for e in enregistrements:
         tra = cle_transitaire(e.transitaire_nom, e.transitaire_tva, sel=sel, alias_publics=alias_publics)
         if tra is None:
             continue
-        cle = (tra, groupe_pays(e.pays_origine), regime_declaration(e.sous_type_declaration),
-               famille_incoterm(e.incoterm), e.mois)
+        cle = (
+            tra,
+            groupe_pays(e.pays_origine),
+            regime_declaration(e.sous_type_declaration),
+            famille_incoterm(e.incoterm),
+            e.mois,
+        )
         groupes[cle].append(e)
     publies, supprimes = [], 0
     for cle in sorted(groupes):
@@ -103,10 +113,19 @@ def agreger(enregistrements: Iterable[EnregistrementFlux], *, sel: bytes, alias_
             if len({e.client_id for e in porteurs}) < seuils.k_clients or len(porteurs) < seuils.k_dossiers:
                 continue
             valeurs = [Decimal(e.prix[nature]) for e in porteurs]
-            prix[nature] = {"p25": arrondir_montant(percentile(valeurs, 25)),
-                            "mediane": arrondir_montant(percentile(valeurs, 50)),
-                            "p75": arrondir_montant(percentile(valeurs, 75))}
+            prix[nature] = {
+                "p25": arrondir_montant(percentile(valeurs, 25)),
+                "mediane": arrondir_montant(percentile(valeurs, 50)),
+                "p75": arrondir_montant(percentile(valeurs, 75)),
+            }
         nomme = cle[0] in (alias_publics or {})
-        publies.append(Agregat(*cle, dossiers=tranche_effectif(len(lot)),
-                               taux_dossiers_avec_ecart=None if nomme else arrondir_taux(taux), prix=prix, nomme=nomme))
+        publies.append(
+            Agregat(
+                *cle,
+                dossiers=tranche_effectif(len(lot)),
+                taux_dossiers_avec_ecart=None if nomme else arrondir_taux(taux),
+                prix=prix,
+                nomme=nomme,
+            )
+        )
     return ResultatReferentiel(publies, supprimes, seuils)

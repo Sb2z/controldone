@@ -126,41 +126,62 @@ LIB_DATE = motifs(
     r"fecha(?:\s*de\s*(?:la\s*)?(?:factura|emision))?\s*:?",
     r"date\s*d'emission\s*:?",
 )
-LIB_DEVISE = motifs(r"(?:invoice\s*)?currency\s*:?", r"devise\s*:?", r"moneda\s*:?", r"divisa\s*:?", r"monnaie\s*:?")
+LIB_DEVISE = motifs(
+    r"(?:invoice\s*)?currency\s*:?", r"devise\s*:?", r"moneda\s*:?", r"divisa\s*:?", r"monnaie\s*:?"
+)
 LIB_INCOTERM = motifs(
-    r"incoterms?(?:\s*\(?20\d\d\)?)?\s*:?", r"(?:terms|conditions?)\s*of\s*delivery\s*:?", r"delivery\s*terms\s*:?",
-    r"conditions?\s*de\s*livraison\s*:?", r"condici(?:on|ones)\s*de\s*entrega\s*:?", r"trade\s*terms\s*:?",
+    r"incoterms?(?:\s*\(?20\d\d\)?)?\s*:?",
+    r"(?:terms|conditions?)\s*of\s*delivery\s*:?",
+    r"delivery\s*terms\s*:?",
+    r"conditions?\s*de\s*livraison\s*:?",
+    r"condici(?:on|ones)\s*de\s*entrega\s*:?",
+    r"trade\s*terms\s*:?",
 )
 LIB_TRANSPORT = motifs(
     rf"(?:master |house )?(?:b/?l|bill of lading|awb|air ?waybill|mawb|hawb|lta|connaissement|conocimiento"
     rf"|guia aerea|cmr|waybill|lettre de transport(?: aerien)?)\s*{_NO}?\s*:?",
 )
-_ACH = (r"(?:buyer|bill(?:ed)? to|sold to|invoice(?:d)? to|customer|acheteur|facture a|vendu a|client|comprador"
-        r"|facturar a|cliente|importer|importateur|importador|" + _L.ACHETEUR + ")")
-_DEST = (r"(?:ship(?:ped)? to|deliver(?:ed|y)? to|consignee|destinataire|livre a|livraison a|enviar a|entregar a"
-         r"|consignatario|destinatario|" + _L.DESTINATAIRE + ")")
-_VEND = (r"(?:seller|shipper|exporter|vendor|supplier|vendeur|expediteur|exportateur|fournisseur|vendedor"
-         r"|exportador|proveedor|remitente|" + _L.VENDEUR + ")")
+_ACH = (
+    r"(?:buyer|bill(?:ed)? to|sold to|invoice(?:d)? to|customer|acheteur|facture a|vendu a|client|comprador"
+    r"|facturar a|cliente|importer|importateur|importador|" + _L.ACHETEUR + ")"
+)
+_DEST = (
+    r"(?:ship(?:ped)? to|deliver(?:ed|y)? to|consignee|destinataire|livre a|livraison a|enviar a|entregar a"
+    r"|consignatario|destinatario|" + _L.DESTINATAIRE + ")"
+)
+_VEND = (
+    r"(?:seller|shipper|exporter|vendor|supplier|vendeur|expediteur|exportateur|fournisseur|vendedor"
+    r"|exportador|proveedor|remitente|" + _L.VENDEUR + ")"
+)
 LIB_ACHETEUR = motifs(rf"{_ACH}\b(?:\s*[/&-]\s*{_ACH}\b)*\s*:?") + _L.ACHETEUR_PARENTHESE
 LIB_DESTINATAIRE = motifs(rf"{_DEST}\b(?:\s*[/&-]\s*{_DEST}\b)*\s*:?")
 LIB_VENDEUR = motifs(rf"{_VEND}\b(?:\s*[/&-]\s*{_VEND}\b)*\s*:?")
 LIB_FIN_PAVE = motifs(
     r"(?:buyer|bill(?:ed)? to|sold to|ship(?:ped)? to|consignee|seller|shipper|exporter|notify|acheteur"
-    r"|destinataire|vendeur|expediteur|comprador|vendedor|consignatario|livre a|enviar a|" + _L.FIN_PAVE + r")\b",
+    r"|destinataire|vendeur|expediteur|comprador|vendedor|consignatario|livre a|enviar a|"
+    + _L.FIN_PAVE
+    + r")\b",
 )
 LIB_POIDS_BRUT = motifs(
-    r"(?:total\s*)?gross\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?", r"g\.?\s*w\.?\s*(?:total)?\s*:",
-    r"(?:total\s*)?poids\s*brut(?:\s*total)?\s*:?", r"(?:total\s*)?peso\s*bruto(?:\s*total)?\s*:?",
+    r"(?:total\s*)?gross\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?",
+    r"g\.?\s*w\.?\s*(?:total)?\s*:",
+    r"(?:total\s*)?poids\s*brut(?:\s*total)?\s*:?",
+    r"(?:total\s*)?peso\s*bruto(?:\s*total)?\s*:?",
 )
 LIB_POIDS_NET = motifs(
-    r"(?:total\s*)?net\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?", r"n\.?\s*w\.?\s*(?:total)?\s*:",
-    r"(?:total\s*)?poids\s*net(?:\s*total)?\s*:?", r"(?:total\s*)?peso\s*neto(?:\s*total)?\s*:?",
+    r"(?:total\s*)?net\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?",
+    r"n\.?\s*w\.?\s*(?:total)?\s*:",
+    r"(?:total\s*)?poids\s*net(?:\s*total)?\s*:?",
+    r"(?:total\s*)?peso\s*neto(?:\s*total)?\s*:?",
 )
 LIB_COLIS = motifs(
     r"(?:total\s*)?(?:number|no\.?|nbr|nb)\s*of\s*(?:packages|pkgs|cartons|parcels|pieces|colli)\s*:?",
-    r"total\s*(?:packages|pkgs|cartons|parcels)\s*:?", r"packages\s*:",
-    r"(?:nombre|nb|nbre)\s*(?:total\s*)?(?:de\s*)?colis\s*:?", r"colis\s*:",
-    r"(?:numero|n\.?o|cantidad|total)\s*(?:de\s*)?bultos\s*:?", r"bultos\s*:",
+    r"total\s*(?:packages|pkgs|cartons|parcels)\s*:?",
+    r"packages\s*:",
+    r"(?:nombre|nb|nbre)\s*(?:total\s*)?(?:de\s*)?colis\s*:?",
+    r"colis\s*:",
+    r"(?:numero|n\.?o|cantidad|total)\s*(?:de\s*)?bultos\s*:?",
+    r"bultos\s*:",
 )
 #: Libellé de colis sans « : », seul dans son segment ; valeur lue à droite seulement.
 LIB_COLIS_NU = motifs(r"(?:packages|pkgs|colis|bultos|cartons|nombre de colis|no\.? of packages)$")
@@ -173,93 +194,257 @@ LIB_TOTAL_DOUANE = motifs(
     r"(?:total\s*)?(?:value|valeur|valor)\s*(?:for|pour la|pour|para|en)\s*(?:customs|douane|aduana)"
     r"(?:\s*purposes?)?(?:\s*only)?\s*:?",
     r"total\s*(?:for|pour la|pour|para)\s*(?:customs|douane|aduana)(?:\s*purposes?)?\s*:?",
-    r"(?:customs|declared)\s*value\s*:?", r"valeur\s*(?:en|declaree en)\s*douane\s*:?", r"valor\s*en\s*aduana\s*:?",
+    r"(?:customs|declared)\s*value\s*:?",
+    r"valeur\s*(?:en|declaree en)\s*douane\s*:?",
+    r"valor\s*en\s*aduana\s*:?",
 )
 LIB_TOTAL = motifs(
     r"(?:grand\s*|invoice\s*|net\s*)?total(?:\s*(?:amount|invoice|value|due|general|a payer|a pagar|facture"
     r"|factura|ttc|cif|fob|cfr|net|to pay|payable|invoice value|importe|credit(?:ed)?|credite|avoir"
     r"|del abono|nota de credito))?(?:\s*\(?[a-z]{3}\)?(?![a-z]))?\s*:?",
-    r"montant\s*(?:de\s*l'|total\s*de\s*l')avoir\s*:?", r"credit\s*(?:note\s*)?total\s*:?",
-    r"amount\s*(?:due|payable)\s*:?", r"balance\s*due\s*:?", r"net\s*a\s*payer\s*:?", r"montant\s*(?:total|net|du)\s*:?",
-    r"importe\s*(?:total|neto)\s*:?", r"valor\s*total\s*:?", r"invoice\s*(?:total|amount|value)\s*:?",
+    r"montant\s*(?:de\s*l'|total\s*de\s*l')avoir\s*:?",
+    r"credit\s*(?:note\s*)?total\s*:?",
+    r"amount\s*(?:due|payable)\s*:?",
+    r"balance\s*due\s*:?",
+    r"net\s*a\s*payer\s*:?",
+    r"montant\s*(?:total|net|du)\s*:?",
+    r"importe\s*(?:total|neto)\s*:?",
+    r"valor\s*total\s*:?",
+    r"invoice\s*(?:total|amount|value)\s*:?",
     r"total\s*a\s*(?:payer|pagar)\s*:?",
 )
 LIB_TOTAL_PAGE = motifs(
-    r"(?:page|sheet)\s*total\s*:?", r"total\s*(?:de\s*(?:la\s*)?)?(?:page|pagina|hoja)\s*:?",
+    r"(?:page|sheet)\s*total\s*:?",
+    r"total\s*(?:de\s*(?:la\s*)?)?(?:page|pagina|hoja)\s*:?",
     r"(?:carried\s*forward|a\s*reporter|suma\s*y\s*sigue|report)\b",
 )
 LIB_SOUS_TOTAUX: list[tuple[TypeSousTotal, list[re.Pattern[str]]]] = [
-    (TypeSousTotal.marchandises, motifs(
-        r"(?:sub-?\s?total|sous-?\s?total|subtotal)(?:\s*\(?(?:goods|marchandises|merchandise|mercancias?|"
-        r"productos)\)?)?\s*:?",
-        r"(?:goods|merchandise)\s*(?:value|total)\s*:?", r"(?:valeur|total)\s*(?:des\s*)?marchandises\s*:?",
-        r"(?:valor|total)\s*(?:de\s*(?:la\s*)?)?mercancias?\s*:?",
-    )),
-    (TypeSousTotal.fret, motifs(
-        r"(?:sea\s*|air\s*|international\s*)?(?:freight|fret|flete|shipping|transport)(?:\s*(?:charges?|costs?|"
-        r"cost|fees?))?\s*:?", r"frais\s*de\s*(?:port|transport)\s*:?", r"gastos\s*de\s*(?:envio|transporte)\s*:?",
-    )),
-    (TypeSousTotal.assurance, motifs(r"(?:insurance|assurance|seguro)(?:\s*(?:charges?|costs?|premium))?\s*:?")),
-    (TypeSousTotal.emballage, motifs(
-        r"(?:packing|packaging|emballage|embalaje)(?:\s*(?:charges?|costs?|fees?))?\s*:?",
-        r"frais\s*d'emballage\s*:?", r"gastos\s*de\s*embalaje\s*:?",
-    )),
-    (TypeSousTotal.remise, motifs(
-        r"(?:discount|remise|rabais|descuento|reduction|rebate|ristourne|bonificacion)\b(?:\s*\(?[\d.,]+\s*%\)?)?"
-        r"\s*:?",
-    )),
-    (TypeSousTotal.autre, motifs(
-        r"(?:other\s*charges|handling(?:\s*charges)?|autres\s*frais|otros\s*gastos|frais\s*divers|"
-        r"documentation\s*fees?)\s*:?",
-    )),
+    (
+        TypeSousTotal.marchandises,
+        motifs(
+            r"(?:sub-?\s?total|sous-?\s?total|subtotal)(?:\s*\(?(?:goods|marchandises|merchandise|mercancias?|"
+            r"productos)\)?)?\s*:?",
+            r"(?:goods|merchandise)\s*(?:value|total)\s*:?",
+            r"(?:valeur|total)\s*(?:des\s*)?marchandises\s*:?",
+            r"(?:valor|total)\s*(?:de\s*(?:la\s*)?)?mercancias?\s*:?",
+        ),
+    ),
+    (
+        TypeSousTotal.fret,
+        motifs(
+            r"(?:sea\s*|air\s*|international\s*)?(?:freight|fret|flete|shipping|transport)(?:\s*(?:charges?|costs?|"
+            r"cost|fees?))?\s*:?",
+            r"frais\s*de\s*(?:port|transport)\s*:?",
+            r"gastos\s*de\s*(?:envio|transporte)\s*:?",
+        ),
+    ),
+    (
+        TypeSousTotal.assurance,
+        motifs(r"(?:insurance|assurance|seguro)(?:\s*(?:charges?|costs?|premium))?\s*:?"),
+    ),
+    (
+        TypeSousTotal.emballage,
+        motifs(
+            r"(?:packing|packaging|emballage|embalaje)(?:\s*(?:charges?|costs?|fees?))?\s*:?",
+            r"frais\s*d'emballage\s*:?",
+            r"gastos\s*de\s*embalaje\s*:?",
+        ),
+    ),
+    (
+        TypeSousTotal.remise,
+        motifs(
+            r"(?:discount|remise|rabais|descuento|reduction|rebate|ristourne|bonificacion)\b(?:\s*\(?[\d.,]+\s*%\)?)?"
+            r"\s*:?",
+        ),
+    ),
+    (
+        TypeSousTotal.autre,
+        motifs(
+            r"(?:other\s*charges|handling(?:\s*charges)?|autres\s*frais|otros\s*gastos|frais\s*divers|"
+            r"documentation\s*fees?)\s*:?",
+        ),
+    ),
 ]
-_EXCLU_SOUS_TOTAL = re.compile(r"packing\s*list|liste\s*de\s*colisage|lista\s*de\s*empaque|shipped|via\b|terms|"
-                               r"poids|weight|peso|document|waybill|frachtbrief|vrachtbrief|lettera di vettura")
+_EXCLU_SOUS_TOTAL = re.compile(
+    r"packing\s*list|liste\s*de\s*colisage|lista\s*de\s*empaque|shipped|via\b|terms|"
+    r"poids|weight|peso|document|waybill|frachtbrief|vrachtbrief|lettera di vettura"
+)
 
 VOCAB_COLONNES: dict[str, list[str]] = {
-    "numero_ligne": ["#", "no", "n°", "n.o", "nº", "nr", "pos", "line", "ligne", "item no", "n° ligne", "linea"],
+    "numero_ligne": [
+        "#",
+        "no",
+        "n°",
+        "n.o",
+        "nº",
+        "nr",
+        "pos",
+        "line",
+        "ligne",
+        "item no",
+        "n° ligne",
+        "linea",
+    ],
     "reference_article": [
-        "item ref", "item ref.", "ref", "reference", "referencia", "ref article", "ref. article", "part no",
-        "part number", "article", "articulo", "code article", "sku", "product code", "item code", "codigo",
-        "item", "material", "cod",
+        "item ref",
+        "item ref.",
+        "ref",
+        "reference",
+        "referencia",
+        "ref article",
+        "ref. article",
+        "part no",
+        "part number",
+        "article",
+        "articulo",
+        "code article",
+        "sku",
+        "product code",
+        "item code",
+        "codigo",
+        "item",
+        "material",
+        "cod",
     ],
     "description": [
-        "description", "designation", "descripcion", "goods", "description of goods", "goods description",
-        "marchandise", "marchandises", "producto", "product", "libelle", "denominacion", "mercancia",
+        "description",
+        "designation",
+        "descripcion",
+        "goods",
+        "description of goods",
+        "goods description",
+        "marchandise",
+        "marchandises",
+        "producto",
+        "product",
+        "libelle",
+        "denominacion",
+        "mercancia",
     ],
     "code": [
-        "hs code", "hs", "hs-code", "h.s. code", "h.s code", "code sh", "sh", "partida", "partida arancelaria",
-        "tariff", "tariff code", "hts", "hts code", "taric", "code nc", "nc", "nomenclature", "commodity code",
-        "code douanier", "customs code", "codigo arancelario", "code tarifaire", "code hs", "fraccion",
+        "hs code",
+        "hs",
+        "hs-code",
+        "h.s. code",
+        "h.s code",
+        "code sh",
+        "sh",
+        "partida",
+        "partida arancelaria",
+        "tariff",
+        "tariff code",
+        "hts",
+        "hts code",
+        "taric",
+        "code nc",
+        "nc",
+        "nomenclature",
+        "commodity code",
+        "code douanier",
+        "customs code",
+        "codigo arancelario",
+        "code tarifaire",
+        "code hs",
+        "fraccion",
     ],
     "origine": [
-        "orig", "origin", "origine", "country of origin", "pays d'origine", "pays origine", "coo", "pais de origen",
-        "origen", "made in", "pays",
+        "orig",
+        "origin",
+        "origine",
+        "country of origin",
+        "pays d'origine",
+        "pays origine",
+        "coo",
+        "pais de origen",
+        "origen",
+        "made in",
+        "pays",
     ],
     "quantite": ["qty", "quantity", "qte", "quantite", "cant", "cantidad", "qte.", "quant"],
     "unite": ["unit", "unite", "uni", "ud", "uom", "u/m", "unidad", "um", "u"],
     "masse_nette": [
-        "n.w. kg", "n.w kg", "n.w", "net kg", "net weight", "nw", "nw kg", "p. neto", "p neto", "p. net", "p net",
-        "poids net", "peso neto", "net wt", "net weight kg", "pds net", "net (kg)", "n.w. (kg)",
+        "n.w. kg",
+        "n.w kg",
+        "n.w",
+        "net kg",
+        "net weight",
+        "nw",
+        "nw kg",
+        "p. neto",
+        "p neto",
+        "p. net",
+        "p net",
+        "poids net",
+        "peso neto",
+        "net wt",
+        "net weight kg",
+        "pds net",
+        "net (kg)",
+        "n.w. (kg)",
     ],
     "masse_brute": [
-        "g.w. kg", "g.w kg", "g.w", "gross kg", "gw", "gw kg", "gross weight", "poids brut", "peso bruto", "p. brut",
-        "p brut", "p. bruto", "p bruto", "gross wt", "gross weight kg", "pds brut", "gross (kg)", "g.w. (kg)",
+        "g.w. kg",
+        "g.w kg",
+        "g.w",
+        "gross kg",
+        "gw",
+        "gw kg",
+        "gross weight",
+        "poids brut",
+        "peso bruto",
+        "p. brut",
+        "p brut",
+        "p. bruto",
+        "p bruto",
+        "gross wt",
+        "gross weight kg",
+        "pds brut",
+        "gross (kg)",
+        "g.w. (kg)",
     ],
     "prix_unitaire": [
-        "unit price", "prix unitaire", "precio unit", "precio unitario", "p.u", "pu", "price", "prix", "precio",
-        "unit value", "valeur unitaire", "prix unit", "p. unit", "p unit", "valor unitario",
+        "unit price",
+        "prix unitaire",
+        "precio unit",
+        "precio unitario",
+        "p.u",
+        "pu",
+        "price",
+        "prix",
+        "precio",
+        "unit value",
+        "valeur unitaire",
+        "prix unit",
+        "p. unit",
+        "p unit",
+        "valor unitario",
     ],
     "montant": [
-        "amount", "montant", "importe", "total", "line total", "value", "valeur", "total amount", "montant total",
-        "valor", "total price", "ext. price", "extended price", "total value", "montant ht", "subtotal", "valor total",
+        "amount",
+        "montant",
+        "importe",
+        "total",
+        "line total",
+        "value",
+        "valeur",
+        "total amount",
+        "montant total",
+        "valor",
+        "total price",
+        "ext. price",
+        "extended price",
+        "total value",
+        "montant ht",
+        "subtotal",
+        "valor total",
         "importe total",
     ],
 }
 # corrections d'en-tête où le préfixe d'un mot normalisé ne suffit pas (« p ne… »)
 for _t in ("masse_nette", "masse_brute"):
-    VOCAB_COLONNES[_t] = [v.replace(".", "") if v.startswith("p.") else v for v in VOCAB_COLONNES[_t]] + \
-        [v for v in VOCAB_COLONNES[_t] if v.startswith("p.")]
+    VOCAB_COLONNES[_t] = [v.replace(".", "") if v.startswith("p.") else v for v in VOCAB_COLONNES[_t]] + [
+        v for v in VOCAB_COLONNES[_t] if v.startswith("p.")
+    ]
 
 _FIN_TABLEAU = re.compile(
     r"^(?:sub-?\s?total|sous-?\s?total|subtotal|total|grand total|page total|carried|a reporter|suma y sigue|"
@@ -306,12 +491,18 @@ class ExtracteurFactureCommerciale:
             (getattr(p, "texte", "") or "").lstrip().startswith("<") for p in pages
         )
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         choisies = pages_du_document(document, pages, context.options)
         vue = vue_document(choisies, separateur_decimal=context.separateur_decimal)
         champs, avert = extraire_facture_commerciale(vue, document_id=document.id, ids=context.ids)
-        return ExtractionResult(extracteur=INFO, champs=champs, avertissements=avert,
-                                partielle=not any(p.lignes for p in vue.pages))
+        return ExtractionResult(
+            extracteur=INFO,
+            champs=champs,
+            avertissements=avert,
+            partielle=not any(p.lignes for p in vue.pages),
+        )
 
 
 # --- extraction -----------------------------------------------------------------------------------------------
@@ -333,7 +524,10 @@ class _Etat:
 
 
 def extraire_facture_commerciale(
-    vue: VueDocument, *, document_id: str, ids=None,
+    vue: VueDocument,
+    *,
+    document_id: str,
+    ids=None,
 ) -> tuple[ChampsFactureCommerciale, list[str]]:
     """Champs d'une facture commerciale à partir de sa vue (pages du document)."""
     fab = Fabrique(TypeDocument.facture_commerciale, document_id, INFO, vue, ids)
@@ -348,7 +542,9 @@ def extraire_facture_commerciale(
     return e.champs, e.avert
 
 
-def _premier(vue: VueDocument, libelles, accepte, *, exclure=None, pages=None, dessous=True) -> Lecture | None:
+def _premier(
+    vue: VueDocument, libelles, accepte, *, exclure=None, pages=None, dessous=True
+) -> Lecture | None:
     for t in chercher(vue, libelles, pages=pages, exclure=exclure):
         lec = valeur_apres(vue, t, accepte, dessous=dessous)
         if lec is not None:
@@ -396,8 +592,10 @@ def _devise(e: _Etat) -> None:
             conf = min(conf, 0.6)
         elif indices and set(indices) != {code_lu}:
             conf = min(conf, 0.6)  # en-tête de colonne ou libellé de total dans une autre devise
-        elif lec.methode is Methode.ocr and conf >= C_OCR_DEVISE_MIN and (
-            indices or _code_seul_relu(vue.texte, code_lu, codes_page)
+        elif (
+            lec.methode is Methode.ocr
+            and conf >= C_OCR_DEVISE_MIN
+            and (indices or _code_seul_relu(vue.texte, code_lu, codes_page))
         ):
             # D-2308 : le code du libellé « devise » est relu ailleurs (en-tête de colonne, total, ou seul code
             # ISO de la page imprimé sur deux lignes) : deux lectures concordantes en deux endroits.
@@ -413,11 +611,16 @@ def _devise(e: _Etat) -> None:
             continue
         for m in lt.mots:
             c = normalize_currency(m.texte, codes_iso_page=codes_page)
-            if (c and c != DEVISE_INCONNUE and m.texte.strip("()-").isupper()) or (c and m.texte in ("€", "£")):
+            if (c and c != DEVISE_INCONNUE and m.texte.strip("()-").isupper()) or (
+                c and m.texte in ("€", "£")
+            ):
                 lecd = Lecture((m,), lt.page, lt.methode, contexte=lt.contexte)
                 conf = min(confiance_mots(lecd), 0.9)
-                if lecd.methode is Methode.ocr and conf >= C_OCR_DEVISE_MIN and _code_seul_relu(
-                        vue.texte, c, codes_page):
+                if (
+                    lecd.methode is Methode.ocr
+                    and conf >= C_OCR_DEVISE_MIN
+                    and _code_seul_relu(vue.texte, c, codes_page)
+                ):
                     conf = 0.9  # D-2308 : seul code ISO du document, relu sur une autre ligne
                 e.champs.devise = e.fab.valeur("devise", lecd, confiance=conf)
                 e.devise = c
@@ -468,8 +671,11 @@ def _devise_indices(e: _Etat, codes_page) -> dict[str, list[tuple[str, Lecture]]
                 ajouter(c, "total", Lecture((m,), lt.page, lt.methode, contexte=lt.contexte))
             sym = re.match(r"^[(\-]?(US\$|[€£₩₹₺¥$])", m.texte)
             if sym:
-                ajouter(devise_symbole(sym.group(1), codes_page), "symbole",
-                        Lecture((m,), lt.page, lt.methode, contexte=lt.contexte))
+                ajouter(
+                    devise_symbole(sym.group(1), codes_page),
+                    "symbole",
+                    Lecture((m,), lt.page, lt.methode, contexte=lt.contexte),
+                )
     return out
 
 
@@ -536,8 +742,9 @@ def _accepte_date(mots) -> tuple[int, int] | None:
         return None
     # retirer les mots de fin qui n'appartiennent pas à la date
     i, j = meilleur
-    while j > 1 and parse_date_detail(" ".join(m.texte for m in mots[:j - 1])) == parse_date_detail(
-            " ".join(m.texte for m in mots[:j])):
+    while j > 1 and parse_date_detail(" ".join(m.texte for m in mots[: j - 1])) == parse_date_detail(
+        " ".join(m.texte for m in mots[:j])
+    ):
         j -= 1
     return i, j
 
@@ -577,8 +784,14 @@ def _entete(e: _Etat) -> None:
         ch.incoterm = fab.valeur("incoterm", code, confiance=confiance_mots(lec, plafond_ocr=0.9))
         mots_lieu = list(lec.mots[1:])
         # mention de version (« (Incoterms® 2020) », « Incoterms 2020 ») : hors du lieu
-        k_fin = next((k for k, m in enumerate(mots_lieu) if m.texte.startswith("(")
-                      or cle_texte(m.texte).startswith("incoterm")), len(mots_lieu))
+        k_fin = next(
+            (
+                k
+                for k, m in enumerate(mots_lieu)
+                if m.texte.startswith("(") or cle_texte(m.texte).startswith("incoterm")
+            ),
+            len(mots_lieu),
+        )
         mots_lieu = mots_lieu[:k_fin]
         if mots_lieu:
             lieu = Lecture(tuple(mots_lieu), lec.page, lec.methode, contexte=lec.contexte)
@@ -604,23 +817,42 @@ def _date_pres_du_numero(e: _Etat) -> None:
                 cle = cle_texte(" ".join(m.texte for m in sg.mots))
                 if num.valeur_brute is None or cle_texte(num.valeur_brute) not in cle:
                     continue
-                k = next((i for i, m in enumerate(sg.mots) if cle_texte(m.texte).strip(":;,")
-                          == cle_texte(num.valeur_brute.split()[-1])), None)
+                k = next(
+                    (
+                        i
+                        for i, m in enumerate(sg.mots)
+                        if cle_texte(m.texte).strip(":;,") == cle_texte(num.valeur_brute.split()[-1])
+                    ),
+                    None,
+                )
                 if k is None:
                     continue
-                suites = [list(sg.mots[k + 1:])]
-                voisin = li.segments[sg.rang + 1:sg.rang + 2]
+                suites = [list(sg.mots[k + 1 :])]
+                voisin = li.segments[sg.rang + 1 : sg.rang + 2]
                 if voisin and voisin[0].x0 - sg.x1 < 0.15:
                     suites.append(list(voisin[0].mots))  # segment voisin (texte OCR découpé)
                 lec = None
                 for mots in suites:
                     j = 0
-                    while j < len(mots) and cle_texte(mots[j].texte) in ("-", "—", "–", "/", "|", ",", "of", "du",
-                                                                        "z", "de", "del", "vom", "dated"):
+                    while j < len(mots) and cle_texte(mots[j].texte) in (
+                        "-",
+                        "—",
+                        "–",
+                        "/",
+                        "|",
+                        ",",
+                        "of",
+                        "du",
+                        "z",
+                        "de",
+                        "del",
+                        "vom",
+                        "dated",
+                    ):
                         j += 1
                     r = _accepte_date(mots[j:])
                     if r is not None:
-                        lec = lecture_mots(mots[j + r[0]:j + r[1]], p, li)
+                        lec = lecture_mots(mots[j + r[0] : j + r[1]], p, li)
                         break
                     if mots[j:]:
                         break  # autre chose suit le numéro : pas une date voisine
@@ -671,7 +903,7 @@ def _incoterm_libre(e: _Etat) -> None:
     li, s, k = trouves[0]
     page = e.vue.page(li.page)
     assert page is not None
-    lec = lecture_mots(s.mots[k:k + 1], page, li)
+    lec = lecture_mots(s.mots[k : k + 1], page, li)
     e.champs.incoterm = e.fab.valeur("incoterm", lec, confiance=min(0.7, confiance_mots(lec)))
 
 
@@ -681,7 +913,9 @@ def _incoterm_libre(e: _Etat) -> None:
 def _parties(e: _Etat) -> None:
     vue, fab, ch = e.vue, e.fab, e.champs
     # étiquette « TVA acheteur » explicite (tableur, formulaire)
-    for t in chercher(vue, motifs(r"(?:buyer|customer|acheteur|client|comprador|cliente)(?:'s)?\s*(?:vat|tva|iva)")):
+    for t in chercher(
+        vue, motifs(r"(?:buyer|customer|acheteur|client|comprador|cliente)(?:'s)?\s*(?:vat|tva|iva)")
+    ):
         lec = valeur_apres(vue, t, lambda ms: (lambda r: (r[0], r[1]) if r else None)(lire_tva_mots(ms)))
         if lec is not None:
             _tva_partie(e, "acheteur", lec)
@@ -706,39 +940,59 @@ def _parties(e: _Etat) -> None:
             li0, mots0 = lignes[0]
             while len(mots0) > 1 and re.fullmatch(r"[\W_]+", mots0[-1].texte):
                 mots0 = mots0[:-1]  # « Brasserie Chimérique SA - » : ponctuation de fin lue par l'OCR
-            if not re.search(r"\b(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))) \
-                    and _nom_plausible(mots0):
+            if not re.search(
+                r"\b(vat|tva|iva)\b", cle_texte(" ".join(m.texte for m in mots0))
+            ) and _nom_plausible(mots0):
                 page = vue.page(li0.page)
                 lec_nom = lecture_mots(mots0, page, li0)
-                ch.acheteur.nom = fab.valeur("acheteur.nom", lec_nom, type_valeur=TypeValeur.texte,
-                                             confiance=min(_plafond_nom(t), confiance_mots(lec_nom)))
-            adr = [lecture_mots(ms, vue.page(li.page), li) for li, ms in lignes[1:]
-                   if not re.search(r"\b(vat|tva|iva|eori|siren|siret|tel|phone|fax|e-?mail)\b",
-                                    cle_texte(" ".join(m.texte for m in ms)))]
+                ch.acheteur.nom = fab.valeur(
+                    "acheteur.nom",
+                    lec_nom,
+                    type_valeur=TypeValeur.texte,
+                    confiance=min(_plafond_nom(t), confiance_mots(lec_nom)),
+                )
+            adr = [
+                lecture_mots(ms, vue.page(li.page), li)
+                for li, ms in lignes[1:]
+                if not re.search(
+                    r"\b(vat|tva|iva|eori|siren|siret|tel|phone|fax|e-?mail)\b",
+                    cle_texte(" ".join(m.texte for m in ms)),
+                )
+            ]
             if adr:
                 ch.acheteur.adresse = fab.valeur("acheteur.adresse", adr[0], type_valeur=TypeValeur.texte)
         rep_fiscal = None
         for li, ms in lignes:
             if ch.acheteur.tva is None:
                 r = lire_tva_ocr(ms)
-                if r is not None and REP_FISCAL.search(cle_texte(" ".join(m.texte for m in ms[:r[0]]))):
+                if r is not None and REP_FISCAL.search(cle_texte(" ".join(m.texte for m in ms[: r[0]]))):
                     # numéro du représentant fiscal : celui du client est cherché d'abord (D-2504)
                     rep_fiscal = rep_fiscal or (li, ms, r)
                 elif r is not None:
-                    _tva_partie(e, "acheteur", lecture_mots(ms[r[0]:r[1]], vue.page(li.page), li),
-                                corrigee=r[2] if r[3] else None)
+                    _tva_partie(
+                        e,
+                        "acheteur",
+                        lecture_mots(ms[r[0] : r[1]], vue.page(li.page), li),
+                        corrigee=r[2] if r[3] else None,
+                    )
             if ch.acheteur.eori is None:
                 eo = _eori(ms)
                 if eo is not None:
-                    lec = lecture_mots(ms[eo[0]:eo[1]], vue.page(li.page), li)
+                    lec = lecture_mots(ms[eo[0] : eo[1]], vue.page(li.page), li)
                     ch.acheteur.eori = fab.valeur("acheteur.eori", lec, confiance=_conf_ref(lec))
                     ch.eori_importateur = fab.valeur("eori_importateur", lec, confiance=_conf_ref(lec))
         if ch.acheteur.tva is None and rep_fiscal is not None:
             li, ms, r = rep_fiscal
-            _tva_partie(e, "acheteur", lecture_mots(ms[r[0]:r[1]], vue.page(li.page), li),
-                        corrigee=r[2] if r[3] else None)
+            _tva_partie(
+                e,
+                "acheteur",
+                lecture_mots(ms[r[0] : r[1]], vue.page(li.page), li),
+                corrigee=r[2] if r[3] else None,
+            )
             if ch.acheteur.tva is not None:
-                ch.acheteur.tva = ch.acheteur.tva.model_copy(update={"confiance": min(ch.acheteur.tva.confiance, 0.6)})
+                ch.acheteur.tva = ch.acheteur.tva.model_copy(
+                    update={"confiance": min(ch.acheteur.tva.confiance, 0.6)}
+                )
         if ch.acheteur.nom is not None:
             break
     if flou:
@@ -757,12 +1011,16 @@ def _parties(e: _Etat) -> None:
         li0, mots0 = lignes[0]
         if _nom_plausible(mots0):
             lec_nom = lecture_mots(mots0, vue.page(li0.page), li0)
-            ch.destinataire.nom = fab.valeur("destinataire.nom", lec_nom, type_valeur=TypeValeur.texte,
-                                             confiance=min(_plafond_nom(t), confiance_mots(lec_nom)))
+            ch.destinataire.nom = fab.valeur(
+                "destinataire.nom",
+                lec_nom,
+                type_valeur=TypeValeur.texte,
+                confiance=min(_plafond_nom(t), confiance_mots(lec_nom)),
+            )
         for li, ms in lignes:
             r = lire_tva_mots(ms)
             if r is not None:
-                lec = lecture_mots(ms[r[0]:r[1]], vue.page(li.page), li)
+                lec = lecture_mots(ms[r[0] : r[1]], vue.page(li.page), li)
                 ch.destinataire.tva = fab.valeur("destinataire.tva", lec, confiance=_conf_tva(lec))
                 break
         break
@@ -771,9 +1029,25 @@ def _parties(e: _Etat) -> None:
 
 #: Libellés usuels d'un pavé acheteur, comparés lettres seules (« Bill to / Buyer » -> « billtobuyer »).
 _LIBELLES_ACHETEUR_LITTERAUX = (
-    "billto", "billtobuyer", "buyer", "soldto", "invoiceto", "customer", "facturea", "factureea", "acheteur",
-    "facturara", "cliente", "rechnungsempfanger", "rechnungsadresse", "fatturaa", "intestatario", "factuuradres",
-    "faturara", "nabywca", "platnik",
+    "billto",
+    "billtobuyer",
+    "buyer",
+    "soldto",
+    "invoiceto",
+    "customer",
+    "facturea",
+    "factureea",
+    "acheteur",
+    "facturara",
+    "cliente",
+    "rechnungsempfanger",
+    "rechnungsadresse",
+    "fatturaa",
+    "intestatario",
+    "factuuradres",
+    "faturara",
+    "nabywca",
+    "platnik",
 )
 
 
@@ -791,10 +1065,30 @@ def _libelles_acheteur_flous(e_vue: VueDocument) -> list[Trouve]:
     """Segments de la première page dont tout le texte (lettres seules) est à une édition (deux au-delà de
     dix lettres) d'un libellé de pavé acheteur, sans être plus proche d'un libellé de livraison ou de vendeur."""
     p = e_vue.pages[0]
-    autres = ("shipto", "consignee", "deliverto", "livrea", "lieferadresse", "odbiorca", "entregara", "seller",
-              "shipper", "exporter", "vendeur", "sprzedawca", "consigneeshipto",
-              # titres du document : « FACTURE » n'est pas « Facturé à »
-              "facture", "factura", "fatura", "faktura", "invoice", "rechnung", "fattura", "factuur")
+    autres = (
+        "shipto",
+        "consignee",
+        "deliverto",
+        "livrea",
+        "lieferadresse",
+        "odbiorca",
+        "entregara",
+        "seller",
+        "shipper",
+        "exporter",
+        "vendeur",
+        "sprzedawca",
+        "consigneeshipto",
+        # titres du document : « FACTURE » n'est pas « Facturé à »
+        "facture",
+        "factura",
+        "fatura",
+        "faktura",
+        "invoice",
+        "rechnung",
+        "fattura",
+        "factuur",
+    )
     out: list[Trouve] = []
     for li in p.lignes:
         if li.y0 > 0.45:
@@ -805,8 +1099,11 @@ def _libelles_acheteur_flous(e_vue: VueDocument) -> list[Trouve]:
                 continue
             for lib in _LIBELLES_ACHETEUR_LITTERAUX:
                 d = _distance(compact, lib)
-                if d <= (2 if len(lib) >= 10 else 1) and len(lib) >= 6 \
-                        and all(_distance(compact, x) > d for x in autres):
+                if (
+                    d <= (2 if len(lib) >= 10 else 1)
+                    and len(lib) >= 6
+                    and all(_distance(compact, x) > d for x in autres)
+                ):
                     out.append(Trouve(sg, li, p, len(sg.mots), lib))
                     break
     return out[:1]
@@ -815,8 +1112,20 @@ def _libelles_acheteur_flous(e_vue: VueDocument) -> list[Trouve]:
 def _reste_de_libelle(mots) -> bool:
     """Mots restant après un libellé reconnu qui ne sont que la suite du libellé (« ] Buyer », « / Kunde »)."""
     compact = re.sub(r"[^a-z]", "", cle_texte(" ".join(m.texte for m in mots)))
-    return bool(compact) and any(_distance(compact, x) <= (1 if len(x) >= 5 else 0) for x in (
-        "buyer", "customer", "kunde", "kaufer", "acheteur", "client", "cliente", "comprador", "klant"))
+    return bool(compact) and any(
+        _distance(compact, x) <= (1 if len(x) >= 5 else 0)
+        for x in (
+            "buyer",
+            "customer",
+            "kunde",
+            "kaufer",
+            "acheteur",
+            "client",
+            "cliente",
+            "comprador",
+            "klant",
+        )
+    )
 
 
 def _nom_plausible(mots) -> bool:
@@ -833,26 +1142,34 @@ def _nom_plausible(mots) -> bool:
 def _plafond_nom(t: Trouve) -> float:
     """Plafond de confiance d'un nom lu dans un pavé : 0,90 ; 0,80 quand une colonne de droite s'intercale
     avec le pavé (structure ambiguë, D-951)."""
-    if t.page.geometrie and not t.ligne.segments[t.segment.rang + 1:] and colonne_droite(
-            t.page, t.ligne, t.segment.x0, t.segment.x1) is not None:
+    if (
+        t.page.geometrie
+        and not t.ligne.segments[t.segment.rang + 1 :]
+        and colonne_droite(t.page, t.ligne, t.segment.x0, t.segment.x1) is not None
+    ):
         return 0.8
     return 0.9
 
 
-_SOUS_CHAMP = re.compile(r"^(?:'s\s*)?(?:address|adresse|direccion|vat|tva|iva|name|nom|nombre|eori|tel|phone|"
-                         r"fax|e-?mail|contact|country|pays|pais|city|ville|ciudad|ref|reference|no\b|n°|number)")
+_SOUS_CHAMP = re.compile(
+    r"^(?:'s\s*)?(?:address|adresse|direccion|vat|tva|iva|name|nom|nombre|eori|tel|phone|"
+    r"fax|e-?mail|contact|country|pays|pais|city|ville|ciudad|ref|reference|no\b|n°|number)"
+)
 
 
 def _sous_champ(t: Trouve) -> bool:
     """« Buyer address », « Buyer VAT No. » : libellé d'un sous-champ, pas l'ouverture du pavé."""
-    reste = cle_texte(" ".join(m.texte for m in t.segment.mots[t.apres:]))
+    reste = cle_texte(" ".join(m.texte for m in t.segment.mots[t.apres :]))
     return bool(_SOUS_CHAMP.match(reste))
 
 
 def _eori(mots) -> tuple[int, int] | None:
     for k, m in enumerate(mots):
-        if re.fullmatch(r"[A-Z]{2}[0-9A-Z]{8,15}", m.texte.strip(":;,")) and k > 0 and "eori" in cle_texte(
-                mots[k - 1].texte):
+        if (
+            re.fullmatch(r"[A-Z]{2}[0-9A-Z]{8,15}", m.texte.strip(":;,"))
+            and k > 0
+            and "eori" in cle_texte(mots[k - 1].texte)
+        ):
             return k, k + 1
     return None
 
@@ -878,7 +1195,13 @@ def _tva_partie(e: _Etat, partie: str, lec: Lecture, corrigee: str | None = None
     if corrigee is not None and v is not None:
         v = v.model_copy(update={"valeur": corrigee, "confiance": min(0.85, max(confiance_mots(lec), 0.6))})
     getattr(e.champs, partie).tva = v
-    if partie == "acheteur" and v is not None and v.valeur and v.valeur.startswith("FR") and extraire_siren(v.valeur):
+    if (
+        partie == "acheteur"
+        and v is not None
+        and v.valeur
+        and v.valeur.startswith("FR")
+        and extraire_siren(v.valeur)
+    ):
         sv = e.fab.valeur("acheteur.siren", lec, confiance=v.confiance)
         if sv is not None and corrigee is not None:
             sv = sv.model_copy(update={"valeur": extraire_siren(corrigee)})
@@ -893,7 +1216,9 @@ def _vendeur(e: _Etat) -> None:
     t_ach = chercher(vue, LIB_ACHETEUR, pages=[p.numero])
     limite = t_ach[0].ligne.rang if t_ach else min(len(p.lignes), 6)
     bandeaux = lignes_bandeau(vue, entetes_repetes=False)
-    t_v = [t for t in chercher(vue, LIB_VENDEUR, pages=[p.numero]) if (p.numero, t.ligne.rang) not in bandeaux]
+    t_v = [
+        t for t in chercher(vue, LIB_VENDEUR, pages=[p.numero]) if (p.numero, t.ligne.rang) not in bandeaux
+    ]
     # un libellé « vendeur » placé après le pavé acheteur (« Expediteur: » d'un transitaire en pied) n'ouvre pas
     # le pavé de l'émetteur
     t_v = t_v if t_v and t_v[0].ligne.rang < (t_ach[0].ligne.rang if t_ach else 99) else []
@@ -901,8 +1226,11 @@ def _vendeur(e: _Etat) -> None:
         lignes = pave(t_v[0], fin=LIB_FIN_PAVE, exclus=e.entetes | bandeaux)
     else:
         # sans libellé : premières lignes de la page, bandeaux et en-têtes répétés exclus (D-953)
-        lignes = [(li, list(li.segments[0].mots)) for li in p.lignes[:limite]
-                  if li.segments and (p.numero, li.rang) not in bandeaux]
+        lignes = [
+            (li, list(li.segments[0].mots))
+            for li in p.lignes[:limite]
+            if li.segments and (p.numero, li.rang) not in bandeaux
+        ]
     titre = _L.TITRE
     for li, ms in lignes:
         # un titre collé au nom (« Société X   INVOICE ») : on garde les mots qui le précèdent
@@ -919,16 +1247,22 @@ def _vendeur(e: _Etat) -> None:
         if not ms or not re.search(r"[a-z]{3}", txt) or re.match(r"^[\d\W]", txt):
             continue
         # couple « Date: … » ou identifiant (« CHE-000.000.001 MWST ») : pas un nom (D-2004)
-        pas_un_nom = not t_v and (re.fullmatch(r"[^\W\d_][\w.\-/]*:", ms[0].texte) is not None
-                                  or sum(c.isdigit() for c in txt) * 2 > sum(c.isalnum() for c in txt))
+        pas_un_nom = not t_v and (
+            re.fullmatch(r"[^\W\d_][\w.\-/]*:", ms[0].texte) is not None
+            or sum(c.isdigit() for c in txt) * 2 > sum(c.isalnum() for c in txt)
+        )
         if ch.vendeur.nom is None and not pas_un_nom and _nom_plausible(ms):
             lec_v = lecture_mots(ms, p, li)
             # sans libellé « vendeur », le nom est présumé (première ligne de l'en-tête)
-            ch.vendeur.nom = fab.valeur("vendeur.nom", lec_v, type_valeur=TypeValeur.texte,
-                                        confiance=min(0.9 if t_v else 0.8, confiance_mots(lec_v)))
+            ch.vendeur.nom = fab.valeur(
+                "vendeur.nom",
+                lec_v,
+                type_valeur=TypeValeur.texte,
+                confiance=min(0.9 if t_v else 0.8, confiance_mots(lec_v)),
+            )
         r = lire_tva_mots(ms)
         if r is not None and ch.vendeur.tva is None:
-            lec = lecture_mots(ms[r[0]:r[1]], p, li)
+            lec = lecture_mots(ms[r[0] : r[1]], p, li)
             ch.vendeur.tva = fab.valeur("vendeur.tva", lec, confiance=_conf_tva(lec))
 
 
@@ -968,8 +1302,11 @@ def _est_debut(cellules) -> bool:
     # rangée dont le montant est illisible (OCR) : référence d'article et quantité lues (D-2009)
     ref = [m.texte.strip("|[]") for m in cellules.get("reference_article", [])]
     qte = cellules.get("quantite", [])
-    return (any(re.search(r"\d", t) and re.search(r"[A-Za-z]", t) and len(t) >= 4 for t in ref[:1])
-            and bool(qte) and bool(re.fullmatch(r"\d[\d.,' ]*", qte[0].texte)))
+    return (
+        any(re.search(r"\d", t) and re.search(r"[A-Za-z]", t) and len(t) >= 4 for t in ref[:1])
+        and bool(qte)
+        and bool(re.fullmatch(r"\d[\d.,' ]*", qte[0].texte))
+    )
 
 
 def _a_chiffre(r: RangeeTableau, typ: str) -> bool:
@@ -982,9 +1319,17 @@ def _recoller_montants(rs: list[RangeeTableau]) -> list[RangeeTableau]:
     out: list[RangeeTableau] = []
     for r in rs:
         seul = {t for t, ms in r.cellules.items() if any(re.search(r"\w", m.texte) for m in ms)} <= {
-            "montant", "prix_unitaire", "inconnue"}
-        if out and seul and _a_chiffre(r, "montant") and not _a_chiffre(out[-1], "montant") \
-                and _a_chiffre(out[-1], "quantite"):
+            "montant",
+            "prix_unitaire",
+            "inconnue",
+        }
+        if (
+            out
+            and seul
+            and _a_chiffre(r, "montant")
+            and not _a_chiffre(out[-1], "montant")
+            and _a_chiffre(out[-1], "quantite")
+        ):
             prec = out[-1]
             for typ, ms in r.cellules.items():
                 prec.cellules.setdefault(typ, []).extend(ms)
@@ -1000,14 +1345,17 @@ def _est_fin(li: VueLigne) -> bool:
 
 #: Report d'une page précédente en tête de tableau (« Brought forward 625.02 », « Report »,
 #: « Übertrag ») : ni une ligne de marchandise ni la fin du tableau (D-2508).
-_REPORT = re.compile(r"^(?:brought\s*forward|b/f\b|carried\s*forward|report(?:\s*de\s*la\s*page)?\b|"
-                     r"a\s*reporter|suma\s*anterior|suma\s*y\s*sigue|transporte\b|ubertrag|uebertrag|riporto|"
-                     r"van\s*vorige|z\s*przeniesienia|do\s*przeniesienia|transporte\s*da\s*pagina)")
+_REPORT = re.compile(
+    r"^(?:brought\s*forward|b/f\b|carried\s*forward|report(?:\s*de\s*la\s*page)?\b|"
+    r"a\s*reporter|suma\s*anterior|suma\s*y\s*sigue|transporte\b|ubertrag|uebertrag|riporto|"
+    r"van\s*vorige|z\s*przeniesienia|do\s*przeniesienia|transporte\s*da\s*pagina)"
+)
 
 
 def _est_report(li: VueLigne) -> bool:
     return any(_REPORT.match(s.cle) for s in li.segments) and not any(
-        re.fullmatch(r"\d{1,3}\.?", s.texte) for s in li.segments[:1])
+        re.fullmatch(r"\d{1,3}\.?", s.texte) for s in li.segments[:1]
+    )
 
 
 def _tableau(e: _Etat) -> None:
@@ -1021,7 +1369,9 @@ def _tableau(e: _Etat) -> None:
         li, cols = trouve
         e.entetes.add((p.numero, li.rang))
         colonnes_prec = cols
-        rs, fin = lire_tableau(p, li.rang, cols, est_debut=_est_debut, est_fin=_est_fin, est_ignoree=_est_report)
+        rs, fin = lire_tableau(
+            p, li.rang, cols, est_debut=_est_debut, est_fin=_est_fin, est_ignoree=_est_report
+        )
         rs = _recoller_montants(rs)
         e.fin_tableau[p.numero] = fin
         for r in rs:
@@ -1069,8 +1419,13 @@ def _origine_document(e: _Etat) -> None:
     lec = _premier(e.vue, _L.LIB_ORIGINE_DOC, _accepte_pays, dessous=False)
     if lec is None:
         return
-    lec = Lecture(tuple(m for m in lec.mots), lec.page, lec.methode, contexte=lec.contexte,
-                  texte_force=lec.texte.strip("().,;"))
+    lec = Lecture(
+        tuple(m for m in lec.mots),
+        lec.page,
+        lec.methode,
+        contexte=lec.contexte,
+        texte_force=lec.texte.strip("().,;"),
+    )
     for k, ln in enumerate(e.champs.lignes):
         v = e.fab.valeur(f"lignes[{k}].pays_origine", lec, confiance=min(0.85, confiance_mots(lec)))
         if v is not None and v.valeur:
@@ -1101,30 +1456,43 @@ def _rangees_sans_entete(e: _Etat) -> list[RangeeTableau]:
             mt, pu = nombres[-1], nombres[-2]
             if mt.j < len(mots) - 1:
                 continue  # le montant termine la ligne
-            if (e.devise is None or exposant_devise(e.devise) > 0) and not re.search(r"\d[.,]\d{2}\)?$", mt.texte):
+            if (e.devise is None or exposant_devise(e.devise) > 0) and not re.search(
+                r"\d[.,]\d{2}\)?$", mt.texte
+            ):
                 continue  # séparateur décimal perdu par l'OCR : montant illisible
-            v_mt = lire_montant_mots(mots[mt.i:mt.j], vue=e.vue, devise=e.devise)
-            v_pu = lire_montant_mots(mots[pu.i:pu.j], vue=e.vue, devise=e.devise)
-            cellules: dict[str, list] = {"numero_ligne": [mots[0]], "montant": list(mots[mt.i:mt.j]),
-                                         "prix_unitaire": list(mots[pu.i:pu.j])}
+            v_mt = lire_montant_mots(mots[mt.i : mt.j], vue=e.vue, devise=e.devise)
+            v_pu = lire_montant_mots(mots[pu.i : pu.j], vue=e.vue, devise=e.devise)
+            cellules: dict[str, list] = {
+                "numero_ligne": [mots[0]],
+                "montant": list(mots[mt.i : mt.j]),
+                "prix_unitaire": list(mots[pu.i : pu.j]),
+            }
             fin_desc = pu.i
             coherent = False
             for q in reversed(nombres[:-2]):
-                v_q = lire_montant_mots(mots[q.i:q.j], vue=e.vue, devise=None, rejeter_masse=False)
+                v_q = lire_montant_mots(mots[q.i : q.j], vue=e.vue, devise=None, rejeter_masse=False)
                 if v_q and v_mt and v_pu and abs(v_q[2] * v_pu[2] - v_mt[2]) <= Decimal("0.011"):
-                    cellules["quantite"] = list(mots[q.i:q.j])
+                    cellules["quantite"] = list(mots[q.i : q.j])
                     if q.j < pu.i and re.fullmatch(r"[A-Za-z]{1,6}\.?", mots[q.j].texte):
                         cellules["unite"] = [mots[q.j]]
                     fin_desc = q.i
                     coherent = True
                     break
             k = 1
-            if k < fin_desc and re.search(r"\d", mots[k].texte) and re.search(r"[A-Za-z]", mots[k].texte) \
-                    and "-" in mots[k].texte:
+            if (
+                k < fin_desc
+                and re.search(r"\d", mots[k].texte)
+                and re.search(r"[A-Za-z]", mots[k].texte)
+                and "-" in mots[k].texte
+            ):
                 cellules["reference_article"] = [mots[k]]
                 k += 1
             reste = list(mots[k:fin_desc])
-            if reste and re.fullmatch(r"\(?[A-Z]{2}\)?", reste[-1].texte) and country_to_iso2(reste[-1].texte.strip("()")):
+            if (
+                reste
+                and re.fullmatch(r"\(?[A-Z]{2}\)?", reste[-1].texte)
+                and country_to_iso2(reste[-1].texte.strip("()"))
+            ):
                 cellules["origine"] = [reste.pop()]
             code: list = []
             while reste and re.fullmatch(r"[\d.\s\-/]+", reste[-1].texte):
@@ -1164,8 +1532,8 @@ def _quantite_sous_unite(e: _Etat, r: RangeeTableau) -> float | None:
     nb = nombres_dans(mots)
     if not nb or nb[0].i != 0 or nb[0].tronque:
         return None
-    r.cellules["quantite"] = list(mots[:nb[0].j])
-    r.cellules["unite"] = list(mots[nb[0].j:])
+    r.cellules["quantite"] = list(mots[: nb[0].j])
+    r.cellules["unite"] = list(mots[nb[0].j :])
     return 0.85
 
 
@@ -1199,14 +1567,16 @@ def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
         ln.code_marchandise_imprime = _code(e, lec, f"{base}.code_marchandise_imprime", r)
     lec = _lec_cellule(r, "origine", premiere_ligne=True)
     if lec is not None and country_to_iso2(lec.texte.strip("()")):
-        ln.pays_origine = fab.valeur(f"{base}.pays_origine", lec, confiance=confiance_mots(lec, plafond_ocr=0.9))
+        ln.pays_origine = fab.valeur(
+            f"{base}.pays_origine", lec, confiance=confiance_mots(lec, plafond_ocr=0.9)
+        )
     # quantité (+ unité si colonne voisine)
     lq = _lec_cellule(r, "quantite", premiere_ligne=True)
     lu = _lec_cellule(r, "unite", premiere_ligne=True)
     if lq is not None:
         nb = nombres_dans(lq.mots)
         if nb and not nb[0].tronque:
-            mots = list(lq.mots[nb[0].i:])
+            mots = list(lq.mots[nb[0].i :])
             lecq = Lecture(tuple(mots), lq.page, lq.methode, contexte=lq.contexte)
             vq = fab.valeur(f"{base}.quantite", lecq)
             if vq is not None and lu is not None and len(lu.mots) == 1 and vq.unite is None:
@@ -1227,14 +1597,18 @@ def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
         lec = _lec_cellule(r, typ, premiere_ligne=True)
         if lec is not None and not lec.texte.endswith("…") and nombres_dans(lec.mots):
             sep, presume = separateur_masse(e.vue, lec.texte)
-            ln_v = fab.valeur(f"{base}.{chemin}", lec, separateur=sep,
-                              confiance=min(confiance_mots(lec), 0.7) if presume else None)
+            ln_v = fab.valeur(
+                f"{base}.{chemin}",
+                lec,
+                separateur=sep,
+                confiance=min(confiance_mots(lec), 0.7) if presume else None,
+            )
             setattr(ln, chemin, ln_v)
     lp = _lec_cellule(r, "prix_unitaire", premiere_ligne=True)
     if lp is not None:
         res = lire_montant_mots(lp.mots, vue=e.vue, devise=e.devise)
         if res is not None:
-            lec = Lecture(lp.mots[res[0]:res[1]], lp.page, lp.methode, contexte=lp.contexte)
+            lec = Lecture(lp.mots[res[0] : res[1]], lp.page, lp.methode, contexte=lp.contexte)
             ln.prix_unitaire = fab.valeur(f"{base}.prix_unitaire", lec, devise=e.devise)
     lm = _lec_cellule(r, "montant", premiere_ligne=True)
     plafond_mt = None
@@ -1244,11 +1618,12 @@ def _ligne(e: _Etat, r: RangeeTableau, k: int) -> LigneFactureCommerciale:
     if lm is not None:
         res = lire_montant_mots(lm.mots, vue=e.vue, devise=e.devise)
         if res is not None:
-            lec = Lecture(lm.mots[res[0]:res[1]], lm.page, lm.methode, contexte=lm.contexte)
+            lec = Lecture(lm.mots[res[0] : res[1]], lm.page, lm.methode, contexte=lm.contexte)
             ln.montant_ligne = fab.valeur(f"{base}.montant_ligne", lec, devise=e.devise)
             if plafond_mt is not None and ln.montant_ligne is not None:
                 ln.montant_ligne = ln.montant_ligne.model_copy(
-                    update={"confiance": min(ln.montant_ligne.confiance, plafond_mt)})
+                    update={"confiance": min(ln.montant_ligne.confiance, plafond_mt)}
+                )
     _recouper_ligne(ln)
     return ln
 
@@ -1271,8 +1646,13 @@ def _unite(texte: str, *, ocr: bool = False):
         if len(codes) == 1:
             return type(un)(code=codes.pop(), brut=texte)
     if ocr and len(base) >= 3:
-        codes = {code for lib, code in table.items() if len(lib) == len(base) and len(lib) >= 3
-                 and sum(a != b for a, b in zip(lib, base, strict=True)) == 1}
+        codes = {
+            code
+            for lib, code in table.items()
+            if len(lib) == len(base)
+            and len(lib) >= 3
+            and sum(a != b for a, b in zip(lib, base, strict=True)) == 1
+        }
         if len(codes) == 1:
             return type(un)(code=codes.pop(), brut=texte)
     return un
@@ -1358,14 +1738,19 @@ def _recouper_ligne(ln: LigneFactureCommerciale) -> None:
     # recoupement strict : montant = quantité × prix au centime près (un prix unitaire arrondi qui
     # n'explique le montant qu'à l'arrondi près ne relève pas la confiance)
     ok = abs(q * pu - mt) <= Decimal("0.011")
-    if not ok and ln.prix_unitaire.methode is Methode.ocr and re.fullmatch(r"\d+", ln.prix_unitaire.valeur_brute or ""):
+    if (
+        not ok
+        and ln.prix_unitaire.methode is Methode.ocr
+        and re.fullmatch(r"\d+", ln.prix_unitaire.valeur_brute or "")
+    ):
         # séparateur décimal du prix perdu par l'OCR (« 485 » pour « 4.85 ») : le prix qui redonne exactement le
         # montant est retenu, confiance plafonnée à 0,60 (D-2009) ; montant et quantité inchangés
         for k in (1, 2, 3, 4):
             cand = pu.scaleb(-k)
             if q != 0 and abs(q * cand - mt) <= Decimal("0.0051"):
-                ln.prix_unitaire = ln.prix_unitaire.model_copy(update={"valeur": str(cand), "confiance": min(
-                    ln.prix_unitaire.confiance, 0.6)})
+                ln.prix_unitaire = ln.prix_unitaire.model_copy(
+                    update={"valeur": str(cand), "confiance": min(ln.prix_unitaire.confiance, 0.6)}
+                )
                 return
     exp = pu.as_tuple().exponent
     demi = Decimal(1).scaleb(exp if isinstance(exp, int) else -2) / 2
@@ -1401,7 +1786,11 @@ def _candidats(e: _Etat) -> list[_Candidat]:
 
     def ajouter(t: Trouve, classe: str) -> None:
         cle = (t.page.numero, t.ligne.rang, t.segment.rang)
-        if cle in vus or (t.page.numero, t.ligne.rang) in e.lignes_tableau or (t.page.numero, t.ligne.rang) in e.entetes:
+        if (
+            cle in vus
+            or (t.page.numero, t.ligne.rang) in e.lignes_tableau
+            or (t.page.numero, t.ligne.rang) in e.entetes
+        ):
             return
         lec = valeur_apres(vue, t, acc, lignes_dessous=1, marge_dessous=0.4, dessous_seul=True)
         if lec is None:
@@ -1436,10 +1825,13 @@ def _pied(e: _Etat) -> None:
         typ = TypeSousTotal(c.classe.split(":", 1)[1])
         k = len(ch.sous_totaux)
         lib = lecture_mots(c.trouve.segment.mots[: max(1, c.trouve.apres)], c.trouve.page, c.trouve.ligne)
-        st = SousTotal(type=typ,
-                       libelle=fab.valeur(f"sous_totaux[{k}].libelle", lib, type_valeur=TypeValeur.texte),
-                       montant=fab.valeur(f"sous_totaux[{k}].montant", c.lecture, devise=e.devise,
-                                          type_valeur=TypeValeur.montant))
+        st = SousTotal(
+            type=typ,
+            libelle=fab.valeur(f"sous_totaux[{k}].libelle", lib, type_valeur=TypeValeur.texte),
+            montant=fab.valeur(
+                f"sous_totaux[{k}].montant", c.lecture, devise=e.devise, type_valeur=TypeValeur.montant
+            ),
+        )
         ch.sous_totaux.append(st)
         vus_types.add(typ.value)
     # total général
@@ -1449,12 +1841,16 @@ def _pied(e: _Etat) -> None:
     somme_lignes = _somme_lignes(ch)
     if retenu is not None:
         conf = _confiance_total(e, retenu, payables, somme_lignes, cands)
-        v = fab.valeur("total_facture", retenu.lecture, confiance=conf, devise=e.devise,
-                       type_valeur=TypeValeur.montant)
+        v = fab.valeur(
+            "total_facture", retenu.lecture, confiance=conf, devise=e.devise, type_valeur=TypeValeur.montant
+        )
         if v is not None:
             v = v.model_copy(update={"total_origine": TotalOrigine.imprime})
-            if v.signe_imprime is SigneImprime.negatif and v.methode is Methode.ocr and re.match(
-                    r"^\s*[-−–—]\s", v.valeur_brute or ""):
+            if (
+                v.signe_imprime is SigneImprime.negatif
+                and v.methode is Methode.ocr
+                and re.match(r"^\s*[-−–—]\s", v.valeur_brute or "")
+            ):
                 # tiret détaché devant le total d'une facture (trait de tableau lu par l'OCR) : pas un signe ;
                 # la lecture reste sous le seuil (D-2907)
                 v = v.model_copy(update={"signe_imprime": None, "confiance": min(v.confiance, 0.7)})
@@ -1462,15 +1858,22 @@ def _pied(e: _Etat) -> None:
     elif somme_lignes is not None:
         sources = [ln.montant_ligne for ln in ch.lignes if ln.montant_ligne is not None]
         ch.total_facture = deriver_somme(
-            "facture_commerciale.total_facture", sources, document_id=fab.document_id, extracteur=INFO,
-            unite=e.devise, total_reconstruit=True, regle="somme_lignes",
+            "facture_commerciale.total_facture",
+            sources,
+            document_id=fab.document_id,
+            extracteur=INFO,
+            unite=e.devise,
+            total_reconstruit=True,
+            regle="somme_lignes",
             id_valeur=fab.ids.nouveau("vs") if fab.ids is not None else None,
         )
         e.avert.append("total_reconstruit")
     # masses et colis (hors tableau)
     exclure_tab = {(p, r) for p, r in e.lignes_tableau} | e.entetes
-    for chemin, libs, champ_ligne in (("masse_brute_totale", LIB_POIDS_BRUT, "masse_brute"),
-                                      ("masse_nette_totale", LIB_POIDS_NET, "masse_nette")):
+    for chemin, libs, champ_ligne in (
+        ("masse_brute_totale", LIB_POIDS_BRUT, "masse_brute"),
+        ("masse_nette_totale", LIB_POIDS_NET, "masse_nette"),
+    ):
         lec = _premier_hors(e, libs, accepte_masse(vue), exclure_tab, partout=True)
         if lec is not None:
             sep, presume = separateur_masse(vue, lec.texte)
@@ -1531,8 +1934,9 @@ def _somme_lignes(ch: ChampsFactureCommerciale) -> Decimal | None:
     return sum(vals, Decimal(0))  # type: ignore[arg-type]
 
 
-def _confiance_total(e: _Etat, retenu: _Candidat, payables: list[_Candidat], somme: Decimal | None,
-                     cands: list[_Candidat]) -> float:
+def _confiance_total(
+    e: _Etat, retenu: _Candidat, payables: list[_Candidat], somme: Decimal | None, cands: list[_Candidat]
+) -> float:
     lec = retenu.lecture
     natif = lec.methode is not Methode.ocr
     conf = 0.95 if natif else confiance_mots(lec)
@@ -1559,7 +1963,9 @@ def _confiance_total(e: _Etat, retenu: _Candidat, payables: list[_Candidat], som
         if somme is not None and marchandises is not None and abs(somme - marchandises) > tol:
             coherent = coherent and abs(marchandises + pieds - total) <= tol
     if coherent:
-        conf = 0.98 if natif else max(min(0.95, conf + 0.1), 0.92) if (lec.confiance_ocr or 0) >= 0.5 else conf
+        conf = (
+            0.98 if natif else max(min(0.95, conf + 0.1), 0.92) if (lec.confiance_ocr or 0) >= 0.5 else conf
+        )
     elif coherent is False:
         conf = min(conf, 0.85 if natif else 0.6)
     else:
@@ -1571,7 +1977,6 @@ def _confiance_total(e: _Etat, retenu: _Candidat, payables: list[_Candidat], som
     if not natif and not coherent and _separateur_decimal_douteux(lec.texte, total, e.devise):
         conf = min(conf, 0.8)
     return conf
-
 
 
 def _separateur_decimal_douteux(texte: str, valeur: Decimal, devise: str | None) -> bool:

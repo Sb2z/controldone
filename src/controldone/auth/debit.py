@@ -39,8 +39,14 @@ class Limiteur(Protocol):
 class LimiteurDebit:
     """``capacite`` jetons, rechargés de ``par_seconde`` ; au plus ``max_cles`` clés suivies (LRU)."""
 
-    def __init__(self, capacite: float, par_seconde: float, *, max_cles: int = 10_000,
-                 horloge: Callable[[], float] = time.monotonic) -> None:
+    def __init__(
+        self,
+        capacite: float,
+        par_seconde: float,
+        *,
+        max_cles: int = 10_000,
+        horloge: Callable[[], float] = time.monotonic,
+    ) -> None:
         if capacite <= 0 or par_seconde <= 0:
             raise ValueError("capacité et recharge strictement positives")
         self.capacite = float(capacite)
@@ -104,9 +110,18 @@ def cle_debit(portee: str, identifiant: str, sel: bytes) -> str:
 class LimiteurDebitPartage:
     """Seau à jetons en base, nommé ``portee`` (``connexion_ip``, ``connexion_compte``, ``api``…)."""
 
-    def __init__(self, portee: str, capacite: float, par_seconde: float, *, db: Database, sel: bytes,
-                 horloge: Callable[[], float] = time.time, max_lignes: int = 100_000,
-                 purge_toutes_s: float = 60.0) -> None:
+    def __init__(
+        self,
+        portee: str,
+        capacite: float,
+        par_seconde: float,
+        *,
+        db: Database,
+        sel: bytes,
+        horloge: Callable[[], float] = time.time,
+        max_lignes: int = 100_000,
+        purge_toutes_s: float = 60.0,
+    ) -> None:
         if capacite <= 0 or par_seconde <= 0:
             raise ValueError("capacité et recharge strictement positives")
         if not sel:
@@ -127,8 +142,12 @@ class LimiteurDebitPartage:
         return cle_debit(self.portee, identifiant, self.sel)
 
     def _panne(self, operation: str, exc: BaseException) -> None:
-        log.warning("debit_base_indisponible portee=%s operation=%s erreur=%s", self.portee, operation,
-                    type(exc).__name__)
+        log.warning(
+            "debit_base_indisponible portee=%s operation=%s erreur=%s",
+            self.portee,
+            operation,
+            type(exc).__name__,
+        )
 
     def _purger_si_du(self, maintenant: float) -> None:
         with self._verrou:
@@ -147,8 +166,15 @@ class LimiteurDebitPartage:
 
         maintenant = self.horloge()
         try:
-            ok, _ = consommer_jetons(self.db, self.cle(cle), portee=self.portee, capacite=self.capacite,
-                                     par_seconde=self.par_seconde, cout=cout, maintenant=maintenant)
+            ok, _ = consommer_jetons(
+                self.db,
+                self.cle(cle),
+                portee=self.portee,
+                capacite=self.capacite,
+                par_seconde=self.par_seconde,
+                cout=cout,
+                maintenant=maintenant,
+            )
         except Exception as exc:
             self._panne("consommer", exc)
             return self.secours.autoriser(cle, cout)
@@ -159,8 +185,13 @@ class LimiteurDebitPartage:
         from controldone.storage.securite import jetons_disponibles
 
         try:
-            jetons = jetons_disponibles(self.db, self.cle(cle), capacite=self.capacite,
-                                        par_seconde=self.par_seconde, maintenant=self.horloge())
+            jetons = jetons_disponibles(
+                self.db,
+                self.cle(cle),
+                capacite=self.capacite,
+                par_seconde=self.par_seconde,
+                maintenant=self.horloge(),
+            )
         except Exception as exc:
             self._panne("attente", exc)
             return self.secours.attente(cle, cout)
@@ -170,8 +201,15 @@ class LimiteurDebitPartage:
         from controldone.storage.securite import crediter_jetons
 
         try:
-            crediter_jetons(self.db, self.cle(cle), portee=self.portee, capacite=self.capacite,
-                            par_seconde=self.par_seconde, cout=cout, maintenant=self.horloge())
+            crediter_jetons(
+                self.db,
+                self.cle(cle),
+                portee=self.portee,
+                capacite=self.capacite,
+                par_seconde=self.par_seconde,
+                cout=cout,
+                maintenant=self.horloge(),
+            )
         except Exception as exc:
             self._panne("rembourser", exc)
             self.secours.rembourser(cle, cout)

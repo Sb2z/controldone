@@ -26,10 +26,17 @@ LIBELLES_STATUT = {
 
 class AgentVeille(Agent):
     nom = "veille"
-    role = ("Surveille les sources officielles (petits envois, MACF/CBAM, réforme du CDU, facturation "
-            "électronique) et rédige pour le fondateur une note des pages modifiées, à relire.")
-    outils = ("lire_sources", "telecharger_source", "lire_instantanes", "enregistrer_instantanes",
-              "proposer_note_veille")
+    role = (
+        "Surveille les sources officielles (petits envois, MACF/CBAM, réforme du CDU, facturation "
+        "électronique) et rédige pour le fondateur une note des pages modifiées, à relire."
+    )
+    outils = (
+        "lire_sources",
+        "telecharger_source",
+        "lire_instantanes",
+        "enregistrer_instantanes",
+        "proposer_note_veille",
+    )
     plateforme = True
     periode = "semaine"
 
@@ -50,18 +57,35 @@ class AgentVeille(Agent):
             else:
                 statut = "modifie"
             if r.get("statut") == "ok":
-                instantanes[s["url"]] = {"sha256": r["sha256"], "taille": str(r["taille"]), "vu_le": now.isoformat()}
-            resultats.append({"theme": s["theme"], "url": s["url"], "statut": statut,
-                              "motif": r.get("motif") or "", "titre": r.get("titre") or "",
-                              "precedent": (precedent or {}).get("vu_le", "")})
+                instantanes[s["url"]] = {
+                    "sha256": r["sha256"],
+                    "taille": str(r["taille"]),
+                    "vu_le": now.isoformat(),
+                }
+            resultats.append(
+                {
+                    "theme": s["theme"],
+                    "url": s["url"],
+                    "statut": statut,
+                    "motif": r.get("motif") or "",
+                    "titre": r.get("titre") or "",
+                    "precedent": (precedent or {}).get("vu_le", ""),
+                }
+            )
         if any(x["statut"] != "non_verifie" for x in resultats):
             self.appeler(ctx, "enregistrer_instantanes", instantanes=instantanes)
         rapport.notes += [f"{x['statut']}:{x['theme']}" for x in resultats]
-        lignes = [f"Note de veille réglementaire du {now.strftime('%d/%m/%Y')} — brouillon interne, jamais publié.",
-                  "La note signale les pages officielles modifiées, à relire ; elle n'en analyse pas le contenu.", ""]
+        lignes = [
+            f"Note de veille réglementaire du {now.strftime('%d/%m/%Y')} — brouillon interne, jamais publié.",
+            "La note signale les pages officielles modifiées, à relire ; elle n'en analyse pas le contenu.",
+            "",
+        ]
         if all(x["statut"] == "non_verifie" for x in resultats):
-            lignes += ["Exécution hors ligne ou sources injoignables : aucune source n'a pu être vérifiée "
-                       "(statut « non vérifié »).", ""]
+            lignes += [
+                "Exécution hors ligne ou sources injoignables : aucune source n'a pu être vérifiée "
+                "(statut « non vérifié »).",
+                "",
+            ]
         for theme, libelle in THEMES.items():
             du_theme = [x for x in resultats if x["theme"] == theme]
             if not du_theme:
@@ -72,10 +96,19 @@ class AgentVeille(Agent):
                 lignes.append(f"- {x['url']} : {LIBELLES_STATUT[x['statut']]}{detail}")
             lignes.append("")
         modifiees = sum(1 for x in resultats if x["statut"] == "modifie")
-        objet = (f"Veille réglementaire : {modifiees} page(s) modifiée(s)" if modifiees
-                 else "Veille réglementaire : aucune modification détectée"
-                 if any(x["statut"] != "non_verifie" for x in resultats) else "Veille réglementaire : non vérifié")
-        out = self.appeler(ctx, "proposer_note_veille", objet=objet, corps="\n".join(lignes),
-                           cle=f"veille:{now.strftime('%Y-%m-%d')}",
-                           sources=[{k: x[k] for k in ("url", "statut", "titre")} for x in resultats])
+        objet = (
+            f"Veille réglementaire : {modifiees} page(s) modifiée(s)"
+            if modifiees
+            else "Veille réglementaire : aucune modification détectée"
+            if any(x["statut"] != "non_verifie" for x in resultats)
+            else "Veille réglementaire : non vérifié"
+        )
+        out = self.appeler(
+            ctx,
+            "proposer_note_veille",
+            objet=objet,
+            corps="\n".join(lignes),
+            cle=f"veille:{now.strftime('%Y-%m-%d')}",
+            sources=[{k: x[k] for k in ("url", "statut", "titre")} for x in resultats],
+        )
         rapport.propositions.append(out)

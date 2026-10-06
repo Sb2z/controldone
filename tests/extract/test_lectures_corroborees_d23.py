@@ -18,11 +18,15 @@ TVA_CLE_FAUSSE = "FR69000458570"
 
 
 def _lt(norm, *, methode=Methode.ocr, conf_ocr=0.9, corrigee=False):
-    return SimpleNamespace(norm=norm, corrigee=corrigee,
-                           lu=SimpleNamespace(lecture=SimpleNamespace(methode=methode, confiance_ocr=conf_ocr)))
+    return SimpleNamespace(
+        norm=norm,
+        corrigee=corrigee,
+        lu=SimpleNamespace(lecture=SimpleNamespace(methode=methode, confiance_ocr=conf_ocr)),
+    )
 
 
 # --- D-2302 : clé de TVA ----------------------------------------------------------------------------------------
+
 
 def test_tva_ocr_a_cle_juste_prend_la_confiance_de_l_attribution():
     assert _conf_tva_cle_valide(_lt(TVA_CLE_JUSTE), 0.97) == C_OCR_RECOUPEE
@@ -38,6 +42,7 @@ def test_tva_cle_fausse_corrigee_native_ou_ocr_faible_regle_ordinaire():
 
 
 # --- D-2305 : nature d'une ligne lue par OCR --------------------------------------------------------------------
+
 
 def test_nature_tolerante_une_faute_par_mot():
     assert nature_libelle("Comisi6n por anticipo") is None
@@ -59,21 +64,26 @@ def test_renvoi_a_une_annexe():
 
 # --- D-2301 : période écrite dans le libellé --------------------------------------------------------------------
 
+
 def test_periode_dans_le_libelle():
-    for texte in ("Lagergeld (07/03/2026 – 15/03/2026)", "Storage 01/06/2026 to 05/06/2026",
-                  "Almacenaje (05/07/2026 — 14/07/2026)"):
+    for texte in (
+        "Lagergeld (07/03/2026 – 15/03/2026)",
+        "Storage 01/06/2026 to 05/06/2026",
+        "Almacenaje (05/07/2026 — 14/07/2026)",
+    ):
         dates = list(_DATE_RE.finditer(texte))
         assert len(dates) == 2
-        assert _RX_SEP_PERIODE.fullmatch(texte[dates[0].end():dates[1].start()].strip("() ") or " ")
+        assert _RX_SEP_PERIODE.fullmatch(texte[dates[0].end() : dates[1].start()].strip("() ") or " ")
 
 
 def test_deux_dates_sans_separateur_d_intervalle_ne_font_pas_une_periode():
     texte = "Magasinage 07/03/2026 facture du 15/03/2026"
     dates = list(_DATE_RE.finditer(texte))
-    assert not _RX_SEP_PERIODE.fullmatch(texte[dates[0].end():dates[1].start()])
+    assert not _RX_SEP_PERIODE.fullmatch(texte[dates[0].end() : dates[1].start()])
 
 
 # --- D-2308 : devise relue ---------------------------------------------------------------------------------------
+
 
 def test_seul_code_iso_relu_sur_deux_lignes():
     texte = "Currency:\nEUR\nTOTAL AMOUNT EUR 6, 442.30"

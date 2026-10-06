@@ -17,7 +17,9 @@ A = "demo_ateliers"
 
 def _deposer(c, fichiers):
     t = jeton(c.get("/espace/depot").text)
-    return c.post("/espace/depot", data={"csrf": t}, files=[("fichiers", f) for f in fichiers], follow_redirects=False)
+    return c.post(
+        "/espace/depot", data={"csrf": t}, files=[("fichiers", f) for f in fichiers], follow_redirects=False
+    )
 
 
 def _lot(monde, lot_id):
@@ -42,12 +44,16 @@ def test_depot_cree_un_lot_et_un_job(monde):
     z = io.BytesIO()
     with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("envoi_test/facture.pdf", _pdf())
-    r = _deposer(c, [("envoi.zip", z.getvalue(), "application/zip"), ("autre.pdf", _pdf(), "application/pdf")])
+    r = _deposer(
+        c, [("envoi.zip", z.getvalue(), "application/zip"), ("autre.pdf", _pdf(), "application/pdf")]
+    )
     assert r.status_code == 303 and r.headers["location"].startswith("/espace/lots/")
     lot_id = r.headers["location"].rsplit("/", 1)[1]
     lot, fichiers = _lot(monde, lot_id)
     assert lot.statut == "recu"
-    assert {f.chemin_relatif for f in fichiers} == {"envoi/envoi_test/facture.pdf", "autre.pdf"} or len(fichiers) == 2
+    assert {f.chemin_relatif for f in fichiers} == {"envoi/envoi_test/facture.pdf", "autre.pdf"} or len(
+        fichiers
+    ) == 2
     jobs = [j for j in JobStore(monde.pf.db).lister(tenant_id=A) if j.payload.get("lot_id") == lot_id]
     assert len(jobs) == 1 and jobs[0].kind == "traiter_lot"
     page = c.get(r.headers["location"]).text
@@ -65,7 +71,12 @@ def test_fichier_trop_volumineux_refuse_sans_etre_conserve(monde, _modele, tmp_p
     with m.pf.db.tenant(A, Acteur.systeme("t"), lecture=True) as s:
         lot = s.obtenir(Lot, lot_id)
         f = s.lister(Fichier, lot_id=lot_id)[0]
-    assert lot.statut == "en_erreur" and f.statut == "refuse" and f.motif_refus == "trop_gros" and f.coffre_ref is None
+    assert (
+        lot.statut == "en_erreur"
+        and f.statut == "refuse"
+        and f.motif_refus == "trop_gros"
+        and f.coffre_ref is None
+    )
     assert not [j for j in JobStore(m.pf.db).lister(tenant_id=A) if j.payload.get("lot_id") == lot_id]
     # dépôt total au-delà de la limite : refus global
     r = _deposer(c, [(f"f{i}.pdf", b"%PDF-1.4" + b"1" * 1900, "application/pdf") for i in range(6)])
@@ -128,7 +139,10 @@ def test_en_tetes_de_securite(monde):
         r = c.get(url)
         h = r.headers
         assert h["content-security-policy"].startswith("default-src 'self'")
-        assert "script-src 'self'" in h["content-security-policy"] and "unsafe-inline" not in h["content-security-policy"]
+        assert (
+            "script-src 'self'" in h["content-security-policy"]
+            and "unsafe-inline" not in h["content-security-policy"]
+        )
         assert h["x-frame-options"] == "DENY"
         assert h["referrer-policy"] == "same-origin"
         assert h["x-content-type-options"] == "nosniff"
@@ -151,14 +165,21 @@ def test_cookie_production(_modele, tmp_path):
     m = construire_monde(_modele, tmp_path / "prod")
     app = create_app(ParametresWeb(plateforme=m.pf, secrets_session=[SECRET_SESSION], prod=True))
     etat = app.state.securite
-    assert etat.cookie["key"] == "__Host-cd_session" and etat.cookie["secure"] and etat.cookie["samesite"] == "strict"
+    assert (
+        etat.cookie["key"] == "__Host-cd_session"
+        and etat.cookie["secure"]
+        and etat.cookie["samesite"] == "strict"
+    )
     m.pf.db.fermer()
 
 
 def test_corps_trop_volumineux_413(monde):
     c = monde.client()
-    r = c.post("/connexion", content=b"x" * (3 * 1024 * 1024),
-               headers={"content-type": "application/x-www-form-urlencoded"})
+    r = c.post(
+        "/connexion",
+        content=b"x" * (3 * 1024 * 1024),
+        headers={"content-type": "application/x-www-form-urlencoded"},
+    )
     assert r.status_code == 413
 
 
@@ -168,6 +189,11 @@ def test_texte_utilisateur_echappe(monde):
 
     f = monde.client()
     connecter_fondateur(f, monde)
-    poster(f, f"/admin/clients/{A}", f"/admin/clients/{A}/entites", {"raison_sociale": "<script>alert('x')</script>"})
+    poster(
+        f,
+        f"/admin/clients/{A}",
+        f"/admin/clients/{A}/entites",
+        {"raison_sociale": "<script>alert('x')</script>"},
+    )
     page = f.get(f"/admin/clients/{A}").text
     assert "<script>alert" not in page and "&lt;script&gt;alert" in page

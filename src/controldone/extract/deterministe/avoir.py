@@ -84,8 +84,11 @@ def _signes_transitaire(vue: VueDocument) -> bool:
         if _MRN.search(li.texte):
             return True
         # le motif d'un avoir (« Grund: Transportschaden ») est une donnée, pas un libellé de prestation (D-2011)
-        if any(nature_libelle(s.texte) is not None for s in li.segments if len(s.texte) <= 60
-               and not any(mo.match(s.cle) for mo in LIB_MOTIF)):
+        if any(
+            nature_libelle(s.texte) is not None
+            for s in li.segments
+            if len(s.texte) <= 60 and not any(mo.match(s.cle) for mo in LIB_MOTIF)
+        ):
             return True
     return False
 
@@ -101,7 +104,11 @@ def est_avoir_fournisseur(vue: VueDocument) -> bool:
         if not cols:
             continue
         types = {c.type for c in cols}
-        if "quantite" in types and ({"prix_unitaire", "montant"} & types) and ({"description", "code"} & types):
+        if (
+            "quantite" in types
+            and ({"prix_unitaire", "montant"} & types)
+            and ({"description", "code"} & types)
+        ):
             return True
     return False
 
@@ -117,7 +124,9 @@ class ExtracteurAvoir:
         t = getattr(document.type, "value", document.type)
         return t == TypeDocument.avoir.value and any((getattr(p, "texte", "") or "").strip() for p in pages)
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         choisies = pages_du_document(document, pages, context.options)
         vue = vue_document(choisies, separateur_decimal=context.separateur_decimal)
         if est_avoir_fournisseur(vue):
@@ -127,11 +136,17 @@ class ExtracteurAvoir:
             from controldone.extract.deterministe.facture_transitaire import ExtracteurFactureTransitaire
         except Exception:  # moteur transitaire indisponible : lecture « fournisseur » en repli
             champs = extraire_avoir_fournisseur(vue, document_id=document.id, ids=context.ids)
-            return ExtractionResult(extracteur=INFO, champs=champs, partielle=True,
-                                    avertissements=["moteur_transitaire_indisponible"])
+            return ExtractionResult(
+                extracteur=INFO,
+                champs=champs,
+                partielle=True,
+                avertissements=["moteur_transitaire_indisponible"],
+            )
         moteur = ExtracteurFactureTransitaire()
         r = moteur.extract(document, pages, context)
-        info = ExtracteurInfo(type="deterministe", id=INFO.id, version=f"{VERSION}+{moteur.id}-{moteur.version}")
+        info = ExtracteurInfo(
+            type="deterministe", id=INFO.id, version=f"{VERSION}+{moteur.id}-{moteur.version}"
+        )
         return r.model_copy(update={"extracteur": info})
 
 
@@ -150,8 +165,9 @@ def extraire_avoir_fournisseur(vue: VueDocument, *, document_id: str, ids=None) 
     return convertir_fc_en_avoir(fc, vue, document_id=document_id, ids=ids)
 
 
-def convertir_fc_en_avoir(fc: ChampsFactureCommerciale, vue: VueDocument, *, document_id: str,
-                          ids=None) -> ChampsAvoir:
+def convertir_fc_en_avoir(
+    fc: ChampsFactureCommerciale, vue: VueDocument, *, document_id: str, ids=None
+) -> ChampsAvoir:
     fab = Fabrique(TypeDocument.avoir, document_id, INFO, vue, ids)
     av = ChampsAvoir()
     # numéro de l'avoir : libellés propres ; à défaut, le numéro « facture » imprimé (avoir présenté comme
@@ -161,7 +177,8 @@ def convertir_fc_en_avoir(fc: ChampsFactureCommerciale, vue: VueDocument, *, doc
         av.numero = fab.valeur("numero", lec, confiance=_conf_ref(lec))
     elif fc.numero is not None:
         av.numero = _requalifier(fc.numero, "numero").model_copy(  # type: ignore[union-attr]
-            update={"confiance": min(fc.numero.confiance, 0.8)})
+            update={"confiance": min(fc.numero.confiance, 0.8)}
+        )
     lec_d = _premier(vue, LIB_DATE, _accepte_date)
     if lec_d is not None:
         av.date = fab.valeur("date", lec_d)
@@ -181,8 +198,12 @@ def convertir_fc_en_avoir(fc: ChampsFactureCommerciale, vue: VueDocument, *, doc
         if cle in vus or cle == numero_avoir:
             continue
         vus.add(cle)
-        v = fab.valeur(f"refs_facture_origine[{len(av.refs_facture_origine)}]", lec, confiance=_conf_ref(lec),
-                       type_valeur=TypeValeur.reference)
+        v = fab.valeur(
+            f"refs_facture_origine[{len(av.refs_facture_origine)}]",
+            lec,
+            confiance=_conf_ref(lec),
+            type_valeur=TypeValeur.reference,
+        )
         if v is not None:
             av.refs_facture_origine.append(v)
     # lignes
@@ -227,7 +248,7 @@ def _accepte_date(mots):
     for j in range(min(len(mots), 5), 0, -1):
         txt = " ".join(m.texte for m in mots[:j])
         if re.search(r"\d", txt) and parse_date_detail(txt) is not None:
-            while j > 1 and parse_date_detail(" ".join(m.texte for m in mots[:j - 1])) is not None:
+            while j > 1 and parse_date_detail(" ".join(m.texte for m in mots[: j - 1])) is not None:
                 j -= 1
             return 0, j
     return None

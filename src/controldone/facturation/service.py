@@ -88,8 +88,13 @@ class ExpediteurFacture:
 
     nom = "plateforme_agreee"
 
-    def __init__(self, pa: PlateformeAgreee, facture: FactureEmise, dossier_sorties: Path | None,
-                 cles: list[bytes] | None = None) -> None:
+    def __init__(
+        self,
+        pa: PlateformeAgreee,
+        facture: FactureEmise,
+        dossier_sorties: Path | None,
+        cles: list[bytes] | None = None,
+    ) -> None:
         self.pa, self.facture, self.dossier_sorties = pa, facture, dossier_sorties
         self.cles = cles
         self.accuse: AccuseDepot | None = None
@@ -98,22 +103,40 @@ class ExpediteurFacture:
         f = self.facture
         if f.outbox_id != action.id:
             raise EmissionRefusee("facture et action ne correspondent pas")
-        self.accuse = self.pa.deposer_facture(FactureADeposer(
-            numero=f.numero, facture_id=f.id, siren_acheteur=str((f.contenu.get("acheteur") or {}).get("siren", "")),
-            contenu=f.pdf))
-        if self.dossier_sorties is not None:  # copie locale chiffrée au repos (D-4106) : facture_emise/<n°>.pdf.enc
+        self.accuse = self.pa.deposer_facture(
+            FactureADeposer(
+                numero=f.numero,
+                facture_id=f.id,
+                siren_acheteur=str((f.contenu.get("acheteur") or {}).get("siren", "")),
+                contenu=f.pdf,
+            )
+        )
+        if (
+            self.dossier_sorties is not None
+        ):  # copie locale chiffrée au repos (D-4106) : facture_emise/<n°>.pdf.enc
             from controldone.storage.traces_envoi import TracesEnvoi
 
-            traces = (TracesEnvoi(self.dossier_sorties, self.cles) if self.cles
-                      else TracesEnvoi.depuis_env(self.dossier_sorties))
+            traces = (
+                TracesEnvoi(self.dossier_sorties, self.cles)
+                if self.cles
+                else TracesEnvoi.depuis_env(self.dossier_sorties)
+            )
             traces.ecrire("facture_emise", f"{_NOM_RE.sub('_', f.numero)}.pdf", f.pdf)
         return f"pa:{self.pa.nom}:{self.accuse.identifiant_pa}"
 
 
 class ServiceFacturation:
-    def __init__(self, db: Database, *, catalogue: CatalogueOffres | None = None, pa: PlateformeAgreee | None = None,
-                 paiement: FournisseurPaiement | None = None, dossier_sorties: Path | str | None = None,
-                 prod: bool | None = None, cles_maitresses: list[bytes] | None = None) -> None:
+    def __init__(
+        self,
+        db: Database,
+        *,
+        catalogue: CatalogueOffres | None = None,
+        pa: PlateformeAgreee | None = None,
+        paiement: FournisseurPaiement | None = None,
+        dossier_sorties: Path | str | None = None,
+        prod: bool | None = None,
+        cles_maitresses: list[bytes] | None = None,
+    ) -> None:
         self.db = db
         self.cles_maitresses = cles_maitresses  # traces chiffrées (défaut : clés de l'environnement, D-4106)
         self.catalogue = catalogue or charger_offres()
@@ -141,47 +164,95 @@ class ServiceFacturation:
         fx = dict(reglages.get("facturation") or {})
         contacts = destinataires_client(reglages, client_id)
         email = str(fx.get("email") or (contacts[0] if contacts and "@" in contacts[0] else ""))
-        champs = {k: str(fx.get(k) or "") for k in ("siren", "tva_intracom", "adresse_ligne", "code_postal", "ville",
-                                                     "adresse_electronique", "livraison_ligne", "livraison_code_postal",
-                                                     "livraison_ville", "livraison_pays")}
-        return Acheteur(client_id=client_id, raison_sociale=str(fx.get("raison_sociale") or raison),
-                        pays=str(fx.get("pays") or "FR"), email=email, **champs), reglages
+        champs = {
+            k: str(fx.get(k) or "")
+            for k in (
+                "siren",
+                "tva_intracom",
+                "adresse_ligne",
+                "code_postal",
+                "ville",
+                "adresse_electronique",
+                "livraison_ligne",
+                "livraison_code_postal",
+                "livraison_ville",
+                "livraison_pays",
+            )
+        }
+        return Acheteur(
+            client_id=client_id,
+            raison_sociale=str(fx.get("raison_sociale") or raison),
+            pays=str(fx.get("pays") or "FR"),
+            email=email,
+            **champs,
+        ), reglages
 
     # --- brouillons --------------------------------------------------------------------------------------
-    def _payload(self, client_id: str, type_facture: str, lignes: list[Ligne], *, remises: list[Remise] | None = None,
-                 references: dict[str, Any] | None = None, facturation: dict[str, Any] | None = None,
-                 objet: str | None = None) -> dict[str, Any]:
+    def _payload(
+        self,
+        client_id: str,
+        type_facture: str,
+        lignes: list[Ligne],
+        *,
+        remises: list[Remise] | None = None,
+        references: dict[str, Any] | None = None,
+        facturation: dict[str, Any] | None = None,
+        objet: str | None = None,
+    ) -> dict[str, Any]:
         acheteur, reglages = self.acheteur(client_id)
         remises = remises or []
-        total_ht = sum((x.montant_ht for x in lignes), Decimal("0.00")) - sum((arrondi(r.montant) for r in remises),
-                                                                            Decimal("0.00"))
+        total_ht = sum((x.montant_ht for x in lignes), Decimal("0.00")) - sum(
+            (arrondi(r.montant) for r in remises), Decimal("0.00")
+        )
         tva = self.catalogue.tva
         montant_tva = arrondi(total_ht * tva.taux_effectif / Decimal(100))
         detail = "\n".join(f"- {x.libelle} : {format_montant(x.montant_ht, 'EUR')} HT" for x in lignes)
         detail += "".join(f"\n- Remise ({r.libelle}) : − {format_montant(r.montant, 'EUR')}" for r in remises)
-        lib_tva = (f"TVA {tva.taux_effectif.normalize():f} %" if tva.tva_applicable else tva.mention_franchise)
-        corps = (f"Brouillon de facture pour {acheteur.raison_sociale} ({type_facture}).\n\n{detail}\n\n"
-                 f"Total HT : {format_montant(total_ht, 'EUR')} ; {lib_tva} : {format_montant(montant_tva, 'EUR')} ; "
-                 f"total TTC : {format_montant(total_ht + montant_tva, 'EUR')}. Numéro attribué à l'émission, "
-                 f"après votre approbation.\n\n{AVERTISSEMENT}")
+        lib_tva = f"TVA {tva.taux_effectif.normalize():f} %" if tva.tva_applicable else tva.mention_franchise
+        corps = (
+            f"Brouillon de facture pour {acheteur.raison_sociale} ({type_facture}).\n\n{detail}\n\n"
+            f"Total HT : {format_montant(total_ht, 'EUR')} ; {lib_tva} : {format_montant(montant_tva, 'EUR')} ; "
+            f"total TTC : {format_montant(total_ht + montant_tva, 'EUR')}. Numéro attribué à l'émission, "
+            f"après votre approbation.\n\n{AVERTISSEMENT}"
+        )
         return {
-            "objet": objet or f"Brouillon de facture — {type_facture}", "corps": corps,
-            "destinataires": destinataires_client(reglages, client_id), "type_facture": type_facture,
-            "lignes": [{"libelle": x.libelle, "quantite": str(x.quantite),
-                        "prix_unitaire_ht": str(arrondi(x.prix_unitaire_ht)), "montant_ht": str(x.montant_ht)}
-                       for x in lignes],
+            "objet": objet or f"Brouillon de facture — {type_facture}",
+            "corps": corps,
+            "destinataires": destinataires_client(reglages, client_id),
+            "type_facture": type_facture,
+            "lignes": [
+                {
+                    "libelle": x.libelle,
+                    "quantite": str(x.quantite),
+                    "prix_unitaire_ht": str(arrondi(x.prix_unitaire_ht)),
+                    "montant_ht": str(x.montant_ht),
+                }
+                for x in lignes
+            ],
             "remises": [{"libelle": r.libelle, "montant": str(arrondi(r.montant))} for r in remises],
-            "total_ht": str(total_ht), "total_tva": str(montant_tva), "total_ttc": str(total_ht + montant_tva),
-            "devise": "EUR", "references": references or {}, "facturation": facturation or {},
+            "total_ht": str(total_ht),
+            "total_tva": str(montant_tva),
+            "total_ttc": str(total_ht + montant_tva),
+            "devise": "EUR",
+            "references": references or {},
+            "facturation": facturation or {},
         }
 
     def _proposer(self, client_id: str, payload: dict[str, Any], acteur: Acteur, cle: str) -> ActionSortante:
-        return FileSortante(self.db).proposer(TypeAction.facture_emise, payload, acteur, tenant_id=client_id,
-                                              idempotency_key=cle)
+        return FileSortante(self.db).proposer(
+            TypeAction.facture_emise, payload, acteur, tenant_id=client_id, idempotency_key=cle
+        )
 
-    def proposer_diagnostic(self, client_id: str, acteur: Acteur, *, coupon: str | None = None,
-                            consentement: Consentement | None = None, references: dict[str, Any] | None = None,
-                            prix_ht: Decimal | None = None) -> ActionSortante:
+    def proposer_diagnostic(
+        self,
+        client_id: str,
+        acteur: Acteur,
+        *,
+        coupon: str | None = None,
+        consentement: Consentement | None = None,
+        references: dict[str, Any] | None = None,
+        prix_ht: Decimal | None = None,
+    ) -> ActionSortante:
         c = self.catalogue
         ligne = Ligne(c.libelle_diagnostic, Decimal(prix_ht if prix_ht is not None else c.prix_diagnostic_ht))
         remises: list[Remise] = []
@@ -189,24 +260,46 @@ class ServiceFacturation:
         cle = f"facture:diagnostic:{client_id}"
         if coupon:
             utilisations = stock.coupon_utilisations(self.db, c.coupon(coupon).code)
-            cp = c.verifier_coupon(coupon, offre="diagnostic", consentement=consentement,
-                                   utilisations=len(utilisations),
-                                   deja_utilise_par_client=any(u.client_id == client_id for u in utilisations))
-            remises.append(Remise(f"{cp.libelle} (coupon {cp.code}, remise {cp.remise_pourcentage.normalize():f} %)",
-                                  cp.remise(ligne.montant_ht)))
+            cp = c.verifier_coupon(
+                coupon,
+                offre="diagnostic",
+                consentement=consentement,
+                utilisations=len(utilisations),
+                deja_utilise_par_client=any(u.client_id == client_id for u in utilisations),
+            )
+            remises.append(
+                Remise(
+                    f"{cp.libelle} (coupon {cp.code}, remise {cp.remise_pourcentage.normalize():f} %)",
+                    cp.remise(ligne.montant_ht),
+                )
+            )
             # L'accord de publication est un acte **distinct**, facultatif et révocable : il n'est pas la
             # condition de la remise (brief juridique §4.4, D-1313). Il est seulement cité s'il existe.
             fx["coupon"] = {"code": cp.code, "accord_publication_condition": False}
             if consentement is not None and consentement.signe and consentement.signe_par.strip():
                 fx["coupon"]["consentement"] = {
-                    "signe": True, "signe_par": consentement.signe_par, "signe_le": consentement.signe_le,
-                    "reference_document": consentement.reference_document, "revocable": True}
+                    "signe": True,
+                    "signe_par": consentement.signe_par,
+                    "signe_le": consentement.signe_le,
+                    "reference_document": consentement.reference_document,
+                    "revocable": True,
+                }
             cle += ":coupon"
-        payload = self._payload(client_id, "diagnostic", [ligne], remises=remises, references=references, facturation=fx)
+        payload = self._payload(
+            client_id, "diagnostic", [ligne], remises=remises, references=references, facturation=fx
+        )
         return self._proposer(client_id, payload, acteur, cle)
 
-    def proposer_abonnement(self, client_id: str, acteur: Acteur, *, palier: str, mois: str,
-                            deja_paye: Decimal | None = None, reference_paiement: str = "") -> ActionSortante:
+    def proposer_abonnement(
+        self,
+        client_id: str,
+        acteur: Acteur,
+        *,
+        palier: str,
+        mois: str,
+        deja_paye: Decimal | None = None,
+        reference_paiement: str = "",
+    ) -> ActionSortante:
         if not re.fullmatch(r"\d{4}-\d{2}", mois):
             raise ValueError("mois au format AAAA-MM attendu")
         p = self.catalogue.palier(palier)
@@ -222,13 +315,21 @@ class ServiceFacturation:
             # Échéance déjà proposée (agent, saisie) sans le paiement Stripe : le paiement fait foi (F-08).
             fs = FileSortante(self.db)
             if a.statut is StatutAction.brouillon:
-                a = fs.remplacer_brouillon(a.id, payload, Acteur.systeme("facturation"),
-                                           motif="paiement d'abonnement reçu (palier et montant payé)")
+                a = fs.remplacer_brouillon(
+                    a.id,
+                    payload,
+                    Acteur.systeme("facturation"),
+                    motif="paiement d'abonnement reçu (palier et montant payé)",
+                )
             else:
-                stock.alerte_fondateur(self.db, cle=f"abonnement_conflit:{client_id}:{mois}", kind="facture_conflit",
-                                       tenant_id=client_id,
-                                       message=f"Abonnement {mois} payé ({deja_paye} EUR) alors qu'un brouillon sans "
-                                               "paiement a déjà été approuvé : vérifier avant émission.")
+                stock.alerte_fondateur(
+                    self.db,
+                    cle=f"abonnement_conflit:{client_id}:{mois}",
+                    kind="facture_conflit",
+                    tenant_id=client_id,
+                    message=f"Abonnement {mois} payé ({deja_paye} EUR) alors qu'un brouillon sans "
+                    "paiement a déjà été approuvé : vérifier avant émission.",
+                )
         return a
 
     def taux_commission(self, client_id: str) -> Decimal:
@@ -239,8 +340,16 @@ class ServiceFacturation:
         _acheteur, reglages = self.acheteur(client_id)
         return taux_commission(reglages, defaut=self.catalogue.taux_commission)
 
-    def proposer_commission(self, client_id: str, acteur: Acteur, *, base: Decimal, avoir_id: str,
-                            reclamation_id: str = "", origine: str = "transitaire") -> ActionSortante:
+    def proposer_commission(
+        self,
+        client_id: str,
+        acteur: Acteur,
+        *,
+        base: Decimal,
+        avoir_id: str,
+        reclamation_id: str = "",
+        origine: str = "transitaire",
+    ) -> ActionSortante:
         """Base = montant **hors taxes** des avoirs émis par un **transitaire** (CGV art. 5, D-1314) ; un
         remboursement ou une remise accordés par une administration (douane, fisc) n'ouvrent aucune
         commission."""
@@ -253,16 +362,28 @@ class ServiceFacturation:
         taux = self.taux_commission(client_id)
         montant = montant_commission(Decimal(base), taux)
         pct = f"{(taux * 100).normalize():f}"
-        ligne = Ligne(f"Commission de {pct} % sur avoir obtenu ({avoir_id}, base HT {format_montant(base, 'EUR')})",
-                      montant)
-        payload = self._payload(client_id, "commission", [ligne],
-                                references={"avoir_id": avoir_id, "reclamation_id": reclamation_id, "base": str(base),
-                                            "assiette": "HT", "taux": str(taux)},
-                                facturation={"offre": "commission"})
+        ligne = Ligne(
+            f"Commission de {pct} % sur avoir obtenu ({avoir_id}, base HT {format_montant(base, 'EUR')})",
+            montant,
+        )
+        payload = self._payload(
+            client_id,
+            "commission",
+            [ligne],
+            references={
+                "avoir_id": avoir_id,
+                "reclamation_id": reclamation_id,
+                "base": str(base),
+                "assiette": "HT",
+                "taux": str(taux),
+            },
+            facturation={"offre": "commission"},
+        )
         return self._proposer(client_id, payload, acteur, commission_cle(client_id, avoir_id))
 
-    def proposer_avoir(self, facture_id: str, acteur: Acteur, *, motif: str,
-                       montant_ht: Decimal | None = None) -> ActionSortante:
+    def proposer_avoir(
+        self, facture_id: str, acteur: Acteur, *, motif: str, montant_ht: Decimal | None = None
+    ) -> ActionSortante:
         """Avoir total (ou partiel : ``montant_ht``) d'une facture émise. Le cumul des avoirs ne peut pas
         dépasser la base HT de la facture."""
         _exiger_fondateur(acteur)
@@ -271,16 +392,26 @@ class ServiceFacturation:
         f = stock.facture(self.db, facture_id)
         if f is None or f.type_code != TYPE_FACTURE:
             raise AccesRefuse("facture introuvable")
-        deja = sum((abs(a.total_ht) for a in stock.factures(self.db, client_id=f.client_id)
-                    if a.facture_origine_id == f.id), Decimal("0.00"))
+        deja = sum(
+            (
+                abs(a.total_ht)
+                for a in stock.factures(self.db, client_id=f.client_id)
+                if a.facture_origine_id == f.id
+            ),
+            Decimal("0.00"),
+        )
         montant = arrondi(montant_ht) if montant_ht is not None else f.total_ht - deja
         if montant <= 0 or deja + montant > f.total_ht:
             raise EmissionRefusee("montant de l'avoir supérieur au reste de la facture")
         ligne = Ligne(f"Avoir sur la facture n° {f.numero} — {motif.strip()[:200]}", montant)
-        payload = self._payload(f.client_id, "avoir", [ligne], references={"facture_origine_id": f.id,
-                                                                            "facture_origine": f.numero},
-                                facturation={"facture_origine_id": f.id, "motif": motif.strip()[:500]},
-                                objet=f"Brouillon d'avoir — facture n° {f.numero}")
+        payload = self._payload(
+            f.client_id,
+            "avoir",
+            [ligne],
+            references={"facture_origine_id": f.id, "facture_origine": f.numero},
+            facturation={"facture_origine_id": f.id, "motif": motif.strip()[:500]},
+            objet=f"Brouillon d'avoir — facture n° {f.numero}",
+        )
         n = len([a for a in stock.factures(self.db, client_id=f.client_id) if a.facture_origine_id == f.id])
         cle = f"avoir:{f.id}:{n + 1}"
         # Un avoir déjà proposé et non encore émis porte cette clé : le renvoyer en silence ferait croire au
@@ -290,8 +421,10 @@ class ServiceFacturation:
             if existant.statut is StatutAction.refuse:
                 cle = f"{cle}:{nouvel_id('rep')}"
             else:
-                raise EmissionRefusee("un avoir non émis existe déjà pour cette facture : l'émettre ou le refuser "
-                                      "avant d'en proposer un autre")
+                raise EmissionRefusee(
+                    "un avoir non émis existe déjà pour cette facture : l'émettre ou le refuser "
+                    "avant d'en proposer un autre"
+                )
         return self._proposer(f.client_id, payload, acteur, cle)
 
     # --- émission ------------------------------------------------------------------------------------------
@@ -305,13 +438,16 @@ class ServiceFacturation:
             raise EmissionRefusee("facture d'origine introuvable")
         return origine
 
-    def _facture(self, numero: str, a: ActionSortante, d: date, acheteur: Acheteur,
-                 origine: FactureEmise | None) -> tuple[Facture, dict[str, Any]]:
+    def _facture(
+        self, numero: str, a: ActionSortante, d: date, acheteur: Acheteur, origine: FactureEmise | None
+    ) -> tuple[Facture, dict[str, Any]]:
         """Facture à partir du brouillon (pur : aucune lecture en base, appelé sous le verrou d'écriture)."""
         p = a.payload_effectif
         fx = dict(p.get("facturation") or {})
-        lignes = tuple(Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1"))
-                       for x in p.get("lignes") or [])
+        lignes = tuple(
+            Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1"))
+            for x in p.get("lignes") or []
+        )
         remises = tuple(Remise(str(r["libelle"]), _d(r.get("montant"))) for r in p.get("remises") or [])
         c = self.catalogue
         type_code = TYPE_AVOIR if origine is not None else TYPE_FACTURE
@@ -319,12 +455,23 @@ class ServiceFacturation:
         deja_paye = _d(fx.get("deja_paye"))
         if deja_paye:
             echeance = d
-        f = Facture(numero=numero, type_code=type_code, date_emission=d, date_echeance=echeance if not origine else d,
-                    vendeur=c.vendeur, acheteur=acheteur, lignes=lignes, tva=c.tva, paiement=c.paiement, remises=remises,
-                    facture_origine=origine.numero if origine else None,
-                    date_facture_origine=origine.date_emission if origine else None,
-                    date_prestation=date.fromisoformat(fx["date_prestation"]) if fx.get("date_prestation") else None,
-                    reference_paiement=str(fx.get("reference_paiement") or numero), objet=str(p.get("type_facture", "")))
+        f = Facture(
+            numero=numero,
+            type_code=type_code,
+            date_emission=d,
+            date_echeance=echeance if not origine else d,
+            vendeur=c.vendeur,
+            acheteur=acheteur,
+            lignes=lignes,
+            tva=c.tva,
+            paiement=c.paiement,
+            remises=remises,
+            facture_origine=origine.numero if origine else None,
+            date_facture_origine=origine.date_emission if origine else None,
+            date_prestation=date.fromisoformat(fx["date_prestation"]) if fx.get("date_prestation") else None,
+            reference_paiement=str(fx.get("reference_paiement") or numero),
+            objet=str(p.get("type_facture", "")),
+        )
         if deja_paye:
             from dataclasses import replace
 
@@ -344,20 +491,38 @@ class ServiceFacturation:
             raise EmissionRefusee("le brouillon doit être approuvé par le fondateur avant l'émission")
         vendeur = self.catalogue.vendeur
         if self.prod and not vendeur.complet:
-            raise EmissionRefusee("identité du vendeur incomplète (" + ", ".join(vendeur.champs_a_completer()) + ")")
+            raise EmissionRefusee(
+                "identité du vendeur incomplète (" + ", ".join(vendeur.champs_a_completer()) + ")"
+            )
         d = le or aujourdhui_paris()
-        serie = self.catalogue.prefixe_avoir if a.payload_effectif.get("type_facture") == "avoir" else \
-            self.catalogue.prefixe_facture
+        serie = (
+            self.catalogue.prefixe_avoir
+            if a.payload_effectif.get("type_facture") == "avoir"
+            else self.catalogue.prefixe_facture
+        )
         fx_payload = dict(a.payload_effectif.get("facturation") or {})
         facture_id = nouvel_id("fac")
 
         acheteur, _ = self.acheteur(a.tenant_id)
         origine = self._origine(a)
         if origine is not None:  # cumul des avoirs revérifié à l'émission
-            deja = sum((abs(x.total_ht) for x in stock.factures(self.db, client_id=origine.client_id)
-                        if x.facture_origine_id == origine.id), Decimal("0.00"))
-            montant = sum((Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1")).montant_ht
-                           for x in a.payload_effectif.get("lignes") or []), Decimal("0.00"))
+            deja = sum(
+                (
+                    abs(x.total_ht)
+                    for x in stock.factures(self.db, client_id=origine.client_id)
+                    if x.facture_origine_id == origine.id
+                ),
+                Decimal("0.00"),
+            )
+            montant = sum(
+                (
+                    Ligne(
+                        str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1")
+                    ).montant_ht
+                    for x in a.payload_effectif.get("lignes") or []
+                ),
+                Decimal("0.00"),
+            )
             if deja + montant > origine.total_ht:
                 raise EmissionRefusee("cumul des avoirs supérieur à la facture d'origine")
 
@@ -365,27 +530,56 @@ class ServiceFacturation:
             f, fx = self._facture(numero, a, d, acheteur, origine)
             xml = generer_xml(f)
             valider_xsd(xml)
-            pdf = assembler_facturx(rendre_pdf(f, non_valable=not vendeur.complet), xml, numero=numero,
-                                    vendeur=vendeur.raison_sociale, titre="Avoir" if f.est_avoir else "Facture")
+            pdf = assembler_facturx(
+                rendre_pdf(f, non_valable=not vendeur.complet),
+                xml,
+                numero=numero,
+                vendeur=vendeur.raison_sociale,
+                titre="Avoir" if f.est_avoir else "Facture",
+            )
             origine_id = fx.get("facture_origine_id") if f.est_avoir else None
             contenu = {
-                "type_facture": a.payload_effectif.get("type_facture"), "acheteur": f.acheteur.__dict__,
+                "type_facture": a.payload_effectif.get("type_facture"),
+                "acheteur": f.acheteur.__dict__,
                 "vendeur": {k: v for k, v in vendeur.__dict__.items() if k != "iban"},
-                "lignes": [{"libelle": x.libelle, "quantite": str(x.quantite), "prix_unitaire_ht": str(x.prix_unitaire_ht),
-                            "montant_ht": str(x.montant_ht)} for x in f.lignes],
+                "lignes": [
+                    {
+                        "libelle": x.libelle,
+                        "quantite": str(x.quantite),
+                        "prix_unitaire_ht": str(x.prix_unitaire_ht),
+                        "montant_ht": str(x.montant_ht),
+                    }
+                    for x in f.lignes
+                ],
                 "remises": [{"libelle": r.libelle, "montant": str(r.montant)} for r in f.remises],
-                "taux_tva": str(f.taux_tva), "categorie_tva": f.tva.categorie, "deja_paye": str(f.deja_paye),
-                "net_a_payer": str(f.net_a_payer), "mentions": mentions_obligatoires(f),
-                "references": a.payload_effectif.get("references") or {}, "facturation": fx,
-                "controles_reforme": controles_reforme(f), "vendeur_complet": vendeur.complet,
+                "taux_tva": str(f.taux_tva),
+                "categorie_tva": f.tva.categorie,
+                "deja_paye": str(f.deja_paye),
+                "net_a_payer": str(f.net_a_payer),
+                "mentions": mentions_obligatoires(f),
+                "references": a.payload_effectif.get("references") or {},
+                "facturation": fx,
+                "controles_reforme": controles_reforme(f),
+                "vendeur_complet": vendeur.complet,
                 "facture_origine": f.facture_origine,
             }
             signe = -1 if f.est_avoir else 1
-            return {"id": facture_id, "type_code": f.type_code, "type_facture": str(contenu["type_facture"] or "")[:32],
-                    "client_id": a.tenant_id, "facture_origine_id": origine_id, "date_echeance": f.date_echeance,
-                    "devise": f.devise, "total_ht": signe * f.base_ht, "total_tva": signe * f.montant_tva,
-                    "total_ttc": signe * f.total_ttc, "contenu": contenu, "xml": xml.decode("utf-8"), "pdf": pdf,
-                    "pdf_sha256": hashlib.sha256(pdf).hexdigest()}
+            return {
+                "id": facture_id,
+                "type_code": f.type_code,
+                "type_facture": str(contenu["type_facture"] or "")[:32],
+                "client_id": a.tenant_id,
+                "facture_origine_id": origine_id,
+                "date_echeance": f.date_echeance,
+                "devise": f.devise,
+                "total_ht": signe * f.base_ht,
+                "total_tva": signe * f.montant_tva,
+                "total_ttc": signe * f.total_ttc,
+                "contenu": contenu,
+                "xml": xml.decode("utf-8"),
+                "pdf": pdf,
+                "pdf_sha256": hashlib.sha256(pdf).hexdigest(),
+            }
 
         coupon = None
         if fx_payload.get("coupon"):
@@ -393,21 +587,43 @@ class ServiceFacturation:
             consent = fx_payload["coupon"].get("consentement") or {}
             if cp.consentement_requis and not consent.get("signe"):  # ancien réglage (offres.yaml)
                 raise CouponRefuse("accord de publication non signé")
-            coupon = {"code": cp.code, "client_id": a.tenant_id, "utilisations_max": cp.utilisations_max,
-                      "une_fois_par_client": cp.une_fois_par_client, "consentement": consent}
+            coupon = {
+                "code": cp.code,
+                "client_id": a.tenant_id,
+                "utilisations_max": cp.utilisations_max,
+                "une_fois_par_client": cp.une_fois_par_client,
+                "consentement": consent,
+            }
         verifier = None
         if origine is not None:
-            montant_avoir = sum((Ligne(str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1"))
-                                 .montant_ht for x in a.payload_effectif.get("lignes") or []), Decimal("0.00"))
+            montant_avoir = sum(
+                (
+                    Ligne(
+                        str(x["libelle"]), _d(x.get("prix_unitaire_ht")), _d(x.get("quantite"), "1")
+                    ).montant_ht
+                    for x in a.payload_effectif.get("lignes") or []
+                ),
+                Decimal("0.00"),
+            )
 
             def verifier(s: Any) -> None:  # même transaction que la numérotation (sûr sous PostgreSQL)
                 if stock.cumul_avoirs(s, origine.id) + montant_avoir > origine.total_ht:
                     raise EmissionRefusee("cumul des avoirs supérieur à la facture d'origine")
+
         try:
-            return stock.emettre_numerotee(self.db, emetteur=vendeur.identifiant, serie=serie, date_emission=d,
-                                           chiffres=self.catalogue.chiffres, construire=construire,
-                                           acteur_id=acteur.id, acteur_role=acteur.role.value, outbox_id=a.id,
-                                           coupon=coupon, verifier=verifier)
+            return stock.emettre_numerotee(
+                self.db,
+                emetteur=vendeur.identifiant,
+                serie=serie,
+                date_emission=d,
+                chiffres=self.catalogue.chiffres,
+                construire=construire,
+                acteur_id=acteur.id,
+                acteur_role=acteur.role.value,
+                outbox_id=a.id,
+                coupon=coupon,
+                verifier=verifier,
+            )
         except stock.CouponIndisponible as exc:
             raise CouponRefuse(str(exc)) from exc
 
@@ -420,8 +636,15 @@ class ServiceFacturation:
         exp = ExpediteurFacture(self.pa, f, self.dossier_sorties, self.cles_maitresses)
         envoyee = FileSortante(self.db).envoyer(action_id, exp, acteur)
         if exp.accuse is not None:
-            stock.enregistrer_statut_pa(self.db, facture_id=f.id, numero=f.numero, identifiant_pa=exp.accuse.identifiant_pa,
-                                        code=exp.accuse.code, libelle="Déposée", horodatage=exp.accuse.horodatage)
+            stock.enregistrer_statut_pa(
+                self.db,
+                facture_id=f.id,
+                numero=f.numero,
+                identifiant_pa=exp.accuse.identifiant_pa,
+                code=exp.accuse.code,
+                libelle="Déposée",
+                horodatage=exp.accuse.horodatage,
+            )
         return envoyee
 
     def emettre_et_deposer(self, action_id: str, acteur: Acteur, *, le: date | None = None) -> FactureEmise:
@@ -436,9 +659,16 @@ class ServiceFacturation:
         n = 0
         for st in self.pa.recevoir_statuts():
             f = stock.facture_par_numero(self.db, st.numero, self.catalogue.vendeur.identifiant)
-            if stock.enregistrer_statut_pa(self.db, facture_id=f.id if f else None, numero=st.numero,
-                                           identifiant_pa=st.identifiant_pa, code=st.code, libelle=st.libelle,
-                                           horodatage=st.horodatage, motif=st.motif):
+            if stock.enregistrer_statut_pa(
+                self.db,
+                facture_id=f.id if f else None,
+                numero=st.numero,
+                identifiant_pa=st.identifiant_pa,
+                code=st.code,
+                libelle=st.libelle,
+                horodatage=st.horodatage,
+                motif=st.motif,
+            ):
                 n += 1
         return n
 
@@ -448,8 +678,9 @@ class ServiceFacturation:
         if compte and compte.customer_id and compte.fournisseur == self.paiement.nom:
             return compte.customer_id
         acheteur, _ = self.acheteur(client_id)
-        cid = self.paiement.creer_client(client_id=client_id, raison_sociale=acheteur.raison_sociale,
-                                         email=acheteur.email or None)
+        cid = self.paiement.creer_client(
+            client_id=client_id, raison_sociale=acheteur.raison_sociale, email=acheteur.email or None
+        )
         stock.enregistrer_compte_paiement(self.db, client_id, fournisseur=self.paiement.nom, customer_id=cid)
         return cid
 
@@ -463,18 +694,31 @@ class ServiceFacturation:
         if net <= 0:
             raise EmissionRefusee("rien à payer sur cette facture")
         return self.paiement.session_paiement(
-            client_id=f.client_id, customer_id=self._customer(f.client_id), facture_id=f.id, numero=f.numero,
-            montant_ttc=net, libelle="ControlDOne", url_succes=f"{url_base}/admin/finances?paiement=ok",
-            url_annulation=f"{url_base}/admin/finances?paiement=annule")
+            client_id=f.client_id,
+            customer_id=self._customer(f.client_id),
+            facture_id=f.id,
+            numero=f.numero,
+            montant_ttc=net,
+            libelle="ControlDOne",
+            url_succes=f"{url_base}/admin/finances?paiement=ok",
+            url_annulation=f"{url_base}/admin/finances?paiement=annule",
+        )
 
-    def lien_abonnement(self, client_id: str, palier: str, acteur: Acteur, *, url_base: str) -> SessionPaiement:
+    def lien_abonnement(
+        self, client_id: str, palier: str, acteur: Acteur, *, url_base: str
+    ) -> SessionPaiement:
         _exiger_fondateur(acteur)
         p = self.catalogue.palier(palier)
         ttc = p.prix_mensuel_ht + arrondi(p.prix_mensuel_ht * self.catalogue.tva.taux_effectif / Decimal(100))
         return self.paiement.session_abonnement(
-            client_id=client_id, customer_id=self._customer(client_id), palier=p.code, libelle=p.libelle,
-            montant_ttc_mensuel=ttc, url_succes=f"{url_base}/admin/finances?abonnement=ok",
-            url_annulation=f"{url_base}/admin/finances?abonnement=annule")
+            client_id=client_id,
+            customer_id=self._customer(client_id),
+            palier=p.code,
+            libelle=p.libelle,
+            montant_ttc_mensuel=ttc,
+            url_succes=f"{url_base}/admin/finances?abonnement=ok",
+            url_annulation=f"{url_base}/admin/finances?abonnement=annule",
+        )
 
     def traiter_webhook(self, charge: bytes, signature: str | None) -> dict[str, Any]:
         """Vérifie la signature (``SignatureInvalide`` sinon) puis traite l'événement (idempotent)."""
@@ -488,8 +732,12 @@ class ServiceFacturation:
         meta = dict(obj.get("metadata") or {})
         meta_sub = dict(((obj.get("subscription_details") or {}).get("metadata")) or {})
         customer = obj.get("customer") if isinstance(obj.get("customer"), str) else None
-        client = (meta.get("client_id") or meta_sub.get("client_id") or obj.get("client_reference_id")
-                  or (stock.client_par_customer(self.db, customer) if customer else None))
+        client = (
+            meta.get("client_id")
+            or meta_sub.get("client_id")
+            or obj.get("client_reference_id")
+            or (stock.client_par_customer(self.db, customer) if customer else None)
+        )
         if client and stock.lire_client_facturation(self.db, str(client)) is None:
             client = None  # métadonnée inconnue : aucun effet sur un client
         montant: Decimal | None = None
@@ -498,40 +746,76 @@ class ServiceFacturation:
         systeme = Acteur.systeme("paiement")
         if typ == "checkout.session.completed":
             if client and customer:
-                stock.enregistrer_compte_paiement(self.db, client, fournisseur=self.paiement.nom, customer_id=customer)
+                stock.enregistrer_compte_paiement(
+                    self.db, client, fournisseur=self.paiement.nom, customer_id=customer
+                )
             if obj.get("mode") == "payment" and obj.get("payment_status") == "paid":
                 montant = Decimal(int(obj.get("amount_total") or 0)) / 100
                 f = stock.facture(self.db, str(meta.get("facture_id") or ""))
                 facture_id = f.id if f and f.client_id == client else None
                 effets.append("encaissement")
             elif obj.get("mode") == "subscription" and client:
-                stock.enregistrer_compte_paiement(self.db, client, fournisseur=self.paiement.nom,
-                                                  abonnement_id=obj.get("subscription"), palier=meta.get("palier"),
-                                                  statut_abonnement="active")
+                stock.enregistrer_compte_paiement(
+                    self.db,
+                    client,
+                    fournisseur=self.paiement.nom,
+                    abonnement_id=obj.get("subscription"),
+                    palier=meta.get("palier"),
+                    statut_abonnement="active",
+                )
                 effets.append("abonnement_actif")
         elif typ == "invoice.paid":
             montant = Decimal(int(obj.get("amount_paid") or 0)) / 100
             if client:
                 compte = stock.compte_paiement(self.db, client)
                 palier = meta_sub.get("palier") or (compte.palier if compte else None)
-                mois = str(meta.get("mois") or mois_paris(datetime.fromtimestamp(int(evt.get("created") or 0), UTC)))
+                mois = str(
+                    meta.get("mois") or mois_paris(datetime.fromtimestamp(int(evt.get("created") or 0), UTC))
+                )
                 if palier:
-                    a = self.proposer_abonnement(client, systeme, palier=palier, mois=mois, deja_paye=montant,
-                                                 reference_paiement=str(obj.get("id", ""))[:140])
+                    a = self.proposer_abonnement(
+                        client,
+                        systeme,
+                        palier=palier,
+                        mois=mois,
+                        deja_paye=montant,
+                        reference_paiement=str(obj.get("id", ""))[:140],
+                    )
                     effets.append(f"brouillon_facture:{a.id}")
         elif typ == "invoice.payment_failed":
-            stock.alerte_fondateur(self.db, cle=f"paiement_echoue:{obj.get('id')}", kind="paiement_echoue",
-                                   tenant_id=client, message="Échec d'un prélèvement d'abonnement (Stripe) : relancer "
-                                                             "le client ou vérifier son moyen de paiement.")
+            stock.alerte_fondateur(
+                self.db,
+                cle=f"paiement_echoue:{obj.get('id')}",
+                kind="paiement_echoue",
+                tenant_id=client,
+                message="Échec d'un prélèvement d'abonnement (Stripe) : relancer "
+                "le client ou vérifier son moyen de paiement.",
+            )
             effets.append("alerte")
         elif typ in ("customer.subscription.updated", "customer.subscription.deleted") and client:
-            stock.enregistrer_compte_paiement(self.db, client, fournisseur=self.paiement.nom, abonnement_id=obj.get("id"),
-                                              statut_abonnement="canceled" if typ.endswith("deleted") else obj.get("status"))
+            stock.enregistrer_compte_paiement(
+                self.db,
+                client,
+                fournisseur=self.paiement.nom,
+                abonnement_id=obj.get("id"),
+                statut_abonnement="canceled" if typ.endswith("deleted") else obj.get("status"),
+            )
             effets.append("statut_abonnement")
-        resume = {"objet": str(obj.get("id", ""))[:255], "mode": obj.get("mode"), "effets": effets,
-                  "livemode": bool(evt.get("livemode"))}
-        nouveau = stock.enregistrer_evenement(self.db, id=evt_id, fournisseur=self.paiement.nom, type=typ[:100],
-                                              client_id=client, facture_id=facture_id, montant=montant,
-                                              devise=str(obj.get("currency") or "eur").upper()[:3], contenu=resume)
+        resume = {
+            "objet": str(obj.get("id", ""))[:255],
+            "mode": obj.get("mode"),
+            "effets": effets,
+            "livemode": bool(evt.get("livemode")),
+        }
+        nouveau = stock.enregistrer_evenement(
+            self.db,
+            id=evt_id,
+            fournisseur=self.paiement.nom,
+            type=typ[:100],
+            client_id=client,
+            facture_id=facture_id,
+            montant=montant,
+            devise=str(obj.get("currency") or "eur").upper()[:3],
+            contenu=resume,
+        )
         return {"statut": "traite" if nouveau else "deja_traite", "type": typ, "effets": effets}
-

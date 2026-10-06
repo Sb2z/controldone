@@ -62,11 +62,15 @@ def main(argv: list[str] | None = None) -> int:
     data.mkdir(parents=True, exist_ok=True)
     from cryptography.fernet import Fernet
 
-    os.environ.update({
-        "CONTROLDONE_ENV": "dev", "CONTROLDONE_DATA_DIR": str(data),
-        "CONTROLDONE_DATABASE_URL": f"sqlite:///{data}/controldone.db",
-        "CONTROLDONE_MASTER_KEY": Fernet.generate_key().decode(), "CONTROLDONE_LOG_LEVEL": "WARNING",
-    })
+    os.environ.update(
+        {
+            "CONTROLDONE_ENV": "dev",
+            "CONTROLDONE_DATA_DIR": str(data),
+            "CONTROLDONE_DATABASE_URL": f"sqlite:///{data}/controldone.db",
+            "CONTROLDONE_MASTER_KEY": Fernet.generate_key().decode(),
+            "CONTROLDONE_LOG_LEVEL": "WARNING",
+        }
+    )
     os.environ.pop("CONTROLDONE_PAGES_CACHE_DIR", None)  # chemin de production : pas de cache de pages
     os.environ.pop("ANTHROPIC_API_KEY", None)
 
@@ -97,14 +101,25 @@ def main(argv: list[str] | None = None) -> int:
     n = 0
 
     def mesurer(**extra) -> dict:
-        m = {"n": n, "t_s": round(time.monotonic() - t0, 1), "rss_mo": round(_rss_mo(), 1),
-             "fds": len(os.listdir("/proc/self/fd")), "fils": len(os.listdir("/proc/self/task")),
-             "enfants": _enfants(), "tmp_fichiers": _nb_fichiers(tmp),
-             "tmp_systeme": len([x for x in os.listdir("/tmp") if x.startswith(("cdo", "cd-", "tmp", "pymp"))]),
-             "db_mo": round(sum(_taille(Path(str(data / "controldone.db") + s)) for s in ("", "-wal", "-shm"))
-                            / 2**20, 2),
-             "coffre_mo": round(_taille(data / "coffre") / 2**20, 1),
-             "registre_textes": len(decoupage._REGISTRE), "objets_gc": len(gc.get_objects()), **extra}
+        m = {
+            "n": n,
+            "t_s": round(time.monotonic() - t0, 1),
+            "rss_mo": round(_rss_mo(), 1),
+            "fds": len(os.listdir("/proc/self/fd")),
+            "fils": len(os.listdir("/proc/self/task")),
+            "enfants": _enfants(),
+            "tmp_fichiers": _nb_fichiers(tmp),
+            "tmp_systeme": len(
+                [x for x in os.listdir("/tmp") if x.startswith(("cdo", "cd-", "tmp", "pymp"))]
+            ),
+            "db_mo": round(
+                sum(_taille(Path(str(data / "controldone.db") + s)) for s in ("", "-wal", "-shm")) / 2**20, 2
+            ),
+            "coffre_mo": round(_taille(data / "coffre") / 2**20, 1),
+            "registre_textes": len(decoupage._REGISTRE),
+            "objets_gc": len(gc.get_objects()),
+            **extra,
+        }
         return m
 
     mesures.append(mesurer(passage=0))
@@ -115,9 +130,13 @@ def main(argv: list[str] | None = None) -> int:
         acteur = Acteur(utilisateur_par_email(pf.db, email).id, Role.client_admin, tid)
         for d in dossiers:
             racine = d / "docs"
-            fichiers = [depot.FichierTransmis(nom=p.relative_to(racine).as_posix(), contenu=p.read_bytes(),
-                                              taille=p.stat().st_size)
-                        for p in sorted(racine.rglob("*")) if p.is_file()]
+            fichiers = [
+                depot.FichierTransmis(
+                    nom=p.relative_to(racine).as_posix(), contenu=p.read_bytes(), taille=p.stat().st_size
+                )
+                for p in sorted(racine.rglob("*"))
+                if p.is_file()
+            ]
             depot.deposer(pf, acteur, fichiers)
         while True:
             statut = worker.executer_un()
@@ -134,9 +153,16 @@ def main(argv: list[str] | None = None) -> int:
     from controldone.storage.file_jobs import JobStore  # noqa: F401  (diagnostic : jobs restants)
 
     par_100 = [m for m in mesures if (m["n"] % 100 == 0 and m["n"] > 0) or m.get("fin") or m["n"] == 0]
-    bilan = {"dossiers_par_passage": len(dossiers), "passages": a.passages, "jobs": n, "statuts": statuts,
-             "duree_s": round(time.monotonic() - t0, 1), "par_100": par_100, "mesures": mesures,
-             "data_dir": str(data)}
+    bilan = {
+        "dossiers_par_passage": len(dossiers),
+        "passages": a.passages,
+        "jobs": n,
+        "statuts": statuts,
+        "duree_s": round(time.monotonic() - t0, 1),
+        "par_100": par_100,
+        "mesures": mesures,
+        "data_dir": str(data),
+    }
     sortie.parent.mkdir(parents=True, exist_ok=True)
     sortie.write_text(json.dumps(bilan, indent=1), "utf-8")
     print(json.dumps({k: v for k, v in bilan.items() if k != "mesures"}, indent=1))

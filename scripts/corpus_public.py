@@ -63,25 +63,40 @@ class Source:
 
 SOURCES: tuple[Source, ...] = (
     Source(
-        nom="zugferd", depot="https://github.com/ZUGFeRD/corpus", licence="Apache-2.0",
+        nom="zugferd",
+        depot="https://github.com/ZUGFeRD/corpus",
+        licence="Apache-2.0",
         inclure=("ZUGFeRDv1/*", "ZUGFeRDv2/*", "XML-Rechnung/*", "PEPPOL/*", "fatturaPA/*", "other/*"),
         # unstructured/ : facture réelle d'un hébergeur ; incoming/ : dépôt de factures reçues (réelles) ;
         # FX-With-UBL-REC50304330.pdf : document réel partiellement pseudonymisé (numéros, nom de contact).
         exclure=("unstructured/*", "incoming/*", "ZUGFeRDv2/fail/FX-With-UBL-REC50304330.pdf"),
     ),
     Source(
-        nom="en16931", depot="https://github.com/ConnectingEurope/eInvoicing-EN16931", licence="EUPL-1.2",
-        inclure=("cii/examples/*", "ubl/examples/*", "test/testfiles/*", "test/cii/*", "edifact/examples/*",
-                 "test/Invoice-unit-UBL/*", "test/CreditNote-unit-UBL/*"),
+        nom="en16931",
+        depot="https://github.com/ConnectingEurope/eInvoicing-EN16931",
+        licence="EUPL-1.2",
+        inclure=(
+            "cii/examples/*",
+            "ubl/examples/*",
+            "test/testfiles/*",
+            "test/cii/*",
+            "edifact/examples/*",
+            "test/Invoice-unit-UBL/*",
+            "test/CreditNote-unit-UBL/*",
+        ),
         unitaires=("test/Invoice-unit-UBL/*", "test/CreditNote-unit-UBL/*"),
     ),
     Source(
-        nom="peppol", depot="https://github.com/OpenPEPPOL/peppol-bis-invoice-3", licence="pas de fichier LICENSE ; © OpenPeppol AISBL, exemples publiés",
+        nom="peppol",
+        depot="https://github.com/OpenPEPPOL/peppol-bis-invoice-3",
+        licence="pas de fichier LICENSE ; © OpenPeppol AISBL, exemples publiés",
         inclure=("rules/examples/*", "rules/national-examples/*", "rules/unit-*", "rules/snippets/*"),
         unitaires=("rules/unit-*", "rules/snippets/*"),
     ),
     Source(
-        nom="facturx", depot="https://github.com/akretion/factur-x", licence="BSD-3-Clause",
+        nom="facturx",
+        depot="https://github.com/akretion/factur-x",
+        licence="BSD-3-Clause",
         inclure=("tests/fixtures/*",),
     ),
 )
@@ -94,9 +109,15 @@ def fetch(sources: list[Source]) -> None:
         if (s.dossier / ".git").exists():
             subprocess.run(["git", "-C", str(s.dossier), "pull", "-q", "--depth", "1"], check=False)
         else:
-            subprocess.run(["git", "clone", "-q", "--depth", "1", s.depot + ".git", str(s.dossier)], check=True)
-        rev = subprocess.run(["git", "-C", str(s.dossier), "log", "-1", "--format=%H %cs"], capture_output=True,
-                             text=True, check=False).stdout.strip()
+            subprocess.run(
+                ["git", "clone", "-q", "--depth", "1", s.depot + ".git", str(s.dossier)], check=True
+            )
+        rev = subprocess.run(
+            ["git", "-C", str(s.dossier), "log", "-1", "--format=%H %cs"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
         print(f"{s.nom:9s} {s.depot}  {rev}  ({len(lister(s))} fichiers retenus)")
 
 
@@ -193,7 +214,9 @@ def verite(xml: bytes) -> dict[str, Any] | None:
     from lxml import etree
 
     try:
-        racine = etree.fromstring(xml, etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False))
+        racine = etree.fromstring(
+            xml, etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
+        )
     except (etree.XMLSyntaxError, ValueError):
         return None
     nom = etree.QName(racine).localname
@@ -206,9 +229,17 @@ def verite(xml: bytes) -> dict[str, Any] | None:
         tr = "SpecifiedSupplyChainTradeTransaction" if zf1 else "SupplyChainTradeTransaction"
         ag = "ApplicableSupplyChainTradeAgreement" if zf1 else "ApplicableHeaderTradeAgreement"
         st = "ApplicableSupplyChainTradeSettlement" if zf1 else "ApplicableHeaderTradeSettlement"
-        sm = "SpecifiedTradeSettlementMonetarySummation" if zf1 else "SpecifiedTradeSettlementHeaderMonetarySummation"
+        sm = (
+            "SpecifiedTradeSettlementMonetarySummation"
+            if zf1
+            else "SpecifiedTradeSettlementHeaderMonetarySummation"
+        )
         lst = "SpecifiedSupplyChainTradeSettlement" if zf1 else "SpecifiedLineTradeSettlement"
-        lsm = "SpecifiedTradeSettlementMonetarySummation" if zf1 else "SpecifiedTradeSettlementLineMonetarySummation"
+        lsm = (
+            "SpecifiedTradeSettlementMonetarySummation"
+            if zf1
+            else "SpecifiedTradeSettlementLineMonetarySummation"
+        )
         v["syntaxe"] = "zf1" if zf1 else "cii"
         v["guideline"] = _un(racine, _L(ctx, "GuidelineSpecifiedDocumentContextParameter", "ID"))
         v["numero"] = _un(racine, _L(doc, "ID"))
@@ -230,18 +261,26 @@ def verite(xml: bytes) -> dict[str, Any] | None:
         lignes = racine.xpath(_L(tr, "IncludedSupplyChainTradeLineItem"))
         # ZUGFeRD 1.0 admet des « lignes » de texte seul (ni article ni montant) : ce ne sont pas des lignes
         # de facture (BG-25), elles ne sont pas comptées.
-        lignes = [lg for lg in lignes if lg.xpath(f"{_L(lst, lsm, 'LineTotalAmount')} | {_L('SpecifiedTradeProduct')}")]
+        lignes = [
+            lg
+            for lg in lignes
+            if lg.xpath(f"{_L(lst, lsm, 'LineTotalAmount')} | {_L('SpecifiedTradeProduct')}")
+        ]
         v["lignes"] = [_un(lg, _L(lst, lsm, "LineTotalAmount")) for lg in lignes]
         v["remises_frais"] = [
             (_un(e, _L("ChargeIndicator", "Indicator")), _un(e, _L("ActualAmount")))
             for e in racine.xpath(f"{reg}/{_L('SpecifiedTradeAllowanceCharge')}")
-        ] + [("true", _un(e, _L("AppliedAmount"))) for e in racine.xpath(f"{reg}/{_L('SpecifiedLogisticsServiceCharge')}")]
+        ] + [
+            ("true", _un(e, _L("AppliedAmount")))
+            for e in racine.xpath(f"{reg}/{_L('SpecifiedLogisticsServiceCharge')}")
+        ]
     elif nom in ("Invoice", "CreditNote") and "oasis" in ns:
         v["syntaxe"] = "ubl"
         v["guideline"] = _un(racine, _L("CustomizationID"))
         v["numero"] = _un(racine, _L("ID"))
-        v["type_code"] = _un(racine, _L("InvoiceTypeCode") if nom == "Invoice" else _L("CreditNoteTypeCode")) or (
-            "380" if nom == "Invoice" else "381")
+        v["type_code"] = _un(
+            racine, _L("InvoiceTypeCode") if nom == "Invoice" else _L("CreditNoteTypeCode")
+        ) or ("380" if nom == "Invoice" else "381")
         v["date"] = _date(_un(racine, _L("IssueDate")))
         devise = _un(racine, _L("DocumentCurrencyCode"))
         v["devise"] = devise
@@ -252,14 +291,17 @@ def verite(xml: bytes) -> dict[str, Any] | None:
         v["bt113"] = _un(racine, f"{lmt}/{_L('PrepaidAmount')}")
         v["bt114"] = _un(racine, f"{lmt}/{_L('PayableRoundingAmount')}")
         v["bt115"] = _un(racine, f"{lmt}/{_L('PayableAmount')}")
-        tva = ("*[local-name()='Party']/*[local-name()='PartyTaxScheme']"
-               "[*[local-name()='TaxScheme']/*[local-name()='ID']='VAT']/*[local-name()='CompanyID']")
+        tva = (
+            "*[local-name()='Party']/*[local-name()='PartyTaxScheme']"
+            "[*[local-name()='TaxScheme']/*[local-name()='ID']='VAT']/*[local-name()='CompanyID']"
+        )
         v["tva_vendeur"] = _un(racine, f"{_L('AccountingSupplierParty')}/{tva}")
         v["tva_acheteur"] = _un(racine, f"{_L('AccountingCustomerParty')}/{tva}")
         lignes = racine.xpath(_L("InvoiceLine") if nom == "Invoice" else _L("CreditNoteLine"))
         v["lignes"] = [_un(lg, _L("LineExtensionAmount")) for lg in lignes]
-        v["remises_frais"] = [(_un(e, _L("ChargeIndicator")), _un(e, _L("Amount")))
-                              for e in racine.xpath(_L("AllowanceCharge"))]
+        v["remises_frais"] = [
+            (_un(e, _L("ChargeIndicator")), _un(e, _L("Amount"))) for e in racine.xpath(_L("AllowanceCharge"))
+        ]
     else:
         return None
     v["profil"] = profil_depuis_guideline(v["guideline"], v["syntaxe"])
@@ -287,8 +329,21 @@ def xml_de_pdf(contenu: bytes) -> tuple[str | None, bytes | None]:
 # --- comparaison -----------------------------------------------------------------------------------------------
 
 CREDIT = {"381", "261", "262", "396", "532"}
-CHAMPS = ("type", "numero", "date", "devise", "bt112_total", "bt109_ht", "bt110_tva", "bt115_net", "tva_vendeur",
-          "tva_acheteur", "nb_lignes", "montants_lignes", "remises_frais")
+CHAMPS = (
+    "type",
+    "numero",
+    "date",
+    "devise",
+    "bt112_total",
+    "bt109_ht",
+    "bt110_tva",
+    "bt115_net",
+    "tva_vendeur",
+    "tva_acheteur",
+    "nb_lignes",
+    "montants_lignes",
+    "remises_frais",
+)
 
 
 def _norm_tva(s: str | None) -> str | None:
@@ -300,9 +355,14 @@ def attendu(gt: dict[str, Any]) -> dict[str, Any]:
     credit = gt["type_code"] in CREDIT or (tot is not None and tot < 0)
     e: dict[str, Any] = {
         "type": "avoir" if credit else "facture",
-        "numero": gt["numero"], "date": gt["date"], "devise": (gt["devise"] or "").upper() or None,
-        "bt112_total": _dec(gt["bt112"]), "bt109_ht": _dec(gt["bt109"]), "bt110_tva": _dec(gt["bt110"]),
-        "bt115_net": _dec(gt["bt115"]), "tva_vendeur": _norm_tva(gt["tva_vendeur"]),
+        "numero": gt["numero"],
+        "date": gt["date"],
+        "devise": (gt["devise"] or "").upper() or None,
+        "bt112_total": _dec(gt["bt112"]),
+        "bt109_ht": _dec(gt["bt109"]),
+        "bt110_tva": _dec(gt["bt110"]),
+        "bt115_net": _dec(gt["bt115"]),
+        "tva_vendeur": _norm_tva(gt["tva_vendeur"]),
         "tva_acheteur": _norm_tva(gt["tva_acheteur"]),
         "nb_lignes": len(gt["lignes"]),
         "montants_lignes": sorted(abs(d) for d in (_dec(x) for x in gt["lignes"]) if d is not None),
@@ -319,7 +379,9 @@ def obtenu(doc: Any) -> dict[str, Any]:
     """Valeurs produites par le pipeline, ramenées aux mêmes clés (``n/a`` : champ absent du modèle)."""
     t = doc.type.value
     c = doc.champs
-    o: dict[str, Any] = {"type": {"facture_commerciale": "facture", "facture_transitaire": "facture"}.get(t, t)}
+    o: dict[str, Any] = {
+        "type": {"facture_commerciale": "facture", "facture_transitaire": "facture"}.get(t, t)
+    }
     if c is None:
         return o
     na = "n/a"
@@ -333,14 +395,21 @@ def obtenu(doc: Any) -> dict[str, Any]:
         o["montants_lignes"] = [_val(lg.montant_ligne) for lg in c.lignes]
         o["remises_frais"] = [_val(s.montant) for s in c.sous_totaux]
     elif t == "facture_transitaire":
-        o["bt112_total"], o["bt109_ht"], o["bt110_tva"] = _val(c.total_ttc), _val(c.total_ht), _val(c.total_tva)
+        o["bt112_total"], o["bt109_ht"], o["bt110_tva"] = (
+            _val(c.total_ttc),
+            _val(c.total_ht),
+            _val(c.total_tva),
+        )
         o["bt115_net"] = _val(c.net_a_payer)
         o["tva_vendeur"], o["tva_acheteur"] = _val(c.emetteur.tva), _val(c.client_facture.tva)
         o["montants_lignes"] = [_val(lg.montant_ht) for lg in c.lignes]
         o["remises_frais"] = na
     elif t == "avoir":
-        o["bt112_total"], o["bt109_ht"], o["bt110_tva"] = (_val(c.total_credite_ttc), _val(c.total_credite_ht),
-                                                          _val(c.total_tva))
+        o["bt112_total"], o["bt109_ht"], o["bt110_tva"] = (
+            _val(c.total_credite_ttc),
+            _val(c.total_credite_ht),
+            _val(c.total_tva),
+        )
         o["bt115_net"] = na
         o["tva_vendeur"], o["tva_acheteur"] = _val(c.emetteur.tva), na
         o["montants_lignes"] = [_val(lg.montant_ht) for lg in c.lignes]
@@ -394,8 +463,14 @@ def traiter_fichier(tache: tuple[str, str, bool, str | None]) -> dict[str, Any]:
     source, rel, unitaire, sortie_diag = tache
     chemin = DOSSIER / source / rel
     contenu = chemin.read_bytes()
-    res: dict[str, Any] = {"source": source, "fichier": rel, "unitaire": unitaire, "taille": len(contenu),
-                           "exceptions": [], "temps": {}}
+    res: dict[str, Any] = {
+        "source": source,
+        "fichier": rel,
+        "unitaire": unitaire,
+        "taille": len(contenu),
+        "exceptions": [],
+        "temps": {},
+    }
     # vérité de terrain
     if chemin.suffix.lower() == ".pdf":
         piece, xml = xml_de_pdf(contenu)
@@ -428,14 +503,29 @@ def traiter_fichier(tache: tuple[str, str, bool, str | None]) -> dict[str, Any]:
             res["mime"] = mime
             # au-delà de la limite de réception (§20.3), le pipeline ne lit jamais le fichier
             info = analyser_contenu_structure(contenu, mime) if len(contenu) <= 50 * 1024 * 1024 else None
-            res["structure"] = None if info is None else {"format": info.format, "type": info.type.value,
-                                                          "schema_valide": info.schema_valide,
-                                                          "motif": getattr(info, "motif", None)}
-            if info is not None and info.type in (TypeDocument.facture_commerciale, TypeDocument.avoir,
-                                                  TypeDocument.facture_transitaire):
+            res["structure"] = (
+                None
+                if info is None
+                else {
+                    "format": info.format,
+                    "type": info.type.value,
+                    "schema_valide": info.schema_valide,
+                    "motif": getattr(info, "motif", None),
+                }
+            )
+            if info is not None and info.type in (
+                TypeDocument.facture_commerciale,
+                TypeDocument.avoir,
+                TypeDocument.facture_transitaire,
+            ):
                 doc = Document(type=info.type, pages=[])
-                ExtracteurFactureXML().extract(doc, [], ExtractionContext(
-                    contenu_fichier=contenu, type_mime=mime, ids=IdGenerator.deterministe(1)))
+                ExtracteurFactureXML().extract(
+                    doc,
+                    [],
+                    ExtractionContext(
+                        contenu_fichier=contenu, type_mime=mime, ids=IdGenerator.deterministe(1)
+                    ),
+                )
         except Exception as e:
             res["exceptions"].append(f"structure:{type(e).__name__}")
             res["trace"] = traceback.format_exc(limit=6)
@@ -456,22 +546,38 @@ def traiter_fichier(tache: tuple[str, str, bool, str | None]) -> dict[str, Any]:
             res["non_lus"] = [n.motif for n in prepare.non_lus]
             res["pages"] = sum(len(p) for p in prepare.pages.values())
             docs = list(prepare.documents.values())
-            res["documents"] = [{"type": d.type.value, "sous_type": d.sous_type, "confiance": d.confiance_classement,
-                                 "motif": d.motif_non_exploitable} for d in docs]
-            factures = [d for d in docs if d.type.value in ("facture_commerciale", "facture_transitaire", "avoir")]
+            res["documents"] = [
+                {
+                    "type": d.type.value,
+                    "sous_type": d.sous_type,
+                    "confiance": d.confiance_classement,
+                    "motif": d.motif_non_exploitable,
+                }
+                for d in docs
+            ]
+            factures = [
+                d for d in docs if d.type.value in ("facture_commerciale", "facture_transitaire", "avoir")
+            ]
             if factures:
                 d = factures[0]
                 methodes = Counter(v.methode.value for v in (d.champs.iter_valeurs() if d.champs else []))
                 res["methodes"] = dict(methodes)
-                confs = [v.confiance for v in (d.champs.iter_valeurs() if d.champs else []) if v.valeur is not None]
+                confs = [
+                    v.confiance for v in (d.champs.iter_valeurs() if d.champs else []) if v.valeur is not None
+                ]
                 res["confiance_min"] = min(confs) if confs else None
                 if gt is not None:
                     att = attendu(gt)
                     obt = obtenu(d)
                     res["comparaison"] = comparer(att, obt)
-                    res["obtenu"] = {k: (v if isinstance(v, str) or v is None else str(v)) for k, v in obt.items()}
-                    res["ecarts"] = {k: [str(att.get(k)), str(obt.get(k))] for k, s in res["comparaison"].items()
-                                     if s in ("faux", "manquant")}
+                    res["obtenu"] = {
+                        k: (v if isinstance(v, str) or v is None else str(v)) for k, v in obt.items()
+                    }
+                    res["ecarts"] = {
+                        k: [str(att.get(k)), str(obt.get(k))]
+                        for k, s in res["comparaison"].items()
+                        if s in ("faux", "manquant")
+                    }
             elif gt is not None:
                 autre = docs[0].type.value if docs else "aucun"
                 res["comparaison"] = comparer(attendu(gt), {"type": autre})
@@ -481,7 +587,9 @@ def traiter_fichier(tache: tuple[str, str, bool, str | None]) -> dict[str, Any]:
             try:
                 resultats = controler_lot(prepare, options=options)
                 res["dossiers"] = len(resultats)
-                res["constats"] = sorted(f"{c.controle_id}:{c.niveau.value}" for r in resultats for c in r.constats)
+                res["constats"] = sorted(
+                    f"{c.controle_id}:{c.niveau.value}" for r in resultats for c in r.constats
+                )
                 if sortie_diag:
                     from controldone.rapport import generer_rapport
 
@@ -508,31 +616,45 @@ def resume(resultats: list[dict[str, Any]]) -> str:
     lignes: list[str] = []
     w = lignes.append
     n = len(resultats)
-    w(f"Fichiers : {n} (dont unitaires {sum(r['unitaire'] for r in resultats)}), "
-      f"avec vérité XML : {sum('verite' in r for r in resultats)}")
+    w(
+        f"Fichiers : {n} (dont unitaires {sum(r['unitaire'] for r in resultats)}), "
+        f"avec vérité XML : {sum('verite' in r for r in resultats)}"
+    )
     exc = Counter(e for r in resultats for e in r["exceptions"])
     iso = Counter(e for r in resultats for e in r.get("erreurs_isolees", []))
     w(f"Exceptions non gérées : {sum(exc.values())} {dict(exc)}")
     w(f"Erreurs isolées par le pipeline (journal) : {sum(iso.values())} {dict(iso)}")
     w(f"Refus à la réception : {dict(Counter(m for r in resultats for m in r.get('fichiers_refuses', [])))}")
     w(f"Non lus : {dict(Counter(m for r in resultats for m in r.get('non_lus', [])))}")
-    w(f"Format structuré reconnu : {dict(Counter((r.get('structure') or {}).get('format', '-') for r in resultats))}")
-    w(f"Classement (premier document) : "
-      f"{dict(Counter((r.get('documents') or [{'type': 'aucun'}])[0]['type'] for r in resultats))}")
-    w(f"Classement (fichiers avec vérité) : "
-      f"{dict(Counter((r.get('documents') or [{'type': 'aucun'}])[0]['type'] for r in resultats if 'verite' in r))}")
-    w(f"Schéma valide (structure) : "
-      f"{dict(Counter(str((r.get('structure') or {}).get('schema_valide')) for r in resultats if r.get('structure')))}")
+    w(
+        f"Format structuré reconnu : {dict(Counter((r.get('structure') or {}).get('format', '-') for r in resultats))}"
+    )
+    w(
+        f"Classement (premier document) : "
+        f"{dict(Counter((r.get('documents') or [{'type': 'aucun'}])[0]['type'] for r in resultats))}"
+    )
+    w(
+        f"Classement (fichiers avec vérité) : "
+        f"{dict(Counter((r.get('documents') or [{'type': 'aucun'}])[0]['type'] for r in resultats if 'verite' in r))}"
+    )
+    w(
+        f"Schéma valide (structure) : "
+        f"{dict(Counter(str((r.get('structure') or {}).get('schema_valide')) for r in resultats if r.get('structure')))}"
+    )
     temps = [r["temps"].get("preparation", 0) + r["temps"].get("diagnostic", 0) for r in resultats]
     if temps:
         ts = sorted(temps)
-        w(f"Temps par fichier (préparation + diagnostic) : médiane {ts[len(ts) // 2]:.2f} s, "
-          f"p95 {ts[int(len(ts) * 0.95) - 1]:.2f} s, max {ts[-1]:.2f} s, total {sum(ts):.0f} s")
+        w(
+            f"Temps par fichier (préparation + diagnostic) : médiane {ts[len(ts) // 2]:.2f} s, "
+            f"p95 {ts[int(len(ts) * 0.95) - 1]:.2f} s, max {ts[-1]:.2f} s, total {sum(ts):.0f} s"
+        )
     par_fmt = defaultdict(list)
     for r in resultats:
         par_fmt[r["format"]].append(r["temps"].get("preparation", 0))
-    w("Temps de préparation médian : " + ", ".join(
-        f"{k} {sorted(v)[len(v) // 2]:.2f} s" for k, v in sorted(par_fmt.items())))
+    w(
+        "Temps de préparation médian : "
+        + ", ".join(f"{k} {sorted(v)[len(v) // 2]:.2f} s" for k, v in sorted(par_fmt.items()))
+    )
     # exactitude
     comp = [r for r in resultats if "comparaison" in r]
 
@@ -556,7 +678,9 @@ def resume(resultats: list[dict[str, Any]]) -> str:
     for k in CHAMPS:
         st = [r["comparaison"][k] for r in comp]
         tot = sum(1 for s in st if s != "n/a")
-        w(f"  {k:16s} {_pct(st.count('ok'), tot):>22s}   manquant {st.count('manquant'):3d}  faux {st.count('faux'):3d}")
+        w(
+            f"  {k:16s} {_pct(st.count('ok'), tot):>22s}   manquant {st.count('manquant'):3d}  faux {st.count('faux'):3d}"
+        )
     w("\nPar source :")
     table(lambda r: r["source"])
     w("\nPar profil :")
@@ -614,12 +738,24 @@ def compare(args: argparse.Namespace) -> int:
             tot = sum(1 for s in st if s != "n/a")
             cel.append(_pct(st.count("ok"), tot))
         print(f"| {k} | {cel[0]} | {cel[1]} |")
-    regress = [(c, k) for c, r in apres.items() if c in avant and "comparaison" in r and "comparaison" in avant[c]
-               for k in CHAMPS if avant[c]["comparaison"][k] == "ok" and r["comparaison"][k] in ("faux", "manquant")]
-    hors_modele = sum(1 for c, r in apres.items() if c in avant and "comparaison" in r and "comparaison" in avant[c]
-                      for k in CHAMPS if avant[c]["comparaison"][k] == "ok" and r["comparaison"][k] == "n/a")
-    print(f"\nRégressions (ok avant, faux ou manquant après) : {len(regress)} ; "
-          f"devenus hors modèle (n/a, ex. facture à total négatif reclassée avoir) : {hors_modele}")
+    regress = [
+        (c, k)
+        for c, r in apres.items()
+        if c in avant and "comparaison" in r and "comparaison" in avant[c]
+        for k in CHAMPS
+        if avant[c]["comparaison"][k] == "ok" and r["comparaison"][k] in ("faux", "manquant")
+    ]
+    hors_modele = sum(
+        1
+        for c, r in apres.items()
+        if c in avant and "comparaison" in r and "comparaison" in avant[c]
+        for k in CHAMPS
+        if avant[c]["comparaison"][k] == "ok" and r["comparaison"][k] == "n/a"
+    )
+    print(
+        f"\nRégressions (ok avant, faux ou manquant après) : {len(regress)} ; "
+        f"devenus hors modèle (n/a, ex. facture à total négatif reclassée avoir) : {hors_modele}"
+    )
     for c, k in regress[:40]:
         print("  ", c, k)
     return 0

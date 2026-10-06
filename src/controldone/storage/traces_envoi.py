@@ -85,7 +85,7 @@ class TracesEnvoi:
         if not brut.startswith(MAGIE):
             raise ErreurIntegrite("trace d'envoi non chiffrée ou d'un format inconnu")
         try:
-            return self._fernet.decrypt(brut[len(MAGIE):])
+            return self._fernet.decrypt(brut[len(MAGIE) :])
         except InvalidToken as exc:
             raise ErreurIntegrite("trace d'envoi indéchiffrable (clé inconnue ou fichier altéré)") from exc
 
@@ -99,15 +99,22 @@ class TracesEnvoi:
         """Traces chiffrées (``<kind>/<nom>.enc``), dans l'ordre des chemins."""
         if not self.racine.is_dir():
             return
-        yield from sorted(p for p in self.racine.glob(f"*/*{EXTENSION}") if p.is_file() and not p.name.startswith("."))
+        yield from sorted(
+            p for p in self.racine.glob(f"*/*{EXTENSION}") if p.is_file() and not p.name.startswith(".")
+        )
 
     def en_clair(self) -> list[Path]:
         """Fichiers encore en clair (traces écrites avant D-4106), hors fichiers temporaires."""
         if not self.racine.is_dir():
             return []
-        return sorted(p for p in self.racine.glob("*/*")
-                      if p.is_file() and not p.is_symlink() and not p.name.startswith(".")
-                      and not p.name.endswith(EXTENSION))
+        return sorted(
+            p
+            for p in self.racine.glob("*/*")
+            if p.is_file()
+            and not p.is_symlink()
+            and not p.name.startswith(".")
+            and not p.name.endswith(EXTENSION)
+        )
 
     def supprimer_client(self, tenant_id: str) -> int:
         """Effacement RGPD : supprime les traces JSON dont le champ ``tenant_id`` est ce client (traces chiffrées
@@ -173,8 +180,12 @@ class TracesEnvoi:
             raise
 
 
-def chiffrer_en_clair(racine: Path | str | None = None, cles_maitresses: Sequence[bytes] | None = None) -> int:
+def chiffrer_en_clair(
+    racine: Path | str | None = None, cles_maitresses: Sequence[bytes] | None = None
+) -> int:
     """Étape de migration des données (``controldone migrer``) : chiffre les traces d'envoi encore en clair."""
     if cles_maitresses is None:
         return TracesEnvoi.depuis_env(racine).chiffrer_en_clair()
-    return TracesEnvoi(racine if racine is not None else racine_par_defaut(), cles_maitresses).chiffrer_en_clair()
+    return TracesEnvoi(
+        racine if racine is not None else racine_par_defaut(), cles_maitresses
+    ).chiffrer_en_clair()

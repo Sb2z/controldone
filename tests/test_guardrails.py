@@ -41,7 +41,9 @@ def _toutes_les_expressions():
 
 
 def test_fichier_versionne():
-    data = yaml.safe_load((get_settings().config_dir / "formulations_interdites.yaml").read_text(encoding="utf-8"))
+    data = yaml.safe_load(
+        (get_settings().config_dir / "formulations_interdites.yaml").read_text(encoding="utf-8")
+    )
     assert data["schema"].startswith("controldone.formulations_interdites/")
     assert data["motif"] == "formulation_interdite"
     assert len(_toutes_les_expressions()) == 37  # tableau §3.2
@@ -56,13 +58,38 @@ def test_chaque_expression_detectee_telle_quelle(expression):
 @pytest.mark.parametrize(
     "texte",
     [
-        "LE BON CODE", "le Code Correct", "ERREUR DE CLASSEMENT", "devrait etre classee", "Droits Dus",
-        "les taxes dues", "montant du a la douane", "trop paye en douane", "sous evaluation", "sousévaluation",
-        "Sur-Évaluations", "origines incorrectes", "préférences injustifiées", "droits préférentiels",
-        "taux erronés", "mauvais taux", "le taux applicable est de 4 %", "opérations illégales", "illégaux",
-        "irrégulières", "en infraction", "des fraudes", "pratiques frauduleuses", "frauduleuse",
-        "nous réclamons", "ControlDOne réclame", "au nom de notre client", "mandatée par",
-        "il faut rectifier la déclaration", "nous garantissons", "certifiée conforme", "certifiés conformes",
+        "LE BON CODE",
+        "le Code Correct",
+        "ERREUR DE CLASSEMENT",
+        "devrait etre classee",
+        "Droits Dus",
+        "les taxes dues",
+        "montant du a la douane",
+        "trop paye en douane",
+        "sous evaluation",
+        "sousévaluation",
+        "Sur-Évaluations",
+        "origines incorrectes",
+        "préférences injustifiées",
+        "droits préférentiels",
+        "taux erronés",
+        "mauvais taux",
+        "le taux applicable est de 4 %",
+        "opérations illégales",
+        "illégaux",
+        "irrégulières",
+        "en infraction",
+        "des fraudes",
+        "pratiques frauduleuses",
+        "frauduleuse",
+        "nous réclamons",
+        "ControlDOne réclame",
+        "au nom de notre client",
+        "mandatée par",
+        "il faut rectifier la déclaration",
+        "nous garantissons",
+        "certifiée conforme",
+        "certifiés conformes",
         "non conformes à la réglementation",
     ],
 )
@@ -93,16 +120,29 @@ def test_assert_clean_et_extrait():
     with pytest.raises(FormulationInterdite) as e:
         assert_clean("Il s'agit d'une fraude manifeste.")
     v = e.value.violations[0]
-    assert v.extrait == "fraude" and v.categorie == "qualification_juridique" and v.motif == "formulation_interdite"
+    assert (
+        v.extrait == "fraude"
+        and v.categorie == "qualification_juridique"
+        and v.motif == "formulation_interdite"
+    )
 
 
 @pytest.mark.parametrize(
     "texte",
     [
-        "droit dû", "le droit dû par l'importateur", "droits dus", "taxe due", "montant dû à la douane",
+        "droit dû",
+        "le droit dû par l'importateur",
+        "droits dus",
+        "taxe due",
+        "montant dû à la douane",
         "montants dus à la douane",  # pluriel exigé par §3.2 (« dû » non final)
-        "Le montant du droit du.", "droit du ; voir", "DROIT DU",  # « du » sans accent : fin de proposition
-        "droit\u200bdû", "taxe\u200bdue", "dro\u00adit dû", "fr\u00adaude",  # caractères invisibles
+        "Le montant du droit du.",
+        "droit du ; voir",
+        "DROIT DU",  # « du » sans accent : fin de proposition
+        "droit\u200bdû",
+        "taxe\u200bdue",
+        "dro\u00adit dû",
+        "fr\u00adaude",  # caractères invisibles
     ],
 )
 def test_participe_du_bloque(texte):
@@ -121,7 +161,7 @@ def test_article_du_non_bloque(texte):
 def test_extrait_avec_caracteres_invisibles():
     texte = "Le dro\u00adit dû est indiqué."
     v = check_text(texte)[0]
-    assert v.extrait == "dro\u00adit dû" and texte[v.debut:v.fin] == v.extrait
+    assert v.extrait == "dro\u00adit dû" and texte[v.debut : v.fin] == v.extrait
 
 
 def test_libelles_de_raisons_propres():

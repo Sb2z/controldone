@@ -486,8 +486,12 @@ class _Regroupeur:
             return []
         refs: list[str] = []
         for d in self.docs:
-            if d.type is TypeDocument.document_support and _exploitable(d) and any(
-                self._cite(_txt(r), num, TypeDocument.facture_commerciale) for r in d.sup.refs_facture
+            if (
+                d.type is TypeDocument.document_support
+                and _exploitable(d)
+                and any(
+                    self._cite(_txt(r), num, TypeDocument.facture_commerciale) for r in d.sup.refs_facture
+                )
             ):
                 refs.extend(_transports_support(d))
         return refs
@@ -507,7 +511,11 @@ class _Regroupeur:
         total_fc, total_dec = _dec(fc.fc.total_facture), _dec(c.montant_total_facture)
         dev_fc, dev_dec = _txt(fc.fc.devise), _txt(c.devise_facture)
         if (
-            total_fc is not None and total_dec is not None and dev_fc and dev_dec and dev_fc == dev_dec
+            total_fc is not None
+            and total_dec is not None
+            and dev_fc
+            and dev_dec
+            and dev_fc == dev_dec
             and abs(total_dec - total_fc) <= self.tol.t_valeur(total_fc, total_dec)
         ):
             s.append(SignalLien.montant_egal)
@@ -540,14 +548,20 @@ class _Regroupeur:
                 s.append(SignalLien.montant_egal)
         elif cible.type is TypeDocument.facture_commerciale:
             num = _numero(cible)
-            if num and any(self._cite(_txt(r), num, TypeDocument.facture_commerciale)
-                           for r in ft.ft.refs_facture_commerciale):
+            if num and any(
+                self._cite(_txt(r), num, TypeDocument.facture_commerciale)
+                for r in ft.ft.refs_facture_commerciale
+            ):
                 s.append(SignalLien.ref_facture_citee)
             t = _txt(cible.fc.ref_transport)
             if t and any(ref_transport_compatibles(a, t) for a in _transports_ft(ft)):
                 s.append(SignalLien.ref_transport)
         elif cible.type is TypeDocument.document_support:
-            if any(ref_transport_compatibles(a, b) for a in _transports_ft(ft) for b in _transports_support(cible)):
+            if any(
+                ref_transport_compatibles(a, b)
+                for a in _transports_ft(ft)
+                for b in _transports_support(cible)
+            ):
                 s.append(SignalLien.ref_transport)
         if self._meme_fichier(ft, cible):
             s.append(SignalLien.meme_fichier_source)
@@ -558,11 +572,15 @@ class _Regroupeur:
         c = av.av
         if cible.type is TypeDocument.facture_transitaire:
             num = _numero(cible)
-            if num and any(self._cite(_txt(r), num, TypeDocument.facture_transitaire) for r in c.refs_facture_origine):
+            if num and any(
+                self._cite(_txt(r), num, TypeDocument.facture_transitaire) for r in c.refs_facture_origine
+            ):
                 s.append(SignalLien.ref_facture_citee)
             if any(mrn_egaux(_txt(m), x) for m in c.refs_mrn for x in _mrns_ft(cible)):
                 s.append(SignalLien.mrn_cite)
-            if any(ref_transport_compatibles(_txt(r), x) for r in c.refs_transport for x in _transports_ft(cible)):
+            if any(
+                ref_transport_compatibles(_txt(r), x) for r in c.refs_transport for x in _transports_ft(cible)
+            ):
                 s.append(SignalLien.ref_transport)
         elif cible.type is TypeDocument.declaration:
             mrn = _txt(cible.dec.mrn)
@@ -578,19 +596,25 @@ class _Regroupeur:
             refs = _transports_support(sup)
             if cible.type is TypeDocument.facture_commerciale:
                 num = _numero(cible)
-                if num and any(self._cite(_txt(r), num, TypeDocument.facture_commerciale) for r in sup.sup.refs_facture):
+                if num and any(
+                    self._cite(_txt(r), num, TypeDocument.facture_commerciale) for r in sup.sup.refs_facture
+                ):
                     s.append(SignalLien.ref_facture_citee)
                 t = _txt(cible.fc.ref_transport)
                 if t and any(ref_transport_compatibles(r, t) for r in refs):
                     s.append(SignalLien.ref_transport)
             elif cible.type is TypeDocument.declaration:
-                if any(ref_transport_compatibles(r, x) for r in refs for x in _refs_documents_declaration(cible)):
+                if any(
+                    ref_transport_compatibles(r, x) for r in refs for x in _refs_documents_declaration(cible)
+                ):
                     s.append(SignalLien.ref_transport)
             elif cible.type is TypeDocument.facture_transitaire:
                 if any(ref_transport_compatibles(r, x) for r in refs for x in _transports_ft(cible)):
                     s.append(SignalLien.ref_transport)
                 num = _numero(cible)
-                if num and any(self._cite(_txt(r), num, TypeDocument.facture_transitaire) for r in sup.sup.refs_facture):
+                if num and any(
+                    self._cite(_txt(r), num, TypeDocument.facture_transitaire) for r in sup.sup.refs_facture
+                ):
                     s.append(SignalLien.ref_facture_citee)  # lettre d'accompagnement de la facture (D-708)
         if self._meme_fichier(sup, cible):
             s.append(SignalLien.meme_fichier_source)
@@ -639,13 +663,19 @@ class _Regroupeur:
         natifs = {gi for gi in retenus if self._meme_frontiere(d, self.groupes[gi])}
         if natifs and len(natifs) < len(retenus):
             refs_d = self._refs_explicites(d)
-            refs_natifs = {r for gi in natifs for m in self.groupes[gi].membres
-                           for r in self._refs_explicites(self.par_id[m])}
+            refs_natifs = {
+                r
+                for gi in natifs
+                for m in self.groupes[gi].membres
+                for r in self._refs_explicites(self.par_id[m])
+            }
 
             def garder(gi: int) -> bool:
                 if gi in natifs:
                     return True
-                communes = refs_d & {r for m in self.groupes[gi].membres for r in self._refs_explicites(self.par_id[m])}
+                communes = refs_d & {
+                    r for m in self.groupes[gi].membres for r in self._refs_explicites(self.par_id[m])
+                }
                 valeurs_natives = {r.split(":", 1)[1] for r in refs_natifs}
                 return any(r.split(":", 1)[1] not in valeurs_natives for r in communes)
 
@@ -661,9 +691,14 @@ class _Regroupeur:
             return tete
         libres = tete
         if d.type is TypeDocument.declaration:
-            libres = {gi: v for gi, v in tete.items() if not any(
-                self.par_id[m].type is TypeDocument.declaration and _exploitable(self.par_id[m])
-                for m in self.groupes[gi].membres)}
+            libres = {
+                gi: v
+                for gi, v in tete.items()
+                if not any(
+                    self.par_id[m].type is TypeDocument.declaration and _exploitable(self.par_id[m])
+                    for m in self.groupes[gi].membres
+                )
+            }
             if len(libres) == 1:
                 return libres
         precedent = self._precedent_dans_fichier(d)
@@ -707,8 +742,10 @@ class _Regroupeur:
         p = mrn_prefixe(_txt(d.dec.mrn)) if _exploitable(d) else ""
         if len(p) != 15:
             return False
-        if any(self.par_id[m].type is TypeDocument.facture_commerciale and _exploitable(self.par_id[m])
-               for m in g.membres):
+        if any(
+            self.par_id[m].type is TypeDocument.facture_commerciale and _exploitable(self.par_id[m])
+            for m in g.membres
+        ):
             return False
         for mid in g.membres:
             m = self.par_id[mid]
@@ -729,7 +766,9 @@ class _Regroupeur:
         for d in exploitables:
             if d.type is not TypeDocument.declaration:
                 continue
-            cands = self._meilleur_par_groupe(d, (TypeDocument.facture_commerciale,), self.signaux_declaration)
+            cands = self._meilleur_par_groupe(
+                d, (TypeDocument.facture_commerciale,), self.signaux_declaration
+            )
             retenus = self._departager(d, {gi: v for gi, v in cands.items() if v[0] >= 2})
             if retenus:
                 groupes = [self.groupes[gi] for gi in retenus]
@@ -746,7 +785,9 @@ class _Regroupeur:
             if len(p) != 15:
                 continue
             for g in self.groupes:
-                autres = [self.par_id[m] for m in g.membres if self.par_id[m].type is TypeDocument.declaration]
+                autres = [
+                    self.par_id[m] for m in g.membres if self.par_id[m].type is TypeDocument.declaration
+                ]
                 if any(mrn_prefixe(_txt(a.dec.mrn)) == p for a in autres) and self._compatible(d, g):
                     sc, sg = next(
                         (g.membres[a.id] for a in autres if mrn_prefixe(_txt(a.dec.mrn)) == p),
@@ -757,21 +798,31 @@ class _Regroupeur:
                     break
         for d in orphelines_dec:
             score_partiel = 0
-            cands = self._meilleur_par_groupe(d, (TypeDocument.facture_commerciale,), self.signaux_declaration)
+            cands = self._meilleur_par_groupe(
+                d, (TypeDocument.facture_commerciale,), self.signaux_declaration
+            )
             if cands:
                 score_partiel = max(v[0] for v in cands.values())
             repli = self._repli_meme_source(d, score_partiel)
             if repli is not None:
                 score, g = repli
-                sig = [*(cands[self.groupes.index(g)][1] if self.groupes.index(g) in cands else []),
-                       SignalLien.meme_dossier_source]
+                sig = [
+                    *(cands[self.groupes.index(g)][1] if self.groupes.index(g) in cands else []),
+                    SignalLien.meme_dossier_source,
+                ]
                 self._ajouter(g, d.id, score, sig)
             else:
                 # 7. déclaration orpheline : son propre dossier ; ses versions la rejoignent
                 p = mrn_prefixe(_txt(d.dec.mrn))
                 existant = next(
-                    (g for g in self.groupes if len(p) == 15 and self.par_id[g.graine].type is TypeDocument.declaration
-                     and mrn_prefixe(_txt(self.par_id[g.graine].dec.mrn)) == p), None,
+                    (
+                        g
+                        for g in self.groupes
+                        if len(p) == 15
+                        and self.par_id[g.graine].type is TypeDocument.declaration
+                        and mrn_prefixe(_txt(self.par_id[g.graine].dec.mrn)) == p
+                    ),
+                    None,
                 )
                 if existant is not None:
                     self._ajouter(existant, d.id, 3, [SignalLien.mrn_cite])
@@ -786,7 +837,9 @@ class _Regroupeur:
         )
         # 5. avoirs
         self._rattacher_type(
-            TypeDocument.avoir, (TypeDocument.facture_transitaire, TypeDocument.declaration), self.signaux_avoir,
+            TypeDocument.avoir,
+            (TypeDocument.facture_transitaire, TypeDocument.declaration),
+            self.signaux_avoir,
             orphelin_dossier=True,
         )
         # documents support, non exploitables, inconnus
@@ -798,7 +851,11 @@ class _Regroupeur:
             # en échec), rattachés comme des supports
             cands = self._meilleur_par_groupe(
                 d,
-                (TypeDocument.facture_commerciale, TypeDocument.declaration, TypeDocument.facture_transitaire),
+                (
+                    TypeDocument.facture_commerciale,
+                    TypeDocument.declaration,
+                    TypeDocument.facture_transitaire,
+                ),
                 self.signaux_support,
             )
             retenus = self._departager(d, {gi: v for gi, v in cands.items() if v[0] >= 2})
@@ -810,9 +867,7 @@ class _Regroupeur:
             if repli is not None:
                 score, g = repli
                 self._ajouter(g, d.id, score, [SignalLien.meme_dossier_source])
-            elif d.type is TypeDocument.document_non_exploitable or (
-                d.type in _ROLE and d.champs is None
-            ):
+            elif d.type is TypeDocument.document_non_exploitable or (d.type in _ROLE and d.champs is None):
                 self._nouveau_groupe(d)  # « intitulé facture » : P1/P2 doivent le voir
             else:
                 non_rattaches.append(d.id)
@@ -829,7 +884,12 @@ class _Regroupeur:
             for g in self.groupes:
                 if d.doublon_de in g.membres:
                     sc, sg = g.membres[d.doublon_de]
-                    self._ajouter(g, d.id, sc, [s for s in sg if s is not SignalLien.graine] or [SignalLien.meme_dossier_source])
+                    self._ajouter(
+                        g,
+                        d.id,
+                        sc,
+                        [s for s in sg if s is not SignalLien.graine] or [SignalLien.meme_dossier_source],
+                    )
                     places = True
             if not places:
                 non_rattaches.append(d.id)
@@ -866,8 +926,11 @@ class _Regroupeur:
         le lien n'est plus faible (D-2407). Rien n'est réuni ni déplacé ; seuls les signaux d'un lien existant
         sont complétés."""
         for g in self.groupes:
-            fcs = [self.par_id[m] for m in g.membres if self.par_id[m].type is TypeDocument.facture_commerciale
-                   and _exploitable(self.par_id[m])]
+            fcs = [
+                self.par_id[m]
+                for m in g.membres
+                if self.par_id[m].type is TypeDocument.facture_commerciale and _exploitable(self.par_id[m])
+            ]
             if not fcs:
                 continue
             relais: list[Document] = []
@@ -887,8 +950,12 @@ class _Regroupeur:
                 continue
             for mid, (score, sig) in list(g.membres.items()):
                 d = self.par_id[mid]
-                if mid == g.graine or d.type is not TypeDocument.declaration or not _exploitable(d) or (
-                        set(sig) & SIGNAUX_FORTS):
+                if (
+                    mid == g.graine
+                    or d.type is not TypeDocument.declaration
+                    or not _exploitable(d)
+                    or (set(sig) & SIGNAUX_FORTS)
+                ):
                     continue
                 mrn = _txt(d.dec.mrn)
                 refs = _refs_documents_declaration(d)
@@ -938,8 +1005,9 @@ class _Regroupeur:
             out["cite"] += [r for r in (_txt(v) for v in d.sup.refs_facture) if r]
         return out
 
-    def _reference_retrouvee(self, faible: Document, refs_f: dict[str, list[str]], appui: Document,
-                             refs_a: dict[str, list[str]]) -> bool:
+    def _reference_retrouvee(
+        self, faible: Document, refs_f: dict[str, list[str]], appui: Document, refs_a: dict[str, list[str]]
+    ) -> bool:
         """Le document faiblement rattaché et un document solidement rattaché au même dossier partagent une
         référence, à une lecture imparfaite près : MRN (``mrn_proches``), titre de transport
         (``ref_transport_proches`` ; entre deux déclarations, égalité ou inclusion seulement : leurs références
@@ -951,7 +1019,8 @@ class _Regroupeur:
         if any(comparer(a, b) for a in refs_f["transport"] for b in refs_a["transport"]):
             return True
         return any(ref_egales(a, b) for a in refs_f["numero"] for b in refs_a["cite"]) or any(
-            ref_egales(a, b) for a in refs_f["cite"] for b in refs_a["numero"])
+            ref_egales(a, b) for a in refs_f["cite"] for b in refs_a["numero"]
+        )
 
     def _corroborer_faibles(self) -> None:
         """Lien faible (score 2, P4) d'un document dont une référence se retrouve, à une lecture imparfaite près,
@@ -966,21 +1035,31 @@ class _Regroupeur:
             change = True
             while change:
                 change = False
-                solides = [mid for mid, (score, sig) in g.membres.items()
-                           if (score >= 3 or SignalLien.graine in sig) and _exploitable(self.par_id[mid])
-                           and not self.par_id[mid].doublon_de]
+                solides = [
+                    mid
+                    for mid, (score, sig) in g.membres.items()
+                    if (score >= 3 or SignalLien.graine in sig)
+                    and _exploitable(self.par_id[mid])
+                    and not self.par_id[mid].doublon_de
+                ]
                 for mid, (score, sig) in list(g.membres.items()):
                     d = self.par_id[mid]
                     if score > 2 or SignalLien.graine in sig or d.doublon_de:
                         continue
-                    retrouvee = any(self._reference_retrouvee(d, refs[mid], self.par_id[a], refs[a])
-                                    for a in solides if a != mid)
+                    retrouvee = any(
+                        self._reference_retrouvee(d, refs[mid], self.par_id[a], refs[a])
+                        for a in solides
+                        if a != mid
+                    )
                     sans_reference = not any(refs[mid].values())
-                    meme_fichier = sans_reference and any(self._meme_fichier(d, self.par_id[a])
-                                                          for a in solides if a != mid)
+                    meme_fichier = sans_reference and any(
+                        self._meme_fichier(d, self.par_id[a]) for a in solides if a != mid
+                    )
                     if retrouvee or meme_fichier:
-                        g.membres[mid] = (3, sorted(set(sig) | {SignalLien.reference_proche},
-                                                    key=_ORDRE_SIGNAUX.index))
+                        g.membres[mid] = (
+                            3,
+                            sorted(set(sig) | {SignalLien.reference_proche}, key=_ORDRE_SIGNAUX.index),
+                        )
                         g.plafond_moyenne.add(mid)
                         change = True
 
@@ -996,8 +1075,11 @@ class _Regroupeur:
                 if self._complet(g):
                     continue
                 autres = [
-                    h for h in self.groupes
-                    if h is not g and _frontieres_compatibles(h.frontiere, g.frontiere) and h.courriel == g.courriel
+                    h
+                    for h in self.groupes
+                    if h is not g
+                    and _frontieres_compatibles(h.frontiere, g.frontiere)
+                    and h.courriel == g.courriel
                 ]
                 complets = [h for h in autres if self._complet(h)]
                 if len(complets) != 1 or len(autres) != 1:
@@ -1008,7 +1090,9 @@ class _Regroupeur:
                         continue
                     if mid == g.graine:
                         # l'ancienne graine n'a qu'un rattachement de frontière
-                        self._ajouter(cible, mid, POIDS_FORCE[ForceLien.moyenne], [SignalLien.meme_dossier_source])
+                        self._ajouter(
+                            cible, mid, POIDS_FORCE[ForceLien.moyenne], [SignalLien.meme_dossier_source]
+                        )
                     else:
                         nouveau = min(score, POIDS_FORCE[ForceLien.moyenne])
                         sig2 = [s for s in sig if s is not SignalLien.graine]
@@ -1049,8 +1133,11 @@ class _Regroupeur:
                 )
             docs = [self.par_id[m] for m in membres]
             types_exp = {d.type for d in docs if _exploitable(d)}
-            manquants = [t.value for t in (TypeDocument.facture_commerciale, TypeDocument.declaration)
-                         if t not in types_exp]
+            manquants = [
+                t.value
+                for t in (TypeDocument.facture_commerciale, TypeDocument.declaration)
+                if t not in types_exp
+            ]
             cle = cle_idempotence_regroupement(membres)
             dossiers.append(
                 Dossier(
@@ -1124,12 +1211,29 @@ class _Regroupeur:
         decs = self._dernieres_declarations(docs)
         fts = [d for d in docs if d.type is TypeDocument.facture_transitaire and _exploitable(d)]
 
-        def alloc(source: str, cible: str | None, methode: MethodeAllocation, montant: Decimal | None,
-                  ligne: int | None = None, mrn: str | None = None) -> Allocation:
+        def alloc(
+            source: str,
+            cible: str | None,
+            methode: MethodeAllocation,
+            montant: Decimal | None,
+            ligne: int | None = None,
+            mrn: str | None = None,
+        ) -> Allocation:
             return Allocation(
-                id=id_stable(Prefixe.allocation, cle, source, ligne if ligne is not None else "", cible or "", mrn or ""),
-                source_document_id=source, source_ligne=ligne, cible_document_id=cible, mrn=mrn,
-                montant_alloue=montant, methode=methode,
+                id=id_stable(
+                    Prefixe.allocation,
+                    cle,
+                    source,
+                    ligne if ligne is not None else "",
+                    cible or "",
+                    mrn or "",
+                ),
+                source_document_id=source,
+                source_ligne=ligne,
+                cible_document_id=cible,
+                mrn=mrn,
+                montant_alloue=montant,
+                methode=methode,
             )
 
         # facture commerciale -> déclaration (§7.5 étape 8)
@@ -1145,15 +1249,28 @@ class _Regroupeur:
                 explicite = bool(num) and any(ref_compatibles(r, num) for r in refs)
                 autres_fc = len(fcs) > 1
                 if autres_fc and explicite:
-                    out.append(alloc(fc.id, d.id, MethodeAllocation.reference_explicite,
-                                     self._montant_explicite(d, fc, len(fcs)) or total))
+                    out.append(
+                        alloc(
+                            fc.id,
+                            d.id,
+                            MethodeAllocation.reference_explicite,
+                            self._montant_explicite(d, fc, len(fcs)) or total,
+                        )
+                    )
                 else:
                     out.append(alloc(fc.id, d.id, MethodeAllocation.totalite, total))
                 continue
             # facture répartie sur plusieurs déclarations
-            explicites = {d.id: self._montant_explicite(d, fc, len(fcs)) for d in cibles
-                          if num and any(ref_compatibles(r, num) for r in _refs_documents_declaration(d))}
-            if explicites and len(explicites) == len(cibles) and all(m is not None for m in explicites.values()):
+            explicites = {
+                d.id: self._montant_explicite(d, fc, len(fcs))
+                for d in cibles
+                if num and any(ref_compatibles(r, num) for r in _refs_documents_declaration(d))
+            }
+            if (
+                explicites
+                and len(explicites) == len(cibles)
+                and all(m is not None for m in explicites.values())
+            ):
                 for d in cibles:
                     out.append(alloc(fc.id, d.id, MethodeAllocation.reference_explicite, explicites[d.id]))
                 continue
@@ -1162,12 +1279,16 @@ class _Regroupeur:
                 out.append(alloc(fc.id, d.id, MethodeAllocation.prorata, part))
 
         # lignes de facture transitaire -> MRN
-        par_prefixe = {mrn_prefixe(_txt(d.dec.mrn)): d for d in decs if len(mrn_prefixe(_txt(d.dec.mrn))) == 15}
+        par_prefixe = {
+            mrn_prefixe(_txt(d.dec.mrn)): d for d in decs if len(mrn_prefixe(_txt(d.dec.mrn))) == 15
+        }
         for ft in fts:
             mrns_cites = {mrn_prefixe(m) for m in _mrns_ft(ft)} - {""}
             if len(decs) == 1 and len(mrns_cites) <= 1:
                 d = decs[0]
-                out.append(alloc(ft.id, d.id, MethodeAllocation.totalite, _total_debours(ft), mrn=_txt(d.dec.mrn)))
+                out.append(
+                    alloc(ft.id, d.id, MethodeAllocation.totalite, _total_debours(ft), mrn=_txt(d.dec.mrn))
+                )
                 continue
             if not decs:
                 continue
@@ -1188,10 +1309,14 @@ class _Regroupeur:
                 elif len(decs) == 1 and dans_dossier:
                     # ligne sans MRN, facture multi-MRN : part de ce dossier inconnue -> prorata
                     d = decs[0]
-                    out.append(alloc(ft.id, d.id, MethodeAllocation.prorata, None, ligne=i, mrn=_txt(d.dec.mrn)))
+                    out.append(
+                        alloc(ft.id, d.id, MethodeAllocation.prorata, None, ligne=i, mrn=_txt(d.dec.mrn))
+                    )
                 else:
                     for d, part in zip(decs, repartir_prorata(montant, taxes), strict=True):
-                        out.append(alloc(ft.id, d.id, MethodeAllocation.prorata, part, ligne=i, mrn=_txt(d.dec.mrn)))
+                        out.append(
+                            alloc(ft.id, d.id, MethodeAllocation.prorata, part, ligne=i, mrn=_txt(d.dec.mrn))
+                        )
         return out
 
     def _montant_explicite(self, dec: Document, fc: Document, nb_fc: int) -> Decimal | None:
@@ -1202,14 +1327,20 @@ class _Regroupeur:
             return None
         c = dec.dec
         montants = [
-            _dec(a.montant_facture_article) for a in c.articles
+            _dec(a.montant_facture_article)
+            for a in c.articles
             if any(ref_compatibles(_txt(r), num) for r in a.references_facture)
         ]
         if montants and all(m is not None for m in montants):
             return sum(montants, Decimal(0))  # type: ignore[arg-type]
-        factures_citees = {norm_ref(r.reference.valeur) for r in c.documents_references
-                           if r.reference is not None and r.reference.valeur
-                           and r.type_code is not None and (r.type_code.valeur or "").upper() in ("N380", "N325", "380", "325")}
+        factures_citees = {
+            norm_ref(r.reference.valeur)
+            for r in c.documents_references
+            if r.reference is not None
+            and r.reference.valeur
+            and r.type_code is not None
+            and (r.type_code.valeur or "").upper() in ("N380", "N325", "380", "325")
+        }
         if nb_fc == 1 or len(factures_citees) <= 1:
             return _dec(c.montant_total_facture)
         return None
@@ -1223,7 +1354,8 @@ def repartir_prorata(total: Decimal | None, poids: Sequence[Decimal | None]) -> 
     if total is None or somme <= 0:
         return [None] * len(poids)
     parts: list[Decimal | None] = [
-        None if p is None else (total * p / somme).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) for p in poids
+        None if p is None else (total * p / somme).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        for p in poids
     ]
     connus = [i for i, p in enumerate(parts) if p is not None]
     if connus and len(connus) == len(parts):
@@ -1244,6 +1376,9 @@ def regrouper(
     """Regroupe les documents d'un lot en dossiers (§7.5). Fonction pure : les documents ne sont pas
     modifiés ; l'ordre d'entrée sert d'ordre de départage (déterminisme)."""
     return _Regroupeur(
-        documents, fichiers or {}, profil or ProfilTolerances(id="tol_regroupement"), transitaires,
+        documents,
+        fichiers or {},
+        profil or ProfilTolerances(id="tol_regroupement"),
+        transitaires,
         options or OptionsRegroupement(),
     ).executer()

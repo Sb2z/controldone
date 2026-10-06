@@ -38,8 +38,15 @@ class ResultatDepot:
     motif: str | None = None
 
     def en_dict(self) -> dict[str, Any]:
-        return {"statut": self.statut, "lot_id": self.lot_id, "jobs": self.jobs, "fichiers": self.fichiers,
-                "doublons": self.doublons, "refuses": self.refuses, "motif": self.motif}
+        return {
+            "statut": self.statut,
+            "lot_id": self.lot_id,
+            "jobs": self.jobs,
+            "fichiers": self.fichiers,
+            "doublons": self.doublons,
+            "refuses": self.refuses,
+            "motif": self.motif,
+        }
 
 
 @runtime_checkable

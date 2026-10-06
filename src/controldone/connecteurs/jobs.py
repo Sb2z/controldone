@@ -34,10 +34,20 @@ def controle_avant_paiement(ctx: JobContext) -> dict[str, Any]:
         en_cours = JobStore(ctx.db).par_cle(f"traiter_lot:{ctx.tenant_id}:{lot_id}")
         if en_cours is not None and en_cours.statut == "pending":
             raise Reporter("traitement du lot en file", delai_s=15)
-        if (en_cours is not None and en_cours.statut == "running" and en_cours.locked_until is not None
-                and en_cours.locked_until > maintenant()):
+        if (
+            en_cours is not None
+            and en_cours.statut == "running"
+            and en_cours.locked_until is not None
+            and en_cours.locked_until > maintenant()
+        ):
             raise Reporter("traitement du lot en cours", delai_s=30)
         traiter_lot(ctx)
-    out = proposer_statut_litige(ctx.db, ctx.tenant_id, lot_id, pa_id, numero=ctx.payload.get("numero"),
-                                 date_echeance=ctx.payload.get("date_echeance"))
+    out = proposer_statut_litige(
+        ctx.db,
+        ctx.tenant_id,
+        lot_id,
+        pa_id,
+        numero=ctx.payload.get("numero"),
+        date_echeance=ctx.payload.get("date_echeance"),
+    )
     return {"lot_id": lot_id, "statut_litige_propose": out is not None, "outbox_id": out}

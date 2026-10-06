@@ -27,10 +27,14 @@ __all__ = ["lire_reference_facture", "mettre_en_file_controle"]
 
 _PARSEUR = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False)
 _XP = {
-    "numero": ("//*[local-name()='ExchangedDocument']/*[local-name()='ID']",
-               "/*[local-name()='Invoice']/*[local-name()='ID']"),
-    "echeance": ("//*[local-name()='SpecifiedTradePaymentTerms']/*[local-name()='DueDateDateTime']/*",
-                 "/*[local-name()='Invoice']/*[local-name()='DueDate']"),
+    "numero": (
+        "//*[local-name()='ExchangedDocument']/*[local-name()='ID']",
+        "/*[local-name()='Invoice']/*[local-name()='ID']",
+    ),
+    "echeance": (
+        "//*[local-name()='SpecifiedTradePaymentTerms']/*[local-name()='DueDateDateTime']/*",
+        "/*[local-name()='Invoice']/*[local-name()='DueDate']",
+    ),
 }
 
 
@@ -78,8 +82,13 @@ def mettre_en_file_controle(db: Database, tenant_id: str, lot_id: str, contenu: 
     """Met en file ``controle_avant_paiement`` pour un lot reçu par l'API (idempotent par lot)."""
     numero, echeance = lire_reference_facture(contenu)
     pa_id = f"api:{lot_id}"
-    payload = {"lot_id": lot_id, "facture_pa_id": pa_id, **({"numero": numero} if numero else {}),
-               **({"date_echeance": echeance} if echeance else {})}
-    job, _ = JobStore(db).enqueue("controle_avant_paiement", payload, f"controle_avant_paiement:{tenant_id}:{pa_id}",
-                                  tenant_id)
+    payload = {
+        "lot_id": lot_id,
+        "facture_pa_id": pa_id,
+        **({"numero": numero} if numero else {}),
+        **({"date_echeance": echeance} if echeance else {}),
+    }
+    job, _ = JobStore(db).enqueue(
+        "controle_avant_paiement", payload, f"controle_avant_paiement:{tenant_id}:{pa_id}", tenant_id
+    )
     return job.id

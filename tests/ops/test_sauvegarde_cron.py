@@ -55,8 +55,13 @@ def test_echec_de_sauvegarde_propage_le_code_et_previent_la_sonde(banc):
 def test_succes_previent_la_sonde_et_verification_profonde_le_jour_venu(banc):
     script, journal, env, tmp = banc
     _executable(tmp / "scripts" / "backup.sh", 'echo "backup $*" >> ' + str(journal) + "\n")
-    env.update({"BACKUP_DIR": str(tmp / "s"), "BACKUP_PING_URL": "https://sonde.exemple.test/p",
-                "BACKUP_VERIFICATION_PROFONDE_JOUR": "tous"})
+    env.update(
+        {
+            "BACKUP_DIR": str(tmp / "s"),
+            "BACKUP_PING_URL": "https://sonde.exemple.test/p",
+            "BACKUP_VERIFICATION_PROFONDE_JOUR": "tous",
+        }
+    )
     subprocess.run([str(script)], env=env, check=True, capture_output=True)
     appels = _appels(journal)
     assert f"backup --destination {tmp / 's'} --verification-profonde" in appels
@@ -90,24 +95,36 @@ def test_hors_site_copie_puis_controle(banc):
     p = subprocess.run([str(script), "--hors-site"], env=env, capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
     appels = _appels(journal)
-    assert appels[0].startswith(f"rclone copy {tmp / 'backups'} objeu:sauv --include controldone-*.tar.gz.enc "
-                                "--include controldone-*.tar.gz.enc.sha256 --immutable --checksum")
+    assert appels[0].startswith(
+        f"rclone copy {tmp / 'backups'} objeu:sauv --include controldone-*.tar.gz.enc "
+        "--include controldone-*.tar.gz.enc.sha256 --immutable --checksum"
+    )
     assert appels[1].startswith(f"rclone check {tmp / 'backups'} objeu:sauv") and "--one-way" in appels[1]
 
 
-@pytest.mark.parametrize(("cas", "code", "kind"), [
-    ("ancienne", 4, "sauvegarde_absente"),
-    ("empreinte", 3, "sauvegarde_verification_echec"),
-    ("copie", 5, "sauvegarde_hors_site_echec"),
-    ("aucune", 4, "sauvegarde_absente"),
-])
+@pytest.mark.parametrize(
+    ("cas", "code", "kind"),
+    [
+        ("ancienne", 4, "sauvegarde_absente"),
+        ("empreinte", 3, "sauvegarde_verification_echec"),
+        ("copie", 5, "sauvegarde_hors_site_echec"),
+        ("aucune", 4, "sauvegarde_absente"),
+    ],
+)
 def test_hors_site_echecs_codes_et_alerte_applicative(banc, cas, code, kind):
     script, journal, env, tmp = banc
     if cas != "aucune":
-        _archive_locale(tmp / "backups", age_s=30 * 3600 if cas == "ancienne" else 0,
-                        empreinte_juste=cas != "empreinte")
-    env.update({"BACKUP_HOST_DIR": str(tmp / "backups"), "BACKUP_RCLONE_REMOTE": "objeu:sauv",
-                "BACKUP_ALERTE_COMPOSE": "/srv/app/deploy/docker-compose.yml", "BACKUP_PING_URL": "https://s.test/x"})
+        _archive_locale(
+            tmp / "backups", age_s=30 * 3600 if cas == "ancienne" else 0, empreinte_juste=cas != "empreinte"
+        )
+    env.update(
+        {
+            "BACKUP_HOST_DIR": str(tmp / "backups"),
+            "BACKUP_RCLONE_REMOTE": "objeu:sauv",
+            "BACKUP_ALERTE_COMPOSE": "/srv/app/deploy/docker-compose.yml",
+            "BACKUP_PING_URL": "https://s.test/x",
+        }
+    )
     if cas == "copie":
         env["FAUX_RCLONE_CODE"] = "1"
     p = subprocess.run([str(script), "--hors-site"], env=env, capture_output=True, text=True)
@@ -172,12 +189,16 @@ def test_verification_profonde_une_seule_fois_le_jour_venu(banc):
     _executable(tmp / "scripts" / "backup.sh", 'echo "backup $*" >> ' + str(journal) + "\n")
     dest = tmp / "s"
     dest.mkdir()
-    env.update({"BACKUP_DIR": str(dest), "BACKUP_VERIFICATION_PROFONDE_JOUR": str(datetime.now(UTC).isoweekday())})
+    env.update(
+        {"BACKUP_DIR": str(dest), "BACKUP_VERIFICATION_PROFONDE_JOUR": str(datetime.now(UTC).isoweekday())}
+    )
     subprocess.run([str(script)], env=env, check=True, capture_output=True)
     (dest / f"controldone-{datetime.now(UTC):%Y%m%d}T021500Z.tar.gz.enc").write_bytes(b"x")
     subprocess.run([str(script)], env=env, check=True, capture_output=True)
-    assert _appels(journal) == [f"backup --destination {dest} --verification-profonde",
-                                f"backup --destination {dest}"]
+    assert _appels(journal) == [
+        f"backup --destination {dest} --verification-profonde",
+        f"backup --destination {dest}",
+    ]
 
 
 def test_hors_site_seuil_de_fraicheur_par_defaut_14_h(banc):
@@ -198,13 +219,25 @@ def test_planificateur_sauvegarde_au_creneau_courant(tmp_path):
     journal = tmp_path / "appels.txt"
     _executable(d / "backup-cron.sh", f'echo "sauvegarde $*" >> {journal}\n')
     faux_py = _executable(tmp_path / "bin" / "python", f'echo "python $*" >> {journal}\n')
-    env = {**os.environ, "CONTROLDONE_PYTHON": str(faux_py), "SCHED_TICK_S": "30",
-           "SCHED_BACKUP_HHMM": "0000,2400,abc"}
-    p = subprocess.Popen(["bash", str(d / "scheduler.sh")], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         text=True, start_new_session=True)
+    env = {
+        **os.environ,
+        "CONTROLDONE_PYTHON": str(faux_py),
+        "SCHED_TICK_S": "30",
+        "SCHED_BACKUP_HHMM": "0000,2400,abc",
+    }
+    p = subprocess.Popen(
+        ["bash", str(d / "scheduler.sh")],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
     try:
         fin = time.monotonic() + 20
-        while time.monotonic() < fin and "sauvegarde" not in (journal.read_text() if journal.exists() else ""):
+        while time.monotonic() < fin and "sauvegarde" not in (
+            journal.read_text() if journal.exists() else ""
+        ):
             time.sleep(0.1)
     finally:
         p.terminate()

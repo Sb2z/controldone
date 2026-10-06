@@ -39,8 +39,12 @@ from controldone.storage.scope import TenantScope
 
 __all__ = ["FORMATS", "ResultatPublication", "piece", "profil_client", "publier_rapport", "reconstituer"]
 
-FORMATS = {"pdf": ("application/pdf", "rapport.pdf"), "html": ("text/html; charset=utf-8", "rapport.html"),
-           "json": ("application/json", "rapport.json"), "txt": ("text/plain; charset=utf-8", "texte.txt")}
+FORMATS = {
+    "pdf": ("application/pdf", "rapport.pdf"),
+    "html": ("text/html; charset=utf-8", "rapport.html"),
+    "json": ("application/json", "rapport.json"),
+    "txt": ("text/plain; charset=utf-8", "texte.txt"),
+}
 
 
 def profil_client(scope: TenantScope) -> ProfilClient:
@@ -53,16 +57,32 @@ def profil_client(scope: TenantScope) -> ProfilClient:
 
 def _fichier_modele(f: Fichier) -> FichierModele | None:
     try:
-        return FichierModele(id=f.id, client_id=f.tenant_id, lot_id=f.lot_id, nom_original=f.nom_original,
-                             chemin_relatif=f.chemin_relatif, sha256=f.sha256, taille=f.taille,
-                             type_mime=f.type_mime, statut=StatutFichier(f.statut), motif_refus=f.motif_refus,
-                             nombre_pages=f.nombre_pages, doublon_de=f.doublon_de)
+        return FichierModele(
+            id=f.id,
+            client_id=f.tenant_id,
+            lot_id=f.lot_id,
+            nom_original=f.nom_original,
+            chemin_relatif=f.chemin_relatif,
+            sha256=f.sha256,
+            taille=f.taille,
+            type_mime=f.type_mime,
+            statut=StatutFichier(f.statut),
+            motif_refus=f.motif_refus,
+            nombre_pages=f.nombre_pages,
+            doublon_de=f.doublon_de,
+        )
     except Exception:
         return None
 
 
-def reconstituer(scope: TenantScope, vault: Any, dossier_racine: Path, *, publies_seulement: bool = True,
-                 dossier_ids: list[str] | None = None) -> list[ResultatDossier]:
+def reconstituer(
+    scope: TenantScope,
+    vault: Any,
+    dossier_racine: Path,
+    *,
+    publies_seulement: bool = True,
+    dossier_ids: list[str] | None = None,
+) -> list[ResultatDossier]:
     """``ResultatDossier`` de chaque dossier du client depuis la base (fondateur seulement : les résultats
     bruts ne sont pas lisibles par un rôle client). Les fichiers sont déchiffrés dans ``dossier_racine``
     (répertoire temporaire de l'appelant) pour les rognages de preuve du rapport."""
@@ -117,16 +137,44 @@ def reconstituer(scope: TenantScope, vault: Any, dossier_racine: Path, *, publie
             resultats.append(rc)
         statut = statut_global_depuis_resultats(resultats, valides_seulement=publies_seulement)
         dossier = dossier.model_copy(update={"statut_global": statut})
-        execution = Execution.nouvelle(id=execution_id or f"exe_{ligne.id[4:]}", client_id=scope.tenant_id,
-                                       empreinte_tolerances=profil.tolerances.empreinte())
-        non_lus = [NonLu(fichier=f.chemin_relatif, motif=f"refuse:{f.motif_refus}")
-                   for f in scope.lister(Fichier, lot_id=ligne.lot_id) if f.statut == StatutFichier.refuse.value] \
-            if ligne.lot_id else []
-        findings = construire_findings(dossier, docs.values(), resultats, execution, fichiers=fichiers,
-                                       dossier_id=dossier.reference or dossier.id, statut_global=statut)
-        sortie.append(ResultatDossier(dossier=dossier, documents=docs, fichiers=fichiers, chemins=chemins, pages={},
-                                      resultats=resultats, findings=findings, execution=execution,
-                                      statut_global=statut, non_lus=non_lus, profil=profil))
+        execution = Execution.nouvelle(
+            id=execution_id or f"exe_{ligne.id[4:]}",
+            client_id=scope.tenant_id,
+            empreinte_tolerances=profil.tolerances.empreinte(),
+        )
+        non_lus = (
+            [
+                NonLu(fichier=f.chemin_relatif, motif=f"refuse:{f.motif_refus}")
+                for f in scope.lister(Fichier, lot_id=ligne.lot_id)
+                if f.statut == StatutFichier.refuse.value
+            ]
+            if ligne.lot_id
+            else []
+        )
+        findings = construire_findings(
+            dossier,
+            docs.values(),
+            resultats,
+            execution,
+            fichiers=fichiers,
+            dossier_id=dossier.reference or dossier.id,
+            statut_global=statut,
+        )
+        sortie.append(
+            ResultatDossier(
+                dossier=dossier,
+                documents=docs,
+                fichiers=fichiers,
+                chemins=chemins,
+                pages={},
+                resultats=resultats,
+                findings=findings,
+                execution=execution,
+                statut_global=statut,
+                non_lus=non_lus,
+                profil=profil,
+            )
+        )
     return sortie
 
 
@@ -167,17 +215,23 @@ def publier_rapport(plateforme: Plateforme, fondateur: Acteur, tenant_id: str) -
     jour = aujourdhui_paris().isoformat()
     payload = {
         "objet": f"Rapport de diagnostic — {client}",
-        "corps": (f"Votre rapport de diagnostic ({nb_dossiers} dossier{'s' if nb_dossiers > 1 else ''}, "
-                  f"{nb_constats} constat{'s' if nb_constats > 1 else ''} validé{'s' if nb_constats > 1 else ''}) "
-                  "est disponible dans votre espace, au format web et PDF."),
+        "corps": (
+            f"Votre rapport de diagnostic ({nb_dossiers} dossier{'s' if nb_dossiers > 1 else ''}, "
+            f"{nb_constats} constat{'s' if nb_constats > 1 else ''} validé{'s' if nb_constats > 1 else ''}) "
+            "est disponible dans votre espace, au format web et PDF."
+        ),
         "destinataires": [],
         "pieces": [{"format": f, "ref": r, "nom": FORMATS[f][1]} for f, r in refs.items()],
         "dossiers_figes": figes,
         "genere_le": jour,
     }
     action = FileSortante(plateforme.db).proposer(
-        TypeAction.rapport_publication, payload, fondateur, tenant_id=tenant_id,
-        idempotency_key=f"rapport:{tenant_id}:{refs['json']}")
+        TypeAction.rapport_publication,
+        payload,
+        fondateur,
+        tenant_id=tenant_id,
+        idempotency_key=f"rapport:{tenant_id}:{refs['json']}",
+    )
     return ResultatPublication(action.id, action.statut.value, nb_dossiers, nb_constats)
 
 
@@ -188,8 +242,12 @@ def mettre_a_disposition(plateforme: Plateforme, action_id: str, acteur: Acteur)
     fs = FileSortante(plateforme.db)
     a = fs.obtenir(action_id, acteur)
     if a.kind in (TypeAction.rapport_publication, TypeAction.reclamation_dossier) and a.statut in (
-            StatutAction.approuve, StatutAction.corrige):
-        fs.envoyer(action_id, ExpediteurFichier(plateforme.dossier_sorties, cles=plateforme.cles_maitresses), acteur)
+        StatutAction.approuve,
+        StatutAction.corrige,
+    ):
+        fs.envoyer(
+            action_id, ExpediteurFichier(plateforme.dossier_sorties, cles=plateforme.cles_maitresses), acteur
+        )
     elif a.kind is TypeAction.facture_emise and a.statut in (StatutAction.approuve, StatutAction.corrige):
         # facture approuvée : émission (numéro, Factur-X) puis dépôt sur la plateforme agréée partenaire
         from controldone.facturation import service_pour
@@ -197,9 +255,13 @@ def mettre_a_disposition(plateforme: Plateforme, action_id: str, acteur: Acteur)
         service_pour(plateforme).emettre_et_deposer(action_id, acteur)
 
 
-def piece(plateforme: Plateforme, acteur: Acteur, action_id: str, fmt: str,
-          kinds: tuple[TypeAction, ...] = (TypeAction.rapport_publication, TypeAction.reclamation_dossier),
-          ) -> tuple[bytes, str, str]:
+def piece(
+    plateforme: Plateforme,
+    acteur: Acteur,
+    action_id: str,
+    fmt: str,
+    kinds: tuple[TypeAction, ...] = (TypeAction.rapport_publication, TypeAction.reclamation_dossier),
+) -> tuple[bytes, str, str]:
     """``(octets, type MIME, nom)`` d'une pièce. Rôle client : action **mise à disposition** de son client
     (sinon ``AccesRefuse``, identique à une action inexistante)."""
     if fmt not in FORMATS:
@@ -216,7 +278,11 @@ def piece(plateforme: Plateforme, acteur: Acteur, action_id: str, fmt: str,
             return contenu, FORMATS[fmt][0], p.get("nom") or FORMATS[fmt][1]
         # pièces du service des litiges : « coffre:<sha256> » (PDF du dossier de demande d'avoir)
         if isinstance(p, str) and p.startswith("coffre:") and fmt == "pdf":
-            return plateforme.vault.lire(a.tenant_id, p[len("coffre:"):]), FORMATS["pdf"][0], "releve_ecarts.pdf"
+            return (
+                plateforme.vault.lire(a.tenant_id, p[len("coffre:") :]),
+                FORMATS["pdf"][0],
+                "releve_ecarts.pdf",
+            )
     if fmt == "txt" and a.kind is TypeAction.reclamation_dossier and payload.get("corps"):
         texte = str(payload["corps"]) + "\n\n" + AVERTISSEMENT + "\n"
         return texte.encode("utf-8"), FORMATS["txt"][0], "releve_ecarts.txt"
@@ -238,5 +304,8 @@ def formats_disponibles(action: Any) -> list[str]:
 
 def actions_client(plateforme: Plateforme, acteur: Acteur, kind: TypeAction) -> list[Any]:
     """Actions mises à disposition du client de l'acteur (rôle client) ou toutes (fondateur)."""
-    return [a for a in FileSortante(plateforme.db).lister(acteur, kind=kind.value)
-            if not acteur.est_client or a.statut is StatutAction.envoye]
+    return [
+        a
+        for a in FileSortante(plateforme.db).lister(acteur, kind=kind.value)
+        if not acteur.est_client or a.statut is StatutAction.envoye
+    ]

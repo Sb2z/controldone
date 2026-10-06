@@ -55,7 +55,9 @@ def _debit_lister(args: argparse.Namespace) -> int:
     for x in lignes:
         portee, _, empreinte = x.cle.partition(":")
         etat = "BLOQUÉ" if x.jetons < 1 else ""
-        print(f"{portee:18s} {empreinte[:16]:16s} {x.jetons:7.2f}  {max(0, int(x.expire - maintenant))} s {etat}")
+        print(
+            f"{portee:18s} {empreinte[:16]:16s} {x.jetons:7.2f}  {max(0, int(x.expire - maintenant))} s {etat}"
+        )
     return 0
 
 
@@ -79,7 +81,9 @@ def _debit_effacer(args: argparse.Namespace) -> int:
     if args.tout:
         n = effacer_debit(pf.db, tout=True, acteur=acteur, motif=args.motif)
     else:
-        n = effacer_debit(pf.db, cles=[cle_debit(p, i, sel) for p, i in cibles], acteur=acteur, motif=args.motif)
+        n = effacer_debit(
+            pf.db, cles=[cle_debit(p, i, sel) for p, i in cibles], acteur=acteur, motif=args.motif
+        )
     print(f"{n} compteur(s) effacé(s). Les connexions concernées sont débloquées.")
     return 0
 
@@ -113,10 +117,16 @@ def _reinitialiser(args: argparse.Namespace) -> int:
         return 2
     changer_mot_de_passe(pf.db, compte.id, empreinte, acteur=Acteur("cli:reinitialisation", Role.fondateur))
     maintenant = time.time()
-    revoquer_sessions_utilisateur(pf.db, compte.id, apres=maintenant, expire=maintenant + DUREE_ABSOLUE_S + 60)
+    revoquer_sessions_utilisateur(
+        pf.db, compte.id, apres=maintenant, expire=maintenant + DUREE_ABSOLUE_S + 60
+    )
     sel = sel_debit(pf.cles_maitresses)
-    effacer_debit(pf.db, cles=[cle_debit(p, i, sel) for p, i in _cles_compte(pf, args.email)],
-                  acteur="cli:reinitialisation", motif="reinitialisation du mot de passe")
+    effacer_debit(
+        pf.db,
+        cles=[cle_debit(p, i, sel) for p, i in _cles_compte(pf, args.email)],
+        acteur="cli:reinitialisation",
+        motif="reinitialisation du mot de passe",
+    )
     print("Mot de passe remplacé ; toutes les sessions du compte sont fermées.")
     return 0
 
@@ -129,16 +139,23 @@ def ajouter_commandes(sous: Any) -> None:
     dl.add_argument("--limite", type=int, default=200)
     dl.set_defaults(fn=_debit_lister)
     de = ds.add_parser("effacer", help="débloquer : remettre des compteurs à zéro")
-    de.add_argument("--email", default=None, help="compte (connexion, second facteur, changement de mot de passe)")
+    de.add_argument(
+        "--email", default=None, help="compte (connexion, second facteur, changement de mot de passe)"
+    )
     de.add_argument("--ip", default=None, help="adresse IP (connexion et API)")
     de.add_argument("--cle-api", dest="cle_api", default=None, help="préfixe public d'une clé d'API")
     de.add_argument("--tout", action="store_true", help="tous les compteurs")
     de.add_argument("--motif", default="", help="motif inscrit au journal d'audit")
     de.set_defaults(fn=_debit_effacer)
 
-    r = sous.add_parser("reinitialiser-mot-de-passe",
-                        help="nouveau mot de passe d'un compte (saisi), sessions révoquées")
+    r = sous.add_parser(
+        "reinitialiser-mot-de-passe", help="nouveau mot de passe d'un compte (saisi), sessions révoquées"
+    )
     r.add_argument("--email", required=True)
-    r.add_argument("--mot-de-passe-stdin", dest="mot_de_passe_stdin", action="store_true",
-                   help="lire le mot de passe sur l'entrée standard (scripts)")
+    r.add_argument(
+        "--mot-de-passe-stdin",
+        dest="mot_de_passe_stdin",
+        action="store_true",
+        help="lire le mot de passe sur l'entrée standard (scripts)",
+    )
     r.set_defaults(fn=_reinitialiser)

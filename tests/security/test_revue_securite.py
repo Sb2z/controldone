@@ -31,13 +31,25 @@ def _api(monde, tenant):
 
 
 def _evenement_paiement_force() -> bytes:
-    return json.dumps({
-        "id": "evt_force_000001", "object": "event", "type": "checkout.session.completed", "created": 1700000000,
-        "livemode": False,
-        "data": {"object": {"id": "cs_force", "object": "checkout.session", "mode": "subscription",
-                            "customer": "cus_attaquant", "subscription": "sub_attaquant",
-                            "metadata": {"client_id": A, "palier": "continu"}}},
-    }).encode()
+    return json.dumps(
+        {
+            "id": "evt_force_000001",
+            "object": "event",
+            "type": "checkout.session.completed",
+            "created": 1700000000,
+            "livemode": False,
+            "data": {
+                "object": {
+                    "id": "cs_force",
+                    "object": "checkout.session",
+                    "mode": "subscription",
+                    "customer": "cus_attaquant",
+                    "subscription": "sub_attaquant",
+                    "metadata": {"client_id": A, "palier": "continu"},
+                }
+            },
+        }
+    ).encode()
 
 
 def test_rs01_bouchon_refuse_un_webhook_signe_avec_l_ancien_secret_public(tmp_path, monkeypatch):
@@ -66,9 +78,14 @@ def test_rs01_webhook_public_refuse_un_evenement_force(monde, monkeypatch):
     for k in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"):
         monkeypatch.delenv(k, raising=False)
     charge = _evenement_paiement_force()
-    r = monde.client().post("/webhooks/stripe", content=charge,
-                            headers={"Stripe-Signature": signer_charge(charge, ANCIEN_SECRET_PUBLIC),
-                                     "Content-Type": "application/json"})
+    r = monde.client().post(
+        "/webhooks/stripe",
+        content=charge,
+        headers={
+            "Stripe-Signature": signer_charge(charge, ANCIEN_SECRET_PUBLIC),
+            "Content-Type": "application/json",
+        },
+    )
     assert r.status_code == 400
     assert stock.evenements_paiement(monde.pf.db) == []
 
@@ -87,8 +104,9 @@ def test_rs02_mcp_depot_par_chemin_exige_un_repertoire_autorise(monde, tmp_path)
     r = outils.deposer_dossier(chemin=str(secret))
     assert "erreur" in r and "lot_id" not in r
     # avec un répertoire autorisé, le dépôt par chemin fonctionne (et reste borné à ce répertoire)
-    autorise = OutilsControldone(monde.pf, verifier_cle_api(monde.pf.db, monde.cles[A]),
-                                 racine_autorisee=secret.parent)
+    autorise = OutilsControldone(
+        monde.pf, verifier_cle_api(monde.pf.db, monde.cles[A]), racine_autorisee=secret.parent
+    )
     assert "lot_id" in autorise.deposer_dossier(chemin=str(secret))
 
 
@@ -111,7 +129,9 @@ def test_rs03_cache_des_pages_prive(tmp_path):
     from controldone.model.enums import QualiteTexte
 
     cache = CachePagesDisque(tmp_path / "cache")
-    cache.ecrire("ab" * 32, "v1", [PageText(numero=1, texte="FICTIF", qualite=QualiteTexte.natif, source="natif")])
+    cache.ecrire(
+        "ab" * 32, "v1", [PageText(numero=1, texte="FICTIF", qualite=QualiteTexte.natif, source="natif")]
+    )
     fichiers = [p for p in (tmp_path / "cache").rglob("*") if p.is_file()]
     assert fichiers
     for p in fichiers:
@@ -202,7 +222,9 @@ def test_rs06_export_client_admin_sans_actions_non_mises_a_disposition(monde, tm
     from controldone.storage.comptes import utilisateur_par_email
 
     uid = utilisateur_par_email(monde.pf.db, ADMIN_A).id
-    sortie = exporter_client(monde.pf.db, monde.pf.vault, A, Acteur(uid, Role.client_admin, A), tmp_path / "e.zip")
+    sortie = exporter_client(
+        monde.pf.db, monde.pf.vault, A, Acteur(uid, Role.client_admin, A), tmp_path / "e.zip"
+    )
     with zipfile.ZipFile(sortie) as z:
         sorties = json.loads(z.read("sorties.json"))
     assert sorties, "le monde de démonstration a des actions mises à disposition"
@@ -228,9 +250,13 @@ def test_rs07_effacement_client_supprime_ses_traces_d_envoi(monde):
     chiffrees = TracesEnvoi(racine, monde.pf.cles_maitresses)  # traces chiffrées au repos (D-4106)
 
     def traces(t):
-        return ([p for p in racine.rglob("*.json") if json.loads(p.read_text("utf-8")).get("tenant_id") == t]
-                + [p for p in chiffrees.lister() if p.name.endswith(".json.enc")
-                   and chiffrees.lire_json(p).get("tenant_id") == t])
+        return [
+            p for p in racine.rglob("*.json") if json.loads(p.read_text("utf-8")).get("tenant_id") == t
+        ] + [
+            p
+            for p in chiffrees.lister()
+            if p.name.endswith(".json.enc") and chiffrees.lire_json(p).get("tenant_id") == t
+        ]
 
     assert traces(A) and traces(B)
     supprimer_client(monde.pf.db, monde.pf.vault, A, FONDATEUR, "demande RGPD (test)", dossier_sorties=racine)
@@ -245,7 +271,9 @@ def test_rs07_effacement_client_supprime_ses_traces_d_envoi(monde):
 def test_rs08_avoir_montant_non_fini_refuse_proprement(monde, montant):
     c = _api(monde, A)
     ouvert = next(x for x in c.get("/api/v1/litiges").json() if x["statut"] == "ouvert")
-    r = c.post(f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "avoir_recu", "montant": montant})
+    r = c.post(
+        f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "avoir_recu", "montant": montant}
+    )
     assert r.status_code == 400, r.text
     assert c.get(f"/api/v1/litiges/{ouvert['litige_id']}").json()["statut"] == "ouvert"
 
@@ -295,16 +323,29 @@ def test_rs09_fondateur_desactive_perd_sa_session(monde):
 # --- RS-10 : connecteur IMAP pouvant lire n'importe quelle variable d'environnement -------------------------------
 
 
-@pytest.mark.parametrize("nom", ["CONTROLDONE_MASTER_KEY", "CONTROLDONE_SECRET_KEY", "STRIPE_SECRET_KEY",
-                                 "ANTHROPIC_API_KEY", "CONTROLDONE_IMAP_", "controldone_imap_x"])
+@pytest.mark.parametrize(
+    "nom",
+    [
+        "CONTROLDONE_MASTER_KEY",
+        "CONTROLDONE_SECRET_KEY",
+        "STRIPE_SECRET_KEY",
+        "ANTHROPIC_API_KEY",
+        "CONTROLDONE_IMAP_",
+        "controldone_imap_x",
+    ],
+)
 def test_rs10_imap_secret_limite_aux_variables_dediees(nom):
     from controldone.connecteurs.imap import ConfigImap
 
     with pytest.raises(ValueError):
-        ConfigImap.depuis_reglages({"hote": "imap.exemple-fictif.test", "utilisateur": "u", "secret_env": nom})
+        ConfigImap.depuis_reglages(
+            {"hote": "imap.exemple-fictif.test", "utilisateur": "u", "secret_env": nom}
+        )
     with pytest.raises(ValueError):
         ConfigImap(hote="imap.exemple-fictif.test", utilisateur="u", secret_env=nom)
-    assert ConfigImap.depuis_reglages({"hote": "h", "utilisateur": "u", "secret_env": "CONTROLDONE_IMAP_CLI_A"})
+    assert ConfigImap.depuis_reglages(
+        {"hote": "h", "utilisateur": "u", "secret_env": "CONTROLDONE_IMAP_CLI_A"}
+    )
 
 
 # --- RS-11 : injection de formule dans l'export XLSX ----------------------------------------------------------------
@@ -337,13 +378,16 @@ def test_rs12_colonne_csv_inconnue_non_journalisee(caplog):
     from controldone.ingest.reception import recevoir_octets
     from controldone.ingest.structure import ExtracteurDeclarationExport
 
-    csv = (b"#ENTETE;mrn;version;devise_facture;montant_total_facture;COLONNE_SECRETE_FICTIVE\r\n"
-           b"ENTETE;26FR111111111111A1;1;EUR;100,00;x\r\n"
-           b"#TAXE;article;type;montant\r\nTAXE;1;A00;10,00\r\n")
+    csv = (
+        b"#ENTETE;mrn;version;devise_facture;montant_total_facture;COLONNE_SECRETE_FICTIVE\r\n"
+        b"ENTETE;26FR111111111111A1;1;EUR;100,00;x\r\n"
+        b"#TAXE;article;type;montant\r\nTAXE;1;A00;10,00\r\n"
+    )
     fr = recevoir_octets([("export.csv", csv)]).fichiers[0]
     r = decouper_fichier(fr.fichier, fr.contenu, options=OptionsPages(ocr=False, isoler=False))
-    ctx = ExtractionContext(contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime,
-                            ids=IdGenerator.deterministe(9))
+    ctx = ExtractionContext(
+        contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime, ids=IdGenerator.deterministe(9)
+    )
     caplog.set_level("DEBUG")
     res = ExtracteurDeclarationExport().extract(r.documents[0], r.pages, ctx)
     assert any("colonne_ignoree" in a for a in res.avertissements), res.avertissements
@@ -354,14 +398,17 @@ def test_rs12_colonne_csv_inconnue_non_journalisee(caplog):
 
 
 def _xxe(cible: Path) -> bytes:
-    return (f'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e SYSTEM "file://{cible}">]>'
-            '<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100">'
-            "<x>&e;</x></rsm:CrossIndustryInvoice>").encode()
+    return (
+        f'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e SYSTEM "file://{cible}">]>'
+        '<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100">'
+        "<x>&e;</x></rsm:CrossIndustryInvoice>"
+    ).encode()
 
 
 def _milliard_de_rires() -> bytes:
     ents = '<!ENTITY a "aaaaaaaaaa">' + "".join(
-        f'<!ENTITY {chr(98 + i)} "{("&" + chr(97 + i) + ";") * 10}">' for i in range(9))
+        f'<!ENTITY {chr(98 + i)} "{("&" + chr(97 + i) + ";") * 10}">' for i in range(9)
+    )
     return f'<?xml version="1.0"?><!DOCTYPE l [{ents}]><l>&j;</l>'.encode()
 
 
@@ -405,8 +452,10 @@ def test_aucun_secret_dans_les_sources():
     import re
 
     racine = Path(__file__).resolve().parents[2] / "src"
-    motif = re.compile(r"(sk_live_[A-Za-z0-9]{8,}|sk-ant-[A-Za-z0-9_-]{16,}|whsec_[A-Za-z0-9_]{8,}|"
-                       r"-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16})")
+    motif = re.compile(
+        r"(sk_live_[A-Za-z0-9]{8,}|sk-ant-[A-Za-z0-9_-]{16,}|whsec_[A-Za-z0-9_]{8,}|"
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16})"
+    )
     trouves = [str(p) for p in racine.rglob("*.py") if motif.search(p.read_text("utf-8", errors="ignore"))]
     assert trouves == []
 
@@ -424,8 +473,14 @@ def _routes_post(app) -> list[str]:
     from controldone.web import routes_admin, routes_auth, routes_client, routes_finances
 
     sortie = []
-    for r in [*routes_auth.routeur.routes, *routes_client.routeur.routes, *routes_admin.routeur.routes,
-              *routes_finances.routeur.routes, *routes_finances.routeur_webhooks.routes, *app.routes]:
+    for r in [
+        *routes_auth.routeur.routes,
+        *routes_client.routeur.routes,
+        *routes_admin.routeur.routes,
+        *routes_finances.routeur.routes,
+        *routes_finances.routeur_webhooks.routes,
+        *app.routes,
+    ]:
         if "POST" in (getattr(r, "methods", None) or set()):
             if r.path.startswith(("/api/", "/webhooks/")):
                 continue
@@ -465,12 +520,18 @@ def test_lecteur_ne_peut_rien_ecrire(monde):
     connecter_client(c, monde, LECTEUR_A)
     t = jeton(c.get("/espace/recouvrement").text)
     ecart = monde.ids[A]["ecart"][0]
-    for url, donnees in ((f"/espace/recouvrement/{ecart}/reclame", {}),
-                         (f"/espace/recouvrement/{ecart}/avoir", {"montant": "1"})):
+    for url, donnees in (
+        (f"/espace/recouvrement/{ecart}/reclame", {}),
+        (f"/espace/recouvrement/{ecart}/avoir", {"montant": "1"}),
+    ):
         r = c.post(url, data={"csrf": t, **donnees}, follow_redirects=False)
         assert r.status_code == 403, (url, r.status_code)
-    r = c.post("/espace/depot", data={"csrf": t}, files=[("fichiers", ("a.csv", b"a;b\n1;2\n", "text/csv"))],
-               follow_redirects=False)
+    r = c.post(
+        "/espace/depot",
+        data={"csrf": t},
+        files=[("fichiers", ("a.csv", b"a;b\n1;2\n", "text/csv"))],
+        follow_redirects=False,
+    )
     assert r.status_code == 403
     assert c.get("/admin", follow_redirects=False).status_code == 404
 
@@ -481,16 +542,34 @@ def test_session_client_ne_devient_pas_fondateur_par_jeton_forge(monde):
     from aides_web import SECRET_SESSION
     from itsdangerous import URLSafeSerializer
 
-    faux = URLSafeSerializer("un-autre-secret-de-plus-de-trente-deux-caracteres", salt="controldone.session").dumps(
-        {"sid": "s", "u": "usr_fondateur_demo", "r": "fondateur", "t": None, "d": time.time(), "e": time.time(),
-         "2f": True})
+    faux = URLSafeSerializer(
+        "un-autre-secret-de-plus-de-trente-deux-caracteres", salt="controldone.session"
+    ).dumps(
+        {
+            "sid": "s",
+            "u": "usr_fondateur_demo",
+            "r": "fondateur",
+            "t": None,
+            "d": time.time(),
+            "e": time.time(),
+            "2f": True,
+        }
+    )
     c = monde.client()
     c.cookies.set("cd_session", faux)
     assert c.get("/admin", follow_redirects=False).status_code == 303
     # jeton correctement signé mais sans second facteur : refusé aussi
     sans_2f = URLSafeSerializer(SECRET_SESSION, salt="controldone.session").dumps(
-        {"sid": "s2", "u": "usr_fondateur_demo", "r": "fondateur", "t": None, "d": time.time(), "e": time.time(),
-         "2f": False})
+        {
+            "sid": "s2",
+            "u": "usr_fondateur_demo",
+            "r": "fondateur",
+            "t": None,
+            "d": time.time(),
+            "e": time.time(),
+            "2f": False,
+        }
+    )
     c2 = monde.client()
     c2.cookies.set("cd_session", sans_2f)
     assert c2.get("/admin", follow_redirects=False).status_code == 303
@@ -499,9 +578,13 @@ def test_session_client_ne_devient_pas_fondateur_par_jeton_forge(monde):
 def test_cle_api_d_un_client_sur_les_objets_d_un_autre(monde):
     c = _api(monde, B)
     ids = monde.ids[A]
-    for url in (f"/api/v1/lots/{ids['lot'][0]}", f"/api/v1/dossiers/{ids['dossier'][0]}",
-                f"/api/v1/dossiers/{ids['dossier'][0]}/constats", f"/api/v1/litiges/{ids['ecart'][0]}",
-                f"/api/v1/rapports/{ids['sortie_envoyee'][0]}?format=pdf"):
+    for url in (
+        f"/api/v1/lots/{ids['lot'][0]}",
+        f"/api/v1/dossiers/{ids['dossier'][0]}",
+        f"/api/v1/dossiers/{ids['dossier'][0]}/constats",
+        f"/api/v1/litiges/{ids['ecart'][0]}",
+        f"/api/v1/rapports/{ids['sortie_envoyee'][0]}?format=pdf",
+    ):
         r = c.get(url)
         assert r.status_code == 404 and r.json() == {"detail": "introuvable"}, url
     r = c.post(f"/api/v1/litiges/{ids['ecart'][0]}/evenements", json={"type": "reclamation_envoyee"})
@@ -525,19 +608,31 @@ def _llm(sortie: dict, texte: str):
     class Messages:
         def parse(self, **kw):
             appels.append(kw)
-            return SimpleNamespace(parsed_output=kw["output_format"].model_validate(sortie), stop_reason="end_turn",
-                                   model=kw["model"], usage=SimpleNamespace(input_tokens=10, output_tokens=10))
+            return SimpleNamespace(
+                parsed_output=kw["output_format"].model_validate(sortie),
+                stop_reason="end_turn",
+                model=kw["model"],
+                usage=SimpleNamespace(input_tokens=10, output_tokens=10),
+            )
 
-    doc = Document(id="doc_fc", type=TypeDocument.facture_commerciale, pages=[PageRef(fichier_id="fic_1", numero=1)])
+    doc = Document(
+        id="doc_fc", type=TypeDocument.facture_commerciale, pages=[PageRef(fichier_id="fic_1", numero=1)]
+    )
     pages = [Page(fichier_id="fic_1", numero=1, texte=texte)]
-    ext = LLMExtracteur(client=SimpleNamespace(messages=Messages()),
-                        settings=Settings(_env_file=None, anthropic_api_key="sk-test-fictif"))
+    ext = LLMExtracteur(
+        client=SimpleNamespace(messages=Messages()),
+        settings=Settings(_env_file=None, anthropic_api_key="sk-test-fictif"),
+    )
     return ext.extract(doc, pages, ExtractionContext(ids=IdGenerator.deterministe(1))), appels
 
 
 def test_rs13_index_de_liste_demesure_ignore():
-    sortie = {"valeurs": [{"champ": "lignes[].montant_ligne", "index": 5_000_000, "valeur_brute": "1,00", "page": 1},
-                          {"champ": "lignes[].montant_ligne", "index": 0, "valeur_brute": "2,00", "page": 1}]}
+    sortie = {
+        "valeurs": [
+            {"champ": "lignes[].montant_ligne", "index": 5_000_000, "valeur_brute": "1,00", "page": 1},
+            {"champ": "lignes[].montant_ligne", "index": 0, "valeur_brute": "2,00", "page": 1},
+        ]
+    }
     r, _ = _llm(sortie, "TOTAL 1,00 2,00")
     assert r.champs is not None and len(r.champs.lignes) == 1
 
@@ -554,9 +649,13 @@ def test_rs13_le_document_ne_peut_pas_fermer_le_bloc_non_fiable():
 # --- RS-14 : secrets transmis au processus qui analyse les fichiers hostiles ---------------------------------------
 
 
-_SECRETS_RS14 = {"CONTROLDONE_MASTER_KEY": "cle-fictive", "STRIPE_SECRET_KEY": "sk_test_fictif",
-                 "ANTHROPIC_API_KEY": "sk-ant-fictif", "CONTROLDONE_IMAP_CLI_A": "mot-de-passe-fictif",
-                 "CONTROLDONE_SECRET_KEY": "secret-fictif"}
+_SECRETS_RS14 = {
+    "CONTROLDONE_MASTER_KEY": "cle-fictive",
+    "STRIPE_SECRET_KEY": "sk_test_fictif",
+    "ANTHROPIC_API_KEY": "sk-ant-fictif",
+    "CONTROLDONE_IMAP_CLI_A": "mot-de-passe-fictif",
+    "CONTROLDONE_SECRET_KEY": "secret-fictif",
+}
 
 
 def test_rs14_processus_d_analyse_sans_secrets(monkeypatch):
@@ -603,5 +702,7 @@ def test_rs14_forkserver_lance_sans_secrets(monkeypatch):
     assert "PATH" in noms and "OMP_THREAD_LIMIT" in noms
     assert not noms & set(_SECRETS_RS14)
     assert os.environ["CONTROLDONE_MASTER_KEY"] == "cle-fictive"
-    sortie = subprocess.run(["sh", "-c", "echo $CONTROLDONE_MASTER_KEY"], capture_output=True, check=True).stdout
+    sortie = subprocess.run(
+        ["sh", "-c", "echo $CONTROLDONE_MASTER_KEY"], capture_output=True, check=True
+    ).stdout
     assert sortie.strip() == b"cle-fictive"  # environnement du processus courant rétabli

@@ -24,8 +24,10 @@ SEL = sel_debit([b"cle-maitresse-de-test-FICTIVE-0123456789abcdef="])
 ACTEUR = Acteur("usr_fictif_pg", Role.client_admin, "demo_ateliers")
 
 if not URL_ADMIN:
-    pytest.skip("CONTROLDONE_TEST_PG_URL absente (serveur PostgreSQL jetable : make test-pg-securite)",
-                allow_module_level=True)
+    pytest.skip(
+        "CONTROLDONE_TEST_PG_URL absente (serveur PostgreSQL jetable : make test-pg-securite)",
+        allow_module_level=True,
+    )
 
 
 class Horloge:
@@ -71,8 +73,12 @@ def test_pg_limiteur_seuils_partage_et_recharge(db):
     db2 = _autre(db)
     try:
         b = LimiteurDebitPartage("connexion_compte", 3, 1.0, db=db2, sel=SEL, horloge=h)
-        assert [a.autoriser("a@exemple.test"), b.autoriser("a@exemple.test"), a.autoriser("a@exemple.test"),
-                b.autoriser("a@exemple.test")] == [True, True, True, False]
+        assert [
+            a.autoriser("a@exemple.test"),
+            b.autoriser("a@exemple.test"),
+            a.autoriser("a@exemple.test"),
+            b.autoriser("a@exemple.test"),
+        ] == [True, True, True, False]
         h.t += 1.0
         assert b.autoriser("a@exemple.test") and not a.autoriser("a@exemple.test")
         a.effacer("a@exemple.test")

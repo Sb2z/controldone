@@ -106,8 +106,11 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
         assurer_tables_securite(plateforme.db)
         registre = RegistreRevocations(plateforme.db)
     etat = EtatSecurite(
-        sessions=GestionnaireSessions(secrets_, registre=registre), secret_csrf=secrets_[-1] + "|csrf",
-        secret_signature=secrets_[-1] + "|signature", prod=prod, https=https,
+        sessions=GestionnaireSessions(secrets_, registre=registre),
+        secret_csrf=secrets_[-1] + "|csrf",
+        secret_signature=secrets_[-1] + "|signature",
+        prod=prod,
+        https=https,
         cookie=parametres_cookie(prod=prod),
     )
     if p.etat_partage:
@@ -160,19 +163,34 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
 
     @app.exception_handler(AccesRefuse)
     async def _introuvable(request: Request, exc: AccesRefuse) -> Response:
-        return page(request, "erreur.html.j2", titre="Page introuvable", statut=404,
-                    message="Cette page n'existe pas ou n'est pas accessible avec votre compte.")
+        return page(
+            request,
+            "erreur.html.j2",
+            titre="Page introuvable",
+            statut=404,
+            message="Cette page n'existe pas ou n'est pas accessible avec votre compte.",
+        )
 
     @app.exception_handler(Interdit)
     async def _interdit(request: Request, exc: Interdit) -> Response:
-        return page(request, "erreur.html.j2", titre="Action non autorisée", statut=403,
-                    message="Cette action n'est pas autorisée pour votre compte.")
+        return page(
+            request,
+            "erreur.html.j2",
+            titre="Action non autorisée",
+            statut=403,
+            message="Cette action n'est pas autorisée pour votre compte.",
+        )
 
     @app.exception_handler(CsrfInvalide)
     async def _csrf(request: Request, exc: CsrfInvalide) -> Response:
-        return page(request, "erreur.html.j2", titre="Formulaire expiré", statut=403,
-                    message="Le formulaire a expiré ou n'a pas été émis par cette application. "
-                            "Rechargez la page puis recommencez.")
+        return page(
+            request,
+            "erreur.html.j2",
+            titre="Formulaire expiré",
+            statut=403,
+            message="Le formulaire a expiré ou n'a pas été émis par cette application. "
+            "Rechargez la page puis recommencez.",
+        )
 
     @app.exception_handler(RequeteInvalide)
     async def _invalide(request: Request, exc: RequeteInvalide) -> Response:
@@ -180,12 +198,21 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
 
     @app.exception_handler(404)
     async def _404(request: Request, exc: Exception) -> Response:
-        return page(request, "erreur.html.j2", titre="Page introuvable", statut=404,
-                    message="Cette page n'existe pas ou n'est pas accessible avec votre compte.")
+        return page(
+            request,
+            "erreur.html.j2",
+            titre="Page introuvable",
+            statut=404,
+            message="Cette page n'existe pas ou n'est pas accessible avec votre compte.",
+        )
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=_middleware_session(app))
-    app.add_middleware(LimiteCorps, limite=2 * 1024 * 1024, limite_depot=p.limites.taille_lot + 16 * 1024 * 1024,
-                       chemins_depot=CHEMINS_DEPOT)
+    app.add_middleware(
+        LimiteCorps,
+        limite=2 * 1024 * 1024,
+        limite_depot=p.limites.taille_lot + 16 * 1024 * 1024,
+        chemins_depot=CHEMINS_DEPOT,
+    )
     hotes = hotes_autorises()
     if hotes:  # domaine configuré : un en-tête Host étranger est refusé (400), RS-18
         from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -210,6 +237,11 @@ def _worker(plateforme: Plateforme) -> Any:
     from controldone.jobs.worker import Worker
 
     handlers = charger_handlers()
-    return Worker(plateforme.db, worker_id=f"web-integre:{socket.gethostname()}:{os.getpid()}",
-                  lease_s=get_settings().job_lease_s, poll_s=1.0, kinds=sorted(handlers),
-                  services={"vault": plateforme.vault})
+    return Worker(
+        plateforme.db,
+        worker_id=f"web-integre:{socket.gethostname()}:{os.getpid()}",
+        lease_s=get_settings().job_lease_s,
+        poll_s=1.0,
+        kinds=sorted(handlers),
+        services={"vault": plateforme.vault},
+    )

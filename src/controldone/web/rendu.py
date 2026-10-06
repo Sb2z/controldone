@@ -108,22 +108,46 @@ def environnement() -> Environment:
     env = Environment(
         loader=PackageLoader("controldone.web", "templates"),
         autoescape=select_autoescape(["html", "j2"], default=True, default_for_string=True),
-        trim_blocks=True, lstrip_blocks=True, undefined=StrictUndefined,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        undefined=StrictUndefined,
     )
-    env.filters.update(montant=_montant, nombre=_nombre, date=_date, taille=_taille, trad=lambda t: traduire(t),
-                       b64=lambda b: base64.b64encode(b).decode("ascii") if b else "")
+    env.filters.update(
+        montant=_montant,
+        nombre=_nombre,
+        date=_date,
+        taille=_taille,
+        trad=lambda t: traduire(t),
+        b64=lambda b: base64.b64encode(b).decode("ascii") if b else "",
+    )
     from controldone.services.publication import formats_disponibles
     from controldone.web.listes_vues import ALERTES_GRAVES, libelle_alerte
 
-    env.globals.update(AVERTISSEMENT=AVERTISSEMENT, PHRASE_RENVOI=PHRASE_RENVOI, formats=formats_disponibles,
-                       AVERTISSEMENT_EN=AVERTISSEMENT_EN, PHRASE_RENVOI_EN=PHRASE_RENVOI_EN, LANGUES=LANGUES,
-                       _=traduire, langue_courante=courante, libelle_alerte=libelle_alerte,
-                       ALERTES_GRAVES=ALERTES_GRAVES)
+    env.globals.update(
+        AVERTISSEMENT=AVERTISSEMENT,
+        PHRASE_RENVOI=PHRASE_RENVOI,
+        formats=formats_disponibles,
+        AVERTISSEMENT_EN=AVERTISSEMENT_EN,
+        PHRASE_RENVOI_EN=PHRASE_RENVOI_EN,
+        LANGUES=LANGUES,
+        _=traduire,
+        langue_courante=courante,
+        libelle_alerte=libelle_alerte,
+        ALERTES_GRAVES=ALERTES_GRAVES,
+    )
     return env
 
 
-def page(request: Request, nom: str, *, titre: str, statut: int = 200, demo: bool = False,
-         nav: str | None = None, **contexte: Any) -> HTMLResponse:
+def page(
+    request: Request,
+    nom: str,
+    *,
+    titre: str,
+    statut: int = 200,
+    demo: bool = False,
+    nav: str | None = None,
+    **contexte: Any,
+) -> HTMLResponse:
     etat = request.app.state.securite
     session = getattr(request.state, "session", None)
     flash = etat.lire_flash(request)
@@ -133,11 +157,24 @@ def page(request: Request, nom: str, *, titre: str, statut: int = 200, demo: boo
     for cle in ("message", "erreur"):  # messages d'erreur du code (textes connus du catalogue)
         if isinstance(contexte.get(cle), str):
             contexte[cle] = traduire(contexte[cle])
-    html = environnement().get_template(nom).render(
-        request=request, titre=traduire(titre), acteur=acteur, csrf=etat.jeton(request), demo=demo, flash=flash,
-        nav=nav, chemin=request.url.path, langue=langue, textes_js=textes_js(langue),
-        retour_langue=_retour_langue(request, statut),
-        **contexte)
+    html = (
+        environnement()
+        .get_template(nom)
+        .render(
+            request=request,
+            titre=traduire(titre),
+            acteur=acteur,
+            csrf=etat.jeton(request),
+            demo=demo,
+            flash=flash,
+            nav=nav,
+            chemin=request.url.path,
+            langue=langue,
+            textes_js=textes_js(langue),
+            retour_langue=_retour_langue(request, statut),
+            **contexte,
+        )
+    )
     rep = HTMLResponse(html, status_code=statut)
     if flash:
         etat.effacer_flash(rep)
@@ -152,11 +189,14 @@ def _retour_langue(request: Request, statut: int) -> str:
     if statut >= 400:
         return "/"
     chemin = request.url.path
-    return retour_sur(chemin + ("?" + request.url.query if request.url.query else ""), retour_sur(chemin, "/"))
+    return retour_sur(
+        chemin + ("?" + request.url.query if request.url.query else ""), retour_sur(chemin, "/")
+    )
 
 
-def redirection(request: Request, url: str, *, message: str | None = None, erreur: str | None = None,
-                **params: Any) -> Response:
+def redirection(
+    request: Request, url: str, *, message: str | None = None, erreur: str | None = None, **params: Any
+) -> Response:
     """Redirection 303 avec message flash, traduit dans la langue de la requête (texte du catalogue, paramètres
     ``params`` au format ``str.format``)."""
     rep = RedirectResponse(url, status_code=303)

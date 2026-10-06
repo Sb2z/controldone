@@ -58,8 +58,17 @@ def scinder_mots_colles(li: VueLigne) -> VueLigne:
             n = max(1, len(m.texte))
             larg = m.x1 - m.x0
             for a, b in itertools.pairwise(coupes):
-                mots.append(Mot(m.texte[a:b], m.x0 + larg * a / n, m.y0, m.x0 + larg * b / n, m.y1, m.confiance,
-                                m.taille))
+                mots.append(
+                    Mot(
+                        m.texte[a:b],
+                        m.x0 + larg * a / n,
+                        m.y0,
+                        m.x0 + larg * b / n,
+                        m.y1,
+                        m.confiance,
+                        m.taille,
+                    )
+                )
         segs.append(Segment(tuple(mots), s.page, s.ligne, s.rang))
     return VueLigne(page=li.page, rang=li.rang, segments=segs, ligne=li.ligne)
 
@@ -93,7 +102,9 @@ def nettoyer_colonnes(cols: list[Colonne], mots: Sequence[Mot] = ()) -> tuple[li
             codes.append(code)
             reste = [m for m in mots if m.x0 >= fin and m.x1 <= c.x1 + 1e-9]
             if reste:
-                out.append(Colonne("inconnue", min(m.x0 for m in reste), c.x1, " ".join(m.texte for m in reste)))
+                out.append(
+                    Colonne("inconnue", min(m.x0 for m in reste), c.x1, " ".join(m.texte for m in reste))
+                )
             continue
         out.append(c)
     vus: set[str] = set()
@@ -116,8 +127,9 @@ def nettoyer_colonnes(cols: list[Colonne], mots: Sequence[Mot] = ()) -> tuple[li
     return out, codes
 
 
-def chercher_partout(vue: VueDocument, motifs: Sequence[re.Pattern[str]], *,
-                     pages: Iterable[int] | None = None) -> list[Trouve]:
+def chercher_partout(
+    vue: VueDocument, motifs: Sequence[re.Pattern[str]], *, pages: Iterable[int] | None = None
+) -> list[Trouve]:
     """Comme ``chercher``, mais le libellé peut commencer au milieu d'un segment (après une frontière de mot)."""
     pats = [re.compile(r"(?<![a-z0-9])(?:" + p.pattern + ")") for p in motifs]
     return chercher(vue, pats, pages=pages, debut_segment=False)

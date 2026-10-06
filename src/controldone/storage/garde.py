@@ -47,7 +47,9 @@ def _filtrer(state: ORMExecuteState) -> None:
     tenant = info.get(CLE_TENANT)
     if info.get(CLE_OPERATEUR) and tenant is None:
         if not state.is_select:
-            raise AccesRefuse("session opérateur : écriture directe interdite (passer par OperatorScope.client)")
+            raise AccesRefuse(
+                "session opérateur : écriture directe interdite (passer par OperatorScope.client)"
+            )
         return
     if tenant is None:
         raise AccesRefuse("accès aux données client hors TenantScope")

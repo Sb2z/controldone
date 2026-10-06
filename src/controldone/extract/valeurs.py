@@ -70,13 +70,15 @@ def normaliser_valeur(
         )
     if t in (TypeValeur.decimal, TypeValeur.taux):
         d = parse_decimal(b, separateur_decimal=separateur_decimal)
-        return ValeurNormalisee(None if d is None else str(abs(d)),
-                                signe=SigneImprime.negatif if d is not None and d < 0 else None)
+        return ValeurNormalisee(
+            None if d is None else str(abs(d)),
+            signe=SigneImprime.negatif if d is not None and d < 0 else None,
+        )
     if t is TypeValeur.quantite:
         lu = parse_nombre(b, separateur_decimal=separateur_decimal)
         if lu is None:
             return ValeurNormalisee(None)
-        reste = b[b.rfind(lu.texte) + len(lu.texte):].strip() if lu.texte in b else ""
+        reste = b[b.rfind(lu.texte) + len(lu.texte) :].strip() if lu.texte in b else ""
         u = normalize_unit(reste) if reste else None
         return ValeurNormalisee(
             str(lu.valeur), unite=u.code if u else None, unite_brute=u.brut if u else None, ambigu=lu.ambigu

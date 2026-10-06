@@ -38,7 +38,9 @@ def test_connexion_client(monde):
 def test_cookie_de_session_httponly(monde):
     c = monde.client()
     r = connecter(c, ADMIN_A, monde.comptes[ADMIN_A])
-    entete = next(v for k, v in r.headers.multi_items() if k == "set-cookie" and v.startswith("cd_session=")).lower()
+    entete = next(
+        v for k, v in r.headers.multi_items() if k == "set-cookie" and v.startswith("cd_session=")
+    ).lower()
     assert "httponly" in entete and "samesite=lax" in entete and "path=/" in entete
 
 
@@ -66,13 +68,17 @@ def test_fondateur_exige_totp(monde):
 def test_totp_anti_rejeu(monde):
     import time
 
-    instant = time.time()  # même pas TOTP pour les deux connexions (sinon le test échoue à un changement de pas)
+    instant = (
+        time.time()
+    )  # même pas TOTP pour les deux connexions (sinon le test échoue à un changement de pas)
     c1, c2 = monde.client(), monde.client()
     connecter_fondateur(c1, monde, t=instant)
     r = connecter(c2, FONDATEUR_EMAIL, MDP_FONDATEUR)
     assert r.headers["location"] == "/connexion/totp"
     t = jeton(c2.get("/connexion/totp").text)
-    r = c2.post("/connexion/totp", data={"csrf": t, "code": code_totp(monde.totp, instant)}, follow_redirects=False)
+    r = c2.post(
+        "/connexion/totp", data={"csrf": t, "code": code_totp(monde.totp, instant)}, follow_redirects=False
+    )
     assert r.status_code == 401  # même code, même pas : refusé
 
 
@@ -132,8 +138,9 @@ def test_csrf_d_une_autre_session_refuse(monde):
 
 
 def test_connexion_sans_csrf_refusee(monde):
-    r = monde.client().post("/connexion", data={"email": ADMIN_A, "mot_de_passe": monde.comptes[ADMIN_A]},
-                            follow_redirects=False)
+    r = monde.client().post(
+        "/connexion", data={"email": ADMIN_A, "mot_de_passe": monde.comptes[ADMIN_A]}, follow_redirects=False
+    )
     assert r.status_code == 403
 
 
@@ -154,12 +161,23 @@ def test_limitation_des_tentatives(monde):
 def test_changer_mot_de_passe(monde):
     c = monde.client()
     connecter_client(c, monde)
-    r = poster(c, "/compte/mot-de-passe", "/compte/mot-de-passe",
-               {"actuel": monde.comptes[ADMIN_A], "nouveau": "court", "confirmation": "court"})
+    r = poster(
+        c,
+        "/compte/mot-de-passe",
+        "/compte/mot-de-passe",
+        {"actuel": monde.comptes[ADMIN_A], "nouveau": "court", "confirmation": "court"},
+    )
     assert r.status_code == 400
-    r = poster(c, "/compte/mot-de-passe", "/compte/mot-de-passe",
-               {"actuel": monde.comptes[ADMIN_A], "nouveau": "nouvelle-phrase-FICTIVE-42",
-                "confirmation": "nouvelle-phrase-FICTIVE-42"})
+    r = poster(
+        c,
+        "/compte/mot-de-passe",
+        "/compte/mot-de-passe",
+        {
+            "actuel": monde.comptes[ADMIN_A],
+            "nouveau": "nouvelle-phrase-FICTIVE-42",
+            "confirmation": "nouvelle-phrase-FICTIVE-42",
+        },
+    )
     assert r.status_code == 303
     c2 = monde.client()
     assert connecter(c2, ADMIN_A, "nouvelle-phrase-FICTIVE-42").status_code == 303

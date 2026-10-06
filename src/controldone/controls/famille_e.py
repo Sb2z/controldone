@@ -54,12 +54,18 @@ __all__ = [
     "imputation_du_dossier",
 ]
 
-ACTION_E = "Rapprocher cet avoir de la facture d'origine et, si besoin, demander une précision au transitaire."
+ACTION_E = (
+    "Rapprocher cet avoir de la facture d'origine et, si besoin, demander une précision au transitaire."
+)
 ACTION_E6 = "Relancer le transitaire pour le reste de l'écart non couvert par les avoirs reçus."
 
 
 def _sans_avoir(ctx: ControlContext, cid: str) -> list[ResultatControle]:
-    return [ctx.non_applicable(cid, RaisonCode.document_manquant, details={"motif": "aucun avoir dans le dossier"})]
+    return [
+        ctx.non_applicable(
+            cid, RaisonCode.document_manquant, details={"motif": "aucun avoir dans le dossier"}
+        )
+    ]
 
 
 def _u(av: Document) -> str:
@@ -81,12 +87,16 @@ def dossier_evaluation_avoir(ctx: ControlContext, av: Document) -> str:
     cites = set(aides.mrn_cites(av))
 
     def cite(decs: Iterable[Document]) -> bool:
-        return any(getattr(d.champs, "type_document", None) == "declaration" and d.dec.mrn_prefixe in cites
-                   for d in decs)
+        return any(
+            getattr(d.champs, "type_document", None) == "declaration" and d.dec.mrn_prefixe in cites
+            for d in decs
+        )
 
     tous = sorted([ctx.dossier.id, *(a.dossier.id for a in freres)])
-    citants = sorted(([ctx.dossier.id] if cite(ctx.declarations(dernieres_versions=False)) else [])
-                     + [a.dossier.id for a in freres if cite(a.documents.values())])
+    citants = sorted(
+        ([ctx.dossier.id] if cite(ctx.declarations(dernieres_versions=False)) else [])
+        + [a.dossier.id for a in freres if cite(a.documents.values())]
+    )
     return (citants or tous)[0]
 
 
@@ -95,8 +105,13 @@ def _evalue_ailleurs(ctx: ControlContext, cid: str, av: Document) -> ResultatCon
     ou = dossier_evaluation_avoir(ctx, av)
     if ou == ctx.dossier.id:
         return None
-    return ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, unite=_u(av), documents=[av.id],
-                              details={"motif": "avoir_evalue_dans_un_autre_dossier", "dossier": ou})
+    return ctx.non_applicable(
+        cid,
+        RaisonCode.couvert_par_autre_controle,
+        unite=_u(av),
+        documents=[av.id],
+        details={"motif": "avoir_evalue_dans_un_autre_dossier", "dossier": ou},
+    )
 
 
 # =====================================================================================================
@@ -145,7 +160,9 @@ def _rattachement_secondaire(ctx: ControlContext, av: Document) -> tuple[str, Va
     for fc in ctx.factures_commerciales():
         if fc.fc.ref_transport is not None and fc.fc.ref_transport.valeur:
             refs_dossier.append(fc.fc.ref_transport.valeur)
-    vals = list(av.av.refs_transport) + [ln.ref_transport for ln in av.av.lignes if ln.ref_transport is not None]
+    vals = list(av.av.refs_transport) + [
+        ln.ref_transport for ln in av.av.lignes if ln.ref_transport is not None
+    ]
     for v in vals:
         if v.valeur and any(ref_transport_compatibles(v.valeur, r) for r in refs_dossier):
             return "la référence de transport", v
@@ -158,19 +175,30 @@ def _e1_avoir(ctx: ControlContext, av: Document) -> ResultatControle:
     details: dict = {"avoir_id": av.id}
     if origines:
         return ctx.conforme(
-            "E1", unite=unite, documents=[av.id, *(ft.id for ft, dos, _ in origines if dos is None)],
+            "E1",
+            unite=unite,
+            documents=[av.id, *(ft.id for ft, dos, _ in origines if dos is None)],
             details={**details, "factures_origine": [ft.id for ft, _, _ in origines]},
             entrees={"ref_facture_origine": origines[0][2]},
         )
     second = _rattachement_secondaire(ctx, av)
     num_v = _numero(av)
     cles = [v for v in (num_v, second[1] if second else None) if v is not None]
-    classement = ctx.classify("E1", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=cles,
-                              raisons_supplementaires=[RaisonCode.rattachement_faible])
+    classement = ctx.classify(
+        "E1",
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=cles,
+        raisons_supplementaires=[RaisonCode.rattachement_faible],
+    )
     cite = [x.valeur for x in av.av.refs_facture_origine if x.valeur]
-    debut = (f"{aides.maj(aides.ref_document(av, num_v))} cite la facture d'origine {', '.join(cite)}, qui n'a pas "
-             f"été retrouvée chez le même émetteur" if cite
-             else f"{aides.maj(aides.ref_document(av, num_v))} ne cite aucune facture d'origine")
+    debut = (
+        f"{aides.maj(aides.ref_document(av, num_v))} cite la facture d'origine {', '.join(cite)}, qui n'a pas "
+        f"été retrouvée chez le même émetteur"
+        if cite
+        else f"{aides.maj(aides.ref_document(av, num_v))} ne cite aucune facture d'origine"
+    )
     if second is not None:
         quoi, v = second
         libelle = f"{debut} ; il est rattaché au dossier seulement par {quoi} {v.valeur} (page {v.page})."
@@ -178,10 +206,19 @@ def _e1_avoir(ctx: ControlContext, av: Document) -> ResultatControle:
     else:
         libelle = f"{debut} et ne partage ni MRN ni référence de transport avec les documents du dossier : avoir non rattaché."
         details["rattachement"] = "aucun"
-    preuves = [preuve(v, RolePreuve.contexte) for v in cles] or [preuve(None, RolePreuve.contexte,
-                                                                        calcul="aucune référence lue")]
-    return ctx.constat("E1", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_E,
-                       preuves=preuves, documents=[av.id], details=details)
+    preuves = [preuve(v, RolePreuve.contexte) for v in cles] or [
+        preuve(None, RolePreuve.contexte, calcul="aucune référence lue")
+    ]
+    return ctx.constat(
+        "E1",
+        classement,
+        unite=unite,
+        libelle=libelle,
+        prochaine_action=ACTION_E,
+        preuves=preuves,
+        documents=[av.id],
+        details=details,
+    )
 
 
 @control("E1")
@@ -254,12 +291,23 @@ def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatC
         # même émetteur, a un numéro illisible (on ne peut ni confirmer ni exclure la référence) : comparaison
         # faite sur elle, au plus à vérifier avec la raison « rattachement faible ».
         e_av = aides.emetteur_de(ctx, av)
-        cands = [ft for ft in ctx.factures_transitaires()
-                 if aides.memes_emetteurs(e_av, aides.emetteur_de(ctx, ft)) and not ctx.utilisable(ft.ft.numero)]
-        if not (any(r.valeur for r in av.av.refs_facture_origine) and len(cands) == 1
-                and len(ctx.factures_transitaires()) == 1):
-            return ctx.non_verifiable("E2", RaisonCode.document_manquant, unite=unite, documents=[av.id],
-                                      details={"motif": "facture d'origine non retrouvée"})
+        cands = [
+            ft
+            for ft in ctx.factures_transitaires()
+            if aides.memes_emetteurs(e_av, aides.emetteur_de(ctx, ft)) and not ctx.utilisable(ft.ft.numero)
+        ]
+        if not (
+            any(r.valeur for r in av.av.refs_facture_origine)
+            and len(cands) == 1
+            and len(ctx.factures_transitaires()) == 1
+        ):
+            return ctx.non_verifiable(
+                "E2",
+                RaisonCode.document_manquant,
+                unite=unite,
+                documents=[av.id],
+                details={"motif": "facture d'origine non retrouvée"},
+            )
         origines = [(cands[0], None, None)]
         raisons.append(RaisonCode.rattachement_faible)
     ids_origine = {ft.id for ft, _, _ in origines}
@@ -269,12 +317,19 @@ def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatC
     # Tous les avoirs (ici et ailleurs, hors secondes réceptions) qui citent l'une de ces factures.
     pool = [d for d in ctx.avoirs() if d.id not in doubles]
     pool += [x.doc for x in aides.documents_autres(ctx, TypeDocument.avoir)]
-    avoirs = [d for d in pool if any(ref_compatibles(r.valeur, n) for r in d.av.refs_facture_origine
-                                     if r.valeur for n in numeros if n)]
+    avoirs = [
+        d
+        for d in pool
+        if any(
+            ref_compatibles(r.valeur, n) for r in d.av.refs_facture_origine if r.valeur for n in numeros if n
+        )
+    ]
     if av.id not in {d.id for d in avoirs}:
         avoirs.append(av)
     fts = [ft for ft, _, _ in origines]
-    fusion = any(ln.nature is NatureLigne.debours_combines for d in [*avoirs, *fts] for ln in aides.lignes_ft(d))
+    fusion = any(
+        ln.nature is NatureLigne.debours_combines for d in [*avoirs, *fts] for ln in aides.lignes_ft(d)
+    )
     credite, n_av, ok_av = _sommes_par_groupe(avoirs, fusion)
     facture, n_ft, ok_ft = _sommes_par_groupe(fts, fusion)
     details: dict = {"avoirs": sorted(d.id for d in avoirs), "factures_origine": sorted(ids_origine)}
@@ -283,13 +338,19 @@ def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatC
         tot_av = sum((num(d.av.total_credite_ht) or ZERO for d in avoirs), ZERO)
         tot_ft = sum((num(ft.ft.total_ht) or ZERO for ft in fts), ZERO)
         if not tot_av or not tot_ft:
-            return ctx.non_verifiable("E2", RaisonCode.valeur_absente, unite=unite, documents=[av.id], details=details)
+            return ctx.non_verifiable(
+                "E2", RaisonCode.valeur_absente, unite=unite, documents=[av.id], details=details
+            )
         credite, facture, n_av, n_ft = {"total": tot_av}, {"total": tot_ft}, len(avoirs), len(fts)
     elif not (ok_av and ok_ft) or not facture:
         # facture d'origine sans ligne lue : rien à comparer (pas « 0 facturé »)
-        return ctx.non_verifiable("E2", RaisonCode.valeur_absente, unite=unite, documents=[av.id], details=details)
+        return ctx.non_verifiable(
+            "E2", RaisonCode.valeur_absente, unite=unite, documents=[av.id], details=details
+        )
     t = ctx.tol.t_somme(n_av + n_ft)
-    comparaisons: dict[str, tuple[Decimal, Decimal]] = {g: (credite[g], facture.get(g, ZERO)) for g in sorted(credite)}
+    comparaisons: dict[str, tuple[Decimal, Decimal]] = {
+        g: (credite[g], facture.get(g, ZERO)) for g in sorted(credite)
+    }
     if "total" not in credite:
         # Ligne d'avoir citant un MRN que la facture d'origine cite aussi pour la même nature : le montant
         # facturé d'origine de ce qui est crédité est celui de ce MRN (D-809).
@@ -299,31 +360,58 @@ def _e2_avoir(ctx: ControlContext, av: Document, doubles: set[str]) -> ResultatC
                 comparaisons[f"{g}|{mrn}"] = (x, f_mrn[(g, mrn)])
     depassements = {k: c - f for k, (c, f) in comparaisons.items() if c > f + t}
     ecart = max(depassements.values(), default=ZERO)
-    commun = dict(unite=unite, attendu=None, constate=None, ecart=arrondi_centime(ecart), tolerance=t,
-                  documents=[av.id], details={**details, "groupes": {g: str(arrondi_centime(x))
-                                                                      for g, x in depassements.items()}})
+    commun = dict(
+        unite=unite,
+        attendu=None,
+        constate=None,
+        ecart=arrondi_centime(ecart),
+        tolerance=t,
+        documents=[av.id],
+        details={**details, "groupes": {g: str(arrondi_centime(x)) for g, x in depassements.items()}},
+    )
     if not depassements:
         return ctx.conforme("E2", **commun)
     vals = [aides.montant_ht(ln) for d in avoirs for ln in aides.lignes_ft(d)]
-    classement = ctx.classify("E2", ecart=ecart, tolerance=t, seuil_certitude=None,
-                              valeurs_cles=[v for v in vals if v is not None], raisons_supplementaires=raisons)
+    classement = ctx.classify(
+        "E2",
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=None,
+        valeurs_cles=[v for v in vals if v is not None],
+        raisons_supplementaires=raisons,
+    )
     morceaux = []
     for k in depassements:
         g, _, mrn = k.partition("|")
-        quoi = _LIBELLE_GROUPE.get(g, "total HT" if g == "total" else "lignes « " + g.replace("_", " ") + " »")
+        quoi = _LIBELLE_GROUPE.get(
+            g, "total HT" if g == "total" else "lignes « " + g.replace("_", " ") + " »"
+        )
         c, f = comparaisons[k]
-        morceaux.append(f"{quoi}{f' du MRN {mrn}' if mrn else ''} : {format_montant(arrondi_centime(c), 'EUR')} "
-                        f"crédités pour {format_montant(arrondi_centime(f), 'EUR')} facturés")
+        morceaux.append(
+            f"{quoi}{f' du MRN {mrn}' if mrn else ''} : {format_montant(arrondi_centime(c), 'EUR')} "
+            f"crédités pour {format_montant(arrondi_centime(f), 'EUR')} facturés"
+        )
     libelle = (
         f"Les avoirs reçus sur la facture d'origine {', '.join(n for n in numeros if n)} dépassent le montant "
         f"facturé ({' ; '.join(morceaux)})."
     )
     preuves = [preuve(v, RolePreuve.valeur_b) for v in vals if v is not None]
-    preuves += [preuve(aides.montant_ht(ln), RolePreuve.valeur_a) for ft in fts for ln in ft.ft.lignes
-                if aides.montant_ht(ln) is not None]
+    preuves += [
+        preuve(aides.montant_ht(ln), RolePreuve.valeur_a)
+        for ft in fts
+        for ln in ft.ft.lignes
+        if aides.montant_ht(ln) is not None
+    ]
     autres = sorted({dos for _, dos, _ in origines if dos})
-    return ctx.constat("E2", classement, libelle=libelle, prochaine_action=ACTION_E, preuves=preuves,
-                       autres_dossiers=autres, **commun)
+    return ctx.constat(
+        "E2",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_E,
+        preuves=preuves,
+        autres_dossiers=autres,
+        **commun,
+    )
 
 
 @control("E2")
@@ -361,22 +449,38 @@ def e3_avoir_recu_deux_fois(ctx: ControlContext) -> list[ResultatControle]:
         if d is None:
             out.append(ctx.conforme("E3", unite=unite, documents=[av.id]))
             continue
-        classement = ctx.classify("E3", ecart=None, tolerance=None, seuil_certitude=None,
-                                  valeurs_cles=[v for v in (_numero(av), _numero(d.premier)) if v is not None])
+        classement = ctx.classify(
+            "E3",
+            ecart=None,
+            tolerance=None,
+            seuil_certitude=None,
+            valeurs_cles=[v for v in (_numero(av), _numero(d.premier)) if v is not None],
+        )
         ou = "dans ce dossier" if d.dossier_premier is None else f"dans le dossier {d.dossier_premier}"
-        motif = ("même émetteur et même numéro" if d.motif == "meme_numero"
-                 else "même montant total et même facture d'origine, à moins de 7 jours d'écart")
+        motif = (
+            "même émetteur et même numéro"
+            if d.motif == "meme_numero"
+            else "même montant total et même facture d'origine, à moins de 7 jours d'écart"
+        )
         libelle = (
             f"{aides.maj(aides.ref_document(av, _numero(av)))} correspond à {aides.ref_document(d.premier, _numero(d.premier))} "
             f"déjà reçu {ou} ({motif}) ; il n'est pas imputé une seconde fois."
         )
         preuves = [preuve(v, RolePreuve.valeur_b) for v in (_numero(av),) if v is not None]
         preuves += [preuve(v, RolePreuve.valeur_a) for v in (_numero(d.premier),) if v is not None]
-        out.append(ctx.constat(
-            "E3", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_E, preuves=preuves,
-            documents=[av.id], autres_dossiers=[d.dossier_premier] if d.dossier_premier else [],
-            details={"avoir_id": av.id, "premier": d.premier.id, "motif": d.motif},
-        ))
+        out.append(
+            ctx.constat(
+                "E3",
+                classement,
+                unite=unite,
+                libelle=libelle,
+                prochaine_action=ACTION_E,
+                preuves=preuves,
+                documents=[av.id],
+                autres_dossiers=[d.dossier_premier] if d.dossier_premier else [],
+                details={"avoir_id": av.id, "premier": d.premier.id, "motif": d.motif},
+            )
+        )
     return out
 
 
@@ -386,27 +490,58 @@ def e3_avoir_recu_deux_fois(ctx: ControlContext) -> list[ResultatControle]:
 
 
 def _e4_comparer(
-    ctx: ControlContext, av: Document, *, sous: str, unite: str, imprime: ValeurSourcee, v_imprime: Decimal,
-    calcul: Decimal, tolerance: Decimal, operandes: list[ValeurSourcee], quoi: str, calcul_txt: str,
+    ctx: ControlContext,
+    av: Document,
+    *,
+    sous: str,
+    unite: str,
+    imprime: ValeurSourcee,
+    v_imprime: Decimal,
+    calcul: Decimal,
+    tolerance: Decimal,
+    operandes: list[ValeurSourcee],
+    quoi: str,
+    calcul_txt: str,
 ) -> ResultatControle:
     ecart = v_imprime - calcul
-    commun = dict(unite=unite, sous_controle=sous, entrees={"imprime": imprime}, attendu=arrondi_centime(calcul),
-                  constate=v_imprime, ecart=arrondi_centime(ecart), tolerance=tolerance,
-                  seuil_certitude=ctx.tol.s_arith(), documents=[av.id], details={"avoir_id": av.id})
+    commun = dict(
+        unite=unite,
+        sous_controle=sous,
+        entrees={"imprime": imprime},
+        attendu=arrondi_centime(calcul),
+        constate=v_imprime,
+        ecart=arrondi_centime(ecart),
+        tolerance=tolerance,
+        seuil_certitude=ctx.tol.s_arith(),
+        documents=[av.id],
+        details={"avoir_id": av.id},
+    )
     if abs(ecart) <= tolerance:
         return ctx.conforme("E4", **commun)
-    classement = ctx.classify("E4", ecart=ecart, tolerance=tolerance, seuil_certitude=ctx.tol.s_arith(),
-                              valeurs_cles=[imprime, *operandes],
-                              confusion=[Confusion(imprime, autre=calcul, tolerance=tolerance)])
+    classement = ctx.classify(
+        "E4",
+        ecart=ecart,
+        tolerance=tolerance,
+        seuil_certitude=ctx.tol.s_arith(),
+        valeurs_cles=[imprime, *operandes],
+        confusion=[Confusion(imprime, autre=calcul, tolerance=tolerance)],
+    )
     libelle = (
         f"Sur {aides.ref_document(av, imprime)}, {quoi} imprimé ({format_montant(v_imprime, 'EUR')}) diffère du "
         f"calcul à partir des montants imprimés ({calcul_txt})."
     )
-    return ctx.constat("E4", classement, libelle=libelle, prochaine_action=ACTION_E,
-                       preuves=[preuve(imprime, RolePreuve.valeur_b),
-                                *(preuve(v, RolePreuve.operande) for v in operandes),
-                                preuve(None, RolePreuve.valeur_a, calcul=calcul_txt)],
-                       **commun)
+    return ctx.constat(
+        "E4",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_E,
+        preuves=[
+            preuve(imprime, RolePreuve.valeur_b),
+            *(preuve(v, RolePreuve.operande) for v in operandes),
+            preuve(None, RolePreuve.valeur_a, calcul=calcul_txt),
+        ],
+        **commun,
+    )
 
 
 def _abs(v: ValeurSourcee | None) -> Decimal | None:
@@ -427,24 +562,62 @@ def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
             if all(aides.utilisable_num(ctx, v) for v in (q, pu, ht)):
                 vq, vpu, vht = _abs(q) or ZERO, _abs(pu) or ZERO, _abs(ht) or ZERO
                 txt = f"{format_nombre(vq)} × {format_montant(vpu, 'EUR')} = {format_montant(arrondi_centime(vq * vpu), 'EUR')}"
-                out.append(_e4_comparer(ctx, av, sous="ligne", unite=cle_unite(av=av.id, ligne=i), imprime=ht,
-                                        v_imprime=vht, calcul=vq * vpu, tolerance=tol.t_ligne(), operandes=[q, pu],
-                                        quoi=f"le montant HT de la ligne {i + 1}", calcul_txt=txt))
+                out.append(
+                    _e4_comparer(
+                        ctx,
+                        av,
+                        sous="ligne",
+                        unite=cle_unite(av=av.id, ligne=i),
+                        imprime=ht,
+                        v_imprime=vht,
+                        calcul=vq * vpu,
+                        tolerance=tol.t_ligne(),
+                        operandes=[q, pu],
+                        quoi=f"le montant HT de la ligne {i + 1}",
+                        calcul_txt=txt,
+                    )
+                )
             else:
-                out.append(ctx.non_verifiable("E4", RaisonCode.valeur_absente, unite=cle_unite(av=av.id, ligne=i),
-                                              sous_controle="ligne", documents=[av.id]))
+                out.append(
+                    ctx.non_verifiable(
+                        "E4",
+                        RaisonCode.valeur_absente,
+                        unite=cle_unite(av=av.id, ligne=i),
+                        sous_controle="ligne",
+                        documents=[av.id],
+                    )
+                )
         tx, tva = ln.taux_tva, ln.montant_tva
         if ht is not None and tx is not None and tva is not None:
             if all(aides.utilisable_num(ctx, v) for v in (ht, tx, tva)):
                 vht, vtx, vtva = _abs(ht) or ZERO, _abs(tx) or ZERO, _abs(tva) or ZERO
                 calc = vht * vtx / Decimal(100)
                 txt = f"{format_montant(vht, 'EUR')} × {format_nombre(vtx)} % = {format_montant(arrondi_centime(calc), 'EUR')}"
-                out.append(_e4_comparer(ctx, av, sous="tva_ligne", unite=cle_unite(av=av.id, ligne=i), imprime=tva,
-                                        v_imprime=vtva, calcul=calc, tolerance=tol.t_ligne(), operandes=[ht, tx],
-                                        quoi=f"le montant de TVA de la ligne {i + 1}", calcul_txt=txt))
+                out.append(
+                    _e4_comparer(
+                        ctx,
+                        av,
+                        sous="tva_ligne",
+                        unite=cle_unite(av=av.id, ligne=i),
+                        imprime=tva,
+                        v_imprime=vtva,
+                        calcul=calc,
+                        tolerance=tol.t_ligne(),
+                        operandes=[ht, tx],
+                        quoi=f"le montant de TVA de la ligne {i + 1}",
+                        calcul_txt=txt,
+                    )
+                )
             else:
-                out.append(ctx.non_verifiable("E4", RaisonCode.valeur_absente, unite=cle_unite(av=av.id, ligne=i),
-                                              sous_controle="tva_ligne", documents=[av.id]))
+                out.append(
+                    ctx.non_verifiable(
+                        "E4",
+                        RaisonCode.valeur_absente,
+                        unite=cle_unite(av=av.id, ligne=i),
+                        sous_controle="tva_ligne",
+                        documents=[av.id],
+                    )
+                )
     # total_ht : Σ montants HT des lignes contre le total crédité HT imprimé.
     hts = [ln.montant_ht for ln in c.lignes]
     if c.total_credite_ht is not None and hts:
@@ -452,29 +625,54 @@ def _e4_avoir(ctx: ControlContext, av: Document) -> list[ResultatControle]:
         if aides.utilisable_num(ctx, c.total_credite_ht) and all(aides.utilisable_num(ctx, v) for v in hts):
             ops = [v for v in hts if v is not None]
             s = sum((_abs(v) or ZERO for v in ops), ZERO)
-            out.append(_e4_comparer(
-                ctx, av, sous="total_ht", unite=u, imprime=c.total_credite_ht, v_imprime=_abs(c.total_credite_ht) or ZERO,
-                calcul=s, tolerance=tol.t_somme(len(ops)), operandes=ops, quoi="le total HT crédité",
-                calcul_txt=f"somme des {len(ops)} lignes = {format_montant(arrondi_centime(s), 'EUR')}",
-            ))
+            out.append(
+                _e4_comparer(
+                    ctx,
+                    av,
+                    sous="total_ht",
+                    unite=u,
+                    imprime=c.total_credite_ht,
+                    v_imprime=_abs(c.total_credite_ht) or ZERO,
+                    calcul=s,
+                    tolerance=tol.t_somme(len(ops)),
+                    operandes=ops,
+                    quoi="le total HT crédité",
+                    calcul_txt=f"somme des {len(ops)} lignes = {format_montant(arrondi_centime(s), 'EUR')}",
+                )
+            )
         else:
-            out.append(ctx.non_verifiable("E4", RaisonCode.valeur_absente, unite=u, sous_controle="total_ht",
-                                          documents=[av.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "E4", RaisonCode.valeur_absente, unite=u, sous_controle="total_ht", documents=[av.id]
+                )
+            )
     # total_ttc : total HT + total TVA = total TTC.
     if c.total_credite_ttc is not None and c.total_credite_ht is not None and c.total_tva is not None:
         u = cle_unite(av=av.id)
         vals = (c.total_credite_ht, c.total_tva, c.total_credite_ttc)
         if all(aides.utilisable_num(ctx, v) for v in vals):
             s = (_abs(c.total_credite_ht) or ZERO) + (_abs(c.total_tva) or ZERO)
-            out.append(_e4_comparer(
-                ctx, av, sous="total_ttc", unite=u, imprime=c.total_credite_ttc,
-                v_imprime=_abs(c.total_credite_ttc) or ZERO, calcul=s, tolerance=tol.t_somme(2),
-                operandes=[c.total_credite_ht, c.total_tva], quoi="le total TTC crédité",
-                calcul_txt=f"total HT + total TVA = {format_montant(arrondi_centime(s), 'EUR')}",
-            ))
+            out.append(
+                _e4_comparer(
+                    ctx,
+                    av,
+                    sous="total_ttc",
+                    unite=u,
+                    imprime=c.total_credite_ttc,
+                    v_imprime=_abs(c.total_credite_ttc) or ZERO,
+                    calcul=s,
+                    tolerance=tol.t_somme(2),
+                    operandes=[c.total_credite_ht, c.total_tva],
+                    quoi="le total TTC crédité",
+                    calcul_txt=f"total HT + total TVA = {format_montant(arrondi_centime(s), 'EUR')}",
+                )
+            )
         else:
-            out.append(ctx.non_verifiable("E4", RaisonCode.valeur_absente, unite=u, sous_controle="total_ttc",
-                                          documents=[av.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "E4", RaisonCode.valeur_absente, unite=u, sous_controle="total_ttc", documents=[av.id]
+                )
+            )
     return out or [ctx.non_applicable("E4", RaisonCode.valeur_absente, unite=_u(av), documents=[av.id])]
 
 
@@ -503,8 +701,12 @@ def _composante_constat(r: ResultatControle) -> Composante | None:
         return None
     if c.composante is not None and c.composante is not Composante.valeur:
         return c.composante
-    return {"C1": Composante.droit, "C2": Composante.autre_taxe, "C3": Composante.tva,
-            "C4": Composante.tva}.get(r.controle_id)
+    return {
+        "C1": Composante.droit,
+        "C2": Composante.autre_taxe,
+        "C3": Composante.tva,
+        "C4": Composante.tva,
+    }.get(r.controle_id)
 
 
 def _composante_resultat(r: ResultatControle) -> Composante | None:
@@ -535,16 +737,30 @@ def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | 
     out: list[tuple[EcartImputable, str | None]] = []
     vus: set[str] = set()
     for e in ctx.ecarts_recouvrement:
-        if e.statut not in (StatutEcart.ouvert, StatutEcart.reclame, StatutEcart.partiellement_credite,
-                            StatutEcart.conteste):
+        if e.statut not in (
+            StatutEcart.ouvert,
+            StatutEcart.reclame,
+            StatutEcart.partiellement_credite,
+            StatutEcart.conteste,
+        ):
             continue
         ft = ctx.document(e.facture_transitaire_id) if e.facture_transitaire_id else None
-        facture_ref = aides.texte(ft.ft.numero) if ft is not None and ft.type is TypeDocument.facture_transitaire else None
+        facture_ref = (
+            aides.texte(ft.ft.numero)
+            if ft is not None and ft.type is TypeDocument.facture_transitaire
+            else None
+        )
         emetteur = e.transitaire_id
         if ft is not None and ft.type is TypeDocument.facture_transitaire:
             emetteur = aides.emetteur_de(ctx, ft) or emetteur
-        out.append((EcartImputable.depuis_ecart(e, facture_ref=facture_ref, emetteur=emetteur,
-                                                reste=e.montant_initial), e.constat_id))
+        out.append(
+            (
+                EcartImputable.depuis_ecart(
+                    e, facture_ref=facture_ref, emetteur=emetteur, reste=e.montant_initial
+                ),
+                e.constat_id,
+            )
+        )
         vus.add(e.constat_id)
     for r in ctx.anterieurs():
         c = r.constat
@@ -569,15 +785,28 @@ def _ecarts_du_dossier(ctx: ControlContext) -> list[tuple[EcartImputable, str | 
             continue
         ft = fts[0]
         mrn = aides.texte(decs[0].dec.mrn) if len(decs) == 1 else None
-        out.append((EcartImputable(
-            id=f"constat:{cle}", composante=comp, reste=m, emetteur=aides.emetteur_de(ctx, ft),
-            constat_id=cle, facture_ref=aides.texte(ft.ft.numero), mrn=mrn, nature=_nature_ligne(r, ft),
-        ), cle))
+        out.append(
+            (
+                EcartImputable(
+                    id=f"constat:{cle}",
+                    composante=comp,
+                    reste=m,
+                    emetteur=aides.emetteur_de(ctx, ft),
+                    constat_id=cle,
+                    facture_ref=aides.texte(ft.ft.numero),
+                    mrn=mrn,
+                    nature=_nature_ligne(r, ft),
+                ),
+                cle,
+            )
+        )
         vus.add(cle)
     return out
 
 
-def imputation_du_dossier(ctx: ControlContext) -> tuple[ResultatImputation, list[tuple[EcartImputable, str | None]]]:
+def imputation_du_dossier(
+    ctx: ControlContext,
+) -> tuple[ResultatImputation, list[tuple[EcartImputable, str | None]]]:
     """Imputation §17.2 des avoirs du dossier (hors secondes réceptions, E3) sur les écarts candidats."""
     lignes = aides.lignes_credit_du_dossier(ctx)
     ecarts = _ecarts_du_dossier(ctx)
@@ -602,8 +831,15 @@ def e5_avoir_sans_ecart(ctx: ControlContext) -> list[ResultatControle]:
     for av in avoirs:
         unite = _u(av)
         if av.id in doubles:
-            out.append(ctx.non_applicable("E5", RaisonCode.couvert_par_autre_controle, unite=unite,
-                                          documents=[av.id], details={"couvert_par": "E3"}))
+            out.append(
+                ctx.non_applicable(
+                    "E5",
+                    RaisonCode.couvert_par_autre_controle,
+                    unite=unite,
+                    documents=[av.id],
+                    details={"couvert_par": "E3"},
+                )
+            )
             continue
         if (ailleurs := _evalue_ailleurs(ctx, "E5", av)) is not None:
             out.append(ailleurs)
@@ -615,11 +851,20 @@ def e5_avoir_sans_ecart(ctx: ControlContext) -> list[ResultatControle]:
         reliquat = res.reliquat_avoir(av.id)
         impute = arrondi_centime(sum((i.montant for i in res.imputations_avoir(av.id)), ZERO))
         t = ctx.tol.t_somme(len(lignes))
-        commun = dict(unite=unite, attendu=impute, constate=arrondi_centime(sum((lc.montant for lc in lignes), ZERO)),
-                      ecart=reliquat, tolerance=t, documents=[av.id],
-                      details={"avoir_id": av.id, "impute": str(impute), "reliquat": str(reliquat),
-                               "imputations": [(i.ecart_id, str(i.montant), i.palier)
-                                               for i in res.imputations_avoir(av.id)]})
+        commun = dict(
+            unite=unite,
+            attendu=impute,
+            constate=arrondi_centime(sum((lc.montant for lc in lignes), ZERO)),
+            ecart=reliquat,
+            tolerance=t,
+            documents=[av.id],
+            details={
+                "avoir_id": av.id,
+                "impute": str(impute),
+                "reliquat": str(reliquat),
+                "imputations": [(i.ecart_id, str(i.montant), i.palier) for i in res.imputations_avoir(av.id)],
+            },
+        )
         if reliquat <= t:
             out.append(ctx.conforme("E5", **commun))
             continue
@@ -633,9 +878,16 @@ def e5_avoir_sans_ecart(ctx: ControlContext) -> list[ResultatControle]:
             f"correspond à aucun écart ouvert"
             + (" ; l'avoir n'est pas ventilé par nature." if sans_vent else ".")
         )
-        out.append(ctx.constat("E5", classement, libelle=libelle,
-                               prochaine_action="Identifier le sujet réglé par cet avoir auprès du transitaire.",
-                               preuves=[preuve(v, RolePreuve.valeur_b) for v in vals], **commun))
+        out.append(
+            ctx.constat(
+                "E5",
+                classement,
+                libelle=libelle,
+                prochaine_action="Identifier le sujet réglé par cet avoir auprès du transitaire.",
+                preuves=[preuve(v, RolePreuve.valeur_b) for v in vals],
+                **commun,
+            )
+        )
     return out
 
 
@@ -674,15 +926,27 @@ def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
         unite = cle_unite(ecart=e.id)
         imputs = [i for i in res.imputations if i.ecart_id == e.id]
         av_ids = list(dict.fromkeys(i.avoir_id for i in imputs))
-        commun = dict(unite=unite, attendu=etat.montant_initial, constate=credit, ecart=etat.reste, tolerance=t,
-                      documents=av_ids,
-                      details={"ecart_id": e.id, "remplace_constat_id": constat_id, "credite": str(credit),
-                               "reste": str(etat.reste), "avoirs": av_ids})
+        commun = dict(
+            unite=unite,
+            attendu=etat.montant_initial,
+            constate=credit,
+            ecart=etat.reste,
+            tolerance=t,
+            documents=av_ids,
+            details={
+                "ecart_id": e.id,
+                "remplace_constat_id": constat_id,
+                "credite": str(credit),
+                "reste": str(etat.reste),
+                "avoirs": av_ids,
+            },
+        )
         if etat.reste <= t:
             out.append(ctx.conforme("E6", **commun))
             continue
-        classement = ctx.classify("E6", ecart=etat.reste, tolerance=t, seuil_certitude=None, valeurs_cles=[],
-                                  montant=etat.reste)
+        classement = ctx.classify(
+            "E6", ecart=etat.reste, tolerance=t, seuil_certitude=None, valeurs_cles=[], montant=etat.reste
+        )
         av_docs = [d for d in (ctx.document(i) for i in av_ids) if d is not None]
         composante = origine.composante if origine is not None else e.composante
         mrn = origine.mrn if origine is not None else e.mrn
@@ -694,10 +958,27 @@ def e6_avoir_partiel(ctx: ControlContext) -> list[ResultatControle]:
             + ", ".join(aides.ref_document(d, _numero(d)) for d in av_docs)
             + f" ; reste {format_montant(etat.reste, 'EUR')}."
         )
-        preuves = [preuve(aides.montant_ht(d.av.lignes[i.ligne]), RolePreuve.valeur_b)
-                   for i in imputs for d in av_docs if d.id == i.avoir_id and i.ligne is not None]
-        out.append(ctx.constat("E6", classement, libelle=libelle, prochaine_action=ACTION_E6, montant=etat.reste,
-                               montant_brut=etat.reste, composante=composante, preuves=preuves, **commun))
-    return out or [ctx.non_applicable("E6", RaisonCode.valeur_absente,
-                                      details={"motif": "aucun écart couvert par un avoir du dossier"})]
-
+        preuves = [
+            preuve(aides.montant_ht(d.av.lignes[i.ligne]), RolePreuve.valeur_b)
+            for i in imputs
+            for d in av_docs
+            if d.id == i.avoir_id and i.ligne is not None
+        ]
+        out.append(
+            ctx.constat(
+                "E6",
+                classement,
+                libelle=libelle,
+                prochaine_action=ACTION_E6,
+                montant=etat.reste,
+                montant_brut=etat.reste,
+                composante=composante,
+                preuves=preuves,
+                **commun,
+            )
+        )
+    return out or [
+        ctx.non_applicable(
+            "E6", RaisonCode.valeur_absente, details={"motif": "aucun écart couvert par un avoir du dossier"}
+        )
+    ]

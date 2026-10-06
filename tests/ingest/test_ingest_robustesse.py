@@ -39,7 +39,9 @@ def _zip(entrees: dict[str, bytes]) -> bytes:
 def test_d1600_flux_deflate_altere_refuse_l_entree_sans_perdre_le_lot():
     contenu = bytearray(_zip({"a.pdf": PDF, "b.pdf": fab.pdf([["autre FICTIF"]])}))
     debut = contenu.find(b"PK\x03\x04") + 30 + len("a.pdf")
-    contenu[debut + 40:debut + 80] = b"\xff" * 40  # flux compressé de a.pdf altéré : zlib.error à la lecture
+    contenu[debut + 40 : debut + 80] = (
+        b"\xff" * 40
+    )  # flux compressé de a.pdf altéré : zlib.error à la lecture
     rec = recevoir_octets([("envoi.zip", bytes(contenu)), ("seul.pdf", PDF)])
     m = _motifs(rec)
     assert m["envoi/a.pdf"] == MotifRefus.corrompu
@@ -50,7 +52,8 @@ def test_d1600_flux_deflate_altere_refuse_l_entree_sans_perdre_le_lot():
 def test_d1600_archive_sans_fichier_refusee_vide(entrees):
     rec = recevoir_octets([("vide.zip", _zip(entrees))])
     assert [(f.fichier.chemin_relatif, f.fichier.motif_refus) for f in rec.fichiers] == [
-        ("vide.zip", MotifRefus.vide)]
+        ("vide.zip", MotifRefus.vide)
+    ]
 
 
 def test_d1600_erreur_imprevue_d_un_analyseur_refuse_le_fichier_seulement(monkeypatch):
@@ -89,20 +92,36 @@ def _xlsx_avec_feuille(feuille: bytes) -> bytes:
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for i in src.infolist():
-            z.writestr(i.filename, feuille if i.filename == "xl/worksheets/sheet1.xml" else src.read(i.filename))
+            z.writestr(
+                i.filename, feuille if i.filename == "xl/worksheets/sheet1.xml" else src.read(i.filename)
+            )
     return out.getvalue()
 
 
 def test_d1602_bombe_xlsx_refusee_comme_une_archive():
-    feuille = (b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
-               + b" " * (3 * 1024 * 1024) + b"</sheetData></worksheet>")  # 3 Mo, taux > 1 000
+    feuille = (
+        b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+        + b" " * (3 * 1024 * 1024)
+        + b"</sheetData></worksheet>"
+    )  # 3 Mo, taux > 1 000
     rec = recevoir_octets([("bombe.xlsx", _xlsx_avec_feuille(feuille))])
     assert rec.fichiers[0].fichier.motif_refus == MotifRefus.archive_dangereuse
-    limite = recevoir_octets([("gros.xlsx", _xlsx_avec_feuille(feuille))],
-                             limites=Limites(zip_taille_totale=1024 * 1024, zip_ratio=10_000))
+    limite = recevoir_octets(
+        [("gros.xlsx", _xlsx_avec_feuille(feuille))],
+        limites=Limites(zip_taille_totale=1024 * 1024, zip_ratio=10_000),
+    )
     assert limite.fichiers[0].fichier.motif_refus == MotifRefus.archive_dangereuse
-    normal = recevoir_octets([("ok.xlsx", _xlsx_avec_feuille(b'<worksheet xmlns="http://schemas.openxmlformats.org/'
-                                                             b'spreadsheetml/2006/main"><sheetData/></worksheet>'))])
+    normal = recevoir_octets(
+        [
+            (
+                "ok.xlsx",
+                _xlsx_avec_feuille(
+                    b'<worksheet xmlns="http://schemas.openxmlformats.org/'
+                    b'spreadsheetml/2006/main"><sheetData/></worksheet>'
+                ),
+            )
+        ]
+    )
     assert normal.fichiers[0].fichier.statut is StatutFichier.ok
 
 
@@ -112,12 +131,16 @@ def test_d1602_bombe_xlsx_refusee_comme_une_archive():
 def _eml_multipart(n: str, pieces: list[tuple[str, str, bytes]]) -> bytes:
     corps = b"--B\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nBonjour FICTIF\r\n"
     for nom, ctype, donnees in pieces:
-        corps += (f"--B\r\nContent-Type: {ctype}; name=\"{nom}\"\r\nContent-Transfer-Encoding: base64\r\n"
-                  f"Content-Disposition: attachment; filename=\"{nom}\"\r\n\r\n").encode()
+        corps += (
+            f'--B\r\nContent-Type: {ctype}; name="{nom}"\r\nContent-Transfer-Encoding: base64\r\n'
+            f'Content-Disposition: attachment; filename="{nom}"\r\n\r\n'
+        ).encode()
         corps += base64.encodebytes(donnees) + b"\r\n"
     corps += b"--B--\r\n"
-    return (f"From: transitaire@exemple.invalid\r\nMessage-ID: <{n}@exemple.invalid>\r\nMIME-Version: 1.0\r\n"
-            "Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n").encode() + corps
+    return (
+        f"From: transitaire@exemple.invalid\r\nMessage-ID: <{n}@exemple.invalid>\r\nMIME-Version: 1.0\r\n"
+        'Content-Type: multipart/mixed; boundary="B"\r\n\r\n'
+    ).encode() + corps
 
 
 def test_d1603_message_joint_en_base64_n_est_pas_perdu():
@@ -135,24 +158,31 @@ def test_d1603_message_joint_en_base64_n_est_pas_perdu():
 def test_d1603_imbrication_courriel_archive_bornee():
     contenu = _eml_multipart("p0", [("f.pdf", "application/pdf", PDF)])
     for i in range(4):  # courriel -> zip -> courriel -> zip …
-        contenu = _zip({f"c{i}.eml": contenu}) if i % 2 == 0 else _eml_multipart(
-            f"p{i}", [(f"z{i}.zip", "application/zip", contenu)])
+        contenu = (
+            _zip({f"c{i}.eml": contenu})
+            if i % 2 == 0
+            else _eml_multipart(f"p{i}", [(f"z{i}.zip", "application/zip", contenu)])
+        )
     rec = recevoir_octets([("envoi.zip", contenu)], limites=Limites(zip_profondeur=2))
     motifs = {f.fichier.motif_refus for f in rec.fichiers}
     assert MotifRefus.archive_dangereuse in motifs
-    assert not any(f.fichier.chemin_relatif.endswith("f.pdf") and f.fichier.statut is StatutFichier.ok
-                   for f in rec.fichiers)
+    assert not any(
+        f.fichier.chemin_relatif.endswith("f.pdf") and f.fichier.statut is StatutFichier.ok
+        for f in rec.fichiers
+    )
 
 
 def _imbrique(n: int) -> bytes:
     corps = b""
     for i in range(n):
-        corps += f"--N{i}\r\nContent-Type: multipart/mixed; boundary=\"N{i + 1}\"\r\n\r\n".encode()
+        corps += f'--N{i}\r\nContent-Type: multipart/mixed; boundary="N{i + 1}"\r\n\r\n'.encode()
     corps += f"--N{n}\r\nContent-Type: text/plain\r\n\r\nfond\r\n--N{n}--\r\n".encode()
     for i in reversed(range(n)):
         corps += f"--N{i}--\r\n".encode()
-    return (b"From: transitaire@exemple.invalid\r\nMIME-Version: 1.0\r\n"
-            b'Content-Type: multipart/mixed; boundary="N0"\r\n\r\n' + corps)
+    return (
+        b"From: transitaire@exemple.invalid\r\nMIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="N0"\r\n\r\n' + corps
+    )
 
 
 def test_d1603_multipart_trop_imbrique_refuse_sans_exception():
@@ -187,9 +217,11 @@ def test_d1604_texte_positionne_borne_texte_complet(monkeypatch):
 def test_d1604_feuille_aux_dimensions_aberrantes_lue_bornee(monkeypatch):
     from controldone.ingest import pages
 
-    feuille = (b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-               b'<dimension ref="A1:XFD1048576"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>FICTIF</t>'
-               b'</is></c></row><row r="3000"><c r="XFD3000"><v>1</v></c></row></sheetData></worksheet>')
+    feuille = (
+        b'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        b'<dimension ref="A1:XFD1048576"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>FICTIF</t>'
+        b'</is></c></row><row r="3000"><c r="XFD3000"><v>1</v></c></row></sheetData></worksheet>'
+    )
     monkeypatch.setattr(pages, "MAX_CELLULES_FEUILLE", 50_000)
     sortie = pages._pages_xlsx(_xlsx_avec_feuille(feuille))
     assert sortie[0].texte.startswith("FICTIF")
@@ -206,8 +238,11 @@ def test_d1605_rognage_page_geante_borne_en_pixels(monkeypatch, tmp_path):
     from controldone.rapport import images
 
     chemin = tmp_path / "geant.pdf"
-    chemin.write_bytes(fab.pdf([fab.FACTURE_COMMERCIALE]).replace(b"/MediaBox [ 0 0 595.2756 841.8898 ]",
-                                                                    b"/MediaBox [ 0 0 14400 14400 ]"))
+    chemin.write_bytes(
+        fab.pdf([fab.FACTURE_COMMERCIALE]).replace(
+            b"/MediaBox [ 0 0 595.2756 841.8898 ]", b"/MediaBox [ 0 0 14400 14400 ]"
+        )
+    )
     original = pdfium.PdfPage.render
     demandes = []
 
@@ -237,8 +272,10 @@ def test_d1606_lot_sans_dossier_liste_ses_fichiers_non_lus():
 
     class Rd:
         def __init__(self):
-            self.non_lus = [NonLu(fichier="a.pdf", motif="document_non_reconnu"),
-                            NonLu(fichier="z", motif="refuse:vide")]
+            self.non_lus = [
+                NonLu(fichier="a.pdf", motif="document_non_reconnu"),
+                NonLu(fichier="z", motif="refuse:vide"),
+            ]
 
     assert _non_lus([Rd(), Rd()], fichiers) == [{"fichier": "a.pdf", "motif": "document_non_reconnu"}]
 
@@ -275,7 +312,9 @@ def test_d1607_classement_sur_extrait_texte_complet_conserve(monkeypatch):
     original = decoupage.classer_page
 
     def espion(page, **kw):
-        vus.append((len(page.texte), max((len(li.texte) for li in page.lignes), default=0), page.avertissements))
+        vus.append(
+            (len(page.texte), max((len(li.texte) for li in page.lignes), default=0), page.avertissements)
+        )
         return original(page, **kw)
 
     monkeypatch.setattr(decoupage, "classer_page", espion)
@@ -283,7 +322,7 @@ def test_d1607_classement_sur_extrait_texte_complet_conserve(monkeypatch):
     monkeypatch.setattr(decoupage, "MAX_CARACTERES_LIGNE_CLASSEMENT", 100)
     texte = ("FACTURE FICTIVE " * 400).encode()  # une seule ligne de 6 400 caractères
     res = _decouper("long.xml", b"<r>" + texte + b"</r>")
-    (n_texte, n_ligne, avert), = vus
+    ((n_texte, n_ligne, avert),) = vus
     assert n_texte <= 500 and n_ligne <= 100 and "classement_sur_extrait" in avert
     assert len(res.textes[1].texte) > 6000  # texte de la page intact
     vus.clear()

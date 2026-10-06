@@ -23,8 +23,13 @@ MDP_FONDATEUR = "phrase-de-passe-fondateur-FICTIVE"
 
 def plateforme(racine: Path, limites: Limites | None = None) -> Plateforme:
     db = Database(f"sqlite:///{racine}/plateforme.db")
-    return Plateforme(db=db, vault=FileVault(racine / "coffre", [CLE_MAITRESSE]), cles_maitresses=[CLE_MAITRESSE],
-                      limites=limites or Limites(), dossier_sorties=racine / "sorties")
+    return Plateforme(
+        db=db,
+        vault=FileVault(racine / "coffre", [CLE_MAITRESSE]),
+        cles_maitresses=[CLE_MAITRESSE],
+        limites=limites or Limites(),
+        dossier_sorties=racine / "sorties",
+    )
 
 
 @dataclass
@@ -49,13 +54,24 @@ class Monde:
         return TestClient(self.app, base_url="http://testserver")
 
 
-def construire_monde(modele: Modele, tmp_path: Path, *, limites: Limites | None = None, https: bool = False) -> Monde:
+def construire_monde(
+    modele: Modele, tmp_path: Path, *, limites: Limites | None = None, https: bool = False
+) -> Monde:
     racine = tmp_path / "monde"
     shutil.copytree(modele.racine, racine)
     pf = plateforme(racine, limites)
-    app = create_app(ParametresWeb(plateforme=pf, secrets_session=[SECRET_SESSION], prod=False, https=https,
-                                   limites=limites or Limites()))
-    return Monde(pf=pf, app=app, totp=modele.totp, comptes=dict(modele.comptes), cles=dict(modele.cles), ids=modele.ids)
+    app = create_app(
+        ParametresWeb(
+            plateforme=pf,
+            secrets_session=[SECRET_SESSION],
+            prod=False,
+            https=https,
+            limites=limites or Limites(),
+        )
+    )
+    return Monde(
+        pf=pf, app=app, totp=modele.totp, comptes=dict(modele.comptes), cles=dict(modele.cles), ids=modele.ids
+    )
 
 
 # --- aides ----------------------------------------------------------------------------------------------------

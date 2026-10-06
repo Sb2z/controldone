@@ -77,11 +77,31 @@ def libelles_fixes() -> set[str]:
     from controldone.storage.securite import _NAVIGATEURS, _SYSTEMES
 
     out: set[str] = set()
-    for d in (LIBELLES_COMPOSANTE, LIBELLES_FORCE, LIBELLES_NATURE, LIBELLES_OUTCOME, LIBELLES_STATUT, LIBELLES_TYPE,
-              LIBELLES_LOT, LIBELLES_NIVEAU, LIBELLES_ROLE, LIBELLES_VALIDATION, LIBELLES_STATUT_ECART):
+    for d in (
+        LIBELLES_COMPOSANTE,
+        LIBELLES_FORCE,
+        LIBELLES_NATURE,
+        LIBELLES_OUTCOME,
+        LIBELLES_STATUT,
+        LIBELLES_TYPE,
+        LIBELLES_LOT,
+        LIBELLES_NIVEAU,
+        LIBELLES_ROLE,
+        LIBELLES_VALIDATION,
+        LIBELLES_STATUT_ECART,
+    ):
         out |= set(d.values())
-    out |= {"Facture du transitaire", "Transport", "MRN", "Facture commerciale", "En cours",
-            "En cours de validation", "transitaire non identifié", "Navigateur inconnu", "système inconnu"}
+    out |= {
+        "Facture du transitaire",
+        "Transport",
+        "MRN",
+        "Facture commerciale",
+        "En cours",
+        "En cours de validation",
+        "transitaire non identifié",
+        "Navigateur inconnu",
+        "système inconnu",
+    }
     out |= {nom for _m, nom in _NAVIGATEURS} | {nom for _m, nom in _SYSTEMES}
     return out
 

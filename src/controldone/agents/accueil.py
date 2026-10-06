@@ -27,8 +27,12 @@ LIBELLES_PIECES = {
 def _cles(d: dict[str, Any]) -> str:
     cles = d.get("cles") or {}
     morceaux = []
-    for cle, libelle in (("num_facture_transitaire", "facture transitaire"), ("ref_transport", "transport"),
-                         ("mrn", "MRN"), ("num_facture_commerciale", "facture commerciale")):
+    for cle, libelle in (
+        ("num_facture_transitaire", "facture transitaire"),
+        ("ref_transport", "transport"),
+        ("mrn", "MRN"),
+        ("num_facture_commerciale", "facture commerciale"),
+    ):
         if cles.get(cle):
             morceaux.append(f"{libelle} {', '.join(cles[cle])}")
     return f" ({' ; '.join(morceaux)})" if morceaux else ""
@@ -49,8 +53,10 @@ def corps_pieces_manquantes(date_lot: str, dossiers: list[dict[str, Any]]) -> st
 
 class AgentAccueil(Agent):
     nom = "accueil"
-    role = ("Accueille chaque nouveau lot : vérifie la complétude des dossiers (P1) et propose au fondateur "
-            "un courriel « pièces manquantes » au client.")
+    role = (
+        "Accueille chaque nouveau lot : vérifie la complétude des dossiers (P1) et propose au fondateur "
+        "un courriel « pièces manquantes » au client."
+    )
     outils = ("lister_lots", "lire_dossiers_du_lot", "proposer_courriel_client")
     periode = "heure"
 
@@ -67,9 +73,12 @@ class AgentAccueil(Agent):
             date_lot = (lot["recu_le"] or "")[:10]
             if len(date_lot) == 10:
                 date_lot = f"{date_lot[8:10]}/{date_lot[5:7]}/{date_lot[0:4]}"
-            out = self.appeler(ctx, "proposer_courriel_client",
-                               objet="Pièces manquantes pour terminer le contrôle de votre dépôt",
-                               corps=corps_pieces_manquantes(date_lot, incomplets),
-                               cle=f"accueil:pieces_manquantes:{ctx.tenant_id}:{lot['id']}",
-                               donnees={"lot_id": lot["id"], "dossiers": [d["dossier_id"] for d in incomplets]})
+            out = self.appeler(
+                ctx,
+                "proposer_courriel_client",
+                objet="Pièces manquantes pour terminer le contrôle de votre dépôt",
+                corps=corps_pieces_manquantes(date_lot, incomplets),
+                cle=f"accueil:pieces_manquantes:{ctx.tenant_id}:{lot['id']}",
+                donnees={"lot_id": lot["id"], "dossiers": [d["dossier_id"] for d in incomplets]},
+            )
             rapport.propositions.append(out)

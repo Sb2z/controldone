@@ -105,8 +105,30 @@ def _variantes(mot: str) -> str:
     return f"{m}(?:s|e|es|x)?"
 
 
-_MOTS_INVARIABLES = frozenset({"le", "la", "les", "de", "du", "des", "a", "en", "au", "aux", "par", "est",
-                               "nous", "vous", "il", "faut", "une", "un", "notre", "the"})
+_MOTS_INVARIABLES = frozenset(
+    {
+        "le",
+        "la",
+        "les",
+        "de",
+        "du",
+        "des",
+        "a",
+        "en",
+        "au",
+        "aux",
+        "par",
+        "est",
+        "nous",
+        "vous",
+        "il",
+        "faut",
+        "une",
+        "un",
+        "notre",
+        "the",
+    }
+)
 
 
 #: Participe « dû » : seule forme accentuée ambiguë avec l'article « du » une fois les accents retirés.

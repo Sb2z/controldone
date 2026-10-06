@@ -52,12 +52,27 @@ class ResultatDemo:
 
 
 CLIENTS = [
-    {"id": "demo_ateliers", "raison_sociale": "ATELIERS DÉMO FICTIF SAS", "offre": "diagnostic",
-     "transitaire_id": "TR-DEMO", "grille": "GRL-DEMO-2026", "dossiers": ["DEMO-1", "DEMO-2", "DEMO-3"],
-     "comptes": [("admin@ateliers-demo.test", "client_admin"), ("lecture@ateliers-demo.test", "client_lecteur")]},
-    {"id": "demo_nord", "raison_sociale": "ATELIERS DÉMO FICTIF — SITE NORD", "offre": "continu",
-     "transitaire_id": "TR-DEMO-NORD", "grille": "GRL-DEMO-2026-NORD", "dossiers": ["DEMO-2", "DEMO-3"],
-     "comptes": [("admin@site-nord-demo.test", "client_admin")]},
+    {
+        "id": "demo_ateliers",
+        "raison_sociale": "ATELIERS DÉMO FICTIF SAS",
+        "offre": "diagnostic",
+        "transitaire_id": "TR-DEMO",
+        "grille": "GRL-DEMO-2026",
+        "dossiers": ["DEMO-1", "DEMO-2", "DEMO-3"],
+        "comptes": [
+            ("admin@ateliers-demo.test", "client_admin"),
+            ("lecture@ateliers-demo.test", "client_lecteur"),
+        ],
+    },
+    {
+        "id": "demo_nord",
+        "raison_sociale": "ATELIERS DÉMO FICTIF — SITE NORD",
+        "offre": "continu",
+        "transitaire_id": "TR-DEMO-NORD",
+        "grille": "GRL-DEMO-2026-NORD",
+        "dossiers": ["DEMO-2", "DEMO-3"],
+        "comptes": [("admin@site-nord-demo.test", "client_admin")],
+    },
 ]
 
 
@@ -72,33 +87,49 @@ def _executer_jobs(plateforme: Plateforme, maximum: int = 50) -> int:
     return n
 
 
-def initialiser_demo(plateforme: Plateforme, *, mot_de_passe_fondateur: str | None = None,
-                     decisions: bool = True) -> ResultatDemo:
+def initialiser_demo(
+    plateforme: Plateforme, *, mot_de_passe_fondateur: str | None = None, decisions: bool = True
+) -> ResultatDemo:
     from controldone.demo.donnees import grille_demo, profil_demo
     from controldone.demo.generateur import generer_demo
 
     db = plateforme.db
     db.creer_schema()
     if utilisateur_par_email(db, EMAIL_FONDATEUR) is not None:
-        return ResultatDemo(fondateur=CompteDemo(EMAIL_FONDATEUR, "", "fondateur"), totp_secret="", totp_uri="",
-                            deja_initialisee=True)
+        return ResultatDemo(
+            fondateur=CompteDemo(EMAIL_FONDATEUR, "", "fondateur"),
+            totp_secret="",
+            totp_uri="",
+            deja_initialisee=True,
+        )
     # --- fondateur ---
     mdp_f = mot_de_passe_fondateur or secrets.token_urlsafe(15)
     uid = "usr_fondateur_demo"
     fondateur = Acteur(uid, Role.fondateur)
-    creer_utilisateur(db, user_id=uid, email=EMAIL_FONDATEUR, mot_de_passe_hash=hacher_mot_de_passe(mdp_f),
-                      role=Role.fondateur, acteur=fondateur, nom="Fondateur (démonstration)")
+    creer_utilisateur(
+        db,
+        user_id=uid,
+        email=EMAIL_FONDATEUR,
+        mot_de_passe_hash=hacher_mot_de_passe(mdp_f),
+        role=Role.fondateur,
+        acteur=fondateur,
+        nom="Fondateur (démonstration)",
+    )
     secret = generer_secret()
     enregistrer_totp(db, uid, chiffrer_secret(plateforme.cles_maitresses, secret), acteur=fondateur)
-    res = ResultatDemo(fondateur=CompteDemo(EMAIL_FONDATEUR, mdp_f, "fondateur"), totp_secret=secret,
-                       totp_uri=uri_provisioning(secret, EMAIL_FONDATEUR, "ControlDOne démo"))
+    res = ResultatDemo(
+        fondateur=CompteDemo(EMAIL_FONDATEUR, mdp_f, "fondateur"),
+        totp_secret=secret,
+        totp_uri=uri_provisioning(secret, EMAIL_FONDATEUR, "ControlDOne démo"),
+    )
 
     profil = profil_demo()
     with tempfile.TemporaryDirectory(prefix="cd-demo-") as tmp:
         racine = generer_demo(Path(tmp) / "demo")
         for c in CLIENTS:
-            tid = admin.creer_client(plateforme, fondateur, c["raison_sociale"], offre=c["offre"], demo=True,
-                                     tenant_id=c["id"])
+            tid = admin.creer_client(
+                plateforme, fondateur, c["raison_sociale"], offre=c["offre"], demo=True, tenant_id=c["id"]
+            )
             res.clients.append(tid)
             admin_client = None
             for email, role in c["comptes"]:
@@ -110,15 +141,31 @@ def initialiser_demo(plateforme: Plateforme, *, mot_de_passe_fondateur: str | No
             with db.operateur(fondateur) as op:
                 scope = op.client(tid, "initialisation de la démonstration")
                 for e in profil["entites"]:
-                    admin.ajouter_entite(scope, e["raison_sociale"], tva=e.get("tva"), siren=e.get("siren"),
-                                         eori=e.get("eori"), alias=";".join(e.get("alias") or []))
+                    admin.ajouter_entite(
+                        scope,
+                        e["raison_sociale"],
+                        tva=e.get("tva"),
+                        siren=e.get("siren"),
+                        eori=e.get("eori"),
+                        alias=";".join(e.get("alias") or []),
+                    )
                 for t in profil["transitaires"]:
-                    admin.ajouter_transitaire(scope, t["nom"], tva=t.get("tva"), alias=";".join(t.get("alias") or []),
-                                              contact="service.litiges@transit-demo.test (FICTIF)",
-                                              transitaire_id=c["transitaire_id"])
+                    admin.ajouter_transitaire(
+                        scope,
+                        t["nom"],
+                        tva=t.get("tva"),
+                        alias=";".join(t.get("alias") or []),
+                        contact="service.litiges@transit-demo.test (FICTIF)",
+                        transitaire_id=c["transitaire_id"],
+                    )
                 g = {**grille_demo(), "grille_id": c["grille"]}
-                ligne = admin.importer_grille(scope, json.dumps(g).encode(), "grille.json",
-                                              transitaire_id=c["transitaire_id"], reference=g["reference"])
+                ligne = admin.importer_grille(
+                    scope,
+                    json.dumps(g).encode(),
+                    "grille.json",
+                    transitaire_id=c["transitaire_id"],
+                    reference=g["reference"],
+                )
                 scope.valider_grille(ligne.grille_id, ligne.version)
             # dépôt par le compte administrateur du client (chemin réel : coffre + lot + job)
             compte = utilisateur_par_email(db, admin_client)
@@ -127,7 +174,9 @@ def initialiser_demo(plateforme: Plateforme, *, mot_de_passe_fondateur: str | No
             for nom in c["dossiers"]:
                 for f in sorted((racine / "dossiers" / nom / "docs").iterdir()):
                     contenu = f.read_bytes()
-                    fichiers.append(depot.FichierTransmis(nom=f"{nom}/{f.name}", contenu=contenu, taille=len(contenu)))
+                    fichiers.append(
+                        depot.FichierTransmis(nom=f"{nom}/{f.name}", contenu=contenu, taille=len(contenu))
+                    )
             depot.deposer(plateforme, acteur, fichiers)
     res.jobs = _executer_jobs(plateforme)
     if decisions:
@@ -154,7 +203,9 @@ def _decisions(plateforme: Plateforme, fondateur: Acteur, res: ResultatDemo) -> 
         pass
     with contextlib.suppress(RequeteInvalide):  # aucun écart certain validé ouvert
         reclamations.preparer_dossier(plateforme, fondateur, tid, "TR-DEMO")
-    compte = next((x for x in res.comptes if x.client == "ATELIERS DÉMO FICTIF SAS" and x.role == "client_admin"), None)
+    compte = next(
+        (x for x in res.comptes if x.client == "ATELIERS DÉMO FICTIF SAS" and x.role == "client_admin"), None
+    )
     if compte is None:
         return
     u = utilisateur_par_email(plateforme.db, compte.email)
@@ -164,7 +215,9 @@ def _decisions(plateforme: Plateforme, fondateur: Acteur, res: ResultatDemo) -> 
         visibles = {c.id for c in scope.lister(Constat)}
         for e in ecarts[:1]:
             if e.constat_id in visibles:
-                reclamations.declarer_envoi(scope, e.id, "Envoyée par courriel au service litiges (démonstration).")
+                reclamations.declarer_envoi(
+                    scope, e.id, "Envoyée par courriel au service litiges (démonstration)."
+                )
 
 
 def resume(res: ResultatDemo) -> list[str]:
@@ -185,4 +238,3 @@ def resume(res: ResultatDemo) -> list[str]:
         lignes.append(f"  {c.email:32s} {c.mot_de_passe:20s} {c.role:15s} {c.client}")
     lignes += ["", f"Clients : {', '.join(res.clients)} — {res.jobs} tâche(s) exécutée(s)."]
     return lignes
-

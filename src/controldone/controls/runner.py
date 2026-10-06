@@ -112,9 +112,9 @@ def _neutraliser(r: ResultatControle, raison: RaisonCode, couvert_par: str) -> R
     )
 
 
-def appliquer_regles_dedoublonnage(resultats: list[ResultatControle], ctx: ControlContext | None = None) -> list[
-    ResultatControle
-]:
+def appliquer_regles_dedoublonnage(
+    resultats: list[ResultatControle], ctx: ControlContext | None = None
+) -> list[ResultatControle]:
     """Règles « pas de double comptage » de §8.6 et §10 (notes A5/A6), sur des unités identiques.
 
     - R1 : C3 constate pour une unité (facture transitaire × déclaration) -> C4 de la même unité
@@ -226,7 +226,10 @@ def run_controls(ctx: ControlContext, *, controles: Iterable[str] | None = None)
         except Exception as e:  # un contrôle en erreur n'arrête jamais les autres (§20.6)
             log.error(
                 "controle_en_erreur controle=%s dossier=%s version=%s exception=%s",
-                cid, ctx.dossier.id, ctx.dossier.version, type(e).__name__,
+                cid,
+                ctx.dossier.id,
+                ctx.dossier.version,
+                type(e).__name__,
             )
             produits = [
                 ctx.non_verifiable(

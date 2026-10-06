@@ -91,9 +91,14 @@ def retirer_surimpressions(pt: PageText) -> PageText:
     lignes: list[Ligne] = []
     for li in pt.lignes:
         # 1) glyphes de tampon ou de filigrane, 2) parmi les mots restants, écriture manuscrite
-        restants = tuple(m for m in li.mots if not (
-            _hauteur(m) >= RATIO_FILIGRANE * h_med
-            or (_hauteur(m) >= RATIO_GLYPHE * h_med and _glyphe_court(m.texte))))
+        restants = tuple(
+            m
+            for m in li.mots
+            if not (
+                _hauteur(m) >= RATIO_FILIGRANE * h_med
+                or (_hauteur(m) >= RATIO_GLYPHE * h_med and _glyphe_court(m.texte))
+            )
+        )
         manuscrits = _suites_manuscrites(restants)
         gardes = [m for k, m in enumerate(restants) if k not in manuscrits]
         if len(gardes) != len(li.mots):
@@ -105,7 +110,19 @@ def retirer_surimpressions(pt: PageText) -> PageText:
     if not modifie:
         return pt
     lignes.sort(key=lambda li: (li.y0 + li.y1) / 2)
-    return PageText(numero=pt.numero, texte=pt.texte, lignes=lignes, qualite=pt.qualite, source=pt.source,
-                    score_natif=pt.score_natif, score_ocr=pt.score_ocr, rotation=pt.rotation,
-                    desinclinaison=pt.desinclinaison, largeur=pt.largeur, hauteur=pt.hauteur, feuille=pt.feuille,
-                    texte_masque=pt.texte_masque, avertissements=list(pt.avertissements))
+    return PageText(
+        numero=pt.numero,
+        texte=pt.texte,
+        lignes=lignes,
+        qualite=pt.qualite,
+        source=pt.source,
+        score_natif=pt.score_natif,
+        score_ocr=pt.score_ocr,
+        rotation=pt.rotation,
+        desinclinaison=pt.desinclinaison,
+        largeur=pt.largeur,
+        hauteur=pt.hauteur,
+        feuille=pt.feuille,
+        texte_masque=pt.texte_masque,
+        avertissements=list(pt.avertissements),
+    )

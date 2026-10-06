@@ -42,7 +42,9 @@ def sorties(tmp_path):
 
 @pytest.fixture
 def archive(monde, tmp_path, cles, sorties):
-    return sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles, now=NOW, sorties=sorties)
+    return sauvegarder(
+        monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles, now=NOW, sorties=sorties
+    )
 
 
 def _manifeste(archive, cles) -> dict:
@@ -53,8 +55,11 @@ def _manifeste(archive, cles) -> dict:
 
 def test_manifeste_couvre_chaque_fichier(monde, archive, cles, sorties):
     m = _manifeste(archive, cles)
-    coffre = {f"coffre/{p.relative_to(monde.vault.racine).as_posix()}" for p in monde.vault.racine.rglob("*")
-              if p.is_file()}
+    coffre = {
+        f"coffre/{p.relative_to(monde.vault.racine).as_posix()}"
+        for p in monde.vault.racine.rglob("*")
+        if p.is_file()
+    }
     assert coffre and coffre <= set(m["fichiers"])
     assert "base/controldone.db" in m["fichiers"]
     assert "outbox_envoyee/rapport_publication/out_1.json" in m["fichiers"]
@@ -76,7 +81,9 @@ def test_aucune_cle_dans_l_archive(monde, tmp_path, cles):
     data = monde.vault.racine.parent
     (data / "dev_master.key").write_text(Fernet.generate_key().decode())
     (data / ".env").write_text("CONTROLDONE_MASTER_KEY=secret\n")
-    a = sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "s", cles, sorties=data / "absent")
+    a = sauvegarder(
+        monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "s", cles, sorties=data / "absent"
+    )
     noms = set(_manifeste(a, cles)["fichiers"])
     assert not [n for n in noms if n.endswith((".key", ".env"))]
     assert cles[0] not in a.read_bytes()
@@ -110,11 +117,16 @@ def _archive_forgee(chemin: Path, cles, membres: dict[str, bytes], *, manifeste:
 
 def test_verifier_compare_au_manifeste(monde, tmp_path, cles):
     base = monde.db.chemin_sqlite().read_bytes()
-    decl = {"base/controldone.db": {"taille": len(base), "sha256": hashlib.sha256(base).hexdigest()},
-            "coffre/cli_a/fichiers/ab/absent": {"taille": 1, "sha256": "0" * 64}}
-    a = _archive_forgee(tmp_path / "f.tar.gz.enc", cles,
-                        {"base/controldone.db": base, "coffre/cli_a/en_trop": b"x"},
-                        manifeste={"fichiers": decl, "base": {"integrite": "ok"}})
+    decl = {
+        "base/controldone.db": {"taille": len(base), "sha256": hashlib.sha256(base).hexdigest()},
+        "coffre/cli_a/fichiers/ab/absent": {"taille": 1, "sha256": "0" * 64},
+    }
+    a = _archive_forgee(
+        tmp_path / "f.tar.gz.enc",
+        cles,
+        {"base/controldone.db": base, "coffre/cli_a/en_trop": b"x"},
+        manifeste={"fichiers": decl, "base": {"integrite": "ok"}},
+    )
     problemes = verifier(a, cles).problemes
     assert "fichier absent : coffre/cli_a/fichiers/ab/absent" in problemes
     assert "fichier non déclaré : coffre/cli_a/en_trop" in problemes
@@ -123,16 +135,21 @@ def test_verifier_compare_au_manifeste(monde, tmp_path, cles):
 
 
 def test_archive_sans_manifeste_reste_restaurable(monde, tmp_path, cles):
-    a = _archive_forgee(tmp_path / "ancienne.tar.gz.enc", cles,
-                        {"base/controldone.db": monde.db.chemin_sqlite().read_bytes()}, manifeste=None)
+    a = _archive_forgee(
+        tmp_path / "ancienne.tar.gz.enc",
+        cles,
+        {"base/controldone.db": monde.db.chemin_sqlite().read_bytes()},
+        manifeste=None,
+    )
     r = verifier(a, cles)
     assert r.ok and r.manifeste is None
     assert (restaurer(a, tmp_path / "r", cles) / "base" / "controldone.db").is_file()
 
 
 def test_archive_avec_entree_inattendue_refusee(monde, tmp_path, cles):
-    a = _archive_forgee(tmp_path / "p.tar.gz.enc", cles, {"base/controldone.db": b"x", "dev_master.key": b"k"},
-                        manifeste=None)
+    a = _archive_forgee(
+        tmp_path / "p.tar.gz.enc", cles, {"base/controldone.db": b"x", "dev_master.key": b"k"}, manifeste=None
+    )
     assert not verifier(a, cles).ok
     with pytest.raises(ErreurIntegrite, match="inattendue"):
         restaurer(a, tmp_path / "r", cles)
@@ -240,8 +257,13 @@ def test_cli_archive_illisible_mise_a_l_ecart_et_alerte(monde, cli_env, tmp_path
 
 def test_cli_sauvegarde_trop_ancienne(monde, cli_env, tmp_path, cles):
     dest = tmp_path / "dest"
-    sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, dest, cles, now=datetime.now(UTC) - timedelta(hours=30))
-    assert sv.main(["verifier", "--dernier", "--destination", str(dest), "--age-max-h", "26"]) == sv.ECHEC_FRAICHEUR
+    sauvegarder(
+        monde.db.chemin_sqlite(), monde.vault.racine, dest, cles, now=datetime.now(UTC) - timedelta(hours=30)
+    )
+    assert (
+        sv.main(["verifier", "--dernier", "--destination", str(dest), "--age-max-h", "26"])
+        == sv.ECHEC_FRAICHEUR
+    )
     assert sv.main(["verifier", "--dernier", "--destination", str(tmp_path / "vide")]) == sv.ECHEC_FRAICHEUR
     assert "sauvegarde_absente" in _alertes(monde)
 
@@ -264,7 +286,9 @@ def test_cli_restaurer_codes(monde, cli_env, tmp_path, archive, capsys):
 
 
 def test_cli_alerter(monde, cli_env):
-    assert sv.main(["alerter", "--kind", "sauvegarde_hors_site_echec", "--message", "rclone en échec"]) == sv.OK
+    assert (
+        sv.main(["alerter", "--kind", "sauvegarde_hors_site_echec", "--message", "rclone en échec"]) == sv.OK
+    )
     assert "sauvegarde_hors_site_echec" in _alertes(monde)
 
 

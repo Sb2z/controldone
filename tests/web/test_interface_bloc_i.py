@@ -40,9 +40,27 @@ def test_parametres_identiques_dans_les_deux_langues():
 
 
 #: Équivalents anglais des formulations interdites (SPEC §3.2) : jamais dans l'interface anglaise.
-INTERDITS_EN = ("illegal", "unlawful", "fraud", "non-compliant", "wrong code", "correct code", "wrong rate",
-                "incorrect rate", "duty owed", "duties owed", "tax owed", "overpaid", "we claim", "on behalf of our client",
-                "we guarantee", "certified compliant", "undervaluation", "overvaluation", "refund of duties")
+INTERDITS_EN = (
+    "illegal",
+    "unlawful",
+    "fraud",
+    "non-compliant",
+    "wrong code",
+    "correct code",
+    "wrong rate",
+    "incorrect rate",
+    "duty owed",
+    "duties owed",
+    "tax owed",
+    "overpaid",
+    "we claim",
+    "on behalf of our client",
+    "we guarantee",
+    "certified compliant",
+    "undervaluation",
+    "overvaluation",
+    "refund of duties",
+)
 
 
 def test_traductions_sans_formulation_interdite():
@@ -69,15 +87,37 @@ def test_negociation_accept_language():
 
 
 def _pages_client(monde):
-    return ["/espace", "/espace/depot", "/espace/dossiers", f"/espace/dossiers/{monde.ids[A]['dossier'][0]}",
-            f"/espace/lots/{monde.ids[A]['lot'][0]}", "/espace/rapports", "/espace/recouvrement",
-            "/compte/mot-de-passe", "/compte/sessions", "/compte", "/espace/dossiers/inexistant"]
+    return [
+        "/espace",
+        "/espace/depot",
+        "/espace/dossiers",
+        f"/espace/dossiers/{monde.ids[A]['dossier'][0]}",
+        f"/espace/lots/{monde.ids[A]['lot'][0]}",
+        "/espace/rapports",
+        "/espace/recouvrement",
+        "/compte/mot-de-passe",
+        "/compte/sessions",
+        "/compte",
+        "/espace/dossiers/inexistant",
+    ]
 
 
 def _pages_fondateur(monde):
-    return ["/admin", "/admin/clients", f"/admin/clients/{A}", f"/admin/clients/{A}/dossiers/{monde.ids[A]['dossier'][0]}",
-            "/admin/validation", "/admin/jobs", "/admin/journal", "/admin/alertes", "/admin/autonomie",
-            "/admin/finances", "/admin/notifications", "/compte/sessions", "/compte"]
+    return [
+        "/admin",
+        "/admin/clients",
+        f"/admin/clients/{A}",
+        f"/admin/clients/{A}/dossiers/{monde.ids[A]['dossier'][0]}",
+        "/admin/validation",
+        "/admin/jobs",
+        "/admin/journal",
+        "/admin/alertes",
+        "/admin/autonomie",
+        "/admin/finances",
+        "/admin/notifications",
+        "/compte/sessions",
+        "/compte",
+    ]
 
 
 def _rendus(monkeypatch) -> set[str]:
@@ -96,7 +136,9 @@ def _rendus(monkeypatch) -> set[str]:
 @pytest.mark.parametrize("langue", ["fr", "en"])
 def test_toutes_les_pages_dans_les_deux_langues(monde, monkeypatch, langue):
     vus = _rendus(monkeypatch)
-    francais_seul = re.compile(r"\b(Tableau de bord|Déposer des documents|Se déconnecter|Rechercher|Aucun dossier)\b")
+    francais_seul = re.compile(
+        r"\b(Tableau de bord|Déposer des documents|Se déconnecter|Rechercher|Aucun dossier)\b"
+    )
     for qui, pages in (("client", _pages_client(monde)), ("fondateur", _pages_fondateur(monde))):
         c = monde.client()
         c.cookies.set(COOKIE_LANGUE, langue)
@@ -117,9 +159,18 @@ def test_toutes_les_pages_dans_les_deux_langues(monde, monkeypatch, langue):
     connexion.cookies.set(COOKIE_LANGUE, langue)
     assert f'<html lang="{langue}">' in connexion.get("/connexion").text
     pages_gabarits = {p.relative_to(GABARITS).as_posix() for p in GABARITS.rglob("*.j2")}
-    hors_pages = {"base.html.j2", "macros.html.j2", "listes.html.j2", "graphes.html.j2", "api_docs.html.j2",
-                  "totp.html.j2", "admin/paiement_bouchon.html.j2"}
-    assert pages_gabarits - hors_pages <= vus | {"connexion.html.j2"}, sorted(pages_gabarits - hors_pages - vus)
+    hors_pages = {
+        "base.html.j2",
+        "macros.html.j2",
+        "listes.html.j2",
+        "graphes.html.j2",
+        "api_docs.html.j2",
+        "totp.html.j2",
+        "admin/paiement_bouchon.html.j2",
+    }
+    assert pages_gabarits - hors_pages <= vus | {"connexion.html.j2"}, sorted(
+        pages_gabarits - hors_pages - vus
+    )
 
 
 @pytest.mark.parametrize("langue", ["fr", "en"])
@@ -130,13 +181,29 @@ def test_gabarits_hors_parcours_dans_les_deux_langues(langue):
 
     activer(langue)
     try:
-        commun = {"titre": "x", "acteur": None, "csrf": "jeton", "demo": False, "flash": None, "nav": None,
-                  "chemin": "/", "langue": langue, "textes_js": {}, "retour_langue": "/", "request": None}
+        commun = {
+            "titre": "x",
+            "acteur": None,
+            "csrf": "jeton",
+            "demo": False,
+            "flash": None,
+            "nav": None,
+            "chemin": "/",
+            "langue": langue,
+            "textes_js": {},
+            "retour_langue": "/",
+            "request": None,
+        }
         html = environnement().get_template("totp.html.j2").render(**commun)
         assert ("Verification code" in html) == (langue == "en")
-        session = SimpleNamespace(id="cs_FICTIF", mode="payment", metadata=SimpleNamespace(numero="F-FICTIF-1"))
-        html = environnement().get_template("admin/paiement_bouchon.html.j2").render(**commun, session=session,
-                                                                                     montant="12.00")
+        session = SimpleNamespace(
+            id="cs_FICTIF", mode="payment", metadata=SimpleNamespace(numero="F-FICTIF-1")
+        )
+        html = (
+            environnement()
+            .get_template("admin/paiement_bouchon.html.j2")
+            .render(**commun, session=session, montant="12.00")
+        )
         assert ("Simulate a successful payment" in html) == (langue == "en")
         assert check_text(texte_visible(html)) == []
     finally:
@@ -151,16 +218,22 @@ def test_choix_de_la_langue(monde):
     # sans jeton CSRF : refusé
     assert c.post("/preferences/langue", data={"langue": "en"}).status_code == 403
     t = jeton(c.get("/connexion").text)
-    r = c.post("/preferences/langue", data={"csrf": t, "langue": "en", "retour": "//evil.example/x"},
-               follow_redirects=False)
+    r = c.post(
+        "/preferences/langue",
+        data={"csrf": t, "langue": "en", "retour": "//evil.example/x"},
+        follow_redirects=False,
+    )
     assert r.status_code == 303 and r.headers["location"] == "/"
     assert "httponly" in r.headers["set-cookie"].lower() and f"{COOKIE_LANGUE}=en" in r.headers["set-cookie"]
     page = c.get("/connexion", headers={"Accept-Language": "fr"}).text  # la préférence l'emporte
     assert '<html lang="en">' in page and "Sign in" in page
     # valeur inconnue : sans effet ; retour vers une liste filtrée conservé
     t = jeton(page)
-    r = c.post("/preferences/langue", data={"csrf": t, "langue": "xx", "retour": "/connexion?a=1"},
-               follow_redirects=False)
+    r = c.post(
+        "/preferences/langue",
+        data={"csrf": t, "langue": "xx", "retour": "/connexion?a=1"},
+        follow_redirects=False,
+    )
     assert r.headers["location"] == "/connexion?a=1" and "set-cookie" not in r.headers
     # connecté : interface et messages en anglais
     connecter_client(c, monde, ADMIN_A)
@@ -180,20 +253,42 @@ def test_suivi_json_dans_la_langue_de_l_utilisateur(monde):
 # --- retour après action dans une liste filtrée -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("valeur", [
-    "//evil.example", "/\\evil.example", "https://evil.example/", "javascript:alert(1)", "/%2F%2Fevil.example",
-    "/x/../admin", "/x?a=%0d%0aSet-Cookie:x", "/x?a=%ZZ", "/x?a=<b>", "/x#a b", "/x?a=b c", "/espace@evil.example",
-    "\t/espace", "/" + "a" * 2001, "http:/evil", "/x?next=//evil", None, 3,
-])
+@pytest.mark.parametrize(
+    "valeur",
+    [
+        "//evil.example",
+        "/\\evil.example",
+        "https://evil.example/",
+        "javascript:alert(1)",
+        "/%2F%2Fevil.example",
+        "/x/../admin",
+        "/x?a=%0d%0aSet-Cookie:x",
+        "/x?a=%ZZ",
+        "/x?a=<b>",
+        "/x#a b",
+        "/x?a=b c",
+        "/espace@evil.example",
+        "\t/espace",
+        "/" + "a" * 2001,
+        "http:/evil",
+        "/x?next=//evil",
+        None,
+        3,
+    ],
+)
 def test_retour_refuse_les_redirections_ouvertes(valeur):
     assert retour_sur(valeur, "/defaut") == "/defaut"
 
 
-@pytest.mark.parametrize("valeur", [
-    "/admin/validation?client=demo_a&min=10%2C5&q=caf%C3%A9+cr%C3%A8me#constats",
-    "/espace/recouvrement?statut=ouvert&tri=-reste&page=2", "/admin/jobs?statut=dead&kind=traiter_lot",
-    "/x?a=%2F%2Fevil.example",  # « // » encodé dans une valeur : reste une valeur, pas une adresse
-])
+@pytest.mark.parametrize(
+    "valeur",
+    [
+        "/admin/validation?client=demo_a&min=10%2C5&q=caf%C3%A9+cr%C3%A8me#constats",
+        "/espace/recouvrement?statut=ouvert&tri=-reste&page=2",
+        "/admin/jobs?statut=dead&kind=traiter_lot",
+        "/x?a=%2F%2Fevil.example",  # « // » encodé dans une valeur : reste une valeur, pas une adresse
+    ],
+)
 def test_retour_accepte_les_requetes_encodees(valeur):
     assert retour_sur(valeur, "/defaut") == valeur
 
@@ -206,11 +301,18 @@ def test_retour_apres_validation_dans_une_file_filtree(monde):
     attendu = f"/admin/validation?client={B}&amp;min=0%2C5#constats"
     assert f'name="retour" value="{attendu}"' in page
     cid = monde.ids[B]["constat_propose"][0]
-    r = poster(c, filtre, f"/admin/clients/{B}/constats/{cid}/valider",
-               {"retour": attendu.replace("&amp;", "&")})
-    assert r.status_code == 303 and r.headers["location"] == f"/admin/validation?client={B}&min=0%2C5#constats"
-    r = poster(c, filtre, f"/admin/clients/{B}/constats/{monde.ids[B]['constat_propose'][1]}/rejeter",
-               {"retour": "https://evil.example/", "motif": "FICTIF"})
+    r = poster(
+        c, filtre, f"/admin/clients/{B}/constats/{cid}/valider", {"retour": attendu.replace("&amp;", "&")}
+    )
+    assert (
+        r.status_code == 303 and r.headers["location"] == f"/admin/validation?client={B}&min=0%2C5#constats"
+    )
+    r = poster(
+        c,
+        filtre,
+        f"/admin/clients/{B}/constats/{monde.ids[B]['constat_propose'][1]}/rejeter",
+        {"retour": "https://evil.example/", "motif": "FICTIF"},
+    )
     assert r.headers["location"] == "/admin/validation"
 
 
@@ -221,8 +323,12 @@ def test_retour_apres_action_dans_le_suivi_des_avoirs(monde):
     page = c.get(filtre).text
     m = re.search(r'action="/espace/recouvrement/([^/"]+)/reclame"', page)
     assert m and 'name="retour" value="/espace/recouvrement?statut=ouvert&amp;tri=-montant"' in page
-    r = poster(c, filtre, f"/espace/recouvrement/{m.group(1)}/reclame",
-               {"retour": "/espace/recouvrement?statut=ouvert&tri=-montant"})
+    r = poster(
+        c,
+        filtre,
+        f"/espace/recouvrement/{m.group(1)}/reclame",
+        {"retour": "/espace/recouvrement?statut=ouvert&tri=-montant"},
+    )
     assert r.status_code == 303 and r.headers["location"] == "/espace/recouvrement?statut=ouvert&tri=-montant"
 
 
@@ -259,7 +365,9 @@ def _kinds_emis() -> set[str]:
     kinds: set[str] = set()
     for p in SRC.rglob("*.py"):
         texte = p.read_text(encoding="utf-8")
-        for m in re.finditer(r"(?:signaler_alerte|emettre_alerte|alerte_fondateur|alerter)\((.{0,300})", texte, re.S):
+        for m in re.finditer(
+            r"(?:signaler_alerte|emettre_alerte|alerte_fondateur|alerter)\((.{0,300})", texte, re.S
+        ):
             kinds |= set(re.findall(r'kind="([a-z_]+)"', m.group(1)))
             kinds |= set(re.findall(r'^\s*"([a-z_]+)",', m.group(1)))
         kinds |= set(re.findall(r'alerter\("([a-z_]+)"', texte))
@@ -273,8 +381,13 @@ def _kinds_emis() -> set[str]:
 
 def test_chaque_type_d_alerte_a_son_libelle():
     emis = _kinds_emis()
-    assert {"sauvegarde_echec", "sauvegarde_verification_echec", "sauvegarde_absente",
-            "sauvegarde_hors_site_echec", "job_mort"} <= emis
+    assert {
+        "sauvegarde_echec",
+        "sauvegarde_verification_echec",
+        "sauvegarde_absente",
+        "sauvegarde_hors_site_echec",
+        "job_mort",
+    } <= emis
     assert sorted(emis - set(LIBELLES_ALERTES)) == []
     for k in emis:
         assert traduire(libelle_alerte(k), "en") != k
@@ -284,14 +397,23 @@ def test_page_alertes_libelles_sauvegarde(monde):
     from controldone.storage.alertes import emettre_alerte
 
     with monde.pf.db.transaction_systeme() as s:
-        for k in ("sauvegarde_echec", "sauvegarde_verification_echec", "sauvegarde_absente",
-                  "sauvegarde_hors_site_echec", "type_futur_inconnu"):
+        for k in (
+            "sauvegarde_echec",
+            "sauvegarde_verification_echec",
+            "sauvegarde_absente",
+            "sauvegarde_hors_site_echec",
+            "type_futur_inconnu",
+        ):
             emettre_alerte(s, cle=f"{k}:essai", kind=k, message=f"Message FICTIF {k}")
     c = monde.client()
     connecter_fondateur(c, monde)
     page = c.get("/admin/alertes").text
-    for lib in ("Sauvegarde en échec", "Sauvegarde non conforme", "Aucune sauvegarde récente",
-                "Copie hors site en échec"):
+    for lib in (
+        "Sauvegarde en échec",
+        "Sauvegarde non conforme",
+        "Aucune sauvegarde récente",
+        "Copie hors site en échec",
+    ):
         assert lib in page
     assert "type_futur_inconnu" in page  # type inconnu : nom technique, jamais d'erreur
     c.cookies.set(COOKIE_LANGUE, "en")

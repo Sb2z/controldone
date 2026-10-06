@@ -162,8 +162,20 @@ def date_document(doc: Document) -> date | None:
 def ajouter_mois(d: date, mois: int) -> date:
     m = d.month - 1 + mois
     an, m = d.year + m // 12, m % 12 + 1
-    jours = [31, 29 if an % 4 == 0 and (an % 100 != 0 or an % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31,
-             30, 31][m - 1]
+    jours = [
+        31,
+        29 if an % 4 == 0 and (an % 100 != 0 or an % 400 == 0) else 28,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ][m - 1]
     return date(an, m, min(d.day, jours))
 
 
@@ -389,7 +401,8 @@ def _qualite_avoir(ctx: ControlContext, doc: Document) -> tuple[int, float]:
     du total crédité."""
     av = doc.av
     ventilees = sum(
-        1 for ln in av.lignes
+        1
+        for ln in av.lignes
         if ln.nature is not None and ctx.utilisable(montant_net_ligne(ln, ctx.utilisable))
     )
     total = av.total_credite_ttc if av.total_credite_ttc is not None else av.total_credite_ht
@@ -437,7 +450,8 @@ def lignes_credit_du_dossier(ctx: ControlContext) -> list[LigneCredit]:
     """Lignes d'avoir à imputer du dossier (§17.2), source unique des familles C, D et E (D-1210) : seconde
     réception d'un même avoir exclue (E3), émetteur identifié, montants et références ``≥ C_MIN_UTILE``."""
     return [
-        lc for a in avoirs_imputables(ctx)
+        lc
+        for a in avoirs_imputables(ctx)
         for lc in lignes_credit_depuis_avoir(a, emetteur=emetteur_de(ctx, a), utilisable=ctx.utilisable)
     ]
 
@@ -453,7 +467,9 @@ def avoirs_non_ventiles_pour(ctx: ControlContext, facture: Document) -> list[Doc
     ef = emetteur_de(ctx, facture)
     num = texte(f.numero) if f.numero is not None and ctx.utilisable(f.numero) else None
     mrns = [x.valeur for x in f.refs_mrn if x.valeur and ctx.utilisable(x)]
-    mrns += [ln.mrn.valeur for ln in f.lignes if ln.mrn is not None and ln.mrn.valeur and ctx.utilisable(ln.mrn)]
+    mrns += [
+        ln.mrn.valeur for ln in f.lignes if ln.mrn is not None and ln.mrn.valeur and ctx.utilisable(ln.mrn)
+    ]
     transports = [x.valeur for x in f.refs_transport if x.valeur and ctx.utilisable(x)]
     out: list[Document] = []
     for a in avoirs_imputables(ctx):
@@ -465,13 +481,24 @@ def avoirs_non_ventiles_pour(ctx: ControlContext, facture: Document) -> list[Doc
             continue
         av = a.av
         tete = LigneCredit(
-            avoir_id=a.id, ligne=None, nature=None, montant=ZERO, emetteur=ea,
-            factures_origine=tuple(x.valeur for x in av.refs_facture_origine if x.valeur and ctx.utilisable(x)),
+            avoir_id=a.id,
+            ligne=None,
+            nature=None,
+            montant=ZERO,
+            emetteur=ea,
+            factures_origine=tuple(
+                x.valeur for x in av.refs_facture_origine if x.valeur and ctx.utilisable(x)
+            ),
             mrns=tuple(x.valeur for x in av.refs_mrn if x.valeur and ctx.utilisable(x)),
             refs_transport=tuple(x.valeur for x in av.refs_transport if x.valeur and ctx.utilisable(x)),
         )
-        palier, _ = choisir_par_paliers(tete, [facture], factures=lambda _x: (num,), mrns=lambda _x: mrns,
-                                        transports=lambda _x: transports)
+        palier, _ = choisir_par_paliers(
+            tete,
+            [facture],
+            factures=lambda _x: (num,),
+            mrns=lambda _x: mrns,
+            transports=lambda _x: transports,
+        )
         if palier:
             out.append(a)
     return out

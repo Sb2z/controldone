@@ -102,10 +102,38 @@ for _ligne in _NOMS.strip().splitlines():
         _INDEX[cle_texte(_n)] = _code.strip()
 
 _ISO3: dict[str, str] = {
-    "FRA": "FR", "DEU": "DE", "ESP": "ES", "ITA": "IT", "GBR": "GB", "USA": "US", "CHN": "CN", "JPN": "JP",
-    "KOR": "KR", "IND": "IN", "VNM": "VN", "TWN": "TW", "HKG": "HK", "THA": "TH", "TUR": "TR", "BEL": "BE",
-    "NLD": "NL", "CHE": "CH", "PRT": "PT", "POL": "PL", "MAR": "MA", "TUN": "TN", "BRA": "BR", "MEX": "MX",
-    "CAN": "CA", "AUS": "AU", "BGD": "BD", "PAK": "PK", "IDN": "ID", "MYS": "MY", "SGP": "SG", "LKA": "LK",
+    "FRA": "FR",
+    "DEU": "DE",
+    "ESP": "ES",
+    "ITA": "IT",
+    "GBR": "GB",
+    "USA": "US",
+    "CHN": "CN",
+    "JPN": "JP",
+    "KOR": "KR",
+    "IND": "IN",
+    "VNM": "VN",
+    "TWN": "TW",
+    "HKG": "HK",
+    "THA": "TH",
+    "TUR": "TR",
+    "BEL": "BE",
+    "NLD": "NL",
+    "CHE": "CH",
+    "PRT": "PT",
+    "POL": "PL",
+    "MAR": "MA",
+    "TUN": "TN",
+    "BRA": "BR",
+    "MEX": "MX",
+    "CAN": "CA",
+    "AUS": "AU",
+    "BGD": "BD",
+    "PAK": "PK",
+    "IDN": "ID",
+    "MYS": "MY",
+    "SGP": "SG",
+    "LKA": "LK",
 }
 
 
@@ -125,7 +153,9 @@ def country_to_iso2(texte: str | None) -> str | None:
     if re.fullmatch(r"[A-Z]{3}", brut) and brut in _ISO3:
         return _ISO3[brut]
     cle = cle_texte(brut).strip(" .,;:()")
-    cle = re.sub(r"^(?:made in|origin|origine|pays d'origine|country of origin|pais de origen)\s*:?\s*", "", cle)
+    cle = re.sub(
+        r"^(?:made in|origin|origine|pays d'origine|country of origin|pais de origen)\s*:?\s*", "", cle
+    )
     if cle in _INDEX:
         return _INDEX[cle]
     sans_article = re.sub(r"^(?:the|la|le|les|l'|el|los|las)\s+", "", cle)

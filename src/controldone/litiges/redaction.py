@@ -28,29 +28,61 @@ from controldone.model.enums import Composante
 
 from .modele import DossierReclamation, LigneReclamation
 
-__all__ = ["EXPRESSIONS_INTERDITES", "LIBELLES_COMPOSANTE", "TITRE_MODELE", "TITRE_RELEVE", "nettoyer_libelle",
-           "objet_reclamation", "rendre_modele", "rendre_pdf", "rendre_releve", "rendre_texte",
-           "verifier_modele"]
+__all__ = [
+    "EXPRESSIONS_INTERDITES",
+    "LIBELLES_COMPOSANTE",
+    "TITRE_MODELE",
+    "TITRE_RELEVE",
+    "nettoyer_libelle",
+    "objet_reclamation",
+    "rendre_modele",
+    "rendre_pdf",
+    "rendre_releve",
+    "rendre_texte",
+    "verifier_modele",
+]
 
 TITRE_RELEVE = "Relevé d'écarts entre documents"
 TITRE_MODELE = "Modèle à adapter par le client"
-NATURE_RELEVE = ("Ce relevé présente des valeurs lues dans les documents transmis et les différences calculées "
-                 "entre elles. Il ne qualifie pas juridiquement la situation et ne se prononce pas sur des sommes "
-                 "dues.")
-NOTE_MODELE = ("Modèle fourni à titre indicatif : vous le complétez, le modifiez et décidez seul de son envoi, "
-               "sous votre nom. Il expose des différences chiffrées et ne contient aucun argument juridique.")
+NATURE_RELEVE = (
+    "Ce relevé présente des valeurs lues dans les documents transmis et les différences calculées "
+    "entre elles. Il ne qualifie pas juridiquement la situation et ne se prononce pas sur des sommes "
+    "dues."
+)
+NOTE_MODELE = (
+    "Modèle fourni à titre indicatif : vous le complétez, le modifiez et décidez seul de son envoi, "
+    "sous votre nom. Il expose des différences chiffrées et ne contient aucun argument juridique."
+)
 
 #: Expressions qui feraient du modèle un acte juridique pour autrui (brief §9.8) : jamais dans le texte.
 EXPRESSIONS_INTERDITES: tuple[str, ...] = (
-    "nous réclamons", "réclamons", "mise en demeure", "mettons en demeure", "en application de l'article",
-    "conformément aux dispositions", "conformément au contrat", "à défaut de régularisation", "action en justice",
-    "nous nous réservons le droit", "vous êtes tenu", "sous huitaine", "sous quinzaine", "dans un délai",
-    "pénalité", "intérêts de retard", "code des douanes", "code de commerce", "code civil",
-    "suivi du recouvrement", "relance au transitaire",
+    "nous réclamons",
+    "réclamons",
+    "mise en demeure",
+    "mettons en demeure",
+    "en application de l'article",
+    "conformément aux dispositions",
+    "conformément au contrat",
+    "à défaut de régularisation",
+    "action en justice",
+    "nous nous réservons le droit",
+    "vous êtes tenu",
+    "sous huitaine",
+    "sous quinzaine",
+    "dans un délai",
+    "pénalité",
+    "intérêts de retard",
+    "code des douanes",
+    "code de commerce",
+    "code civil",
+    "suivi du recouvrement",
+    "relance au transitaire",
 )
 #: Citations de textes (« article L. 221-3 », « art. 1231 du code… ») : jamais dans le relevé ni le modèle.
 _CITATION = r"\bart(?:icle|\.)\s*[LRD]\.?\s?\d|\bloi n°"
-_INTERDITES_RE = re.compile("|".join([*(re.escape(x) for x in EXPRESSIONS_INTERDITES), _CITATION]), re.IGNORECASE)
+_INTERDITES_RE = re.compile(
+    "|".join([*(re.escape(x) for x in EXPRESSIONS_INTERDITES), _CITATION]), re.IGNORECASE
+)
 
 LIBELLES_COMPOSANTE: dict[Composante, str] = {
     Composante.droit: "droits de douane",
@@ -91,13 +123,24 @@ def verifier_modele(texte: str) -> None:
     """Lève ``FormulationInterdite`` si le texte contient une expression d'acte juridique (brief §9.8)."""
     m = _INTERDITES_RE.search(texte)
     if m:
-        raise FormulationInterdite([Violation(expression=m.group(0), categorie="acte_juridique_pour_autrui",
-                                              extrait=texte[max(0, m.start() - 30):m.end() + 30],
-                                              debut=m.start(), fin=m.end())])
+        raise FormulationInterdite(
+            [
+                Violation(
+                    expression=m.group(0),
+                    categorie="acte_juridique_pour_autrui",
+                    extrait=texte[max(0, m.start() - 30) : m.end() + 30],
+                    debut=m.start(),
+                    fin=m.end(),
+                )
+            ]
+        )
 
 
 def _texte_ligne(i: int, ligne: LigneReclamation) -> str:
-    morceaux = [f"Dossier {ligne.dossier_reference or ligne.dossier_id}", f"facture n° {ligne.facture or '(non lue)'}"]
+    morceaux = [
+        f"Dossier {ligne.dossier_reference or ligne.dossier_id}",
+        f"facture n° {ligne.facture or '(non lue)'}",
+    ]
     if ligne.mrn:
         morceaux.append(f"MRN {ligne.mrn}")
     morceaux.append(LIBELLES_COMPOSANTE.get(ligne.composante, str(ligne.composante)))
@@ -130,7 +173,9 @@ def _bloc_partie(d: dict[str, str | None], defaut: str) -> list[str]:
 def _annexe(dossier: DossierReclamation) -> list[str]:
     sortie = ["Annexe — pièces et calculs"]
     for i, ligne in enumerate(dossier.lignes, 1):
-        sortie.append(f"{i}. Dossier {ligne.dossier_reference or ligne.dossier_id} — facture n° {ligne.facture or '(non lue)'}")
+        sortie.append(
+            f"{i}. Dossier {ligne.dossier_reference or ligne.dossier_id} — facture n° {ligne.facture or '(non lue)'}"
+        )
         for p in ligne.pieces:
             page = f", page {p.page}" if p.page else ""
             lu = f" : « {p.valeur_lue} »" if p.valeur_lue else ""
@@ -173,12 +218,22 @@ def rendre_modele(dossier: DossierReclamation) -> list[str]:
     p += ["", "À l'attention de :"]
     p += _bloc_partie(dossier.transitaire, "[Transitaire — à compléter]")
     p += ["", f"Objet : {_objet_modele(dossier)}", "", "Madame, Monsieur,", ""]
-    p.append(f"En rapprochant vos factures des autres documents de nos dossiers d'import, nous relevons des "
-             f"différences chiffrées, présentées dans le relevé joint ({_eur(total)} au total).")
+    p.append(
+        f"En rapprochant vos factures des autres documents de nos dossiers d'import, nous relevons des "
+        f"différences chiffrées, présentées dans le relevé joint ({_eur(total)} au total)."
+    )
     p.append("")
-    p.append("Pourriez-vous vérifier ces montants et nous indiquer si vous émettrez un avoir, ou nous "
-             "transmettre les éléments qui expliquent ces différences ?")
-    p += ["", "[Formule de politesse — à compléter]", "", "[Nom, fonction — à compléter]", "[Date — à compléter]"]
+    p.append(
+        "Pourriez-vous vérifier ces montants et nous indiquer si vous émettrez un avoir, ou nous "
+        "transmettre les éléments qui expliquent ces différences ?"
+    )
+    p += [
+        "",
+        "[Formule de politesse — à compléter]",
+        "",
+        "[Nom, fonction — à compléter]",
+        "[Date — à compléter]",
+    ]
     return p
 
 
@@ -236,25 +291,54 @@ def rendre_pdf(dossier: DossierReclamation) -> bytes:
     flux.append(Spacer(1, 2 * mm))
     flux.append(p(NATURE_RELEVE, petit))
     flux.append(Spacer(1, 3 * mm))
-    donnees = [[p(x, petit) for x in ("Dossier / facture", "Composante", "Valeur facturée (document, page)",
-                                      "Valeur de comparaison (document, page)", "Différence calculée",
-                                      "Tolérance")]]
+    donnees = [
+        [
+            p(x, petit)
+            for x in (
+                "Dossier / facture",
+                "Composante",
+                "Valeur facturée (document, page)",
+                "Valeur de comparaison (document, page)",
+                "Différence calculée",
+                "Tolérance",
+            )
+        ]
+    ]
     for ligne in dossier.lignes:
-        refac = (ligne.montant_refacture or "—") + (f"\n{ligne.source_refacture}" if ligne.source_refacture else "")
-        ref = (ligne.montant_reference or "—") + (f"\n{ligne.source_reference}" if ligne.source_reference else "")
+        refac = (ligne.montant_refacture or "—") + (
+            f"\n{ligne.source_refacture}" if ligne.source_refacture else ""
+        )
+        ref = (ligne.montant_reference or "—") + (
+            f"\n{ligne.source_reference}" if ligne.source_reference else ""
+        )
         ecart = _eur(ligne.ecart) + ("\n(à confirmer)" if ligne.a_confirmer else "")
         doss = f"{ligne.dossier_reference or ligne.dossier_id}\n{ligne.facture or '(non lue)'}" + (
-            f"\nMRN {ligne.mrn}" if ligne.mrn else "")
-        donnees.append([p(doss, petit), p(LIBELLES_COMPOSANTE.get(ligne.composante, str(ligne.composante)), petit),
-                        p(refac, petit), p(ref, petit), p(ecart, petit), p(ligne.tolerance or "—", petit)])
+            f"\nMRN {ligne.mrn}" if ligne.mrn else ""
+        )
+        donnees.append(
+            [
+                p(doss, petit),
+                p(LIBELLES_COMPOSANTE.get(ligne.composante, str(ligne.composante)), petit),
+                p(refac, petit),
+                p(ref, petit),
+                p(ecart, petit),
+                p(ligne.tolerance or "—", petit),
+            ]
+        )
     tableau = Table(donnees, colWidths=[30 * mm, 22 * mm, 36 * mm, 36 * mm, 26 * mm, 30 * mm], repeatRows=1)
-    tableau.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c0c6ce")),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f5")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
+    tableau.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c0c6ce")),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef1f5")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
     flux += [tableau, Spacer(1, 3 * mm)]
-    flux.append(p(f"Total des différences constatées entre documents : {_eur(dossier.total_demande)}.", titre))
+    flux.append(
+        p(f"Total des différences constatées entre documents : {_eur(dossier.total_demande)}.", titre)
+    )
     if dossier.total_a_confirmer:
         flux.append(p(f"Total des différences à confirmer : {_eur(dossier.total_a_confirmer)}."))
     flux.append(Spacer(1, 3 * mm))
@@ -277,8 +361,15 @@ def rendre_pdf(dossier: DossierReclamation) -> bytes:
         flux.append(p(ligne_modele) if ligne_modele else Spacer(1, 3 * mm))
 
     tampon = io.BytesIO()
-    doc = SimpleDocTemplate(tampon, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm, topMargin=16 * mm,
-                            bottomMargin=26 * mm, title=objet_reclamation(dossier))
+    doc = SimpleDocTemplate(
+        tampon,
+        pagesize=A4,
+        leftMargin=15 * mm,
+        rightMargin=15 * mm,
+        topMargin=16 * mm,
+        bottomMargin=26 * mm,
+        title=objet_reclamation(dossier),
+    )
     # (titre du document PDF : « Relevé d'écarts entre documents — factures n° … »)
     doc.build(flux, onFirstPage=pied, onLaterPages=pied)
     return tampon.getvalue()

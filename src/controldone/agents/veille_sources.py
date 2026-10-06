@@ -59,23 +59,47 @@ class Source:
 
 
 SOURCES: tuple[Source, ...] = (
-    Source("forfait_petits_envois",
-           "https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-"
-           "imports-which-will-apply-until-1-july-2028-2026-06-08_en", "docs/recherche/customs.md §3"),
-    Source("forfait_petits_envois", "https://eur-lex.europa.eu/eli/reg/2026/382/oj",
-           "docs/recherche/customs.md §3 (règlement 2026/382, page non lue lors du brief)"),
-    Source("macf_cbam", "https://taxation-customs.ec.europa.eu/carbon-border-adjustment-mechanism_en",
-           "complément officiel (le brief cite l'autorité allemande, hors liste blanche)"),
-    Source("macf_cbam", "https://eur-lex.europa.eu/eli/reg/2023/956/oj", "complément officiel (règlement MACF)"),
-    Source("reforme_cdu", "https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en",
-           "docs/recherche/customs.md §5"),
-    Source("reforme_cdu",
-           "https://taxation-customs.ec.europa.eu/online-services/online-services-and-databases-customs/"
-           "eu-customs-data-model-eucdm_en", "docs/recherche/customs.md §1"),
-    Source("facturation_electronique", "https://www.impots.gouv.fr/facturation-electronique-et-plateformes-agreees",
-           "docs/recherche/einvoice.md"),
-    Source("facturation_electronique", "https://www.douane.gouv.fr/demarche/beneficier-automatiquement-de-"
-           "lautoliquidation-de-la-tva-limport", "docs/recherche/customs.md §2"),
+    Source(
+        "forfait_petits_envois",
+        "https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-"
+        "imports-which-will-apply-until-1-july-2028-2026-06-08_en",
+        "docs/recherche/customs.md §3",
+    ),
+    Source(
+        "forfait_petits_envois",
+        "https://eur-lex.europa.eu/eli/reg/2026/382/oj",
+        "docs/recherche/customs.md §3 (règlement 2026/382, page non lue lors du brief)",
+    ),
+    Source(
+        "macf_cbam",
+        "https://taxation-customs.ec.europa.eu/carbon-border-adjustment-mechanism_en",
+        "complément officiel (le brief cite l'autorité allemande, hors liste blanche)",
+    ),
+    Source(
+        "macf_cbam", "https://eur-lex.europa.eu/eli/reg/2023/956/oj", "complément officiel (règlement MACF)"
+    ),
+    Source(
+        "reforme_cdu",
+        "https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en",
+        "docs/recherche/customs.md §5",
+    ),
+    Source(
+        "reforme_cdu",
+        "https://taxation-customs.ec.europa.eu/online-services/online-services-and-databases-customs/"
+        "eu-customs-data-model-eucdm_en",
+        "docs/recherche/customs.md §1",
+    ),
+    Source(
+        "facturation_electronique",
+        "https://www.impots.gouv.fr/facturation-electronique-et-plateformes-agreees",
+        "docs/recherche/einvoice.md",
+    ),
+    Source(
+        "facturation_electronique",
+        "https://www.douane.gouv.fr/demarche/beneficier-automatiquement-de-"
+        "lautoliquidation-de-la-tva-limport",
+        "docs/recherche/customs.md §2",
+    ),
 )
 
 
@@ -124,8 +148,14 @@ def _lire_borne(http: Any, url: str, taille_max: int) -> tuple[int, str | None, 
         return 200, None, bytes(corps).decode(rep.charset_encoding or "utf-8", errors="replace")
 
 
-def telecharger(url: str, *, client: Any = None, max_redirections: int = 3, timeout: float = 20.0,
-                taille_max: int = TAILLE_MAX_REPONSE) -> dict[str, Any]:
+def telecharger(
+    url: str,
+    *,
+    client: Any = None,
+    max_redirections: int = 3,
+    timeout: float = 20.0,
+    taille_max: int = TAILLE_MAX_REPONSE,
+) -> dict[str, Any]:
     """Télécharge ``url`` si elle est sous liste blanche (chaque redirection est revérifiée).
 
     Renvoie ``{"url", "statut": "ok", "sha256", "taille", "titre"}`` ou ``{"statut": "non_verifie",
@@ -138,8 +168,11 @@ def telecharger(url: str, *, client: Any = None, max_redirections: int = 3, time
     if not domaine_autorise(url):
         raise DomaineNonAutorise(f"domaine hors liste blanche : {urlsplit(url).hostname}")
     propre = client is None
-    http = client or httpx.Client(timeout=timeout, follow_redirects=False,
-                                  headers={"User-Agent": "ControlDOne-veille/1.0 (lecture seule)"})
+    http = client or httpx.Client(
+        timeout=timeout,
+        follow_redirects=False,
+        headers={"User-Agent": "ControlDOne-veille/1.0 (lecture seule)"},
+    )
     courante = url
     try:
         for _ in range(max_redirections + 1):

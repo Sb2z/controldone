@@ -101,14 +101,20 @@ def test_lignes_codes_dans_leur_colonne(en):
     ch, _ = en
     assert len(ch.lignes) == 3
     l0, l1, l2 = ch.lignes
-    assert l0.code_marchandise_imprime.valeur == "63026000" and l0.code_marchandise_imprime.valeur_brute == "6302.60.00"
+    assert (
+        l0.code_marchandise_imprime.valeur == "63026000"
+        and l0.code_marchandise_imprime.valeur_brute == "6302.60.00"
+    )
     assert l1.code_marchandise_imprime.valeur_brute == "2202 99 99"
     assert l2.code_marchandise_imprime.valeur == "731815"  # code à 6 chiffres
     assert l0.quantite.decimal() == Decimal("4930") and l0.quantite.unite == "C62"
     assert l1.quantite.unite == "LTR" and l2.quantite.unite == "KGM"
     assert l2.prix_unitaire.decimal() == Decimal("3.124")
-    assert [ln.montant_ligne.decimal() for ln in ch.lignes] == [Decimal("5916.00"), Decimal("2500.00"),
-                                                               Decimal("3124.00")]
+    assert [ln.montant_ligne.decimal() for ln in ch.lignes] == [
+        Decimal("5916.00"),
+        Decimal("2500.00"),
+        Decimal("3124.00"),
+    ]
     assert {ln.pays_origine.valeur for ln in ch.lignes} == {"GB", "CN"}
     codes = {ln.code_marchandise_imprime.valeur for ln in ch.lignes}
     # téléphone, SIREN, TVA, LTA de l'en-tête ne deviennent jamais des codes marchandise
@@ -167,9 +173,11 @@ def test_total_incoherent_confiance_basse():
 
 
 def test_dollar_seul_devise_inconnue():
-    contenu = fx.facture_en(devise_libelle=None, total="$ 12,540.00",
-                            pied=[("Subtotal (goods)", "$ 11,540.00"), ("Freight", "$ 1,250.00"),
-                                  ("Discount", "$ -250.00")])
+    contenu = fx.facture_en(
+        devise_libelle=None,
+        total="$ 12,540.00",
+        pied=[("Subtotal (goods)", "$ 11,540.00"), ("Freight", "$ 1,250.00"), ("Discount", "$ -250.00")],
+    )
     ch, _ = _fc(contenu)
     assert ch.devise is None or ch.devise.valeur in (None, "inconnue")
     if ch.devise is not None:
@@ -192,9 +200,20 @@ def test_code_coupe_sur_deux_lignes():
     p.t(330, 72, "Currency:")
     p.t(420, 72, "EUR")
     p.ligne(120, fx.COLS_EN)
-    p.ligne(138, [(42, "1", False), (60, "X-1", False), (125, "Laptop computer", False), (285, "8471.30", False),
-                  (345, "CN", False), (405, "2", True), (412, "pcs", False), (500, "600.00", True),
-                  (555, "1,200.00", True)])
+    p.ligne(
+        138,
+        [
+            (42, "1", False),
+            (60, "X-1", False),
+            (125, "Laptop computer", False),
+            (285, "8471.30", False),
+            (345, "CN", False),
+            (405, "2", True),
+            (412, "pcs", False),
+            (500, "600.00", True),
+            (555, "1,200.00", True),
+        ],
+    )
     p.ligne(150, [(125, "14 inch", False), (285, "00", False)])
     p.t(330, 180, "TOTAL")
     p.t(555, 180, "EUR 1,200.00", droite=True)
@@ -210,14 +229,25 @@ def test_tableur_formulaire_et_total_absent():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Invoice"
-    for row in (["COMMERCIAL INVOICE"], ["Great Lakes Demo Tools LLC (FICTITIOUS)"], [],
-                ["Invoice No.", "No.202600070"], ["Date", "2026-08-25"], ["Currency", "USD"],
-                ["Incoterms", "FOB Los Angeles"], ["Buyer", "Brindille Cosmétiques SAS (FICTIF)"],
-                ["Buyer address", "7 chemin des Échantillons"], ["Buyer VAT No.", fx.TVA_ACHETEUR], [],
-                ["#", "Item ref.", "Description", "HS code", "Origin", "Qty", "Unit", "Unit price", "Amount"],
-                [1, "LA-9063-BK", "Kitchen knife stainless", "8211.91.00", "US", 1290, "C62", 6.58, 8488.2],
-                [2, "LA-6623-A", "Switching power supply", "8504.40.82", "US", 380, "C62", 11.83, 4495.4],
-                [], ["Total gross weight (kg)", 2311.287], ["Number of packages", 138]):
+    for row in (
+        ["COMMERCIAL INVOICE"],
+        ["Great Lakes Demo Tools LLC (FICTITIOUS)"],
+        [],
+        ["Invoice No.", "No.202600070"],
+        ["Date", "2026-08-25"],
+        ["Currency", "USD"],
+        ["Incoterms", "FOB Los Angeles"],
+        ["Buyer", "Brindille Cosmétiques SAS (FICTIF)"],
+        ["Buyer address", "7 chemin des Échantillons"],
+        ["Buyer VAT No.", fx.TVA_ACHETEUR],
+        [],
+        ["#", "Item ref.", "Description", "HS code", "Origin", "Qty", "Unit", "Unit price", "Amount"],
+        [1, "LA-9063-BK", "Kitchen knife stainless", "8211.91.00", "US", 1290, "C62", 6.58, 8488.2],
+        [2, "LA-6623-A", "Switching power supply", "8504.40.82", "US", 380, "C62", 11.83, 4495.4],
+        [],
+        ["Total gross weight (kg)", 2311.287],
+        ["Number of packages", 138],
+    ):
         ws.append(row)
     for r in (13, 14):
         for c in (8, 9):
@@ -226,7 +256,9 @@ def test_tableur_formulaire_et_total_absent():
     wb.save(buf)
     ch, _ = _fc(buf.getvalue(), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     assert ch.numero.valeur == "No.202600070"
-    assert ch.devise.valeur == "USD" and ch.incoterm.valeur == "FOB" and ch.incoterm_lieu.valeur == "Los Angeles"
+    assert (
+        ch.devise.valeur == "USD" and ch.incoterm.valeur == "FOB" and ch.incoterm_lieu.valeur == "Los Angeles"
+    )
     assert ch.acheteur.tva.valeur == fx.TVA_ACHETEUR
     assert ch.acheteur.nom.valeur == "Brindille Cosmétiques SAS (FICTIF)"
     assert [ln.quantite.decimal() for ln in ch.lignes] == [Decimal("1290"), Decimal("380")]
@@ -247,19 +279,43 @@ def _page_ocr(lignes: list[list[tuple[str, float, float]]], conf: float = 0.95) 
         y = 0.1 + 0.02 * i
         ms = tuple(Mot(t, x0, y, x1, y + 0.012, conf) for t, x0, x1 in mots)
         out.append(Ligne(texte="   ".join(m.texte for m in ms), mots=ms))
-    return PageText(numero=1, texte="\n".join(li.texte for li in out), lignes=out, qualite=QualiteTexte.ocr,
-                    source="ocr")
+    return PageText(
+        numero=1, texte="\n".join(li.texte for li in out), lignes=out, qualite=QualiteTexte.ocr, source="ocr"
+    )
 
 
 def test_ocr_confiance_plafonnee_et_correction_tva():
-    pt = _page_ocr([
-        [("Buyer", 0.06, 0.1), ("/", 0.105, 0.11), ("Bill", 0.115, 0.14), ("to", 0.145, 0.16),
-         ("Invoice", 0.57, 0.62), ("No.:", 0.625, 0.65), ("EXP", 0.70, 0.73), ("-26-00180", 0.733, 0.80)],
-        [("Lumen", 0.06, 0.1), ("Industrie", 0.105, 0.16), ("SAS", 0.165, 0.19), ("Invoice", 0.57, 0.62),
-         ("date:", 0.625, 0.66), ("Aug", 0.70, 0.73), ("31,", 0.735, 0.755), ("2026", 0.76, 0.79)],
-        [("VAT", 0.06, 0.09), ("No.:", 0.095, 0.12), ("FRO7000909341", 0.125, 0.25), ("Currency:", 0.57, 0.64),
-         ("EUR", 0.70, 0.73)],
-    ])
+    pt = _page_ocr(
+        [
+            [
+                ("Buyer", 0.06, 0.1),
+                ("/", 0.105, 0.11),
+                ("Bill", 0.115, 0.14),
+                ("to", 0.145, 0.16),
+                ("Invoice", 0.57, 0.62),
+                ("No.:", 0.625, 0.65),
+                ("EXP", 0.70, 0.73),
+                ("-26-00180", 0.733, 0.80),
+            ],
+            [
+                ("Lumen", 0.06, 0.1),
+                ("Industrie", 0.105, 0.16),
+                ("SAS", 0.165, 0.19),
+                ("Invoice", 0.57, 0.62),
+                ("date:", 0.625, 0.66),
+                ("Aug", 0.70, 0.73),
+                ("31,", 0.735, 0.755),
+                ("2026", 0.76, 0.79),
+            ],
+            [
+                ("VAT", 0.06, 0.09),
+                ("No.:", 0.095, 0.12),
+                ("FRO7000909341", 0.125, 0.25),
+                ("Currency:", 0.57, 0.64),
+                ("EUR", 0.70, 0.73),
+            ],
+        ]
+    )
     ch, _ = extraire_facture_commerciale(vue_document([pt]), document_id="doc_test")
     # « EXP -26-00180 » : référence recollée, la date du dessous n'est jamais prise pour le numéro
     assert ch.numero.valeur_brute == "EXP -26-00180" and ch.numero.methode is Methode.ocr
@@ -272,11 +328,14 @@ def test_ocr_confiance_plafonnee_et_correction_tva():
 def test_ocr_total_sans_separateur_decimal_plafonne():
     # Holdout 1 : un total OCR ≥ 1000 sans séparateur décimal, pour une devise à 2 décimales, peut avoir
     # perdu sa virgule (facteur 100) : jamais > 0,80 sans recoupement à la même échelle.
-    pt = _page_ocr([
-        [("Invoice", 0.57, 0.62), ("No.:", 0.625, 0.65), ("INV-FICTIF-0001", 0.70, 0.80)],
-        [("Currency:", 0.57, 0.64), ("EUR", 0.70, 0.73)],
-        [("TOTAL", 0.50, 0.56), ("AMOUNT", 0.57, 0.64), ("EUR", 0.66, 0.70), ("4058121", 0.72, 0.80)],
-    ], conf=0.99)
+    pt = _page_ocr(
+        [
+            [("Invoice", 0.57, 0.62), ("No.:", 0.625, 0.65), ("INV-FICTIF-0001", 0.70, 0.80)],
+            [("Currency:", 0.57, 0.64), ("EUR", 0.70, 0.73)],
+            [("TOTAL", 0.50, 0.56), ("AMOUNT", 0.57, 0.64), ("EUR", 0.66, 0.70), ("4058121", 0.72, 0.80)],
+        ],
+        conf=0.99,
+    )
     ch, _ = extraire_facture_commerciale(vue_document([pt]), document_id="doc_test")
     assert ch.total_facture is not None and ch.total_facture.confiance <= 0.8
     assert _separateur_decimal_douteux("4058121", Decimal("4058121"), "EUR")
@@ -297,12 +356,15 @@ def _mots(*ts: str) -> list[Mot]:
     return out
 
 
-@pytest.mark.parametrize("mots, attendu", [
-    (("1", "234,56"), "1 234,56"),
-    (("113,", "212.72"), "113, 212.72"),
-    (("2,902", ".060", "kg"), "2,902 .060"),
-    (("1'234.56",), "1'234.56"),
-])
+@pytest.mark.parametrize(
+    "mots, attendu",
+    [
+        (("1", "234,56"), "1 234,56"),
+        (("113,", "212.72"), "113, 212.72"),
+        (("2,902", ".060", "kg"), "2,902 .060"),
+        (("1'234.56",), "1'234.56"),
+    ],
+)
 def test_nombres_groupes(mots, attendu):
     n = nombres_dans(_mots(*mots))
     assert n[0].texte == attendu

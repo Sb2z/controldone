@@ -17,7 +17,9 @@ def test_bouchon_respecte_l_interface(pa):
 
 
 def test_depot_idempotent_et_statuts(pa):
-    f = FactureADeposer(numero="F-2026-0001", facture_id="fac_1", siren_acheteur="000000001", contenu=b"%PDF-1.4 FICTIF")
+    f = FactureADeposer(
+        numero="F-2026-0001", facture_id="fac_1", siren_acheteur="000000001", contenu=b"%PDF-1.4 FICTIF"
+    )
     a1 = pa.deposer_facture(f)
     a2 = pa.deposer_facture(f)
     assert a1 == a2 and a1.code == "200"
@@ -45,7 +47,9 @@ def test_synchronisation_des_statuts_en_base(service, db, pa):
     assert service.synchroniser_statuts_pa() == 1  # le 200 du dépôt est déjà enregistré
     assert service.synchroniser_statuts_pa() == 0
     statuts = stock.statuts_pa(db, facture_id=f.id)
-    assert [s.code for s in statuts] == ["200", "210"] and statuts[-1].motif.startswith("Facture mal adressée")
+    assert [s.code for s in statuts] == ["200", "210"] and statuts[-1].motif.startswith(
+        "Facture mal adressée"
+    )
 
 
 def test_documentation_ne_pretend_pas_etre_une_pa():
@@ -55,4 +59,8 @@ def test_documentation_ne_pretend_pas_etre_une_pa():
 
     assert "n'est pas une plateforme agréée et ne prétend pas l'être" in module.__doc__
     doc = (Path(__file__).resolve().parents[2] / "docs" / "FACTURATION.md").read_text(encoding="utf-8")
-    assert "n'est pas une plateforme agréée" in doc and "1er septembre 2026" in doc and "1er septembre 2027" in doc
+    assert (
+        "n'est pas une plateforme agréée" in doc
+        and "1er septembre 2026" in doc
+        and "1er septembre 2027" in doc
+    )

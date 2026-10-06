@@ -27,8 +27,11 @@ GRIS = colors.HexColor("#6b7280")
 FILET = colors.HexColor("#cfd4da")
 FOND = colors.HexColor("#f3f4f6")
 ROUGE = colors.HexColor("#b42318")
-ACCENTS = {"facture_commerciale": colors.HexColor("#0f4c5c"), "declaration": colors.HexColor("#3a3a6a"),
-           "facture_transitaire": colors.HexColor("#5c3d0f")}
+ACCENTS = {
+    "facture_commerciale": colors.HexColor("#0f4c5c"),
+    "declaration": colors.HexColor("#3a3a6a"),
+    "facture_transitaire": colors.HexColor("#5c3d0f"),
+}
 
 
 class _Releve:
@@ -38,8 +41,18 @@ class _Releve:
         self.c = c
         self.zones: dict[str, tuple[float, float, float, float]] = {}
 
-    def ecrire(self, x: float, y: float, texte: str, police: str, taille: float, *, droite: bool = False,
-               centre: bool = False, chemin: str | None = None) -> None:
+    def ecrire(
+        self,
+        x: float,
+        y: float,
+        texte: str,
+        police: str,
+        taille: float,
+        *,
+        droite: bool = False,
+        centre: bool = False,
+        chemin: str | None = None,
+    ) -> None:
         from reportlab.pdfbase.pdfmetrics import stringWidth
 
         c = self.c
@@ -56,11 +69,17 @@ class _Releve:
             x0 = x
         if chemin:
             largeur, hauteur = A4
-            self.zones[chemin] = (max(0.0, x0 / largeur), max(0.0, 1 - (y + 0.85 * taille) / hauteur),
-                                  min(1.0, (x0 + w) / largeur), min(1.0, 1 - (y - 0.25 * taille) / hauteur))
+            self.zones[chemin] = (
+                max(0.0, x0 / largeur),
+                max(0.0, 1 - (y + 0.85 * taille) / hauteur),
+                min(1.0, (x0 + w) / largeur),
+                min(1.0, 1 - (y - 0.25 * taille) / hauteur),
+            )
 
 
-def dessiner_document(doc: DocDemo, chemin: Path | None = None) -> dict[str, tuple[float, float, float, float]]:
+def dessiner_document(
+    doc: DocDemo, chemin: Path | None = None
+) -> dict[str, tuple[float, float, float, float]]:
     """Dessine le document (dans ``chemin``, ou en mémoire) ; retourne la zone de chaque valeur du modèle
     (chemin relatif -> ``(x0, y0, x1, y1)``)."""
     import io
@@ -82,7 +101,9 @@ def dessiner_document(doc: DocDemo, chemin: Path | None = None) -> dict[str, tup
     c.setFillColor(ROUGE)
     c.rect(0, hauteur - 8 * mm, largeur, 8 * mm, stroke=0, fill=1)
     c.setFillColor(colors.white)
-    rel.ecrire(largeur / 2, hauteur - 5.3 * mm, "DONNÉES FICTIVES — DOCUMENT DE DÉMONSTRATION", b, 8, centre=True)
+    rel.ecrire(
+        largeur / 2, hauteur - 5.3 * mm, "DONNÉES FICTIVES — DOCUMENT DE DÉMONSTRATION", b, 8, centre=True
+    )
     # titre (ligne propre), puis émetteur à gauche et en-tête à droite
     c.setFillColor(accent)
     rel.ecrire(g, hauteur - 20 * mm, doc.titre, b, 16)
@@ -121,8 +142,14 @@ def dessiner_document(doc: DocDemo, chemin: Path | None = None) -> dict[str, tup
             from reportlab.pdfbase.pdfmetrics import stringWidth
 
             rel.ecrire(g, yd, ch.libelle, police, taille)
-            rel.ecrire(g + stringWidth(ch.libelle + " ", police, taille), yd, ch.brut, police, taille,
-                       chemin=ch.chemin)
+            rel.ecrire(
+                g + stringWidth(ch.libelle + " ", police, taille),
+                yd,
+                ch.brut,
+                police,
+                taille,
+                chemin=ch.chemin,
+            )
         else:
             rel.ecrire(g, yd, ch.brut, police, taille, chemin=ch.chemin)
         yd -= 4.3 * mm
@@ -200,14 +227,18 @@ def generer_demo(racine: Path | str) -> Path:
     racine = Path(racine)
     client = racine / "clients" / "DEMO"
     (client / "grilles").mkdir(parents=True, exist_ok=True)
-    (client / "profil.json").write_text(json.dumps(profil_demo(), ensure_ascii=False, indent=2) + "\n",
-                                        encoding="utf-8")
-    (client / "grilles" / "grille.json").write_text(json.dumps(grille_demo(), ensure_ascii=False, indent=2) + "\n",
-                                                   encoding="utf-8")
+    (client / "profil.json").write_text(
+        json.dumps(profil_demo(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    (client / "grilles" / "grille.json").write_text(
+        json.dumps(grille_demo(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     for dossier in dossiers_demo():
         for doc in dossier.documents:
             dessiner_document(doc, racine / "dossiers" / dossier.nom / "docs" / doc.fichier)
     (racine / "LISEZMOI.txt").write_text(
         "Jeu de démonstration ControlDOne — DONNÉES FICTIVES.\n"
-        "Sociétés, adresses, numéros et montants inventés. Régénérer : controldone demo.\n", encoding="utf-8")
+        "Sociétés, adresses, numéros et montants inventés. Régénérer : controldone demo.\n",
+        encoding="utf-8",
+    )
     return racine

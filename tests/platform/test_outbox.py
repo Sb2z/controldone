@@ -19,8 +19,11 @@ from controldone.outbox import (
 from controldone.storage import AccesRefuse, verifier_chaine
 from controldone.storage.models import AuditLog
 
-PROPRE = {"objet": "Rapport de diagnostic disponible", "corps": "Votre rapport (FICTIF) est disponible.",
-          "destinataires": ["compta@client-fictif.test"]}
+PROPRE = {
+    "objet": "Rapport de diagnostic disponible",
+    "corps": "Votre rapport (FICTIF) est disponible.",
+    "destinataires": ["compta@client-fictif.test"],
+}
 INTERDIT = {"objet": "Réclamation", "corps": "Le transitaire vous a facturé un droit dû illégal."}
 
 
@@ -81,7 +84,10 @@ def test_correction_passe_les_garde_fous(monde, file, expediteur):
     a = file.proposer(TypeAction.reclamation_dossier, INTERDIT, SYSTEME, tenant_id="cli_a")
     with pytest.raises(ActionBloquee):
         file.corriger(a.id, FONDATEUR, {"objet": "Demande d'avoir", "corps": "Ce texte reste un droit dû."})
-    corrige = {"objet": "Demande d'avoir", "corps": "Le montant refacturé diffère du montant liquidé indiqué."}
+    corrige = {
+        "objet": "Demande d'avoir",
+        "corps": "Le montant refacturé diffère du montant liquidé indiqué.",
+    }
     a = file.corriger(a.id, FONDATEUR, corrige)
     assert a.statut is StatutAction.corrige and a.payload == INTERDIT and a.payload_corrige == corrige
     assert a.motif_blocage is None
@@ -97,7 +103,10 @@ def test_refus_avec_motif_obligatoire(monde, file, expediteur):
         file.refuser(a.id, FONDATEUR, "  ")
     a = file.refuser(a.id, FONDATEUR, "ton inadapté")
     assert a.statut is StatutAction.refuse and a.motif_refus == "ton inadapté"
-    for tentative in (lambda: file.approuver(a.id, FONDATEUR), lambda: file.envoyer(a.id, expediteur, FONDATEUR)):
+    for tentative in (
+        lambda: file.approuver(a.id, FONDATEUR),
+        lambda: file.envoyer(a.id, expediteur, FONDATEUR),
+    ):
         with pytest.raises(TransitionInterdite):
             tentative()
 
@@ -125,8 +134,11 @@ def test_mode_auto_approuve_si_garde_fous_ok(monde, file, expediteur):
 def test_seul_le_fondateur_decide(monde, file):
     a = file.proposer(TypeAction.email_client, PROPRE, SYSTEME, tenant_id="cli_a")
     for acteur in (SYSTEME, monde.acteurs["admin_a"], monde.acteurs["lecteur_a"], monde.acteurs["admin_b"]):
-        for decision in (lambda ac: file.approuver(a.id, ac), lambda ac: file.corriger(a.id, ac, PROPRE),
-                         lambda ac: file.refuser(a.id, ac, "x")):
+        for decision in (
+            lambda ac: file.approuver(a.id, ac),
+            lambda ac: file.corriger(a.id, ac, PROPRE),
+            lambda ac: file.refuser(a.id, ac, "x"),
+        ):
             with pytest.raises(AccesRefuse):
                 decision(acteur)
     with pytest.raises(AccesRefuse):
@@ -153,8 +165,9 @@ def test_visibilite_client(monde, file, expediteur):
 
 def test_idempotence_et_client_inconnu(file):
     a = file.proposer(TypeAction.facture_emise, PROPRE, SYSTEME, tenant_id="cli_a", idempotency_key="fac-1")
-    b = file.proposer(TypeAction.facture_emise, {"corps": "autre"}, SYSTEME, tenant_id="cli_a",
-                      idempotency_key="fac-1")
+    b = file.proposer(
+        TypeAction.facture_emise, {"corps": "autre"}, SYSTEME, tenant_id="cli_a", idempotency_key="fac-1"
+    )
     assert a.id == b.id and b.payload == PROPRE
     with pytest.raises(AccesRefuse):
         file.proposer(TypeAction.facture_emise, PROPRE, SYSTEME, tenant_id="cli_inexistant")
@@ -163,7 +176,9 @@ def test_idempotence_et_client_inconnu(file):
 
 
 def test_garde_fous_reverifies_a_l_envoi(monde, file, expediteur, monkeypatch):
-    a = file.approuver(file.proposer(TypeAction.email_client, PROPRE, SYSTEME, tenant_id="cli_a").id, FONDATEUR)
+    a = file.approuver(
+        file.proposer(TypeAction.email_client, PROPRE, SYSTEME, tenant_id="cli_a").id, FONDATEUR
+    )
     import controldone.outbox.service as svc
 
     monkeypatch.setattr(svc, "verifier_textes", lambda contenu: ["liste enrichie entre-temps"])

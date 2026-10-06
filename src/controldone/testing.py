@@ -133,8 +133,15 @@ def taxation(
     def v(nom: str, val: str | None, brut: str | None = None) -> ValeurSourcee | None:
         if val is None:
             return None
-        return vs(f"declaration.taxations[].{nom}", val, brut=brut, document_id=doc_id, methode=methode,
-                  confiance=confiance, page=page)
+        return vs(
+            f"declaration.taxations[].{nom}",
+            val,
+            brut=brut,
+            document_id=doc_id,
+            methode=methode,
+            confiance=confiance,
+            page=page,
+        )
 
     return TaxationDeclaration(
         article=v("article", article),
@@ -177,7 +184,11 @@ def facture_transitaire(*, id: str | None = None, **champs: Any) -> Document:
 
 
 def dossier_pour(
-    documents: Iterable[Document], *, force: ForceLien = ForceLien.forte, id: str = "dos_test", version: int = 1
+    documents: Iterable[Document],
+    *,
+    force: ForceLien = ForceLien.forte,
+    id: str = "dos_test",
+    version: int = 1,
 ) -> Dossier:
     """Dossier liant chaque document avec son rôle naturel et la force donnée."""
     liens = []
@@ -196,6 +207,9 @@ def contexte(
 ) -> ControlContext:
     """Contexte de contrôle prêt à l'emploi pour une liste de documents."""
     return ControlContext.construire(
-        dossier_pour(documents, force=force), documents, profil or ProfilTolerances(id="tol_test"),
-        execution_id="exe_test", **kwargs,
+        dossier_pour(documents, force=force),
+        documents,
+        profil or ProfilTolerances(id="tol_test"),
+        execution_id="exe_test",
+        **kwargs,
     )

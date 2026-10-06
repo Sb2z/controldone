@@ -20,8 +20,13 @@ from controldone.storage.sauvegarde import restaurer, rotation, sauvegarder
 def test_sauvegarde_et_restauration(monde, tmp_path, cles):
     with monde.db.tenant("cli_a", SYSTEME) as sc:  # écriture en cours de journée (base ouverte)
         sc.creer_lot("lot_sauvegarde")
-    archive = sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles,
-                          now=datetime(2026, 9, 30, 2, 0, tzinfo=UTC))
+    archive = sauvegarder(
+        monde.db.chemin_sqlite(),
+        monde.vault.racine,
+        tmp_path / "sauv",
+        cles,
+        now=datetime(2026, 9, 30, 2, 0, tzinfo=UTC),
+    )
     assert archive.name == "controldone-20260930T020000Z.tar.gz.enc"
     assert stat.S_IMODE(os.stat(archive).st_mode) == 0o600
     assert b"SQLite format" not in archive.read_bytes() and b"lot_sauvegarde" not in archive.read_bytes()
@@ -71,8 +76,10 @@ def test_rotation_7_jours_4_semaines(tmp_path):
     jours = {n[12:20] for n in restants}
     assert len(restants) <= 13 and len(supprimes) == 60 - len(restants)
     # deux sauvegardes par jour (D-4105) : les 4 plus récentes (deux jours) sont toutes conservées
-    assert {f"controldone-{(debut - timedelta(hours=12 * i)).strftime('%Y%m%dT%H%M%SZ')}.tar.gz.enc"
-            for i in range(4)} <= set(restants)
+    assert {
+        f"controldone-{(debut - timedelta(hours=12 * i)).strftime('%Y%m%dT%H%M%SZ')}.tar.gz.enc"
+        for i in range(4)
+    } <= set(restants)
     assert {(debut - timedelta(days=i)).strftime("%Y%m%d") for i in range(7)} <= jours
     semaines = {datetime.strptime(n[12:20], "%Y%m%d").isocalendar()[:2] for n in restants}
     assert len(semaines) >= 4

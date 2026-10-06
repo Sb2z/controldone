@@ -97,9 +97,16 @@ class RapportAgent:
     redaction: str = "gabarit"  # gabarit | llm
 
     def en_dict(self) -> dict[str, Any]:
-        return {"agent": self.agent, "execution_id": self.execution_id, "tenant_id": self.tenant_id,
-                "propositions": self.propositions, "alertes": self.alertes, "jobs": self.jobs,
-                "notes": self.notes, "redaction": self.redaction}
+        return {
+            "agent": self.agent,
+            "execution_id": self.execution_id,
+            "tenant_id": self.tenant_id,
+            "propositions": self.propositions,
+            "alertes": self.alertes,
+            "jobs": self.jobs,
+            "notes": self.notes,
+            "redaction": self.redaction,
+        }
 
 
 class Agent:
@@ -124,15 +131,28 @@ class Agent:
 
     def appeler(self, ctx: ContexteAgent, nom: str, **params: Any) -> Any:
         if nom not in self._outils:
-            ctx.journal.ecrire(agent=self.nom, execution_id=ctx.execution_id, tenant_id=ctx.tenant_id,
-                               evenement="refus_outil", outil=nom, quand=ctx.maintenant())
+            ctx.journal.ecrire(
+                agent=self.nom,
+                execution_id=ctx.execution_id,
+                tenant_id=ctx.tenant_id,
+                evenement="refus_outil",
+                outil=nom,
+                quand=ctx.maintenant(),
+            )
             raise OutilNonAutorise(f"l'agent {self.nom} n'a pas accès à l'outil {nom}")
         outil = self._outils[nom]
         valides = outil.valider(params)
         resultat = outil.fn(ctx, **valides)
-        ctx.journal.ecrire(agent=self.nom, execution_id=ctx.execution_id, tenant_id=ctx.tenant_id,
-                           evenement="outil", outil=nom, params=resumer(valides), resultat=resumer(resultat),
-                           quand=ctx.maintenant())
+        ctx.journal.ecrire(
+            agent=self.nom,
+            execution_id=ctx.execution_id,
+            tenant_id=ctx.tenant_id,
+            evenement="outil",
+            outil=nom,
+            params=resumer(valides),
+            resultat=resumer(resultat),
+            quand=ctx.maintenant(),
+        )
         return resultat
 
     def executer(self, ctx: ContexteAgent, **params: Any) -> RapportAgent:
@@ -142,17 +162,37 @@ class Agent:
             raise ValueError(f"{self.nom} exige un client")
         ctx.agent = self.nom
         rapport = RapportAgent(self.nom, ctx.execution_id, ctx.tenant_id)
-        ctx.journal.ecrire(agent=self.nom, execution_id=ctx.execution_id, tenant_id=ctx.tenant_id,
-                           evenement="debut", params=resumer(params), quand=ctx.maintenant())
+        ctx.journal.ecrire(
+            agent=self.nom,
+            execution_id=ctx.execution_id,
+            tenant_id=ctx.tenant_id,
+            evenement="debut",
+            params=resumer(params),
+            quand=ctx.maintenant(),
+        )
         try:
             self._executer(ctx, rapport, **params)
         except Exception as exc:
-            ctx.journal.ecrire(agent=self.nom, execution_id=ctx.execution_id, tenant_id=ctx.tenant_id,
-                               evenement="erreur", erreur=type(exc).__name__, quand=ctx.maintenant())
+            ctx.journal.ecrire(
+                agent=self.nom,
+                execution_id=ctx.execution_id,
+                tenant_id=ctx.tenant_id,
+                evenement="erreur",
+                erreur=type(exc).__name__,
+                quand=ctx.maintenant(),
+            )
             raise
-        ctx.journal.ecrire(agent=self.nom, execution_id=ctx.execution_id, tenant_id=ctx.tenant_id,
-                           evenement="fin", propositions=len(rapport.propositions), alertes=len(rapport.alertes),
-                           jobs=len(rapport.jobs), redaction=rapport.redaction, quand=ctx.maintenant())
+        ctx.journal.ecrire(
+            agent=self.nom,
+            execution_id=ctx.execution_id,
+            tenant_id=ctx.tenant_id,
+            evenement="fin",
+            propositions=len(rapport.propositions),
+            alertes=len(rapport.alertes),
+            jobs=len(rapport.jobs),
+            redaction=rapport.redaction,
+            quand=ctx.maintenant(),
+        )
         return rapport
 
     def _executer(self, ctx: ContexteAgent, rapport: RapportAgent, **params: Any) -> None:  # pragma: no cover
@@ -160,5 +200,10 @@ class Agent:
 
     @classmethod
     def description(cls) -> dict[str, Any]:
-        return {"nom": cls.nom, "role": cls.role, "outils": list(cls.outils), "plateforme": cls.plateforme,
-                "periode": cls.periode}
+        return {
+            "nom": cls.nom,
+            "role": cls.role,
+            "outils": list(cls.outils),
+            "plateforme": cls.plateforme,
+            "periode": cls.periode,
+        }

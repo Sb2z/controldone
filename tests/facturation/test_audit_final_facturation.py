@@ -19,12 +19,27 @@ def test_f08_paiement_stripe_remplace_le_brouillon_de_l_agent(service, db):
     from controldone.litiges import LigneFacture, payload_facture
 
     # l'agent a proposé l'échéance au prix par défaut (99,00), sans le paiement
-    payload = payload_facture("abonnement", [LigneFacture("Contrôle continu — abonnement 2026-10", Decimal("99.00"))],
-                              destinataires=["x@client-b-fictif.test"], raison_sociale="CLIENT B FICTIF SARL")
-    agent = FileSortante(db).proposer("facture_emise", payload, SYSTEME, tenant_id="cli_b",
-                                      idempotency_key="facture:abonnement:cli_b:2026-10")
-    a = service.proposer_abonnement("cli_b", SYSTEME, palier="pro", mois="2026-10", deja_paye=Decimal("238.80"),
-                                    reference_paiement="in_FICTIF")
+    payload = payload_facture(
+        "abonnement",
+        [LigneFacture("Contrôle continu — abonnement 2026-10", Decimal("99.00"))],
+        destinataires=["x@client-b-fictif.test"],
+        raison_sociale="CLIENT B FICTIF SARL",
+    )
+    agent = FileSortante(db).proposer(
+        "facture_emise",
+        payload,
+        SYSTEME,
+        tenant_id="cli_b",
+        idempotency_key="facture:abonnement:cli_b:2026-10",
+    )
+    a = service.proposer_abonnement(
+        "cli_b",
+        SYSTEME,
+        palier="pro",
+        mois="2026-10",
+        deja_paye=Decimal("238.80"),
+        reference_paiement="in_FICTIF",
+    )
     assert a.id == agent.id
     # avant : le brouillon de l'agent (99,00, sans « déjà payé ») était renvoyé tel quel
     assert a.payload["total_ht"] == "199.00" and a.payload["facturation"]["deja_paye"] == "238.80"
@@ -37,12 +52,22 @@ def test_f08_agent_ne_propose_pas_un_abonnement_stripe_actif(db, monkeypatch):
     from controldone.agents import outils
     from controldone.agents.base import ContexteAgent
 
-    stock.enregistrer_compte_paiement(db, "cli_b", fournisseur="stripe", abonnement_id="sub_FICTIF", palier="intensif",
-                                      statut_abonnement="active")
+    stock.enregistrer_compte_paiement(
+        db,
+        "cli_b",
+        fournisseur="stripe",
+        abonnement_id="sub_FICTIF",
+        palier="intensif",
+        statut_abonnement="active",
+    )
     ctx = ContexteAgent.__new__(ContexteAgent)
     ctx.db, ctx.tenant_id = db, "cli_b"
     info = outils._abonnement(ctx, "cli_b", {})
-    assert info == {"prix": "349.00", "palier": "intensif", "stripe_actif": True}  # avant : 99,00 et actif ignoré
+    assert info == {
+        "prix": "349.00",
+        "palier": "intensif",
+        "stripe_actif": True,
+    }  # avant : 99,00 et actif ignoré
 
 
 def test_f09_second_avoir_avant_emission_refuse(service, db):
@@ -71,7 +96,9 @@ def test_f10_une_seule_source_du_taux_de_commission(service, db):
 
 def test_commission_jamais_sur_un_remboursement_d_administration(service):
     with pytest.raises(ValueError, match="administration"):
-        service.proposer_commission("cli_a", FONDATEUR, base=Decimal("100"), avoir_id="remb", origine="administration")
+        service.proposer_commission(
+            "cli_a", FONDATEUR, base=Decimal("100"), avoir_id="remb", origine="administration"
+        )
 
 
 def test_f19_frontiere_de_mois_de_paris():
@@ -79,7 +106,9 @@ def test_f19_frontiere_de_mois_de_paris():
     from controldone.jobs.couts import mois_courant
 
     instant = datetime(2026, 9, 30, 22, 30, tzinfo=UTC)  # 1er octobre, 0 h 30 à Paris
-    assert mois_paris(instant) == mois_courant(instant) == "2026-10"  # avant : plafond IA en mois UTC (« 2026-09 »)
+    assert (
+        mois_paris(instant) == mois_courant(instant) == "2026-10"
+    )  # avant : plafond IA en mois UTC (« 2026-09 »)
 
 
 def test_cumul_des_avoirs_verifie_sous_le_verrou_de_numerotation(service, db):

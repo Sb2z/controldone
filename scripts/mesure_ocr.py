@@ -83,7 +83,7 @@ def valeurs_verite(valeurs: dict) -> list[tuple[str, str, str]]:
             continue
         m = _NOMBRE.match(s)
         if m:
-            chiffres = (m.group(1).lstrip("0") + (m.group(2) or "").rstrip("0"))
+            chiffres = m.group(1).lstrip("0") + (m.group(2) or "").rstrip("0")
             if len(chiffres) < 3:
                 continue
             cat = "montant"
@@ -144,9 +144,21 @@ def _mesurer_fichier(t: dict) -> dict:
     except Exception as e:  # mesure : on note l'échec
         return {"chemin": str(chemin), "erreur": f"{type(e).__name__}: {e}"[:200]}
     duree = time.perf_counter() - debut
-    return {"chemin": str(chemin), "duree": duree,
-            "pages": [{"numero": p.numero, "texte": p.texte, "score_ocr": p.score_ocr, "rotation": p.rotation,
-                       "qualite": p.qualite.value, "avert": p.avertissements} for p in pages]}
+    return {
+        "chemin": str(chemin),
+        "duree": duree,
+        "pages": [
+            {
+                "numero": p.numero,
+                "texte": p.texte,
+                "score_ocr": p.score_ocr,
+                "rotation": p.rotation,
+                "qualite": p.qualite.value,
+                "avert": p.avertissements,
+            }
+            for p in pages
+        ],
+    }
 
 
 def taches_corpus(corpus: Path, modes: set[str] | None, dossiers: set[str] | None) -> list[dict]:
@@ -169,9 +181,16 @@ def taches_corpus(corpus: Path, modes: set[str] | None, dossiers: set[str] | Non
                 continue
             chemin = str(dossier / d["file"])
             tache = taches.setdefault(chemin, {"chemin": chemin, "docs": []})
-            tache["docs"].append({"dossier": dossier.name, "doc_id": d["doc_id"], "type": d["type"],
-                                  "mode": mode, "pages": d["pages"],
-                                  "valeurs": valeurs_verite(verite["truth_values"].get(d["doc_id"], {}))})
+            tache["docs"].append(
+                {
+                    "dossier": dossier.name,
+                    "doc_id": d["doc_id"],
+                    "type": d["type"],
+                    "mode": mode,
+                    "pages": d["pages"],
+                    "valeurs": valeurs_verite(verite["truth_values"].get(d["doc_id"], {})),
+                }
+            )
     return list(taches.values())
 
 
@@ -182,8 +201,9 @@ def _centile(v: list[float], q: float) -> float:
     return v[min(len(v) - 1, round(q * (len(v) - 1)))]
 
 
-def mesurer(corpus: Path, *, modes=None, dossiers=None, cache=None, jobs=4, isoler=True,
-            reglages: dict | None = None) -> dict:
+def mesurer(
+    corpus: Path, *, modes=None, dossiers=None, cache=None, jobs=4, isoler=True, reglages: dict | None = None
+) -> dict:
     taches = taches_corpus(corpus, modes, dossiers)
     # Réglages ou autre arbre de sources : le processus isolé (forkserver) importerait le module installé.
     isoler = isoler and not reglages and "MESURE_OCR_SRC" not in os.environ
@@ -204,17 +224,27 @@ def mesurer(corpus: Path, *, modes=None, dossiers=None, cache=None, jobs=4, isol
             compact = _compacter(texte)
             res = [(cat, ch, v, trouvee(cat, v, texte, compact)) for cat, ch, v in d["valeurs"]]
             scores = [p["score_ocr"] for p in ps if p["score_ocr"] is not None]
-            docs.append({"dossier": d["dossier"], "doc_id": d["doc_id"], "type": d["type"], "mode": d["mode"],
-                         "fichier": t["chemin"], "pages": len(ps),
-                         "score_ocr": statistics.mean(scores) if scores else None,
-                         "rotations": [p["rotation"] for p in ps],
-                         "valeurs": [[cat, ch, v, ok] for cat, ch, v, ok in res]})
+            docs.append(
+                {
+                    "dossier": d["dossier"],
+                    "doc_id": d["doc_id"],
+                    "type": d["type"],
+                    "mode": d["mode"],
+                    "fichier": t["chemin"],
+                    "pages": len(ps),
+                    "score_ocr": statistics.mean(scores) if scores else None,
+                    "rotations": [p["rotation"] for p in ps],
+                    "valeurs": [[cat, ch, v, ok] for cat, ch, v, ok in res],
+                }
+            )
             temps_page[d["mode"]].extend([r["duree"] / max(1, len(r["pages"]))] * len(ps))
     return {"corpus": str(corpus), "docs": docs, "temps_page": temps_page}
 
 
 def resumer(res: dict) -> dict[str, dict]:
-    groupes: dict[str, dict] = defaultdict(lambda: {"docs": 0, "pages": 0, "scores": [], "cat": defaultdict(lambda: [0, 0])})
+    groupes: dict[str, dict] = defaultdict(
+        lambda: {"docs": 0, "pages": 0, "scores": [], "cat": defaultdict(lambda: [0, 0])}
+    )
     for d in res["docs"]:
         for cle in (d["mode"], "TOUT"):
             g = groupes[cle]
@@ -230,18 +260,24 @@ def resumer(res: dict) -> dict[str, dict]:
     tous_temps = [x for v in res["temps_page"].values() for x in v]
     for cle, g in groupes.items():
         temps = tous_temps if cle == "TOUT" else res["temps_page"].get(cle, [])
-        sortie[cle] = {"docs": g["docs"], "pages": g["pages"],
-                       "score_ocr": round(statistics.mean(g["scores"]), 3) if g["scores"] else None,
-                       "valeurs": {c: [ok, n, round(ok / n, 4) if n else None] for c, (ok, n) in g["cat"].items()},
-                       "p50_s": round(_centile(temps, 0.5), 2), "p95_s": round(_centile(temps, 0.95), 2)}
+        sortie[cle] = {
+            "docs": g["docs"],
+            "pages": g["pages"],
+            "score_ocr": round(statistics.mean(g["scores"]), 3) if g["scores"] else None,
+            "valeurs": {c: [ok, n, round(ok / n, 4) if n else None] for c, (ok, n) in g["cat"].items()},
+            "p50_s": round(_centile(temps, 0.5), 2),
+            "p95_s": round(_centile(temps, 0.95), 2),
+        }
     return sortie
 
 
 def afficher(resume: dict[str, dict], titre: str = "") -> None:
     if titre:
         print(titre)
-    print(f"{'mode':<12}{'docs':>5}{'pages':>6}{'conf':>7}{'toutes':>16}{'montant':>16}{'reference':>16}"
-          f"{'texte':>16}{'p50 s':>7}{'p95 s':>7}")
+    print(
+        f"{'mode':<12}{'docs':>5}{'pages':>6}{'conf':>7}{'toutes':>16}{'montant':>16}{'reference':>16}"
+        f"{'texte':>16}{'p50 s':>7}{'p95 s':>7}"
+    )
     for cle in sorted(resume, key=lambda k: (k == "TOUT", k)):
         g = resume[cle]
 
@@ -250,22 +286,28 @@ def afficher(resume: dict[str, dict], titre: str = "") -> None:
             return f"{v[0]}/{v[1]} {100 * v[2]:.1f}%" if v and v[1] else "-"
 
         conf = f"{g['score_ocr']:.3f}" if g["score_ocr"] is not None else "-"
-        print(f"{cle:<12}{g['docs']:>5}{g['pages']:>6}{conf:>7}{f('toutes'):>16}{f('montant'):>16}"
-              f"{f('reference'):>16}{f('texte'):>16}{g['p50_s']:>7}{g['p95_s']:>7}")
+        print(
+            f"{cle:<12}{g['docs']:>5}{g['pages']:>6}{conf:>7}{f('toutes'):>16}{f('montant'):>16}"
+            f"{f('reference'):>16}{f('texte'):>16}{g['p50_s']:>7}{g['p95_s']:>7}"
+        )
 
 
 def comparer(avant: dict, apres: dict) -> None:
     ra, rb = resumer(avant), resumer(apres)
-    print(f"{'mode':<12}{'pages':>6}{'avant':>9}{'après':>9}{'delta':>8}{'conf av':>9}{'conf ap':>9}"
-          f"{'p50 av':>8}{'p50 ap':>8}{'p95 av':>8}{'p95 ap':>8}")
+    print(
+        f"{'mode':<12}{'pages':>6}{'avant':>9}{'après':>9}{'delta':>8}{'conf av':>9}{'conf ap':>9}"
+        f"{'p50 av':>8}{'p50 ap':>8}{'p95 av':>8}{'p95 ap':>8}"
+    )
     for cle in sorted(set(ra) | set(rb), key=lambda k: (k == "TOUT", k)):
         a, b = ra.get(cle), rb.get(cle)
         if not a or not b:
             continue
         va, vb = a["valeurs"]["toutes"][2] or 0, b["valeurs"]["toutes"][2] or 0
-        print(f"{cle:<12}{b['pages']:>6}{100 * va:>8.1f}%{100 * vb:>8.1f}%{100 * (vb - va):>+7.1f}"
-              f"{a['score_ocr'] or 0:>9.3f}{b['score_ocr'] or 0:>9.3f}{a['p50_s']:>8}{b['p50_s']:>8}"
-              f"{a['p95_s']:>8}{b['p95_s']:>8}")
+        print(
+            f"{cle:<12}{b['pages']:>6}{100 * va:>8.1f}%{100 * vb:>8.1f}%{100 * (vb - va):>+7.1f}"
+            f"{a['score_ocr'] or 0:>9.3f}{b['score_ocr'] or 0:>9.3f}{a['p50_s']:>8}{b['p50_s']:>8}"
+            f"{a['p95_s']:>8}{b['p95_s']:>8}"
+        )
     # documents qui perdent ou gagnent des valeurs
     idx = {(d["dossier"], d["doc_id"]): d for d in avant["docs"]}
     pertes, gains = [], []
@@ -292,8 +334,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cache", default=None, help="cache de pages propre à l'expérience (défaut : aucun)")
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--local", action="store_true", help="sans processus isolé (diagnostic)")
-    ap.add_argument("--reglages", default=None,
-                    help="JSON fusionné dans pages.REGLAGES_OCR (variante ; implique --local)")
+    ap.add_argument(
+        "--reglages", default=None, help="JSON fusionné dans pages.REGLAGES_OCR (variante ; implique --local)"
+    )
     ap.add_argument("--json", default=None, help="écrit le détail (textes non inclus) dans ce fichier")
     ap.add_argument("--compare", nargs=2, metavar=("AVANT", "APRES"), help="compare deux résultats JSON")
     a = ap.parse_args(argv)
@@ -305,10 +348,15 @@ def main(argv: list[str] | None = None) -> int:
     if "holdout" in corpus.parts or corpus.name == "corpus_g3":
         ap.error("corpus ou split interdit")
     os.environ.setdefault("OMP_THREAD_LIMIT", "1")
-    res = mesurer(corpus, modes=set(filter(None, a.modes.split(","))) or None,
-                  dossiers=set(filter(None, a.dossiers.split(","))) or None,
-                  cache=a.cache, jobs=a.jobs, isoler=not a.local,
-                  reglages=json.loads(a.reglages) if a.reglages else None)
+    res = mesurer(
+        corpus,
+        modes=set(filter(None, a.modes.split(","))) or None,
+        dossiers=set(filter(None, a.dossiers.split(","))) or None,
+        cache=a.cache,
+        jobs=a.jobs,
+        isoler=not a.local,
+        reglages=json.loads(a.reglages) if a.reglages else None,
+    )
     import controldone.ingest.pages as module_pages
 
     afficher(resumer(res), f"OCR {corpus.name} (dev) — sources {Path(module_pages.__file__).parents[2]}")

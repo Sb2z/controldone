@@ -38,7 +38,9 @@ def _rediger(resultats: list[Any]) -> list[Any]:
     for r in resultats:
         c = r.constat
         if c is not None and c.motif_blocage is None and check_text(f"{c.libelle} {c.prochaine_action}"):
-            r = r.model_copy(update={"constat": c.model_copy(update={"motif_blocage": MOTIF_FORMULATION_INTERDITE})})
+            r = r.model_copy(
+                update={"constat": c.model_copy(update={"motif_blocage": MOTIF_FORMULATION_INTERDITE})}
+            )
         sortie.append(r)
     return sortie
 
@@ -84,9 +86,15 @@ def recontroler_dossier(ctx: JobContext) -> dict[str, Any]:
         profil = _profil(scope)
         grilles = scope.grilles_validees()
     contexte = ControlContext.construire(
-        dossier, documents.values(), profil.tolerances, grilles=grilles, entites=profil.entites,
-        transitaires=profil.transitaires, autres_dossiers=autres,
-        parametres_petits_envois=profil.parametres_petits_envois, execution_id=nouvel_id(Prefixe.execution),
+        dossier,
+        documents.values(),
+        profil.tolerances,
+        grilles=grilles,
+        entites=profil.entites,
+        transitaires=profil.transitaires,
+        autres_dossiers=autres,
+        parametres_petits_envois=profil.parametres_petits_envois,
+        execution_id=nouvel_id(Prefixe.execution),
     )
     resultats = _rediger(run_controls(contexte))
     statut = statut_global_depuis_resultats(resultats)

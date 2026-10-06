@@ -241,8 +241,12 @@ def instantane_base(chemin: Path | str) -> dict[str, Any]:
     con = sqlite3.connect(f"file:{Path(chemin)}?mode=ro", uri=True)
     try:
         integrite = con.execute("PRAGMA integrity_check").fetchone()[0]
-        tables = [r[0] for r in con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        tables = [
+            r[0]
+            for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
         lignes = {t: con.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in tables}
         audit: dict[str, Any] = {"entrees": 0, "tete": None}
         if "audit_log" in tables:
@@ -256,7 +260,9 @@ def instantane_base(chemin: Path | str) -> dict[str, Any]:
 # --- création ---------------------------------------------------------------------------------------------
 
 
-def _entree_tar(nom: str, *, taille: int = 0, repertoire: bool = False, mtime: float | None = None) -> tarfile.TarInfo:
+def _entree_tar(
+    nom: str, *, taille: int = 0, repertoire: bool = False, mtime: float | None = None
+) -> tarfile.TarInfo:
     info = tarfile.TarInfo(nom)
     info.type = tarfile.DIRTYPE if repertoire else tarfile.REGTYPE
     info.mode = 0o700 if repertoire else 0o600
@@ -267,7 +273,9 @@ def _entree_tar(nom: str, *, taille: int = 0, repertoire: bool = False, mtime: f
     return info
 
 
-def _ajouter_fichier(tar: tarfile.TarFile, chemin: Path, nom: str, fichiers: dict[str, dict[str, Any]]) -> None:
+def _ajouter_fichier(
+    tar: tarfile.TarFile, chemin: Path, nom: str, fichiers: dict[str, dict[str, Any]]
+) -> None:
     with chemin.open("rb") as f:
         st = os.fstat(f.fileno())  # le descripteur garde l'inode ouvert : remplacement atomique sans effet
         lecteur = _Empreinte(f)  # type: ignore[arg-type]
@@ -275,7 +283,9 @@ def _ajouter_fichier(tar: tarfile.TarFile, chemin: Path, nom: str, fichiers: dic
     fichiers[nom] = {"taille": lecteur.n, "sha256": lecteur.h.hexdigest()}
 
 
-def _ajouter_arbre(tar: tarfile.TarFile, racine: Path, prefixe: str, fichiers: dict[str, dict[str, Any]]) -> None:
+def _ajouter_arbre(
+    tar: tarfile.TarFile, racine: Path, prefixe: str, fichiers: dict[str, dict[str, Any]]
+) -> None:
     """Ajoute ``racine`` (sans lien symbolique ni fichier temporaire ``.tmp-*`` en cours d'écriture)."""
     tar.addfile(_entree_tar(prefixe, repertoire=True))
     for dossier, sous, noms in os.walk(racine):
@@ -293,9 +303,15 @@ def _ajouter_arbre(tar: tarfile.TarFile, racine: Path, prefixe: str, fichiers: d
                 continue
 
 
-def _creer_archive(destination: Path, cles: Sequence[bytes], now: datetime | None, tmp_dir: Path | str | None,
-                   coffre: Path | str | None, sorties: Path | str | None,
-                   preparer_base: Callable[[Path], tuple[Path, str, dict[str, Any]]]) -> Path:
+def _creer_archive(
+    destination: Path,
+    cles: Sequence[bytes],
+    now: datetime | None,
+    tmp_dir: Path | str | None,
+    coffre: Path | str | None,
+    sorties: Path | str | None,
+    preparer_base: Callable[[Path], tuple[Path, str, dict[str, Any]]],
+) -> Path:
     """Archive ``CDSAV2`` : ``preparer_base(tmp)`` écrit la copie cohérente de la base dans ``tmp`` et renvoie
     ``(fichier, nom dans l'archive, état pour le manifeste)`` ; puis coffre, traces d'envoi et manifeste."""
     from controldone import __version__
@@ -320,8 +336,11 @@ def _creer_archive(destination: Path, cles: Sequence[bytes], now: datetime | Non
                         if racine is not None and Path(racine).is_dir():
                             _ajouter_arbre(tar, Path(racine), prefixe, fichiers)
                     manifeste = {
-                        "format": "controldone-sauvegarde", "version": 1, "application": __version__,
-                        "cree_le": now.astimezone(UTC).isoformat(), "base": {"chemin": nom_base, **etat_base},
+                        "format": "controldone-sauvegarde",
+                        "version": 1,
+                        "application": __version__,
+                        "cree_le": now.astimezone(UTC).isoformat(),
+                        "base": {"chemin": nom_base, **etat_base},
                         "fichiers": fichiers,
                     }
                     brut = json.dumps(manifeste, ensure_ascii=False, indent=1, sort_keys=True).encode()
@@ -338,9 +357,16 @@ def _creer_archive(destination: Path, cles: Sequence[bytes], now: datetime | Non
     return cible
 
 
-def sauvegarder(base_sqlite: Path | str, coffre: Path | str | None, destination: Path | str,
-                cles: Sequence[bytes], *, now: datetime | None = None, tmp_dir: Path | str | None = None,
-                sorties: Path | str | None = None) -> Path:
+def sauvegarder(
+    base_sqlite: Path | str,
+    coffre: Path | str | None,
+    destination: Path | str,
+    cles: Sequence[bytes],
+    *,
+    now: datetime | None = None,
+    tmp_dir: Path | str | None = None,
+    sorties: Path | str | None = None,
+) -> Path:
     """Sauvegarde en flux ; ``tmp_dir`` (copie de la base) : défaut ``destination`` (même volume).
     ``sorties`` : répertoire des traces d'envoi (``<data_dir>/outbox_envoyee``), facultatif."""
     base_sqlite = Path(base_sqlite)
@@ -375,8 +401,15 @@ def est_postgresql(url: str | None) -> bool:
     return bool(url) and make_url(url).get_backend_name() == "postgresql"  # type: ignore[arg-type]
 
 
-_PARAMS_LIBPQ = {"sslmode": "PGSSLMODE", "sslrootcert": "PGSSLROOTCERT", "sslcert": "PGSSLCERT",
-                 "sslkey": "PGSSLKEY", "host": "PGHOST", "port": "PGPORT", "application_name": "PGAPPNAME"}
+_PARAMS_LIBPQ = {
+    "sslmode": "PGSSLMODE",
+    "sslrootcert": "PGSSLROOTCERT",
+    "sslcert": "PGSSLCERT",
+    "sslkey": "PGSSLKEY",
+    "host": "PGHOST",
+    "port": "PGPORT",
+    "application_name": "PGAPPNAME",
+}
 
 
 def _env_libpq(url: str) -> dict[str, str]:
@@ -386,8 +419,13 @@ def _env_libpq(url: str) -> dict[str, str]:
 
     u = make_url(url)
     env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
-    for cle, var in (("host", "PGHOST"), ("port", "PGPORT"), ("username", "PGUSER"), ("password", "PGPASSWORD"),
-                     ("database", "PGDATABASE")):
+    for cle, var in (
+        ("host", "PGHOST"),
+        ("port", "PGPORT"),
+        ("username", "PGUSER"),
+        ("password", "PGPASSWORD"),
+        ("database", "PGDATABASE"),
+    ):
         valeur = getattr(u, cle)
         if valeur not in (None, ""):
             env[var] = str(valeur)
@@ -401,8 +439,10 @@ def _env_libpq(url: str) -> dict[str, str]:
 def _outil(nom: str) -> str:
     chemin = shutil.which(os.environ.get(f"CONTROLDONE_{nom.upper()}") or nom)
     if chemin is None:
-        raise OutilAbsent(f"{nom} introuvable : installer postgresql-client (même version majeure que le "
-                          f"serveur) ou définir CONTROLDONE_{nom.upper()}")
+        raise OutilAbsent(
+            f"{nom} introuvable : installer postgresql-client (même version majeure que le "
+            f"serveur) ou définir CONTROLDONE_{nom.upper()}"
+        )
     return chemin
 
 
@@ -424,9 +464,15 @@ def _moteur_pg(url: str) -> Any:
 def _etat_pg(conn: Any) -> dict[str, Any]:
     from sqlalchemy import text
 
-    tables = [r[0] for r in conn.execute(text(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() "
-        "AND table_type = 'BASE TABLE' ORDER BY table_name"))]
+    tables = [
+        r[0]
+        for r in conn.execute(
+            text(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() "
+                "AND table_type = 'BASE TABLE' ORDER BY table_name"
+            )
+        )
+    ]
     lignes = {t: int(conn.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar_one()) for t in tables}
     audit: dict[str, Any] = {"entrees": 0, "tete": None}
     if "audit_log" in tables:
@@ -447,9 +493,16 @@ def instantane_postgresql(url: str) -> dict[str, Any]:
         moteur.dispose()
 
 
-def sauvegarder_postgresql(url: str, coffre: Path | str | None, destination: Path | str, cles: Sequence[bytes],
-                           *, now: datetime | None = None, tmp_dir: Path | str | None = None,
-                           sorties: Path | str | None = None) -> Path:
+def sauvegarder_postgresql(
+    url: str,
+    coffre: Path | str | None,
+    destination: Path | str,
+    cles: Sequence[bytes],
+    *,
+    now: datetime | None = None,
+    tmp_dir: Path | str | None = None,
+    sorties: Path | str | None = None,
+) -> Path:
     """Comme ``sauvegarder``, la base étant un ``pg_dump --format=custom`` pris sur un instantané exporté :
     comptage des lignes, tête de l'audit et dump voient exactement les mêmes données."""
     from sqlalchemy import text
@@ -468,8 +521,17 @@ def sauvegarder_postgresql(url: str, coffre: Path | str | None, destination: Pat
                     instantane = conn.execute(text("SELECT pg_export_snapshot()")).scalar_one()
                     etat = _etat_pg(conn)
                     # la transaction reste ouverte pendant pg_dump : l'instantané exporté reste valable
-                    _executer_outil([pg_dump, "--format=custom", "--no-owner", "--no-privileges",
-                                     f"--snapshot={instantane}", f"--file={dump}"], env)
+                    _executer_outil(
+                        [
+                            pg_dump,
+                            "--format=custom",
+                            "--no-owner",
+                            "--no-privileges",
+                            f"--snapshot={instantane}",
+                            f"--file={dump}",
+                        ],
+                        env,
+                    )
                     version = _executer_outil([pg_dump, "--version"], env).strip()
         finally:
             moteur.dispose()
@@ -494,7 +556,7 @@ def creer_base_pg(url_serveur: str, nom: str) -> str:
     moteur = _moteur_pg(url_serveur).execution_options(isolation_level="AUTOCOMMIT")
     try:
         with moteur.connect() as conn:
-            conn.execute(text(f'CREATE DATABASE "{nom}" TEMPLATE template0 ENCODING \'UTF8\''))
+            conn.execute(text(f"CREATE DATABASE \"{nom}\" TEMPLATE template0 ENCODING 'UTF8'"))
     finally:
         moteur.dispose()
     return make_url(url_serveur).set(database=nom).render_as_string(hide_password=False)
@@ -531,15 +593,26 @@ def restaurer_postgresql(dump: Path | str, url: str) -> dict[str, Any]:
     moteur = _moteur_pg(url)
     try:
         with moteur.connect() as conn:
-            n = conn.execute(text("SELECT COUNT(*) FROM information_schema.tables "
-                                  "WHERE table_schema = current_schema()")).scalar_one()
+            n = conn.execute(
+                text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema()")
+            ).scalar_one()
     finally:
         moteur.dispose()
     if n:
         raise FileExistsError(f"la base cible n'est pas vide ({n} tables) : restauration refusée")
     env = _env_libpq(url)
-    _executer_outil([_outil("pg_restore"), "--no-owner", "--no-privileges", "--exit-on-error",
-                     "--single-transaction", f"--dbname={env['PGDATABASE']}", str(dump)], env)
+    _executer_outil(
+        [
+            _outil("pg_restore"),
+            "--no-owner",
+            "--no-privileges",
+            "--exit-on-error",
+            "--single-transaction",
+            f"--dbname={env['PGDATABASE']}",
+            str(dump),
+        ],
+        env,
+    )
     return instantane_postgresql(url)
 
 
@@ -564,13 +637,16 @@ def _verifier_membre(membre: tarfile.TarInfo) -> None:
     nom = membre.name
     if nom == MANIFESTE and membre.isfile():
         return
-    if not any(nom == r or nom.startswith(r + "/") for r in _RACINES) or not (membre.isfile() or membre.isdir()):
+    if not any(nom == r or nom.startswith(r + "/") for r in _RACINES) or not (
+        membre.isfile() or membre.isdir()
+    ):
         raise ErreurIntegrite(f"entrée inattendue dans l'archive : {nom!r}")
 
 
 @contextlib.contextmanager
-def _ouvrir(archive: Path, cles: Sequence[bytes], empreinte: _Empreinte | None = None
-            ) -> Iterator[tuple[tarfile.TarFile, _LecteurChiffre | None]]:
+def _ouvrir(
+    archive: Path, cles: Sequence[bytes], empreinte: _Empreinte | None = None
+) -> Iterator[tuple[tarfile.TarFile, _LecteurChiffre | None]]:
     """Tar en flux sur l'archive déchiffrée (ancien format : déchiffré en mémoire). ``empreinte`` : calcule au
     passage le SHA-256 de l'archive chiffrée."""
     with archive.open("rb") as brut:
@@ -589,7 +665,9 @@ def _ouvrir(archive: Path, cles: Sequence[bytes], empreinte: _Empreinte | None =
                 try:
                     clair = _fernet(cles).decrypt(tete + entree.read())
                 except InvalidToken as exc:
-                    raise ErreurIntegrite("sauvegarde indéchiffrable (clé incorrecte ou fichier altéré)") from exc
+                    raise ErreurIntegrite(
+                        "sauvegarde indéchiffrable (clé incorrecte ou fichier altéré)"
+                    ) from exc
                 with tarfile.open(fileobj=io.BytesIO(clair), mode="r:gz") as tar:
                     yield tar, None
         except (tarfile.TarError, EOFError, zlib.error, gzip.BadGzipFile, struct.error) as exc:
@@ -620,8 +698,10 @@ class RapportVerification:
             f"manifeste        : {'présent' if self.manifeste else 'absent (archive antérieure à D-3301)'}",
         ]
         if self.manifeste:
-            sortie.append(f"instantané       : {self.manifeste.get('cree_le')} — {len(tables)} tables, "
-                          f"{sum(tables.values())} lignes, audit {base.get('audit', {}).get('entrees')} entrées")
+            sortie.append(
+                f"instantané       : {self.manifeste.get('cree_le')} — {len(tables)} tables, "
+                f"{sum(tables.values())} lignes, audit {base.get('audit', {}).get('entrees')} entrées"
+            )
         sortie.append("résultat         : " + ("CONFORME" if self.ok else "EN ÉCHEC"))
         sortie += [f"  - {p}" for p in self.problemes]
         return sortie
@@ -720,13 +800,17 @@ def restaurer(archive: Path | str, cible: Path | str, cles: Sequence[bytes]) -> 
             manifeste = json.loads(manifeste_chemin.read_text(encoding="utf-8"))
         except ValueError as exc:
             raise ErreurIntegrite("manifeste illisible") from exc
-        vus = {p.relative_to(cible).as_posix(): {"taille": p.stat().st_size, "sha256": empreinte_fichier(p)}
-               for p in sorted(cible.rglob("*"))
-               if p.is_file() and p != manifeste_chemin and p != cible / NOM_VERROU}
+        vus = {
+            p.relative_to(cible).as_posix(): {"taille": p.stat().st_size, "sha256": empreinte_fichier(p)}
+            for p in sorted(cible.rglob("*"))
+            if p.is_file() and p != manifeste_chemin and p != cible / NOM_VERROU
+        }
         problemes = _comparer_au_manifeste(vus, manifeste)
         if problemes:
             raise ErreurIntegrite("restauration non conforme au manifeste : " + "; ".join(problemes[:5]))
-    if not base.is_file():  # PostgreSQL : le dump se lit (pg_restore --list) ; chargement : restaurer_postgresql
+    if (
+        not base.is_file()
+    ):  # PostgreSQL : le dump se lit (pg_restore --list) ; chargement : restaurer_postgresql
         dump = cible / _ARC_DUMP
         with dump.open("rb") as f:
             if f.read(len(MAGIE_PG)) != MAGIE_PG:
@@ -760,17 +844,25 @@ def derniere_sauvegarde(destination: Path | str) -> Path | None:
     return archives[-1][1] if archives else None
 
 
-def rotation(destination: Path | str, *, jours: int = 7, semaines: int = 4, recentes: int = 4,
-             maintenant: float | None = None) -> list[Path]:
+def rotation(
+    destination: Path | str,
+    *,
+    jours: int = 7,
+    semaines: int = 4,
+    recentes: int = 4,
+    maintenant: float | None = None,
+) -> list[Path]:
     """Applique la politique de conservation ; renvoie les archives supprimées : les ``recentes`` dernières
     archives (quel que soit leur jour : plusieurs sauvegardes par jour, D-4105), puis la plus récente de chacun
     des ``jours`` derniers jours et de chacune des ``semaines`` dernières semaines ISO. Supprime aussi leurs
     empreintes ``.sha256`` et les restes de plus d'un jour d'une sauvegarde ou d'une vérification
     interrompue (``.partiel``, répertoires ``.cd-sauvegarde-*`` / ``.cd-verification-*``, ``.invalide``)."""
     destination = Path(destination)
-    sauvegardes = sorted(((d, p) for p in destination.glob("controldone-*.tar.gz.enc")
-                          if (d := _date(p)) is not None), reverse=True)
-    garder: set[Path] = {p for _, p in sauvegardes[:max(0, recentes)]}
+    sauvegardes = sorted(
+        ((d, p) for p in destination.glob("controldone-*.tar.gz.enc") if (d := _date(p)) is not None),
+        reverse=True,
+    )
+    garder: set[Path] = {p for _, p in sauvegardes[: max(0, recentes)]}
     vus_jours: list[object] = []
     vus_semaines: list[object] = []
     for d, p in sauvegardes:  # du plus récent au plus ancien
@@ -787,8 +879,12 @@ def rotation(destination: Path | str, *, jours: int = 7, semaines: int = 4, rece
         p.unlink()
         p.with_name(p.name + EXT_EMPREINTE).unlink(missing_ok=True)
     limite = (maintenant if maintenant is not None else time.time()) - 86400
-    for reste in [*destination.glob("controldone-*.partiel"), *destination.glob(f"controldone-*{EXT_INVALIDE}"),
-                  *destination.glob(".cd-sauvegarde-*"), *destination.glob(".cd-verification-*")]:
+    for reste in [
+        *destination.glob("controldone-*.partiel"),
+        *destination.glob(f"controldone-*{EXT_INVALIDE}"),
+        *destination.glob(".cd-sauvegarde-*"),
+        *destination.glob(".cd-verification-*"),
+    ]:
         with contextlib.suppress(OSError):
             if reste.lstat().st_mtime < limite:
                 shutil.rmtree(reste) if reste.is_dir() and not reste.is_symlink() else reste.unlink()
@@ -810,8 +906,13 @@ def alerter(kind: str, message: str, details: dict[str, Any] | None = None) -> b
         db = Database()
         try:
             with db.transaction_systeme() as s:
-                return emettre_alerte(s, cle=f"{kind}:{datetime.now(UTC):%Y-%m-%d}", kind=kind, message=message,
-                                      details=details or {})
+                return emettre_alerte(
+                    s,
+                    cle=f"{kind}:{datetime.now(UTC):%Y-%m-%d}",
+                    kind=kind,
+                    message=message,
+                    details=details or {},
+                )
         finally:
             db.fermer()
     except Exception:  # la base elle-même est indisponible : le code retour et le journal suffisent
@@ -820,8 +921,12 @@ def alerter(kind: str, message: str, details: dict[str, Any] | None = None) -> b
 
 
 def _alerter_echec(exc: BaseException) -> None:
-    alerter("sauvegarde_echec", f"Échec de la sauvegarde chiffrée ({type(exc).__name__}) : vérifier l'espace "
-                                "disque, la clé maîtresse et le journal de sauvegarde.", {"erreur": type(exc).__name__})
+    alerter(
+        "sauvegarde_echec",
+        f"Échec de la sauvegarde chiffrée ({type(exc).__name__}) : vérifier l'espace "
+        "disque, la clé maîtresse et le journal de sauvegarde.",
+        {"erreur": type(exc).__name__},
+    )
 
 
 def _verification_profonde(archive: Path, cles: Sequence[bytes]) -> tuple[list[str], list[str]]:
@@ -842,13 +947,17 @@ def _verification_profonde(archive: Path, cles: Sequence[bytes]) -> tuple[list[s
             return controler(cible, cles).problemes, []
         serveur = os.environ.get("BACKUP_PG_VERIFICATION_URL", "").strip()
         if not serveur:
-            return [], ["base PostgreSQL : dump relu ; chargement d'essai non fait (BACKUP_PG_VERIFICATION_URL "
-                        "non défini)"]
+            return [], [
+                "base PostgreSQL : dump relu ; chargement d'essai non fait (BACKUP_PG_VERIFICATION_URL "
+                "non défini)"
+            ]
         nom = f"cd_verif_{secrets.token_hex(6)}"
         try:
             url = creer_base_pg(serveur, nom)
             restaurer_postgresql(cible / _ARC_DUMP, url)
-            return controler(cible, cles, base_url=url).problemes, [f"base PostgreSQL chargée à l'essai ({nom})"]
+            return controler(cible, cles, base_url=url).problemes, [
+                f"base PostgreSQL chargée à l'essai ({nom})"
+            ]
         except Exception as exc:
             return [f"chargement d'essai PostgreSQL impossible : {type(exc).__name__}: {str(exc)[:300]}"], []
         finally:
@@ -868,8 +977,11 @@ def _verifier_et_signaler(archive: Path, cles: Sequence[bytes], *, profond: bool
     print("\n".join([*lignes, *(f"remarque         : {r}" for r in remarques)]))
     if rapport.ok:
         return OK
-    alerter("sauvegarde_verification_echec", f"Sauvegarde {archive.name} non conforme : {rapport.problemes[0]}"[:500],
-            {"archive": archive.name, "problemes": rapport.problemes[:10]})
+    alerter(
+        "sauvegarde_verification_echec",
+        f"Sauvegarde {archive.name} non conforme : {rapport.problemes[0]}"[:500],
+        {"archive": archive.name, "problemes": rapport.problemes[:10]},
+    )
     return ECHEC_VERIFICATION
 
 
@@ -884,8 +996,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     b.add_argument("--destination", default=None)
     b.add_argument("--sans-rotation", action="store_true")
     b.add_argument("--sans-verification", action="store_true", help="ne pas relire l'archive créée")
-    b.add_argument("--verification-profonde", action="store_true",
-                   help="restauration d'essai complète de l'archive créée (espace disque : une fois les données)")
+    b.add_argument(
+        "--verification-profonde",
+        action="store_true",
+        help="restauration d'essai complète de l'archive créée (espace disque : une fois les données)",
+    )
     v = sub.add_parser("verifier", help="relit une archive (déchiffrement, manifeste, empreintes)")
     v.add_argument("archive", nargs="?", default=None)
     v.add_argument("--dernier", action="store_true", help="la plus récente de --destination")
@@ -895,23 +1010,45 @@ def main(argv: Sequence[str] | None = None) -> int:
     r = sub.add_parser("restaurer", help="restaure dans un répertoire absent ou vide")
     r.add_argument("archive")
     r.add_argument("cible")
-    r.add_argument("--base-cible", dest="base_cible", default=None,
-                   help="PostgreSQL : URL d'une base VIDE où charger le dump (pg_restore)")
-    r.add_argument("--controler", action="store_true", help="puis contrôle approfondi (coffre, audit, tables)")
+    r.add_argument(
+        "--base-cible",
+        dest="base_cible",
+        default=None,
+        help="PostgreSQL : URL d'une base VIDE où charger le dump (pg_restore)",
+    )
+    r.add_argument(
+        "--controler", action="store_true", help="puis contrôle approfondi (coffre, audit, tables)"
+    )
     c = sub.add_parser("controler", help="contrôle approfondi d'un répertoire restauré")
     c.add_argument("cible")
-    c.add_argument("--base-url", dest="base_cible", default=None,
-                   help="PostgreSQL : URL de la base où le dump a été chargé")
+    c.add_argument(
+        "--base-url",
+        dest="base_cible",
+        default=None,
+        help="PostgreSQL : URL de la base où le dump a été chargé",
+    )
     for p in (b, sub.add_parser("rotation", help="applique la politique de conservation")):
         if p is not b:
             p.add_argument("--destination", default=None)
         p.add_argument("--jours", type=int, default=int(os.environ.get("BACKUP_JOURS", "7")))
         p.add_argument("--semaines", type=int, default=int(os.environ.get("BACKUP_SEMAINES", "4")))
-        p.add_argument("--recentes", type=int, default=int(os.environ.get("BACKUP_RECENTES", "4")),
-                       help="archives les plus récentes toujours conservées (deux par jour : 4 = deux jours)")
+        p.add_argument(
+            "--recentes",
+            type=int,
+            default=int(os.environ.get("BACKUP_RECENTES", "4")),
+            help="archives les plus récentes toujours conservées (deux par jour : 4 = deux jours)",
+        )
     a = sub.add_parser("alerter", help="enregistre une alerte fondateur (échec signalé par un script hôte)")
-    a.add_argument("--kind", required=True, choices=["sauvegarde_echec", "sauvegarde_hors_site_echec",
-                                                     "sauvegarde_absente", "sauvegarde_verification_echec"])
+    a.add_argument(
+        "--kind",
+        required=True,
+        choices=[
+            "sauvegarde_echec",
+            "sauvegarde_hors_site_echec",
+            "sauvegarde_absente",
+            "sauvegarde_verification_echec",
+        ],
+    )
     a.add_argument("--message", required=True)
     args = parser.parse_args(argv)
     if args.cmd == "alerter":
@@ -938,11 +1075,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:  # purge et restauration exclues pendant la copie (D-3504)
             with verrou_maintenance(data_dir, "sauvegarde", attente_s=attente):
                 if chemin is not None:
-                    sortie = sauvegarder(chemin, data_dir / "coffre", destination, cles,
-                                         sorties=data_dir / "outbox_envoyee")
+                    sortie = sauvegarder(
+                        chemin, data_dir / "coffre", destination, cles, sorties=data_dir / "outbox_envoyee"
+                    )
                 else:
-                    sortie = sauvegarder_postgresql(url, data_dir / "coffre", destination, cles,
-                                                    sorties=data_dir / "outbox_envoyee")
+                    sortie = sauvegarder_postgresql(
+                        url, data_dir / "coffre", destination, cles, sorties=data_dir / "outbox_envoyee"
+                    )
         except OutilAbsent as exc:
             _alerter_echec(exc)
             print(f"sauvegarde impossible : {exc}", file=sys.stderr)
@@ -965,7 +1104,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"supprimée : {p}")
         return code
     if args.cmd == "verifier":
-        archive = Path(args.archive) if args.archive else (derniere_sauvegarde(destination) if args.dernier else None)
+        archive = (
+            Path(args.archive)
+            if args.archive
+            else (derniere_sauvegarde(destination) if args.dernier else None)
+        )
         if archive is None:
             if args.dernier:
                 print(f"aucune sauvegarde dans {destination}", file=sys.stderr)
@@ -980,8 +1123,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if code == OK and args.age_max_h is not None and d is not None:
             age_h = (datetime.now(UTC) - d).total_seconds() / 3600
             if age_h > args.age_max_h:
-                print(f"sauvegarde la plus récente vieille de {age_h:.1f} h (> {args.age_max_h} h)", file=sys.stderr)
-                alerter("sauvegarde_absente", f"Dernière sauvegarde vieille de {age_h:.0f} h ({archive.name}).")
+                print(
+                    f"sauvegarde la plus récente vieille de {age_h:.1f} h (> {args.age_max_h} h)",
+                    file=sys.stderr,
+                )
+                alerter(
+                    "sauvegarde_absente", f"Dernière sauvegarde vieille de {age_h:.0f} h ({archive.name})."
+                )
                 return ECHEC_FRAICHEUR
         return code
     if args.cmd == "restaurer":
@@ -990,16 +1138,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                 cible = restaurer(args.archive, args.cible, cles)
                 if (cible / _ARC_DUMP).is_file() and args.base_cible:
                     etat = restaurer_postgresql(cible / _ARC_DUMP, args.base_cible)
-                    print(f"base PostgreSQL chargée : {len(etat['tables'])} tables, "
-                          f"{sum(etat['tables'].values())} lignes")
+                    print(
+                        f"base PostgreSQL chargée : {len(etat['tables'])} tables, "
+                        f"{sum(etat['tables'].values())} lignes"
+                    )
         except (ErreurIntegrite, FileExistsError, FileNotFoundError, VerrouOccupe, RuntimeError) as exc:
             print(f"restauration refusée : {exc}", file=sys.stderr)
-            return (ECHEC_CONFIGURATION if isinstance(exc, VerrouOccupe | FileExistsError | FileNotFoundError)
-                    else ECHEC_VERIFICATION)
+            return (
+                ECHEC_CONFIGURATION
+                if isinstance(exc, VerrouOccupe | FileExistsError | FileNotFoundError)
+                else ECHEC_VERIFICATION
+            )
         print(cible)
         if (cible / _ARC_DUMP).is_file() and not args.base_cible:
-            print("base PostgreSQL extraite (base/controldone.dump) : la charger dans une base vide avec "
-                  "--base-cible <url>", file=sys.stderr)
+            print(
+                "base PostgreSQL extraite (base/controldone.dump) : la charger dans une base vide avec "
+                "--base-cible <url>",
+                file=sys.stderr,
+            )
         if not args.controler:
             return OK
         args.cible = str(cible)

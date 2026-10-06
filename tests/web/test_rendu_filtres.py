@@ -36,8 +36,18 @@ def test_date():
     assert _date(date(2026, 5, 1)) == "2026-05-01"
 
 
-@pytest.mark.parametrize("n, attendu", [(None, "—"), ("x", "—"), (0, "0 o"), (1023, "1023 o"), (1024, "1,0 Ko"),
-                                        (5 * 1024 * 1024, "5,0 Mo"), (3 * 1024**4, "3072,0 Go")])
+@pytest.mark.parametrize(
+    "n, attendu",
+    [
+        (None, "—"),
+        ("x", "—"),
+        (0, "0 o"),
+        (1023, "1023 o"),
+        (1024, "1,0 Ko"),
+        (5 * 1024 * 1024, "5,0 Mo"),
+        (3 * 1024**4, "3072,0 Go"),
+    ],
+)
 def test_taille(n, attendu):
     assert _taille(n) == attendu
 
@@ -48,7 +58,9 @@ def test_environnement_echappe_et_filtres():
     assert t.render(x="<script>", m="1", b=b"ab", v=b"") == f"&lt;script&gt;|1,00{NB}EUR|YWI=|"
 
 
-@pytest.mark.parametrize("valeur", ["//evil.example", "https://evil.example", "/a b", "/\\x", None, 3, "", "a/b"])
+@pytest.mark.parametrize(
+    "valeur", ["//evil.example", "https://evil.example", "/a b", "/\\x", None, 3, "", "a/b"]
+)
 def test_retour_refuse(valeur):
     assert retour_sur(valeur, "/espace") == "/espace"
 

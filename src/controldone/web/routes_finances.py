@@ -55,14 +55,32 @@ def finances(request: Request) -> Response:
     clients = stock.clients_facturation(pf.db)
     fs = FileSortante(pf.db)
     emises = {x["id"] for x in s.factures}
-    a_emettre = [a for a in fs.lister(f, kind=TypeAction.facture_emise.value, statuts=["approuve", "corrige"])
-                 if stock.facture_par_outbox(pf.db, a.id) is None]
+    a_emettre = [
+        a
+        for a in fs.lister(f, kind=TypeAction.facture_emise.value, statuts=["approuve", "corrige"])
+        if stock.facture_par_outbox(pf.db, a.id) is None
+    ]
     brouillons = fs.lister(f, kind=TypeAction.facture_emise.value, statuts=["brouillon"])
     cat = svc.catalogue
     coupons = {code: len(stock.coupon_utilisations(pf.db, code)) for code in cat.coupons}
-    return page(request, "admin/finances.html.j2", titre="Finances", nav="finances", s=s, du_mois=du_mois, mois=mois,
-                clients=clients, a_emettre=a_emettre, brouillons=brouillons, cat=cat, coupons=coupons,
-                paiement=svc.paiement, pa=svc.pa, nb_emises=len(emises), vendeur_incomplet=cat.vendeur.champs_a_completer())
+    return page(
+        request,
+        "admin/finances.html.j2",
+        titre="Finances",
+        nav="finances",
+        s=s,
+        du_mois=du_mois,
+        mois=mois,
+        clients=clients,
+        a_emettre=a_emettre,
+        brouillons=brouillons,
+        cat=cat,
+        coupons=coupons,
+        paiement=svc.paiement,
+        pa=svc.pa,
+        nb_emises=len(emises),
+        vendeur_incomplet=cat.vendeur.champs_a_completer(),
+    )
 
 
 @routeur.get("/export.csv")
@@ -70,7 +88,9 @@ def export(request: Request) -> Response:
     f = _fondateur(request)
     pf = _pf(request)
     s = synthese(pf.db, acteur_id=f.id, acteur_role=f.role.value)
-    return fichier_attache(export_csv(s.lignes), f"finances-{aujourdhui_paris():%Y-%m-%d}.csv", "text/plain; charset=utf-8")
+    return fichier_attache(
+        export_csv(s.lignes), f"finances-{aujourdhui_paris():%Y-%m-%d}.csv", "text/plain; charset=utf-8"
+    )
 
 
 @routeur.get("/factures/{facture_id}.{fmt}")
@@ -97,14 +117,21 @@ def proposer_diagnostic(request: Request) -> Response:
     coupon = _s(form, "coupon", 64) or None
     consentement = None
     if coupon:
-        consentement = Consentement(signe=form.get("consentement_signe") == "1", signe_par=_s(form, "signe_par", 200),
-                                    signe_le=_s(form, "signe_le", 10), reference_document=_s(form, "reference", 200))
+        consentement = Consentement(
+            signe=form.get("consentement_signe") == "1",
+            signe_par=_s(form, "signe_par", 200),
+            signe_le=_s(form, "signe_le", 10),
+            reference_document=_s(form, "reference", 200),
+        )
     try:
         svc.proposer_diagnostic(_s(form, "client_id", 64), f, coupon=coupon, consentement=consentement)
     except (CouponRefuse, ValueError) as exc:
         return _erreur(request, exc)
-    return redirection(request, "/admin/validation#sorties", message="Brouillon de facture de diagnostic créé : "
-                                                                     "à approuver dans la file de validation.")
+    return redirection(
+        request,
+        "/admin/validation#sorties",
+        message="Brouillon de facture de diagnostic créé : à approuver dans la file de validation.",
+    )
 
 
 @routeur.post("/abonnement")
@@ -112,11 +139,14 @@ def proposer_abonnement(request: Request) -> Response:
     f = _fondateur(request)
     form = formulaire_sync(request)
     try:
-        service_pour(_pf(request)).proposer_abonnement(_s(form, "client_id", 64), f, palier=_s(form, "palier", 32),
-                                                       mois=_s(form, "mois", 7))
+        service_pour(_pf(request)).proposer_abonnement(
+            _s(form, "client_id", 64), f, palier=_s(form, "palier", 32), mois=_s(form, "mois", 7)
+        )
     except (KeyError, ValueError) as exc:
         return _erreur(request, exc)
-    return redirection(request, "/admin/validation#sorties", message="Brouillon de facture d'abonnement créé.")
+    return redirection(
+        request, "/admin/validation#sorties", message="Brouillon de facture d'abonnement créé."
+    )
 
 
 @routeur.post("/commission")
@@ -126,11 +156,17 @@ def proposer_commission(request: Request) -> Response:
     try:
         base = montant_saisi(_s(form, "base", 40), nom="base HT")
         service_pour(_pf(request)).proposer_commission(
-            _s(form, "client_id", 64), f, base=base, avoir_id=_s(form, "avoir_id", 100),
-            origine="administration" if _s(form, "origine", 20) == "administration" else "transitaire")
+            _s(form, "client_id", 64),
+            f,
+            base=base,
+            avoir_id=_s(form, "avoir_id", 100),
+            origine="administration" if _s(form, "origine", 20) == "administration" else "transitaire",
+        )
     except (InvalidOperation, ValueError) as exc:
         return _erreur(request, exc)
-    return redirection(request, "/admin/validation#sorties", message="Brouillon de facture de commission créé.")
+    return redirection(
+        request, "/admin/validation#sorties", message="Brouillon de facture de commission créé."
+    )
 
 
 @routeur.post("/emettre/{action_id}")
@@ -141,8 +177,12 @@ def emettre(request: Request, action_id: str) -> Response:
         fac = service_pour(_pf(request)).emettre_et_deposer(action_id, f)
     except ValueError as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message="Facture {numero} émise et déposée sur la plateforme agréée.",
-                       numero=fac.numero)
+    return redirection(
+        request,
+        _RETOUR,
+        message="Facture {numero} émise et déposée sur la plateforme agréée.",
+        numero=fac.numero,
+    )
 
 
 @routeur.post("/factures/{facture_id}/avoir")
@@ -151,8 +191,12 @@ def avoir(request: Request, facture_id: str) -> Response:
     form = formulaire_sync(request)
     try:
         brut = _s(form, "montant_ht", 40)
-        service_pour(_pf(request)).proposer_avoir(facture_id, f, motif=_s(form, "motif", 500),
-                                                  montant_ht=montant_saisi(brut, nom="montant HT") if brut else None)
+        service_pour(_pf(request)).proposer_avoir(
+            facture_id,
+            f,
+            motif=_s(form, "motif", 500),
+            montant_ht=montant_saisi(brut, nom="montant HT") if brut else None,
+        )
     except (InvalidOperation, ValueError) as exc:
         return _erreur(request, exc)
     return redirection(request, "/admin/validation#sorties", message="Brouillon d'avoir créé : à approuver.")
@@ -166,7 +210,9 @@ def lien_paiement(request: Request, facture_id: str) -> Response:
         session = service_pour(_pf(request)).lien_paiement(facture_id, f, url_base=_url_base(request))
     except ValueError as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message="Lien de paiement à transmettre au client : {lien}", lien=session.url)
+    return redirection(
+        request, _RETOUR, message="Lien de paiement à transmettre au client : {lien}", lien=session.url
+    )
 
 
 @routeur.post("/abonnement/lien")
@@ -174,11 +220,14 @@ def lien_abonnement(request: Request) -> Response:
     f = _fondateur(request)
     form = formulaire_sync(request)
     try:
-        session = service_pour(_pf(request)).lien_abonnement(_s(form, "client_id", 64), _s(form, "palier", 32), f,
-                                                             url_base=_url_base(request))
+        session = service_pour(_pf(request)).lien_abonnement(
+            _s(form, "client_id", 64), _s(form, "palier", 32), f, url_base=_url_base(request)
+        )
     except (KeyError, ValueError) as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message="Lien d'abonnement à transmettre au client : {lien}", lien=session.url)
+    return redirection(
+        request, _RETOUR, message="Lien d'abonnement à transmettre au client : {lien}", lien=session.url
+    )
 
 
 @routeur.post("/pa/synchroniser")
@@ -186,7 +235,9 @@ def synchroniser_pa(request: Request) -> Response:
     _fondateur(request)
     formulaire_sync(request)
     n = service_pour(_pf(request)).synchroniser_statuts_pa()
-    return redirection(request, _RETOUR, message="{n} statut(s) de cycle de vie reçu(s) de la plateforme agréée.", n=n)
+    return redirection(
+        request, _RETOUR, message="{n} statut(s) de cycle de vie reçu(s) de la plateforme agréée.", n=n
+    )
 
 
 # --- bouchon de paiement (aucun Stripe configuré) ---------------------------------------------------------------
@@ -206,8 +257,14 @@ def page_bouchon(request: Request, session_id: str) -> Response:
         session = _bouchon(request).session(session_id)
     except KeyError as exc:
         raise AccesRefuse("introuvable ou hors périmètre") from exc
-    return page(request, "admin/paiement_bouchon.html.j2", titre="Paiement simulé", nav="finances", session=session,
-                montant=Decimal(session["amount_total"]) / 100)
+    return page(
+        request,
+        "admin/paiement_bouchon.html.j2",
+        titre="Paiement simulé",
+        nav="finances",
+        session=session,
+        montant=Decimal(session["amount_total"]) / 100,
+    )
 
 
 @routeur.post("/bouchon/{session_id}/payer")
@@ -222,7 +279,9 @@ def payer_bouchon(request: Request, session_id: str) -> Response:
         raise AccesRefuse("introuvable ou hors périmètre") from exc
     for charge, signature in evenements:  # même chemin que les webhooks réels (signature vérifiée)
         svc.traiter_webhook(charge, signature)
-    return redirection(request, _RETOUR, message="Paiement simulé : {n} événement(s) traité(s).", n=len(evenements))
+    return redirection(
+        request, _RETOUR, message="Paiement simulé : {n} événement(s) traité(s).", n=len(evenements)
+    )
 
 
 # --- webhooks -----------------------------------------------------------------------------------------------------
@@ -233,10 +292,9 @@ def webhook_stripe(request: Request) -> Response:
     charge = depuis_boucle(request.body)
     try:
         res: dict[str, Any] = service_pour(request.app.state.plateforme).traiter_webhook(
-            charge, request.headers.get("stripe-signature"))
+            charge, request.headers.get("stripe-signature")
+        )
     except SignatureInvalide:
         log.warning("webhook_stripe_refuse")
         return JSONResponse({"erreur": "signature invalide"}, status_code=400)
     return JSONResponse({"recu": True, "statut": res["statut"]})
-
-

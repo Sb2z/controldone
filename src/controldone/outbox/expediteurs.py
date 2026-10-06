@@ -40,9 +40,15 @@ class ExpediteurFichier:
 
     def envoyer(self, action: ActionSortante) -> str:
         contenu = {
-            "id": action.id, "kind": action.kind.value, "tenant_id": action.tenant_id,
-            "statut_avant_envoi": action.statut.value, "decide_par": action.decide_par,
-            "payload": action.payload_effectif, "corrige": action.payload_corrige is not None,
+            "id": action.id,
+            "kind": action.kind.value,
+            "tenant_id": action.tenant_id,
+            "statut_avant_envoi": action.statut.value,
+            "decide_par": action.decide_par,
+            "payload": action.payload_effectif,
+            "corrige": action.payload_corrige is not None,
         }
-        cible = self.traces.ecrire_json(_NOM_RE.sub("_", action.kind.value), _NOM_RE.sub("_", action.id), contenu)
+        cible = self.traces.ecrire_json(
+            _NOM_RE.sub("_", action.kind.value), _NOM_RE.sub("_", action.id), contenu
+        )
         return f"fichier:{cible}"

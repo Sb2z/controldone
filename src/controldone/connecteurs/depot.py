@@ -32,7 +32,12 @@ def _deja_integre(lots: list[Lot], message_id: str | None, reference: str | None
         r = lot.resume or {}
         if message_id and r.get("message_id") == message_id:
             return True
-        if reference and r.get("source") == source and r.get("reference") == reference and source != "dossier_surveille":
+        if (
+            reference
+            and r.get("source") == source
+            and r.get("reference") == reference
+            and source != "dossier_surveille"
+        ):
             return True
     return False
 
@@ -46,20 +51,26 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
         if _deja_integre(sc.lister(Lot), depot.message_id, depot.reference, depot.source):
             return ResultatDepot("deja_recu", motif="message_ou_reference_deja_integre")
     if depot.courriel is not None:
-        reception = recevoir_courriel(depot.courriel, expediteurs_autorises=reglages.get("expediteurs_autorises", []),
-                                      deja_recus=deja)
+        reception = recevoir_courriel(
+            depot.courriel, expediteurs_autorises=reglages.get("expediteurs_autorises", []), deja_recus=deja
+        )
         if reception.quarantaine:
             expediteur = parseaddr(reception.lot.expediteur or "")[1]
             domaine = expediteur.rsplit("@", 1)[1] if "@" in expediteur else "inconnu"
             empreinte = hashlib.sha256((depot.message_id or "").encode() or depot.courriel).hexdigest()[:16]
             with db.tenant(tenant, acteur) as sc:
-                sc.signaler_alerte(cle=f"quarantaine:{empreinte}", kind="courriel_quarantaine",
-                                   message=f"Courriel d'un expéditeur non autorisé (domaine {domaine}) mis en "
-                                           "quarantaine sur la boîte dédiée : rien n'a été traité.",
-                                   details={"domaine": domaine, "message_sha": empreinte})
+                sc.signaler_alerte(
+                    cle=f"quarantaine:{empreinte}",
+                    kind="courriel_quarantaine",
+                    message=f"Courriel d'un expéditeur non autorisé (domaine {domaine}) mis en "
+                    "quarantaine sur la boîte dédiée : rien n'a été traité.",
+                    details={"domaine": domaine, "message_sha": empreinte},
+                )
             return ResultatDepot("quarantaine", motif=reception.motif_quarantaine)
     else:
-        reception = recevoir_octets(depot.elements, client_id=tenant, canal=CanalLot(depot.canal), deja_recus=deja)
+        reception = recevoir_octets(
+            depot.elements, client_id=tenant, canal=CanalLot(depot.canal), deja_recus=deja
+        )
     nouveaux = [f for f in reception.fichiers if f.fichier.doublon_de is None]
     doublons = len(reception.fichiers) - len(nouveaux)
     if not nouveaux:
@@ -78,8 +89,13 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
                 nouveaux_blobs.append(ref)
             f.contenu = None
         refs.append(ref)
-    res = ResultatDepot("lot_cree", lot_id=lot_id, fichiers=sum(1 for r in refs if r is not None),
-                        doublons=doublons, refuses=sum(1 for f in nouveaux if f.fichier.statut is StatutFichier.refuse))
+    res = ResultatDepot(
+        "lot_cree",
+        lot_id=lot_id,
+        fichiers=sum(1 for r in refs if r is not None),
+        doublons=doublons,
+        refuses=sum(1 for f in nouveaux if f.fichier.statut is StatutFichier.refuse),
+    )
     try:
         with db.tenant(tenant, acteur) as sc:
             # contenu retiré par une purge concurrente entre le coffre et la transaction (D-1324) : rien
@@ -87,23 +103,37 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
             if any(ref and not vault.existe(tenant, ref) for ref in refs):
                 raise RuntimeError("contenu retiré du coffre pendant l'intégration")
             lot = sc.creer_lot(lot_id, canal=CanalLot(depot.canal).value, expediteur=reception.lot.expediteur)
-            lot.resume = {"source": depot.source, "reference": depot.reference, "message_id": depot.message_id,
-                          **{k: v for k, v in depot.meta.items() if k in ("facture_pa_id", "controle_avant_paiement")}}
+            lot.resume = {
+                "source": depot.source,
+                "reference": depot.reference,
+                "message_id": depot.message_id,
+                **{k: v for k, v in depot.meta.items() if k in ("facture_pa_id", "controle_avant_paiement")},
+            }
             for f, ref in zip(reception.fichiers, refs, strict=True):
                 sc.enregistrer_fichier(f.fichier, lot_id=lot_id, coffre_ref=ref)
             sc.flush()
             # jobs mis en file dans la même transaction que le lot (D-1306)
             if res.fichiers:
-                res.jobs.append(sc.mettre_en_file("traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant}:{lot_id}"))
+                res.jobs.append(
+                    sc.mettre_en_file("traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant}:{lot_id}")
+                )
             pa_id = depot.meta.get("facture_pa_id")
             if pa_id and depot.meta.get("controle_avant_paiement") and res.fichiers:
-                payload = {"lot_id": lot_id, "facture_pa_id": pa_id,
-                           **{k: str(depot.meta[k]) for k in ("numero", "date_echeance") if depot.meta.get(k)}}
-                res.jobs.append(sc.mettre_en_file("controle_avant_paiement", payload,
-                                                  f"controle_avant_paiement:{tenant}:{pa_id}"))
+                payload = {
+                    "lot_id": lot_id,
+                    "facture_pa_id": pa_id,
+                    **{k: str(depot.meta[k]) for k in ("numero", "date_echeance") if depot.meta.get(k)},
+                }
+                res.jobs.append(
+                    sc.mettre_en_file(
+                        "controle_avant_paiement", payload, f"controle_avant_paiement:{tenant}:{pa_id}"
+                    )
+                )
     except BaseException:
         try:
-            with db.tenant(tenant, acteur) as sc:  # sous le verrou d'écriture (dépôt concurrent du même contenu)
+            with db.tenant(
+                tenant, acteur
+            ) as sc:  # sous le verrou d'écriture (dépôt concurrent du même contenu)
                 encore = sc.contenus_references(nouveaux_blobs)
                 for sha in nouveaux_blobs:
                     if sha not in encore:

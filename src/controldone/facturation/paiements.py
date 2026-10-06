@@ -72,7 +72,9 @@ def verifier_cle_stripe(cle: str, env: dict[str, str] | None = None) -> str:
     if cle.startswith(("sk_live_", "rk_live_")):
         if env.get("CONTROLDONE_ENV") == "prod" and env.get("STRIPE_LIVE_OK") == "1":
             return cle
-        raise CleStripeRefusee("clé Stripe de production refusée : CONTROLDONE_ENV=prod et STRIPE_LIVE_OK=1 requis")
+        raise CleStripeRefusee(
+            "clé Stripe de production refusée : CONTROLDONE_ENV=prod et STRIPE_LIVE_OK=1 requis"
+        )
     raise CleStripeRefusee("clé Stripe refusée : sk_test_… attendu")
 
 
@@ -105,11 +107,30 @@ class FournisseurPaiement(Protocol):
 
     def creer_client(self, *, client_id: str, raison_sociale: str, email: str | None) -> str: ...
 
-    def session_paiement(self, *, client_id: str, customer_id: str | None, facture_id: str, numero: str,
-                         montant_ttc: Decimal, libelle: str, url_succes: str, url_annulation: str) -> SessionPaiement: ...
+    def session_paiement(
+        self,
+        *,
+        client_id: str,
+        customer_id: str | None,
+        facture_id: str,
+        numero: str,
+        montant_ttc: Decimal,
+        libelle: str,
+        url_succes: str,
+        url_annulation: str,
+    ) -> SessionPaiement: ...
 
-    def session_abonnement(self, *, client_id: str, customer_id: str | None, palier: str, libelle: str,
-                           montant_ttc_mensuel: Decimal, url_succes: str, url_annulation: str) -> SessionPaiement: ...
+    def session_abonnement(
+        self,
+        *,
+        client_id: str,
+        customer_id: str | None,
+        palier: str,
+        libelle: str,
+        montant_ttc_mensuel: Decimal,
+        url_succes: str,
+        url_annulation: str,
+    ) -> SessionPaiement: ...
 
     def verifier_webhook(self, charge: bytes, signature: str | None) -> dict[str, Any]: ...
 
@@ -120,8 +141,9 @@ class PaiementStripe:
 
     nom = "stripe"
 
-    def __init__(self, cle: str, secret_webhook: str | None, *, client: Any = None,
-                 env: dict[str, str] | None = None) -> None:
+    def __init__(
+        self, cle: str, secret_webhook: str | None, *, client: Any = None, env: dict[str, str] | None = None
+    ) -> None:
         self.cle = verifier_cle_stripe(cle, env)
         self.mode_test = "_test_" in self.cle
         self.secret_webhook = secret_webhook
@@ -135,37 +157,86 @@ class PaiementStripe:
         params: dict[str, Any] = {"name": raison_sociale[:250], "metadata": {"client_id": client_id}}
         if email:
             params["email"] = email
-        c = self.client.v1.customers.create(params=params, options={"idempotency_key": f"customer:{client_id}"})
+        c = self.client.v1.customers.create(
+            params=params, options={"idempotency_key": f"customer:{client_id}"}
+        )
         return str(c.id)
 
-    def session_paiement(self, *, client_id: str, customer_id: str | None, facture_id: str, numero: str,
-                         montant_ttc: Decimal, libelle: str, url_succes: str, url_annulation: str) -> SessionPaiement:
+    def session_paiement(
+        self,
+        *,
+        client_id: str,
+        customer_id: str | None,
+        facture_id: str,
+        numero: str,
+        montant_ttc: Decimal,
+        libelle: str,
+        url_succes: str,
+        url_annulation: str,
+    ) -> SessionPaiement:
         meta = {"client_id": client_id, "facture_id": facture_id, "numero": numero}
         params: dict[str, Any] = {
-            "mode": "payment", "success_url": url_succes, "cancel_url": url_annulation,
-            "client_reference_id": client_id, "metadata": meta, "payment_intent_data": {"metadata": meta},
-            "line_items": [{"quantity": 1, "price_data": {"currency": "eur", "unit_amount": centimes(montant_ttc),
-                                                          "product_data": {"name": f"{libelle} — facture {numero}"[:250]}}}],
-        }
-        if customer_id:
-            params["customer"] = customer_id
-        s = self.client.v1.checkout.sessions.create(params=params, options={"idempotency_key": f"checkout:{facture_id}"})
-        return SessionPaiement(str(s.id), str(s.url), "payment")
-
-    def session_abonnement(self, *, client_id: str, customer_id: str | None, palier: str, libelle: str,
-                           montant_ttc_mensuel: Decimal, url_succes: str, url_annulation: str) -> SessionPaiement:
-        meta = {"client_id": client_id, "palier": palier}
-        params: dict[str, Any] = {
-            "mode": "subscription", "success_url": url_succes, "cancel_url": url_annulation,
-            "client_reference_id": client_id, "metadata": meta, "subscription_data": {"metadata": meta},
-            "line_items": [{"quantity": 1, "price_data": {
-                "currency": "eur", "unit_amount": centimes(montant_ttc_mensuel), "recurring": {"interval": "month"},
-                "product_data": {"name": libelle[:250]}}}],
+            "mode": "payment",
+            "success_url": url_succes,
+            "cancel_url": url_annulation,
+            "client_reference_id": client_id,
+            "metadata": meta,
+            "payment_intent_data": {"metadata": meta},
+            "line_items": [
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": "eur",
+                        "unit_amount": centimes(montant_ttc),
+                        "product_data": {"name": f"{libelle} — facture {numero}"[:250]},
+                    },
+                }
+            ],
         }
         if customer_id:
             params["customer"] = customer_id
         s = self.client.v1.checkout.sessions.create(
-            params=params, options={"idempotency_key": f"abonnement:{client_id}:{palier}:{secrets.token_hex(4)}"})
+            params=params, options={"idempotency_key": f"checkout:{facture_id}"}
+        )
+        return SessionPaiement(str(s.id), str(s.url), "payment")
+
+    def session_abonnement(
+        self,
+        *,
+        client_id: str,
+        customer_id: str | None,
+        palier: str,
+        libelle: str,
+        montant_ttc_mensuel: Decimal,
+        url_succes: str,
+        url_annulation: str,
+    ) -> SessionPaiement:
+        meta = {"client_id": client_id, "palier": palier}
+        params: dict[str, Any] = {
+            "mode": "subscription",
+            "success_url": url_succes,
+            "cancel_url": url_annulation,
+            "client_reference_id": client_id,
+            "metadata": meta,
+            "subscription_data": {"metadata": meta},
+            "line_items": [
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": "eur",
+                        "unit_amount": centimes(montant_ttc_mensuel),
+                        "recurring": {"interval": "month"},
+                        "product_data": {"name": libelle[:250]},
+                    },
+                }
+            ],
+        }
+        if customer_id:
+            params["customer"] = customer_id
+        s = self.client.v1.checkout.sessions.create(
+            params=params,
+            options={"idempotency_key": f"abonnement:{client_id}:{palier}:{secrets.token_hex(4)}"},
+        )
         return SessionPaiement(str(s.id), str(s.url), "subscription")
 
     def verifier_webhook(self, charge: bytes, signature: str | None) -> dict[str, Any]:
@@ -203,29 +274,73 @@ class PaiementBouchon:
     def creer_client(self, *, client_id: str, raison_sociale: str, email: str | None) -> str:
         return "cus_bouchon_" + hashlib.sha256(client_id.encode()).hexdigest()[:14]
 
-    def session_paiement(self, *, client_id: str, customer_id: str | None, facture_id: str, numero: str,
-                         montant_ttc: Decimal, libelle: str, url_succes: str, url_annulation: str) -> SessionPaiement:
+    def session_paiement(
+        self,
+        *,
+        client_id: str,
+        customer_id: str | None,
+        facture_id: str,
+        numero: str,
+        montant_ttc: Decimal,
+        libelle: str,
+        url_succes: str,
+        url_annulation: str,
+    ) -> SessionPaiement:
         sid = "cs_bouchon_" + secrets.token_hex(8)
-        self._ecrire(sid, {"id": sid, "mode": "payment", "amount_total": centimes(montant_ttc), "currency": "eur",
-                           "customer": customer_id, "client_reference_id": client_id,
-                           "metadata": {"client_id": client_id, "facture_id": facture_id, "numero": numero},
-                           "url_succes": url_succes})
+        self._ecrire(
+            sid,
+            {
+                "id": sid,
+                "mode": "payment",
+                "amount_total": centimes(montant_ttc),
+                "currency": "eur",
+                "customer": customer_id,
+                "client_reference_id": client_id,
+                "metadata": {"client_id": client_id, "facture_id": facture_id, "numero": numero},
+                "url_succes": url_succes,
+            },
+        )
         return SessionPaiement(sid, f"/admin/finances/bouchon/{sid}", "payment")
 
-    def session_abonnement(self, *, client_id: str, customer_id: str | None, palier: str, libelle: str,
-                           montant_ttc_mensuel: Decimal, url_succes: str, url_annulation: str) -> SessionPaiement:
+    def session_abonnement(
+        self,
+        *,
+        client_id: str,
+        customer_id: str | None,
+        palier: str,
+        libelle: str,
+        montant_ttc_mensuel: Decimal,
+        url_succes: str,
+        url_annulation: str,
+    ) -> SessionPaiement:
         sid = "cs_bouchon_" + secrets.token_hex(8)
-        self._ecrire(sid, {"id": sid, "mode": "subscription", "amount_total": centimes(montant_ttc_mensuel),
-                           "currency": "eur", "customer": customer_id, "client_reference_id": client_id,
-                           "metadata": {"client_id": client_id, "palier": palier}, "url_succes": url_succes})
+        self._ecrire(
+            sid,
+            {
+                "id": sid,
+                "mode": "subscription",
+                "amount_total": centimes(montant_ttc_mensuel),
+                "currency": "eur",
+                "customer": customer_id,
+                "client_reference_id": client_id,
+                "metadata": {"client_id": client_id, "palier": palier},
+                "url_succes": url_succes,
+            },
+        )
         return SessionPaiement(sid, f"/admin/finances/bouchon/{sid}", "subscription")
 
     def session(self, session_id: str) -> dict[str, Any]:
         return self._lire(session_id)
 
     def _evenement(self, type_: str, objet: dict[str, Any]) -> tuple[bytes, str]:
-        evt = {"id": "evt_bouchon_" + secrets.token_hex(10), "object": "event", "type": type_,
-               "created": int(time.time()), "livemode": False, "data": {"object": objet}}
+        evt = {
+            "id": "evt_bouchon_" + secrets.token_hex(10),
+            "object": "event",
+            "type": type_,
+            "created": int(time.time()),
+            "livemode": False,
+            "data": {"object": objet},
+        }
         charge = json.dumps(evt, ensure_ascii=False).encode()
         return charge, signer_charge(charge, self.secret_webhook)
 
@@ -233,37 +348,66 @@ class PaiementBouchon:
         """Événements signés que Stripe enverrait après un paiement réussi : ``checkout.session.completed``
         (et, pour un abonnement, ``invoice.paid`` du premier mois). À poster sur le webhook."""
         s = self._lire(session_id)
-        objet = {"id": s["id"], "object": "checkout.session", "mode": s["mode"], "payment_status": "paid",
-                 "status": "complete", "amount_total": s["amount_total"], "currency": s["currency"],
-                 "customer": s["customer"], "client_reference_id": s["client_reference_id"],
-                 "metadata": s["metadata"]}
+        objet = {
+            "id": s["id"],
+            "object": "checkout.session",
+            "mode": s["mode"],
+            "payment_status": "paid",
+            "status": "complete",
+            "amount_total": s["amount_total"],
+            "currency": s["currency"],
+            "customer": s["customer"],
+            "client_reference_id": s["client_reference_id"],
+            "metadata": s["metadata"],
+        }
         evts = []
         if s["mode"] == "subscription":
             sub = "sub_bouchon_" + hashlib.sha256(s["id"].encode()).hexdigest()[:14]
             objet["subscription"] = sub
             evts.append(self._evenement("checkout.session.completed", objet))
-            evts.append(self.simuler_facture_abonnement(sub, s["customer"], s["amount_total"], s["metadata"], mois=mois))
+            evts.append(
+                self.simuler_facture_abonnement(
+                    sub, s["customer"], s["amount_total"], s["metadata"], mois=mois
+                )
+            )
         else:
             objet["payment_intent"] = "pi_bouchon_" + secrets.token_hex(8)
             evts.append(self._evenement("checkout.session.completed", objet))
         return evts
 
-    def simuler_facture_abonnement(self, abonnement_id: str, customer_id: str | None, montant_centimes: int,
-                                   metadata: dict[str, Any], *, mois: str | None = None,
-                                   payee: bool = True) -> tuple[bytes, str]:
+    def simuler_facture_abonnement(
+        self,
+        abonnement_id: str,
+        customer_id: str | None,
+        montant_centimes: int,
+        metadata: dict[str, Any],
+        *,
+        mois: str | None = None,
+        payee: bool = True,
+    ) -> tuple[bytes, str]:
         """``invoice.paid`` (ou ``invoice.payment_failed``) d'une échéance mensuelle d'abonnement."""
-        inv = {"id": "in_bouchon_" + secrets.token_hex(8), "object": "invoice", "subscription": abonnement_id,
-               "customer": customer_id, "amount_paid": montant_centimes if payee else 0,
-               "amount_due": montant_centimes, "currency": "eur", "status": "paid" if payee else "open",
-               "billing_reason": "subscription_cycle",
-               "subscription_details": {"metadata": metadata}, "metadata": {"mois": mois} if mois else {}}
+        inv = {
+            "id": "in_bouchon_" + secrets.token_hex(8),
+            "object": "invoice",
+            "subscription": abonnement_id,
+            "customer": customer_id,
+            "amount_paid": montant_centimes if payee else 0,
+            "amount_due": montant_centimes,
+            "currency": "eur",
+            "status": "paid" if payee else "open",
+            "billing_reason": "subscription_cycle",
+            "subscription_details": {"metadata": metadata},
+            "metadata": {"mois": mois} if mois else {},
+        }
         return self._evenement("invoice.paid" if payee else "invoice.payment_failed", inv)
 
     def verifier_webhook(self, charge: bytes, signature: str | None) -> dict[str, Any]:
         return _verifier_signature(charge, signature, self.secret_webhook)
 
 
-def fournisseur_depuis_env(env: dict[str, str] | None = None, *, racine_bouchon: Path | None = None) -> FournisseurPaiement:
+def fournisseur_depuis_env(
+    env: dict[str, str] | None = None, *, racine_bouchon: Path | None = None
+) -> FournisseurPaiement:
     """``PaiementStripe`` si ``STRIPE_SECRET_KEY`` est défini (clé de test, ou production autorisée),
     sinon ``PaiementBouchon``."""
     env = dict(os.environ) if env is None else env

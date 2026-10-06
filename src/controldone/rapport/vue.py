@@ -352,8 +352,15 @@ def _preuve_vue(p: Preuve, rd: ResultatDossier) -> PreuveVue:
     if p.document_id is None and p.calcul:
         lib, fichier = "Calcul", None
     return PreuveVue(
-        role=LIBELLES_ROLE_PREUVE.get(p.role, p.role.value), document=lib, fichier=fichier, page=p.page,
-        valeur_lue=p.valeur_brute, calcul=p.calcul, chemin_local=chemin, type_mime=mime, zone=zone,
+        role=LIBELLES_ROLE_PREUVE.get(p.role, p.role.value),
+        document=lib,
+        fichier=fichier,
+        page=p.page,
+        valeur_lue=p.valeur_brute,
+        calcul=p.calcul,
+        chemin_local=chemin,
+        type_mime=mime,
+        zone=zone,
     )
 
 
@@ -366,8 +373,11 @@ LIBELLE_RETENU = (
 
 def _constat_vue(c: Constat, r, rd: ResultatDossier) -> ConstatVue:
     spec = get_spec(c.controle_id)
-    codes = [x for x in c.raisons if not (c.renvoi and x in (RaisonCode.renvoi_reglementaire,
-                                                              RaisonCode.controle_signal_seulement))]
+    codes = [
+        x
+        for x in c.raisons
+        if not (c.renvoi and x in (RaisonCode.renvoi_reglementaire, RaisonCode.controle_signal_seulement))
+    ]
     if len(codes) > 1:
         codes = [x for x in codes if x is not RaisonCode.controle_signal_seulement]
     raisons = [RAISON_LIBELLES.get(x, x.value) for x in codes]
@@ -377,18 +387,27 @@ def _constat_vue(c: Constat, r, rd: ResultatDossier) -> ConstatVue:
     if c.renvoi and PHRASE_RENVOI not in libelle and PHRASE_RENVOI not in action:
         action = (action + " " + PHRASE_RENVOI).strip()
     return ConstatVue(
-        id=c.id, controle_id=c.controle_id, controle_libelle=spec.libelle,
-        niveau=LIBELLES_NIVEAU[c.niveau], niveau_code=c.niveau.value, libelle=libelle, prochaine_action=action,
+        id=c.id,
+        controle_id=c.controle_id,
+        controle_libelle=spec.libelle,
+        niveau=LIBELLES_NIVEAU[c.niveau],
+        niveau_code=c.niveau.value,
+        libelle=libelle,
+        prochaine_action=action,
         raisons=raisons,
-        montant=_m(c.montant_en_jeu) if c.nature_montant not in (NatureMontant.renvoi, NatureMontant.aucun) else "—",
+        montant=_m(c.montant_en_jeu)
+        if c.nature_montant not in (NatureMontant.renvoi, NatureMontant.aucun)
+        else "—",
         montant_valeur=c.montant_en_jeu,
-        nature=LIBELLES_NATURE[c.nature_montant], nature_code=c.nature_montant.value,
+        nature=LIBELLES_NATURE[c.nature_montant],
+        nature_code=c.nature_montant.value,
         composante=LIBELLES_COMPOSANTE.get(c.composante) if c.composante else None,
         tolerance=format_nombre(r.tolerance_appliquee) if r.tolerance_appliquee is not None else None,
         seuil=format_nombre(r.seuil_certitude_applique) if r.seuil_certitude_applique is not None else None,
         renvoi=c.renvoi,
         preuves=[_preuve_vue(p, rd) for p in sorted(c.preuves, key=lambda p: _ORDRE_ROLES.index(p.role))],
-        dossier_reference=rd.dossier.reference or rd.dossier.id, bloque=bloque,
+        dossier_reference=rd.dossier.reference or rd.dossier.id,
+        bloque=bloque,
         statut_validation=c.statut_validation.value,
     )
 
@@ -435,27 +454,59 @@ def _cote_a_cote(fcs: list[Document], decs: list[Document]) -> list[LigneCoteACo
     for d in fcs:
         for li in d.fc.lignes:
             k = _sh6(_valeur(li.code_marchandise_imprime)) or "—"
-            morceaux = [x for x in (_valeur(li.description), _valeur(li.quantite) and f"qté {_valeur(li.quantite)}",
-                                    _valeur(li.montant_ligne), _valeur(li.pays_origine)) if x]
+            morceaux = [
+                x
+                for x in (
+                    _valeur(li.description),
+                    _valeur(li.quantite) and f"qté {_valeur(li.quantite)}",
+                    _valeur(li.montant_ligne),
+                    _valeur(li.pays_origine),
+                )
+                if x
+            ]
             gauche[k].append(" · ".join(morceaux) or "ligne")
     for d in decs:
         for a in d.dec.articles:
             k = a.code_sh6 or "—"
-            morceaux = [x for x in (f"article {_valeur(a.numero_article)}" if _valeur(a.numero_article) else None,
-                                    _valeur(a.code_marchandise), _valeur(a.montant_facture_article),
-                                    _valeur(a.pays_origine)) if x]
+            morceaux = [
+                x
+                for x in (
+                    f"article {_valeur(a.numero_article)}" if _valeur(a.numero_article) else None,
+                    _valeur(a.code_marchandise),
+                    _valeur(a.montant_facture_article),
+                    _valeur(a.pays_origine),
+                )
+                if x
+            ]
             droite[k].append(" · ".join(morceaux) or "article")
     out = []
     for k in sorted(set(gauche) | set(droite), key=lambda x: (x == "—", x)):
         n = max(len(gauche[k]), len(droite[k]))
         for i in range(n):
-            out.append(LigneCoteACote(k, gauche[k][i] if i < len(gauche[k]) else "—",
-                                      droite[k][i] if i < len(droite[k]) else "—"))
+            out.append(
+                LigneCoteACote(
+                    k,
+                    gauche[k][i] if i < len(gauche[k]) else "—",
+                    droite[k][i] if i < len(droite[k]) else "—",
+                )
+            )
     return out[:60]
 
 
-_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
-         "novembre", "décembre"]
+_MOIS = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+]
 
 
 def _mois_libelle(iso: str) -> str:
@@ -466,9 +517,13 @@ def _mois_libelle(iso: str) -> str:
 def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVue:
     d = rd.dossier
     docs_liens = [(rd.documents.get(lien.document_id), lien) for lien in d.liens]
-    fcs = [x for x, _l in docs_liens if x is not None and x.type is TypeDocument.facture_commerciale and x.champs]
+    fcs = [
+        x for x, _l in docs_liens if x is not None and x.type is TypeDocument.facture_commerciale and x.champs
+    ]
     decs = [x for x, _l in docs_liens if x is not None and x.type is TypeDocument.declaration and x.champs]
-    fts = [x for x, _l in docs_liens if x is not None and x.type is TypeDocument.facture_transitaire and x.champs]
+    fts = [
+        x for x, _l in docs_liens if x is not None and x.type is TypeDocument.facture_transitaire and x.champs
+    ]
     cles = [
         ("Facture du transitaire", ", ".join(d.cles.num_facture_transitaire) or "—"),
         ("Transport", ", ".join(d.cles.ref_transport) or "—"),
@@ -480,13 +535,18 @@ def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVu
         if doc is None:
             continue
         _lib, fichier = _doc_libelle(doc, rd)
-        documents.append(DocumentVue(
-            id=doc.id, type=LIBELLES_TYPE.get(doc.type, doc.type.value), fichier=fichier or "—",
-            pages=", ".join(str(p.numero) for p in doc.pages) or "—",
-            confiance=f"{round(doc.confiance_classement * 100)} %",
-            lien=LIBELLES_FORCE[lien.force], signaux=", ".join(LIBELLES_SIGNAL.get(s, s.value) for s in lien.signaux),
-            faible=lien.force is ForceLien.faible,
-        ))
+        documents.append(
+            DocumentVue(
+                id=doc.id,
+                type=LIBELLES_TYPE.get(doc.type, doc.type.value),
+                fichier=fichier or "—",
+                pages=", ".join(str(p.numero) for p in doc.pages) or "—",
+                confiance=f"{round(doc.confiance_classement * 100)} %",
+                lien=LIBELLES_FORCE[lien.force],
+                signaux=", ".join(LIBELLES_SIGNAL.get(s, s.value) for s in lien.signaux),
+                faible=lien.force is ForceLien.faible,
+            )
+        )
     constats, resultats = [], []
     exclus = constats_hors_totaux(rd.resultats)
     for r in rd.resultats:
@@ -495,18 +555,45 @@ def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVu
             cv = _constat_vue(r.constat, r, rd)
             cv.hors_totaux = exclus.get(r.constat.id)
             constats.append(cv)
-        resultats.append(ResultatVue(
-            controle_id=r.controle_id + (f" ({r.sous_controle})" if r.sous_controle else ""),
-            libelle=spec.libelle, resultat=LIBELLES_OUTCOME[r.outcome], resultat_code=r.outcome.value,
-            attendu=_nombre_fr(r.attendu), constate=_nombre_fr(r.constate),
-            raison=RAISON_LIBELLES.get(r.raison_code, "") if r.raison_code else "",
-        ))
+        resultats.append(
+            ResultatVue(
+                controle_id=r.controle_id + (f" ({r.sous_controle})" if r.sous_controle else ""),
+                libelle=spec.libelle,
+                resultat=LIBELLES_OUTCOME[r.outcome],
+                resultat_code=r.outcome.value,
+                attendu=_nombre_fr(r.attendu),
+                constate=_nombre_fr(r.constate),
+                raison=RAISON_LIBELLES.get(r.raison_code, "") if r.raison_code else "",
+            )
+        )
     ordre_niveau = {"ecart_certain": 0, "a_verifier": 1}
-    constats.sort(key=lambda c: (c.renvoi, ordre_niveau.get(c.niveau_code, 2), -(c.montant_valeur or 0), c.controle_id))
-    cert = sum((c.montant_valeur for c in constats if c.niveau_code == "ecart_certain" and not c.hors_totaux
-                and c.nature_code == "recouvrable" and c.montant_valeur and c.montant_valeur > 0), Decimal(0))
-    aver = sum((c.montant_valeur for c in constats if c.niveau_code == "a_verifier" and not c.hors_totaux
-                and c.nature_code == "recouvrable" and c.montant_valeur and c.montant_valeur > 0), Decimal(0))
+    constats.sort(
+        key=lambda c: (c.renvoi, ordre_niveau.get(c.niveau_code, 2), -(c.montant_valeur or 0), c.controle_id)
+    )
+    cert = sum(
+        (
+            c.montant_valeur
+            for c in constats
+            if c.niveau_code == "ecart_certain"
+            and not c.hors_totaux
+            and c.nature_code == "recouvrable"
+            and c.montant_valeur
+            and c.montant_valeur > 0
+        ),
+        Decimal(0),
+    )
+    aver = sum(
+        (
+            c.montant_valeur
+            for c in constats
+            if c.niveau_code == "a_verifier"
+            and not c.hors_totaux
+            and c.nature_code == "recouvrable"
+            and c.montant_valeur
+            and c.montant_valeur > 0
+        ),
+        Decimal(0),
+    )
     raisons = Counter(r for c in constats for r in c.raisons)
     fc0 = fcs[0] if fcs else None
     dec0 = decs[0] if decs else None
@@ -517,16 +604,24 @@ def _dossier_vue(rd: ResultatDossier, transitaires: dict[str, str]) -> DossierVu
             mois = v.valeur[:7]
             break
     return DossierVue(
-        reference=d.reference or d.id, statut=LIBELLES_STATUT[rd.statut_global], statut_code=rd.statut_global.value,
+        reference=d.reference or d.id,
+        statut=LIBELLES_STATUT[rd.statut_global],
+        statut_code=rd.statut_global.value,
         cles=cles,
         tva_acheteur=(_valeur(fc0.fc.acheteur.tva) if fc0 else None) or "—",
         tva_importateur=(_valeur(dec0.dec.importateur.tva) if dec0 else None) or "—",
         montant_facture=_montant_doc(fc0.fc.total_facture, fc0.fc.devise) if fc0 else "—",
-        montant_declare=_montant_doc(dec0.dec.montant_total_facture, dec0.dec.devise_facture) if dec0 else "—",
+        montant_declare=_montant_doc(dec0.dec.montant_total_facture, dec0.dec.devise_facture)
+        if dec0
+        else "—",
         raisons="; ".join(r for r, _n in raisons.most_common(3)) or "—",
-        recouvrable_certain=cert, recouvrable_a_verifier=aver,
+        recouvrable_certain=cert,
+        recouvrable_a_verifier=aver,
         transitaire=transitaires.get(d.transitaire_id or "", d.transitaire_id),
-        documents=documents, constats=constats, resultats=resultats, cote_a_cote=_cote_a_cote(fcs, decs),
+        documents=documents,
+        constats=constats,
+        resultats=resultats,
+        cote_a_cote=_cote_a_cote(fcs, decs),
         documents_manquants=[LIBELLES_TYPE[TypeDocument(x)] for x in d.documents_manquants],
         mois=mois,
     )
@@ -568,15 +663,25 @@ def construire_vue(
     statuts = Counter(rd.statut_global for rd in resultats)
 
     def somme(filtre) -> Decimal:
-        return sum((c.montant_valeur for c in constats if filtre(c) and c.montant_valeur is not None), Decimal(0))
+        return sum(
+            (c.montant_valeur for c in constats if filtre(c) and c.montant_valeur is not None), Decimal(0)
+        )
 
     def rec_cert(c):
-        return (c.nature_code == "recouvrable" and c.niveau_code == "ecart_certain" and not c.hors_totaux
-                and (c.montant_valeur or 0) > 0)
+        return (
+            c.nature_code == "recouvrable"
+            and c.niveau_code == "ecart_certain"
+            and not c.hors_totaux
+            and (c.montant_valeur or 0) > 0
+        )
 
     def rec_aver(c):
-        return (c.nature_code == "recouvrable" and c.niveau_code == "a_verifier" and not c.hors_totaux
-                and (c.montant_valeur or 0) > 0)
+        return (
+            c.nature_code == "recouvrable"
+            and c.niveau_code == "a_verifier"
+            and not c.hors_totaux
+            and (c.montant_valeur or 0) > 0
+        )
 
     doc_c = [c for c in constats if c.nature_code == "ecart_documentaire" and not c.hors_totaux]
     calc_c = [c for c in constats if c.nature_code == "arithmetique_declaration"]
@@ -596,18 +701,37 @@ def construire_vue(
                     cert[k] += c.montant_valeur or 0
                 elif rec_aver(c):
                     aver[k] += c.montant_valeur or 0
-        return [(k, _m(cert.get(k, Decimal(0))), _m(aver.get(k, Decimal(0)))) for k in sorted(set(cert) | set(aver))]
+        return [
+            (k, _m(cert.get(k, Decimal(0))), _m(aver.get(k, Decimal(0))))
+            for k in sorted(set(cert) | set(aver))
+        ]
 
     autres_nature = [c for c in constats if c.nature_code == "aucun"]
     table = [
-        LigneNature("Écarts refacturés — certains", len([c for c in constats if rec_cert(c)]), _m(somme(rec_cert)),
-                    "montant recouvrable certain"),
-        LigneNature("Écarts refacturés — à vérifier", len([c for c in constats if rec_aver(c)]), _m(somme(rec_aver)),
-                    "affiché à part, jamais additionné au précédent"),
-        LigneNature("Écarts de valeur entre documents", len(doc_c), _m(abs_doc),
-                    "valeur absolue ; ne constitue pas un montant de droits"),
-        LigneNature("Écarts de calcul sur la déclaration", len(calc_c), _m(abs_calc),
-                    "valeur absolue ; à faire expliquer par le déclarant"),
+        LigneNature(
+            "Écarts refacturés — certains",
+            len([c for c in constats if rec_cert(c)]),
+            _m(somme(rec_cert)),
+            "montant recouvrable certain",
+        ),
+        LigneNature(
+            "Écarts refacturés — à vérifier",
+            len([c for c in constats if rec_aver(c)]),
+            _m(somme(rec_aver)),
+            "affiché à part, jamais additionné au précédent",
+        ),
+        LigneNature(
+            "Écarts de valeur entre documents",
+            len(doc_c),
+            _m(abs_doc),
+            "valeur absolue ; ne constitue pas un montant de droits",
+        ),
+        LigneNature(
+            "Écarts de calcul sur la déclaration",
+            len(calc_c),
+            _m(abs_calc),
+            "valeur absolue ; à faire expliquer par le déclarant",
+        ),
         LigneNature("Points à faire vérifier par un professionnel", len(renvois), "—", "sans montant"),
         LigneNature("Autres écarts documentaires (sans montant)", len(autres_nature), "—", ""),
     ]
@@ -619,24 +743,47 @@ def construire_vue(
             if rec_cert(c):
                 par_tr[d.transitaire or "transitaire non identifié"].append(c)
     if par_tr:
-        actions.append(Action("P1", "Préparer les demandes d'avoir prêtes, à envoyer par vos soins après validation",
-                              [f"{t} : {_m(sum((c.montant_valeur or 0 for c in cs), Decimal(0)))} "
-                               f"({len(cs)} écart{'s' if len(cs) > 1 else ''} certain{'s' if len(cs) > 1 else ''})"
-                               for t, cs in sorted(par_tr.items())]))
+        actions.append(
+            Action(
+                "P1",
+                "Préparer les demandes d'avoir prêtes, à envoyer par vos soins après validation",
+                [
+                    f"{t} : {_m(sum((c.montant_valeur or 0 for c in cs), Decimal(0)))} "
+                    f"({len(cs)} écart{'s' if len(cs) > 1 else ''} certain{'s' if len(cs) > 1 else ''})"
+                    for t, cs in sorted(par_tr.items())
+                ],
+            )
+        )
     a_verifier = [c for c in constats if c.niveau_code == "a_verifier" and not c.renvoi]
     if a_verifier:
-        actions.append(Action("P2", "Lever les points à vérifier",
-                              [f"{c.dossier_reference} — {c.controle_id} {c.controle_libelle}" for c in a_verifier[:25]]
-                              + ([f"… et {len(a_verifier) - 25} autres"] if len(a_verifier) > 25 else [])))
+        actions.append(
+            Action(
+                "P2",
+                "Lever les points à vérifier",
+                [f"{c.dossier_reference} — {c.controle_id} {c.controle_libelle}" for c in a_verifier[:25]]
+                + ([f"… et {len(a_verifier) - 25} autres"] if len(a_verifier) > 25 else []),
+            )
+        )
     if renvois:
-        actions.append(Action("P3", "Transmettre les points réglementaires à un représentant en douane enregistré "
-                                    "ou à un avocat",
-                              [f"{c.dossier_reference} — {c.controle_id} {c.controle_libelle}" for c in renvois]))
-    manquants = [f"{d.reference} : {', '.join(d.documents_manquants)}" for d in dossiers if d.documents_manquants]
+        actions.append(
+            Action(
+                "P3",
+                "Transmettre les points réglementaires à un représentant en douane enregistré ou à un avocat",
+                [f"{c.dossier_reference} — {c.controle_id} {c.controle_libelle}" for c in renvois],
+            )
+        )
+    manquants = [
+        f"{d.reference} : {', '.join(d.documents_manquants)}" for d in dossiers if d.documents_manquants
+    ]
     nl = list(non_lus) if non_lus is not None else _non_lus(resultats)
     if manquants or nl:
-        actions.append(Action("P4", "Compléter les documents manquants ou illisibles",
-                              manquants + [f"{n.fichier} : {LIBELLES_NON_LU.get(n.motif, n.motif)}" for n in nl[:15]]))
+        actions.append(
+            Action(
+                "P4",
+                "Compléter les documents manquants ou illisibles",
+                manquants + [f"{n.fichier} : {LIBELLES_NON_LU.get(n.motif, n.motif)}" for n in nl[:15]],
+            )
+        )
     executions = sorted({rd.execution.id for rd in resultats})
     ex0 = resultats[0].execution if resultats else None
     contenu = profil.tolerances.contenu()
@@ -646,33 +793,60 @@ def construire_vue(
         if v is None:
             continue
         tolerances.append((lib, f"{format_nombre(Decimal(str(v)))} {unite}".strip()))
-    validation = all(c.statut_validation in (StatutValidation.valide.value, StatutValidation.modifie.value)
-                     for c in constats)
+    validation = all(
+        c.statut_validation in (StatutValidation.valide.value, StatutValidation.modifie.value)
+        for c in constats
+    )
     return RapportVue(
-        titre=titre, client=profil.client.raison_sociale,
-        offre={"diagnostic": "Diagnostic", "continu": "Contrôle continu"}.get(profil.client.offre.value,
-                                                                            profil.client.offre.value),
-        periode=_periode(resultats, profil), date=_date_fr(date_rapport or date.today()), demo=profil.demo,
+        titre=titre,
+        client=profil.client.raison_sociale,
+        offre={"diagnostic": "Diagnostic", "continu": "Contrôle continu"}.get(
+            profil.client.offre.value, profil.client.offre.value
+        ),
+        periode=_periode(resultats, profil),
+        date=_date_fr(date_rapport or date.today()),
+        demo=profil.demo,
         nb_dossiers=len(dossiers),
-        versions={"moteur": VERSION_MOTEUR, "règles": VERSION_REGLES, "schéma": SCHEMA_VERSION,
-                  "rapport": VERSION_RAPPORT},
-        execution_ids=executions, empreinte=profil.tolerances.empreinte(),
+        versions={
+            "moteur": VERSION_MOTEUR,
+            "règles": VERSION_REGLES,
+            "schéma": SCHEMA_VERSION,
+            "rapport": VERSION_RAPPORT,
+        },
+        execution_ids=executions,
+        empreinte=profil.tolerances.empreinte(),
         statuts=[(LIBELLES_STATUT[s], s.value, statuts.get(s, 0)) for s in StatutGlobal],
-        recouvrable_certain=_m(somme(rec_cert)), recouvrable_a_verifier=_m(somme(rec_aver)),
-        ecarts_documentaires=_m(abs_doc), ecarts_documentaires_nb=len(doc_c),
-        ecarts_calcul=_m(abs_calc), ecarts_calcul_nb=len(calc_c), nb_renvois=len(renvois),
+        recouvrable_certain=_m(somme(rec_cert)),
+        recouvrable_a_verifier=_m(somme(rec_aver)),
+        ecarts_documentaires=_m(abs_doc),
+        ecarts_documentaires_nb=len(doc_c),
+        ecarts_calcul=_m(abs_calc),
+        ecarts_calcul_nb=len(calc_c),
+        nb_renvois=len(renvois),
         par_composante=repartition(lambda d, c: c.composante if c.nature_code == "recouvrable" else None),
         par_transitaire=repartition(lambda d, c: d.transitaire or "non identifié"),
         par_mois=repartition(lambda d, c: _mois_libelle(d.mois) if d.mois else "non daté"),
-        table_nature=table, actions=actions, dossiers=dossiers, renvois=renvois,
-        non_lus=[(n.fichier, LIBELLES_NON_LU.get(n.motif, n.motif.replace("_", " ")),
-                  ", ".join(str(p) for p in n.pages) or "—") for n in nl],
+        table_nature=table,
+        actions=actions,
+        dossiers=dossiers,
+        renvois=renvois,
+        non_lus=[
+            (
+                n.fichier,
+                LIBELLES_NON_LU.get(n.motif, n.motif.replace("_", " ")),
+                ", ".join(str(p) for p in n.pages) or "—",
+            )
+            for n in nl
+        ],
         tolerances=tolerances,
         extracteurs=sorted((ex0.versions_extracteurs if ex0 else {}).items()),
-        modele_llm=(ex0.modele_llm if ex0 and ex0.modele_llm else "aucun (extraction sans modèle de langage)"),
+        modele_llm=(
+            ex0.modele_llm if ex0 and ex0.modele_llm else "aucun (extraction sans modèle de langage)"
+        ),
         limites=LIMITES_METHODE,
-        mention_validation="" if (validation and constats) else
-        "Constats proposés par le système, avant validation par le fondateur.",
+        mention_validation=""
+        if (validation and constats)
+        else "Constats proposés par le système, avant validation par le fondateur.",
         constats_bloques=sum(1 for c in constats if c.bloque),
     )
 

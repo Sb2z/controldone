@@ -41,7 +41,9 @@ SIREN_A, SIREN_B = "123456782", "987654324"
 TVA_A, TVA_B = tva_fr_depuis_siren(SIREN_A), tva_fr_depuis_siren(SIREN_B)
 TVA_TIERS = "DE123456789"
 TVA_HORS = tva_fr_depuis_siren("999000001")  # entité fictive hors client
-ENT_A = Entite(id="ent_a", raison_sociale="ALPHA IMPORT FICTIF", tva=TVA_A, siren=SIREN_A, alias=["Alpha Import"])
+ENT_A = Entite(
+    id="ent_a", raison_sociale="ALPHA IMPORT FICTIF", tva=TVA_A, siren=SIREN_A, alias=["Alpha Import"]
+)
 ENT_B = Entite(id="ent_b", raison_sociale="BETA LOGISTIQUE FICTIF", tva=TVA_B, siren=SIREN_B)
 ENTITES = [ENT_A, ENT_B]
 JOUR = "2026-08-14"
@@ -58,8 +60,19 @@ def dv(chemin, valeur, doc=DEC, **kw):
     return None if valeur is None else vs(f"declaration.{chemin}", valeur, document_id=doc, **kw)
 
 
-def facture(id=FC, *, numero="INV-2026-00042", total="12540.00", devise="USD", tva=TVA_A, qualite=QualiteTexte.natif,
-            sous_type=None, kw_total=None, kw_devise=None, **champs):
+def facture(
+    id=FC,
+    *,
+    numero="INV-2026-00042",
+    total="12540.00",
+    devise="USD",
+    tva=TVA_A,
+    qualite=QualiteTexte.natif,
+    sous_type=None,
+    kw_total=None,
+    kw_devise=None,
+    **champs,
+):
     c = ChampsFactureCommerciale(
         numero=fv("numero", numero, id),
         total_facture=fv("total_facture", total, id, **(kw_total or {})),
@@ -70,8 +83,20 @@ def facture(id=FC, *, numero="INV-2026-00042", total="12540.00", devise="USD", t
     return document(TypeDocument.facture_commerciale, c, id=id, qualite=qualite, sous_type=sous_type)
 
 
-def declaration(id=DEC, *, mrn="26FR00000000000001", montant="12540.00", devise="USD", tva=TVA_A, taux=None,
-                sens="eur_par_devise", qualite=QualiteTexte.natif, kw_montant=None, version=None, **champs):
+def declaration(
+    id=DEC,
+    *,
+    mrn="26FR00000000000001",
+    montant="12540.00",
+    devise="USD",
+    tva=TVA_A,
+    taux=None,
+    sens="eur_par_devise",
+    qualite=QualiteTexte.natif,
+    kw_montant=None,
+    version=None,
+    **champs,
+):
     c = ChampsDeclaration(
         mrn=dv("mrn", mrn, id),
         version=dv("version", version, id),
@@ -90,7 +115,11 @@ def ctx_de(docs, *, force=ForceLien.forte, allocations=(), entites=ENTITES, taux
     dossier = dossier_pour(docs, force=force)
     dossier.allocations.extend(allocations)
     return ControlContext.construire(
-        dossier, docs, profil or ProfilTolerances(id="tol_test"), entites=entites, execution_id="exe_test",
+        dossier,
+        docs,
+        profil or ProfilTolerances(id="tol_test"),
+        entites=entites,
+        execution_id="exe_test",
         taux_reference=TableTauxReference(taux_ref) if taux_ref else None,
     )
 
@@ -122,10 +151,20 @@ def test_couple_unique_sans_allocation():
 
 
 def test_couples_par_allocation():
-    docs = [facture("doc_fc1"), facture("doc_fc2"), declaration("doc_dec1"),
-            declaration("doc_dec2", mrn="26FR99999999999001")]
-    allocs = [Allocation(source_document_id="doc_fc1", cible_document_id="doc_dec1", methode=MethodeAllocation.totalite),
-              Allocation(source_document_id="doc_fc2", cible_document_id="doc_dec2", methode=MethodeAllocation.totalite)]
+    docs = [
+        facture("doc_fc1"),
+        facture("doc_fc2"),
+        declaration("doc_dec1"),
+        declaration("doc_dec2", mrn="26FR99999999999001"),
+    ]
+    allocs = [
+        Allocation(
+            source_document_id="doc_fc1", cible_document_id="doc_dec1", methode=MethodeAllocation.totalite
+        ),
+        Allocation(
+            source_document_id="doc_fc2", cible_document_id="doc_dec2", methode=MethodeAllocation.totalite
+        ),
+    ]
     cs = fa.couples(ctx_de(docs, allocations=allocs))
     assert sorted(c.unite for c in cs) == ["dec:doc_dec1|fc:doc_fc1", "dec:doc_dec2|fc:doc_fc2"]
 
@@ -202,8 +241,13 @@ def test_a1_rattachement_faible():
 
 
 def _refs(*refs, code="N380"):
-    return [DocumentReference(type_code=dv("documents_references[].type_code", code),
-                              reference=dv("documents_references[].reference", r)) for r in refs]
+    return [
+        DocumentReference(
+            type_code=dv("documents_references[].type_code", code),
+            reference=dv("documents_references[].reference", r),
+        )
+        for r in refs
+    ]
 
 
 def test_a2_conforme_et_reference_tronquee():
@@ -290,13 +334,17 @@ def test_a4_conforme_dans_t_valeur():
 
 
 def test_a4_ecart_certain_eur_signe():
-    r = un(fa.a4_valeur_facturee, ctx_de([facture(devise="EUR"), declaration(devise="EUR", montant="12640.00")]))
+    r = un(
+        fa.a4_valeur_facturee, ctx_de([facture(devise="EUR"), declaration(devise="EUR", montant="12640.00")])
+    )
     assert r.outcome is Outcome.ecart_certain
     c = texte_propre(r)
     assert c.montant_en_jeu == D("100.00") and c.nature_montant is NatureMontant.ecart_documentaire
     assert c.sens is None and c.renvoi is False
     assert "12\u00a0640,00\u00a0EUR" in c.libelle and "valeur en douane" not in c.libelle
-    r = un(fa.a4_valeur_facturee, ctx_de([facture(devise="EUR"), declaration(devise="EUR", montant="12440.00")]))
+    r = un(
+        fa.a4_valeur_facturee, ctx_de([facture(devise="EUR"), declaration(devise="EUR", montant="12440.00")])
+    )
     assert r.constat.montant_en_jeu == D("-100.00")
 
 
@@ -309,13 +357,17 @@ def test_a4_montant_converti_au_taux_imprime():
 
 
 def test_a4_sous_seuil():
-    r = un(fa.a4_valeur_facturee, ctx_de([facture(devise="EUR", total="1000.00"),
-                                          declaration(devise="EUR", montant="1003.00")]))
+    r = un(
+        fa.a4_valeur_facturee,
+        ctx_de([facture(devise="EUR", total="1000.00"), declaration(devise="EUR", montant="1003.00")]),
+    )
     assert r.outcome is Outcome.a_verifier and r.constat.raisons == [RaisonCode.ecart_sous_seuil]
 
 
 def test_a4_ligne_de_pied():
-    f = facture(sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "350.00"))])
+    f = facture(
+        sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "350.00"))]
+    )
     r = un(fa.a4_valeur_facturee, ctx_de([f, declaration(montant="12190.00")]))
     assert r.outcome is Outcome.a_verifier
     c = texte_propre(r)
@@ -331,7 +383,9 @@ def test_a4_total_reconstruit():
 
 
 def test_a4_confiance_et_ancrage():
-    r = un(fa.a4_valeur_facturee, ctx_de([facture(kw_total={"confiance": 0.8}), declaration(montant="13540.00")]))
+    r = un(
+        fa.a4_valeur_facturee, ctx_de([facture(kw_total={"confiance": 0.8}), declaration(montant="13540.00")])
+    )
     assert RaisonCode.confiance_insuffisante in r.constat.raisons
     f = facture(kw_total={"methode": "llm", "ancree": False, "confiance": 0.85})
     r = un(fa.a4_valeur_facturee, ctx_de([f, declaration(montant="13540.00")]))
@@ -351,23 +405,42 @@ def test_a4_allocation_prorata_et_rattachement_faible():
     alloc = Allocation(source_document_id=FC, cible_document_id=DEC, methode=MethodeAllocation.prorata)
     r = un(fa.a4_valeur_facturee, ctx_de([facture(), declaration(montant="13540.00")], allocations=[alloc]))
     assert RaisonCode.allocation_prorata in r.constat.raisons
-    r = un(fa.a4_valeur_facturee, ctx_de([facture(), declaration(montant="13540.00")], force=ForceLien.moyenne))
+    r = un(
+        fa.a4_valeur_facturee, ctx_de([facture(), declaration(montant="13540.00")], force=ForceLien.moyenne)
+    )
     assert r.outcome is Outcome.a_verifier and RaisonCode.rattachement_faible in r.constat.raisons
 
 
 def test_a4_plusieurs_factures_additionnees():
-    docs = [facture("doc_fc1", total="1000.00"), facture("doc_fc2", total="2500.50"), declaration(montant="3500.50")]
+    docs = [
+        facture("doc_fc1", total="1000.00"),
+        facture("doc_fc2", total="2500.50"),
+        declaration(montant="3500.50"),
+    ]
     r = un(fa.a4_valeur_facturee, ctx_de(docs))
     assert r.outcome is Outcome.conforme and r.attendu == "3500.50"
 
 
 def test_a4_facture_repartie_sur_deux_declarations():
-    docs = [facture(total="3000.00"), declaration("doc_dec1", montant="1000.00"),
-            declaration("doc_dec2", mrn="26FR99999999999001", montant="2000.00")]
-    allocs = [Allocation(source_document_id=FC, cible_document_id="doc_dec1", montant_alloue=D("1000.00"),
-                         methode=MethodeAllocation.reference_explicite),
-              Allocation(source_document_id=FC, cible_document_id="doc_dec2", montant_alloue=D("1500.00"),
-                         methode=MethodeAllocation.reference_explicite)]
+    docs = [
+        facture(total="3000.00"),
+        declaration("doc_dec1", montant="1000.00"),
+        declaration("doc_dec2", mrn="26FR99999999999001", montant="2000.00"),
+    ]
+    allocs = [
+        Allocation(
+            source_document_id=FC,
+            cible_document_id="doc_dec1",
+            montant_alloue=D("1000.00"),
+            methode=MethodeAllocation.reference_explicite,
+        ),
+        Allocation(
+            source_document_id=FC,
+            cible_document_id="doc_dec2",
+            montant_alloue=D("1500.00"),
+            methode=MethodeAllocation.reference_explicite,
+        ),
+    ]
     rs = fa.a4_valeur_facturee(ctx_de(docs, allocations=allocs))
     principal = [r for r in rs if r.sous_controle is None]
     alloc = {r.unite: r for r in rs if r.sous_controle == "allocation"}
@@ -397,7 +470,9 @@ def test_a4_devise_incertaine():
 def test_a4_non_verifiable_et_non_applicable():
     r = un(fa.a4_valeur_facturee, ctx_de([facture(), declaration(montant=None)]))
     assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.valeur_absente
-    r = un(fa.a4_valeur_facturee, ctx_de([facture(), declaration(montant="1", kw_montant={"confiance": 0.4})]))
+    r = un(
+        fa.a4_valeur_facturee, ctx_de([facture(), declaration(montant="1", kw_montant={"confiance": 0.4})])
+    )
     assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.confiance_insuffisante
     r = un(fa.a4_valeur_facturee, ctx_de([facture(), declaration(devise="EUR", taux="0.92")]))
     assert r.outcome is Outcome.non_applicable and r.raison_code is RaisonCode.montant_converti
@@ -420,7 +495,9 @@ def test_a5_ligne_de_pied_convertie_explique_l_ecart():
     # D-2202 (§8.5.1 condition 7) : facture 12 540,00 USD dont 350,00 USD de fret en pied ; la déclaration
     # reprend les marchandises seules converties (12 190,00 × 0,92 = 11 214,80 EUR). Écart -322,00 EUR = fret
     # converti au même taux : à vérifier, jamais certain ; renvoi au déclarant comme pour A4.
-    f = facture(sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "350.00"))])
+    f = facture(
+        sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "350.00"))]
+    )
     r = un(fa.a5_montant_converti, ctx_de([f, _eur("11214.80")]))
     assert r.outcome is Outcome.a_verifier
     c = texte_propre(r)
@@ -428,7 +505,9 @@ def test_a5_ligne_de_pied_convertie_explique_l_ecart():
     assert PHRASE_RENVOI in c.prochaine_action and "lignes de pied" in c.libelle
     assert c.montant_en_jeu == D("-322.00")
     # Pied qui n'explique pas l'écart : inchangé (certain).
-    f = facture(sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "100.00"))])
+    f = facture(
+        sous_totaux=[SousTotal(type=TypeSousTotal.fret, montant=fv("sous_totaux[].montant", "100.00"))]
+    )
     assert un(fa.a5_montant_converti, ctx_de([f, _eur("11214.80")])).outcome is Outcome.ecart_certain
 
 
@@ -442,13 +521,22 @@ def test_a5_ecart_certain_sens_lu():
 
 
 def test_a5_sens_devise_par_eur():
-    r = un(fa.a5_montant_converti, ctx_de([facture(), _eur("11536.34", taux="1.0870", sens="devise_par_eur")]))
+    r = un(
+        fa.a5_montant_converti, ctx_de([facture(), _eur("11536.34", taux="1.0870", sens="devise_par_eur")])
+    )
     assert r.outcome is Outcome.conforme
 
 
 def test_a5_sens_derive():
-    sens_derive = {"taux_change_sens": dv("taux_change_sens", "eur_par_devise", methode="derive", confiance=0.85,
-                                          regle_derivation="taux_bce")}
+    sens_derive = {
+        "taux_change_sens": dv(
+            "taux_change_sens",
+            "eur_par_devise",
+            methode="derive",
+            confiance=0.85,
+            regle_derivation="taux_bce",
+        )
+    }
     # écart au-delà du seuil dans les deux sens : certain possible
     d = _eur("9000.00", sens=None)
     d.dec.taux_change_sens = sens_derive["taux_change_sens"]
@@ -517,7 +605,9 @@ def test_a6_devise_incertaine():
 
 
 def test_a6_conforme_non_verifiable_non_applicable():
-    assert un(fa.a6_montant_sans_conversion, ctx_de([facture(), _eur("11536.80")])).outcome is Outcome.conforme
+    assert (
+        un(fa.a6_montant_sans_conversion, ctx_de([facture(), _eur("11536.80")])).outcome is Outcome.conforme
+    )
     r = un(fa.a6_montant_sans_conversion, ctx_de([facture(), declaration(devise="EUR", montant="12540.00")]))
     assert r.outcome is Outcome.non_verifiable
     r = un(fa.a6_montant_sans_conversion, ctx_de([facture(), declaration()]))
@@ -633,9 +723,14 @@ def test_a9_unites_differentes_et_total():
 
 
 def test_a10_masses():
-    f = facture(masse_nette_totale=fv("masse_nette_totale", "100.000"), masse_brute_totale=fv("masse_brute_totale", "120.000"))
-    d = declaration(masse_brute_totale=dv("masse_brute_totale", "150.000"),
-                    articles=[_article("1", masse_nette=dv("articles[].masse_nette", "100.300"))])
+    f = facture(
+        masse_nette_totale=fv("masse_nette_totale", "100.000"),
+        masse_brute_totale=fv("masse_brute_totale", "120.000"),
+    )
+    d = declaration(
+        masse_brute_totale=dv("masse_brute_totale", "150.000"),
+        articles=[_article("1", masse_nette=dv("articles[].masse_nette", "100.300"))],
+    )
     rs = {r.sous_controle: r for r in fa.a10_masses(ctx_de([f, d]))}
     assert rs["nette"].outcome is Outcome.conforme
     assert rs["brute"].outcome is Outcome.a_verifier and rs["brute"].constat.montant_en_jeu is None
@@ -643,9 +738,12 @@ def test_a10_masses():
 
 
 def test_a10_liste_de_colisage_et_non_verifiable():
-    sup = document(TypeDocument.document_support, ChampsSupport(
-        masse_brute=vs("document_support.masse_brute", "150.000", document_id="doc_sup")), id="doc_sup",
-        sous_type="liste_colisage")
+    sup = document(
+        TypeDocument.document_support,
+        ChampsSupport(masse_brute=vs("document_support.masse_brute", "150.000", document_id="doc_sup")),
+        id="doc_sup",
+        sous_type="liste_colisage",
+    )
     d = declaration(masse_brute_totale=dv("masse_brute_totale", "150.000"))
     rs = {r.sous_controle: r for r in fa.a10_masses(ctx_de([facture(), d, sup]))}
     assert rs["brute"].outcome is Outcome.conforme and "doc_sup" in rs["brute"].documents_concernes
@@ -654,8 +752,10 @@ def test_a10_liste_de_colisage_et_non_verifiable():
 
 def test_a11_colis():
     f = facture(nombre_colis=fv("nombre_colis", "12"))
-    assert un(fa.a11_colis, ctx_de([f, declaration(nombre_colis_total=dv("nombre_colis_total", "12"))])).outcome \
+    assert (
+        un(fa.a11_colis, ctx_de([f, declaration(nombre_colis_total=dv("nombre_colis_total", "12"))])).outcome
         is Outcome.conforme
+    )
     d = declaration(articles=[_article("1", colis="5"), _article("2", colis="6")])
     r = un(fa.a11_colis, ctx_de([f, d]))
     assert r.outcome is Outcome.a_verifier and r.constate == "11"
@@ -667,16 +767,22 @@ def test_a11_deux_declarations_colis_par_article_sans_exception():
     # Total de colis non lu sur deux déclarations du même couple : les valeurs par article (plus nombreuses
     # que les déclarations) ne doivent pas faire échouer la rédaction du libellé (ValueError de zip strict).
     f = facture(nombre_colis=fv("nombre_colis", "20"))
-    d1 = declaration(articles=[_article("1", colis="5", doc="doc_dec1"), _article("2", colis="6", doc="doc_dec1")])
-    d2 = declaration("doc_dec2", mrn="26FR22222222222222",
-                     articles=[_article("1", colis="4", doc="doc_dec2"), _article("2", colis="3", doc="doc_dec2")])
+    d1 = declaration(
+        articles=[_article("1", colis="5", doc="doc_dec1"), _article("2", colis="6", doc="doc_dec1")]
+    )
+    d2 = declaration(
+        "doc_dec2",
+        mrn="26FR22222222222222",
+        articles=[_article("1", colis="4", doc="doc_dec2"), _article("2", colis="3", doc="doc_dec2")],
+    )
     rs = fa.a11_colis(ctx_de([f, d1, d2]))
     assert rs and all(r.outcome is not None for r in rs)
     for r in rs:
         if r.outcome is Outcome.a_verifier:
             assert "MRN" in texte_propre(r).libelle
-    assert fa._refs_dec([d1.model_copy(), d2], [dv("x", "1"), dv("x", "2"), dv("x", "3", doc="doc_dec2")]) \
-        .startswith("les déclarations (")
+    assert fa._refs_dec(
+        [d1.model_copy(), d2], [dv("x", "1"), dv("x", "2"), dv("x", "3", doc="doc_dec2")]
+    ).startswith("les déclarations (")
 
 
 # --- A12, A13 (renvoi) -------------------------------------------------------------------------------------
@@ -686,8 +792,11 @@ def test_a12_origines():
     f = facture(lignes=[_ligne("847130", origine="CN")])
     d = declaration(articles=[_article("2", "847130", origine="CN")])
     assert un(fa.a12_pays_origine, ctx_de([f, d])).outcome is Outcome.conforme
-    d = declaration(articles=[_article("2", "847130", origine="VN",
-                                       code_preference=dv("articles[].code_preference", "300"))])
+    d = declaration(
+        articles=[
+            _article("2", "847130", origine="VN", code_preference=dv("articles[].code_preference", "300"))
+        ]
+    )
     r = un(fa.a12_pays_origine, ctx_de([f, d]))
     assert r.outcome is Outcome.a_verifier
     c = texte_propre(r)
@@ -708,8 +817,10 @@ def test_a12_ensemble_et_non_verifiable():
 
 def test_a13_codes():
     f = facture(lignes=[_ligne("8471.30.00")])
-    assert un(fa.a13_codes_marchandise, ctx_de([f, declaration(articles=[_article("1", "8471300000")])])).outcome \
+    assert (
+        un(fa.a13_codes_marchandise, ctx_de([f, declaration(articles=[_article("1", "8471300000")])])).outcome
         is Outcome.conforme
+    )
     r = un(fa.a13_codes_marchandise, ctx_de([f, declaration(articles=[_article("1", "8517620000")])]))
     assert r.outcome is Outcome.a_verifier
     c = texte_propre(r)
@@ -721,8 +832,10 @@ def test_a13_codes():
 
 
 def test_a13_facture_sans_code():
-    r = un(fa.a13_codes_marchandise, ctx_de([facture(lignes=[_ligne(None, "1")]),
-                                             declaration(articles=[_article("1", "8471300000")])]))
+    r = un(
+        fa.a13_codes_marchandise,
+        ctx_de([facture(lignes=[_ligne(None, "1")]), declaration(articles=[_article("1", "8471300000")])]),
+    )
     assert r.outcome is Outcome.non_verifiable and r.details["motif"] == "la facture ne porte pas de code"
 
 
@@ -758,7 +871,9 @@ def test_a15_reference_remplacee_par_une_autre():
     """D-810 : une désignation citant une référence de même forme (« LA-1012-Z ») reprend bien une référence
     d'article ; celle de la facture (« LA-1012-M ») est introuvable -> constat."""
     f = facture(lignes=[_ligne(ref="LA-1012-M"), _ligne(ref="LA-5118-X")])
-    d = declaration(articles=[_article("1", desc="MONITEUR REF LA-1012-Z"), _article("2", desc="CASSEROLE REF LA-5118-X")])
+    d = declaration(
+        articles=[_article("1", desc="MONITEUR REF LA-1012-Z"), _article("2", desc="CASSEROLE REF LA-5118-X")]
+    )
     r = un(fa.a15_references_produit, ctx_de([f, d]))
     assert r.outcome is Outcome.a_verifier and "LA-1012-M" in texte_propre(r).libelle
     assert "LA-5118-X" not in r.details["absentes"][0]
@@ -766,7 +881,9 @@ def test_a15_reference_remplacee_par_une_autre():
 
 def test_a15_reference_tronquee_et_designation_illisible():
     f = facture(lignes=[_ligne(ref="OS-2191-B"), _ligne(ref="OS-4240-BK")])
-    d = declaration(articles=[_article("1", desc="COUTEAU REF OS-2191-"), _article("2", desc="VIS REF OS-4240-BK")])
+    d = declaration(
+        articles=[_article("1", desc="COUTEAU REF OS-2191-"), _article("2", desc="VIS REF OS-4240-BK")]
+    )
     assert un(fa.a15_references_produit, ctx_de([f, d])).outcome is Outcome.conforme  # troncature (§8.4)
     d = declaration(articles=[_article("1", desc="COUTEAU REF OS-2191-B"), _article("2", desc=None)])
     assert un(fa.a15_references_produit, ctx_de([f, d])).outcome is Outcome.non_verifiable
@@ -777,20 +894,44 @@ def test_a15_reference_tronquee_et_designation_illisible():
 
 @pytest.fixture
 def dossier_en_ecart():
-    f = facture(total="12540.00", tva=TVA_A, incoterm=fv("incoterm", "FOB"), date=fv("date", "2026-08-20"),
-                nombre_colis=fv("nombre_colis", "4"), masse_brute_totale=fv("masse_brute_totale", "80"),
-                lignes=[_ligne("8471.30.00", "10", origine="CN", ref="AB-1234")])
-    d = declaration(devise="EUR", montant="12540.00", taux="0.92000", tva=TVA_B, incoterm=dv("incoterm", "DAP"),
-                    nombre_colis_total=dv("nombre_colis_total", "5"), masse_brute_totale=dv("masse_brute_totale", "95"),
-                    documents_references=_refs("XYZ-999"),
-                    articles=[_article("1", "8471800000", "12", origine="VN", desc="Article AB-9999 FICTIF")])
+    f = facture(
+        total="12540.00",
+        tva=TVA_A,
+        incoterm=fv("incoterm", "FOB"),
+        date=fv("date", "2026-08-20"),
+        nombre_colis=fv("nombre_colis", "4"),
+        masse_brute_totale=fv("masse_brute_totale", "80"),
+        lignes=[_ligne("8471.30.00", "10", origine="CN", ref="AB-1234")],
+    )
+    d = declaration(
+        devise="EUR",
+        montant="12540.00",
+        taux="0.92000",
+        tva=TVA_B,
+        incoterm=dv("incoterm", "DAP"),
+        nombre_colis_total=dv("nombre_colis_total", "5"),
+        masse_brute_totale=dv("masse_brute_totale", "95"),
+        documents_references=_refs("XYZ-999"),
+        articles=[_article("1", "8471800000", "12", origine="VN", desc="Article AB-9999 FICTIF")],
+    )
     return ctx_de([f, d])
 
 
 def test_garde_fous_textes_et_renvois(dossier_en_ecart):
     rs = run_controls(dossier_en_ecart, controles=[f"A{i}" for i in range(1, 16)])
     constats = [r.constat for r in rs if r.constat is not None]
-    assert {c.controle_id for c in constats} >= {"A1", "A2", "A6", "A8", "A9", "A10", "A11", "A12", "A13", "A14"}
+    assert {c.controle_id for c in constats} >= {
+        "A1",
+        "A2",
+        "A6",
+        "A8",
+        "A9",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A14",
+    }
     for c in constats:
         assert check_text(c.libelle) == [] and check_text(c.prochaine_action) == [], c.controle_id
         assert c.motif_blocage is None
@@ -814,11 +955,20 @@ def test_gabarits_sans_formulation_interdite():
 def test_a10_nette_couverte_par_b4_quand_une_nette_d_article_depasse_sa_brute():
     # D-3106 : article 1 déclaré avec une masse nette (150) supérieure à sa masse brute (120) : B4 le relève ; la
     # masse nette déclarée qui en découle ne donne pas un second constat A10 (même fait).
-    f = facture(masse_nette_totale=fv("masse_nette_totale", "100.000"),
-                masse_brute_totale=fv("masse_brute_totale", "120.000"))
-    d = declaration(masse_brute_totale=dv("masse_brute_totale", "120.000"),
-                    articles=[_article("1", masse_nette=dv("articles[].masse_nette", "150.000"),
-                                       masse_brute=dv("articles[].masse_brute", "120.000"))])
+    f = facture(
+        masse_nette_totale=fv("masse_nette_totale", "100.000"),
+        masse_brute_totale=fv("masse_brute_totale", "120.000"),
+    )
+    d = declaration(
+        masse_brute_totale=dv("masse_brute_totale", "120.000"),
+        articles=[
+            _article(
+                "1",
+                masse_nette=dv("articles[].masse_nette", "150.000"),
+                masse_brute=dv("articles[].masse_brute", "120.000"),
+            )
+        ],
+    )
     rs = {r.sous_controle: r for r in fa.a10_masses(ctx_de([f, d]))}
     assert rs["nette"].outcome is Outcome.non_applicable
     assert rs["nette"].raison_code is RaisonCode.couvert_par_autre_controle

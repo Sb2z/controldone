@@ -28,7 +28,10 @@ MOTIFS_SECRETS = [
     ("clé Stripe réelle", re.compile(r"\b(?:sk|rk)_live_[A-Za-z0-9]{16,}")),
     ("secret de webhook Stripe", re.compile(r"\bwhsec_[A-Za-z0-9]{24,}")),
     ("clé AWS", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
-    ("jeton GitHub", re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{60,}")),
+    (
+        "jeton GitHub",
+        re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{60,}"),
+    ),
     ("jeton Slack", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{20,}")),
 ]
 PRAGMA = "pragma: allowlist secret"
@@ -60,17 +63,26 @@ def _espace_final(ligne: str, markdown: bool) -> bool:
     if ligne == ligne.rstrip(" \t"):
         return False
     # Markdown : deux espaces après du texte = retour à la ligne forcé, admis.
-    return not (markdown and ligne.endswith("  ") and ligne[:-2].strip() and ligne[:-2] == ligne[:-2].rstrip())
+    return not (
+        markdown and ligne.endswith("  ") and ligne[:-2].strip() and ligne[:-2] == ligne[:-2].rstrip()
+    )
 
 
 def espaces(fichiers: list[Path]) -> list[str]:
-    return [f"{p}:{n}: espace en fin de ligne" for p in fichiers for n, ligne in _lignes(p)
-            if _espace_final(ligne, p.suffix == ".md")]
+    return [
+        f"{p}:{n}: espace en fin de ligne"
+        for p in fichiers
+        for n, ligne in _lignes(p)
+        if _espace_final(ligne, p.suffix == ".md")
+    ]
 
 
 def lourds(fichiers: list[Path], max_ko: int) -> list[str]:
-    return [f"{p}: {p.stat().st_size // 1024} Ko > {max_ko} Ko (corpus : ne pas versionner, voir bench/README.md)"
-            for p in fichiers if p.is_file() and p.stat().st_size > max_ko * 1024]
+    return [
+        f"{p}: {p.stat().st_size // 1024} Ko > {max_ko} Ko (corpus : ne pas versionner, voir bench/README.md)"
+        for p in fichiers
+        if p.is_file() and p.stat().st_size > max_ko * 1024
+    ]
 
 
 def secrets(fichiers: list[Path]) -> list[str]:
@@ -101,8 +113,12 @@ def syntaxe(fichiers: list[Path]) -> list[str]:
 
 
 def sans_print(fichiers: list[Path]) -> list[str]:
-    return [f"{p}:{n}: print() dans un paquet cœur (utiliser logging)" for p in fichiers
-            for n, ligne in _lignes(p) if PRINT_RE.match(ligne)]
+    return [
+        f"{p}:{n}: print() dans un paquet cœur (utiliser logging)"
+        for p in fichiers
+        for n, ligne in _lignes(p)
+        if PRINT_RE.match(ligne)
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -48,11 +48,16 @@ def _article(doc_id: str, n: int, code: str, masse: str | None, origine: str = "
 
 def _dossier(num: int, date_acc: str, articles: list[tuple[str, str | None, str]], vendeur: str):
     doc_id = f"doc_dec_{num}"
-    dec = declaration(id=doc_id, mrn=f"26FRFIC00000000{num:03d}",
-                      date_acceptation=vs("declaration.date_acceptation", date_acc, document_id=doc_id),
-                      articles=[_article(doc_id, i + 1, c, m, o) for i, (c, m, o) in enumerate(articles)])
-    fc = facture_commerciale(id=f"doc_fc_{num}", vendeur=Partie(
-        nom=vs("facture_commerciale.vendeur.nom", vendeur, document_id=f"doc_fc_{num}")))
+    dec = declaration(
+        id=doc_id,
+        mrn=f"26FRFIC00000000{num:03d}",
+        date_acceptation=vs("declaration.date_acceptation", date_acc, document_id=doc_id),
+        articles=[_article(doc_id, i + 1, c, m, o) for i, (c, m, o) in enumerate(articles)],
+    )
+    fc = facture_commerciale(
+        id=f"doc_fc_{num}",
+        vendeur=Partie(nom=vs("facture_commerciale.vendeur.nom", vendeur, document_id=f"doc_fc_{num}")),
+    )
     dos = dossier_pour([dec, fc], id=f"dos_{num}")
     dos.reference = f"D-2026-{num:05d}"
     return dos, [dec, fc]
@@ -62,12 +67,21 @@ def _dossier(num: int, date_acc: str, articles: list[tuple[str, str | None, str]
 def lignes():
     out = []
     for dos, docs in (
-        _dossier(1, "2026-02-10", [("7208 51 98", "12000.000", "TR"), ("8471300000", "50.000", "CN")],
-                 "ACIERIE FICTIVE ANADOLU"),
-        _dossier(2, "2026-05-03", [("7601 10 00", "8500.500", "IN"), ("7202", "100.000", "CN")],
-                 "ALU FICTIF LTD"),
-        _dossier(3, "2026-08-21", [("2804 10 00", "900.000", "NO"), ("7318 15 90", None, "CN")],
-                 "VISSERIE FICTIVE CO"),
+        _dossier(
+            1,
+            "2026-02-10",
+            [("7208 51 98", "12000.000", "TR"), ("8471300000", "50.000", "CN")],
+            "ACIERIE FICTIVE ANADOLU",
+        ),
+        _dossier(
+            2, "2026-05-03", [("7601 10 00", "8500.500", "IN"), ("7202", "100.000", "CN")], "ALU FICTIF LTD"
+        ),
+        _dossier(
+            3,
+            "2026-08-21",
+            [("2804 10 00", "900.000", "NO"), ("7318 15 90", None, "CN")],
+            "VISSERIE FICTIVE CO",
+        ),
         _dossier(4, "2025-12-30", [("7308 90 98", "3000.000", "CN")], "ACIERIE FICTIVE ANADOLU"),
     ):
         out += selectionner_lignes(dos, docs, liste=LISTE)
@@ -76,32 +90,43 @@ def lignes():
 
 # --- liste des codes ------------------------------------------------------------------------------------
 
+
 def test_liste_versionnee_sourcee_et_a_verifier():
     assert LISTE.version and LISTE.source_url.startswith("https://eur-lex.europa.eu/")
     assert LISTE.consulte_le == "2026-10-02" and LISTE.a_verifier
     assert LISTE.seuil_tonnes == "50"
-    assert {s for s in LISTE.secteurs} == {"ciment", "electricite", "engrais", "fer_acier", "aluminium", "hydrogene"}
+    assert {s for s in LISTE.secteurs} == {
+        "ciment",
+        "electricite",
+        "engrais",
+        "fer_acier",
+        "aluminium",
+        "hydrogene",
+    }
     assert LISTE.secteurs["electricite"].hors_cumul_50t and LISTE.secteurs["hydrogene"].hors_cumul_50t
 
 
-@pytest.mark.parametrize(("code", "statut", "secteur"), [
-    ("7208 51 98", StatutCode.dans_liste, "fer_acier"),
-    ("72.08.51.98.00", StatutCode.dans_liste, "fer_acier"),
-    ("7204 49 00", StatutCode.hors_liste, None),          # déchets : exclusion de l'entrée « 72 »
-    ("7202 21 00", StatutCode.hors_liste, None),          # ferro-silicium : exclusion « 7202 2 »
-    ("7202 11 20", StatutCode.dans_liste, "fer_acier"),   # ferro-manganèse : non exclu
-    ("7202", StatutCode.a_preciser, "fer_acier"),         # trop court face aux exclusions
-    ("2523", StatutCode.a_preciser, "ciment"),
-    ("2523 29 00", StatutCode.dans_liste, "ciment"),
-    ("3105 60 00", StatutCode.hors_liste, None),
-    ("3105 20 10", StatutCode.dans_liste, "engrais"),
-    ("2716 00 00", StatutCode.dans_liste, "electricite"),
-    ("7616 99 90", StatutCode.dans_liste, "aluminium"),
-    ("7615 10 10", StatutCode.hors_liste, None),
-    ("8471 30 00", StatutCode.hors_liste, None),
-    ("", StatutCode.illisible, None),
-    (None, StatutCode.illisible, None),
-])
+@pytest.mark.parametrize(
+    ("code", "statut", "secteur"),
+    [
+        ("7208 51 98", StatutCode.dans_liste, "fer_acier"),
+        ("72.08.51.98.00", StatutCode.dans_liste, "fer_acier"),
+        ("7204 49 00", StatutCode.hors_liste, None),  # déchets : exclusion de l'entrée « 72 »
+        ("7202 21 00", StatutCode.hors_liste, None),  # ferro-silicium : exclusion « 7202 2 »
+        ("7202 11 20", StatutCode.dans_liste, "fer_acier"),  # ferro-manganèse : non exclu
+        ("7202", StatutCode.a_preciser, "fer_acier"),  # trop court face aux exclusions
+        ("2523", StatutCode.a_preciser, "ciment"),
+        ("2523 29 00", StatutCode.dans_liste, "ciment"),
+        ("3105 60 00", StatutCode.hors_liste, None),
+        ("3105 20 10", StatutCode.dans_liste, "engrais"),
+        ("2716 00 00", StatutCode.dans_liste, "electricite"),
+        ("7616 99 90", StatutCode.dans_liste, "aluminium"),
+        ("7615 10 10", StatutCode.hors_liste, None),
+        ("8471 30 00", StatutCode.hors_liste, None),
+        ("", StatutCode.illisible, None),
+        (None, StatutCode.illisible, None),
+    ],
+)
 def test_classement_par_code_imprime(code, statut, secteur):
     c = LISTE.classer(code)
     assert c.statut is statut
@@ -116,6 +141,7 @@ def test_masse_kg():
 
 
 # --- sélection ----------------------------------------------------------------------------------------------
+
 
 def test_selection_par_code_imprime_et_provenance(lignes):
     codes = [li.code_imprime for li in lignes]
@@ -133,7 +159,11 @@ def test_agregats_par_code_origine_fournisseur_periode(lignes):
     ags = agreger(lignes, annee=2026)
     assert {a.periode for a in ags} == {"2026-T1", "2026-T2", "2026-T3"}
     alu = next(a for a in ags if a.code_imprime == "7601 10 00")
-    assert alu.masse_nette_kg == Decimal("8500.500") and alu.pays_origine == "IN" and alu.fournisseur == "ALU FICTIF LTD"
+    assert (
+        alu.masse_nette_kg == Decimal("8500.500")
+        and alu.pays_origine == "IN"
+        and alu.fournisseur == "ALU FICTIF LTD"
+    )
     assert alu.installation == "à demander au fournisseur"
     sans = next(a for a in ags if a.code_imprime == "7318 15 90")
     assert sans.lignes_sans_masse == 1 and sans.masse_nette_kg == 0
@@ -141,6 +171,7 @@ def test_agregats_par_code_origine_fournisseur_periode(lignes):
 
 
 # --- seuil : arithmétique seulement --------------------------------------------------------------------
+
 
 def test_seuil_arithmetique_avec_renvoi(lignes):
     s = synthese_seuil(lignes, 2026)
@@ -165,6 +196,7 @@ def test_seuil_depasse_reste_un_calcul():
 
 # --- demandes aux fournisseurs ------------------------------------------------------------------------
 
+
 def test_liste_des_donnees_a_demander():
     ids = {d.id for d in DONNEES_A_DEMANDER}
     assert {"installation", "emissions_directes", "prix_carbone"} <= ids
@@ -174,10 +206,16 @@ def test_liste_des_donnees_a_demander():
 
 def test_brouillons_un_par_fournisseur_jamais_envoyes(lignes):
     bs = brouillons_demandes(lignes, annee=2026, client="CLIENT FICTIF SAS")
-    assert [b["fournisseur"] for b in bs] == ["ACIERIE FICTIVE ANADOLU", "ALU FICTIF LTD", "VISSERIE FICTIVE CO"]
+    assert [b["fournisseur"] for b in bs] == [
+        "ACIERIE FICTIVE ANADOLU",
+        "ALU FICTIF LTD",
+        "VISSERIE FICTIVE CO",
+    ]
     for b in bs:
         assert b["destinataires"] == [] and b["destinataire_role"] == "client"
-        assert PHRASE_RENVOI in b["corps"] and AVERTISSEMENT in b["corps"] and MENTION_PREPARATION in b["corps"]
+        assert (
+            PHRASE_RENVOI in b["corps"] and AVERTISSEMENT in b["corps"] and MENTION_PREPARATION in b["corps"]
+        )
         assert "émissions" in b["corps"].lower() and "installation" in b["corps"].lower()
         assert check_text(b["objet"]) == [] and check_text(b["corps"]) == []
     # 2025 : la ligne de décembre 2025 n'entre pas dans les brouillons 2026
@@ -216,8 +254,10 @@ def test_brouillons_deposes_dans_la_file_sans_envoi(db, lignes):
 def test_lignes_depuis_les_dossiers_traites_du_client(db):
     systeme = Acteur.systeme("tests")
     with db.tenant("cli_macf", systeme) as sc:
-        for n, d, arts, v in ((1, "2026-02-10", [("7208 51 98", "12000.000", "TR")], "ACIERIE FICTIVE"),
-                              (2, "2026-04-02", [("6403 99 93", "40.000", "VN")], "CHAUSSURES FICTIVES")):
+        for n, d, arts, v in (
+            (1, "2026-02-10", [("7208 51 98", "12000.000", "TR")], "ACIERIE FICTIVE"),
+            (2, "2026-04-02", [("6403 99 93", "40.000", "VN")], "CHAUSSURES FICTIVES"),
+        ):
             dos, docs = _dossier(n, d, arts, v)
             sc.enregistrer_dossier(dos, documents=docs)
     with db.tenant("cli_macf", systeme, lecture=True) as sc:
@@ -227,6 +267,7 @@ def test_lignes_depuis_les_dossiers_traites_du_client(db):
 
 
 # --- exports -----------------------------------------------------------------------------------------------
+
 
 def test_pack_csv_xlsx_pdf(tmp_path, lignes):
     pack = preparer_pack(lignes, annee=2026, client="CLIENT FICTIF SAS", date_preparation=date(2026, 10, 2))
@@ -256,9 +297,13 @@ def test_pack_csv_xlsx_pdf(tmp_path, lignes):
 
 
 def test_injection_de_formule_neutralisee(tmp_path):
-    dos, docs = _dossier(7, "2026-01-15", [("7208 51 98", "10.000", "CN")], "=HYPERLINK(\"http://x\")")
-    pack = preparer_pack(selectionner_lignes(dos, docs, liste=LISTE), annee=2026, client="CLIENT FICTIF",
-                         date_preparation=date(2026, 10, 2))
+    dos, docs = _dossier(7, "2026-01-15", [("7208 51 98", "10.000", "CN")], '=HYPERLINK("http://x")')
+    pack = preparer_pack(
+        selectionner_lignes(dos, docs, liste=LISTE),
+        annee=2026,
+        client="CLIENT FICTIF",
+        date_preparation=date(2026, 10, 2),
+    )
     sorties = ecrire_pack(pack, tmp_path)
     assert "'=HYPERLINK" in sorties["csv"][0].read_text(encoding="utf-8-sig")
     from openpyxl import load_workbook

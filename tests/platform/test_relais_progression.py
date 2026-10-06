@@ -39,7 +39,8 @@ def _pipeline_qui_progresse(n, *, options):
 
 def test_progression_relayee_depuis_le_processus_fils():
     vus: list[tuple[str, int, int]] = []
-    out = executer_avec_delai(_pipeline_qui_progresse, (3,), {"options": _Options()}, 60.0,
-                              progression=lambda *a: vus.append(a))
+    out = executer_avec_delai(
+        _pipeline_qui_progresse, (3,), {"options": _Options()}, 60.0, progression=lambda *a: vus.append(a)
+    )
     assert out == 30
     assert vus == [("extraction", 0, 3), ("extraction", 1, 3), ("extraction", 2, 3)]

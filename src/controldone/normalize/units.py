@@ -53,8 +53,14 @@ for _code, _libelles in {
         _UNITES.setdefault(_l.replace("_", " "), _code)
 # libellés de plusieurs mots
 for _l, _code in {
-    "metre carre": "MTK", "metres carres": "MTK", "square meter": "MTK", "square meters": "MTK",
-    "metre cube": "MTQ", "metres cubes": "MTQ", "cubic meter": "MTQ", "cubic meters": "MTQ",
+    "metre carre": "MTK",
+    "metres carres": "MTK",
+    "square meter": "MTK",
+    "square meters": "MTK",
+    "metre cube": "MTQ",
+    "metres cubes": "MTQ",
+    "cubic meter": "MTQ",
+    "cubic meters": "MTQ",
 }.items():
     _UNITES[_l] = _code
 
@@ -92,7 +98,10 @@ _UNITE_MASSE_RE = re.compile(
     r"toneladas?|t|lbs?|pounds?)\.?\s*$"
 )
 _FACTEURS_KG: dict[str, Decimal] = {
-    "kg": Decimal(1), "g": Decimal("0.001"), "t": Decimal(1000), "lb": Decimal("0.45359237"),
+    "kg": Decimal(1),
+    "g": Decimal("0.001"),
+    "t": Decimal(1000),
+    "lb": Decimal("0.45359237"),
 }
 
 

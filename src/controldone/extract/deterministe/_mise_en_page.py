@@ -188,8 +188,10 @@ class Lecture:
         if not self.mots or all(m.x1 <= 0 for m in self.mots):
             return None
         return Zone(
-            x0=_borne(min(m.x0 for m in self.mots)), y0=_borne(min(m.y0 for m in self.mots)),
-            x1=_borne(max(m.x1 for m in self.mots)), y1=_borne(max(m.y1 for m in self.mots)),
+            x0=_borne(min(m.x0 for m in self.mots)),
+            y0=_borne(min(m.y0 for m in self.mots)),
+            x1=_borne(max(m.x1 for m in self.mots)),
+            y1=_borne(max(m.y1 for m in self.mots)),
         )
 
     @property
@@ -249,8 +251,18 @@ def _mots_cellule(cellule: Mot) -> list[Mot]:
     texte = cellule.texte
     n = max(1, len(texte))
     larg = cellule.x1 - cellule.x0
-    return [Mot(m.group(0), cellule.x0 + larg * m.start() / n, cellule.y0, cellule.x0 + larg * m.end() / n,
-                cellule.y1, cellule.confiance, cellule.taille) for m in re.finditer(r"\S+", texte)]
+    return [
+        Mot(
+            m.group(0),
+            cellule.x0 + larg * m.start() / n,
+            cellule.y0,
+            cellule.x0 + larg * m.end() / n,
+            cellule.y1,
+            cellule.confiance,
+            cellule.taille,
+        )
+        for m in re.finditer(r"\S+", texte)
+    ]
 
 
 def _segmenter(mots: Sequence[Mot], *, tableur: bool) -> list[list[Mot]]:
@@ -278,7 +290,9 @@ def pages_du_document(document: object, pages: Sequence[object], options: dict |
     choisies = [p for p in pages if not nums or getattr(p, "numero", None) in nums] or list(pages)
     opt = (options or {}).get("textes_pages") or (options or {}).get("pages_texte")
     if opt:
-        par_num = opt if isinstance(opt, dict) else {getattr(p, "numero", i + 1): p for i, p in enumerate(opt)}
+        par_num = (
+            opt if isinstance(opt, dict) else {getattr(p, "numero", i + 1): p for i, p in enumerate(opt)}
+        )
         choisies = [par_num.get(getattr(p, "numero", None), p) for p in choisies]
     return choisies
 
@@ -301,11 +315,21 @@ def vue_document(pages: Sequence[object], *, separateur_decimal: str | None = No
             if not mots:
                 continue
             rang = len(lignes)
-            segs = [Segment(tuple(g), pt.numero, rang, k)
-                    for k, g in enumerate(_segmenter(mots, tableur=tableur))]
+            segs = [
+                Segment(tuple(g), pt.numero, rang, k) for k, g in enumerate(_segmenter(mots, tableur=tableur))
+            ]
             lignes.append(VueLigne(page=pt.numero, rang=rang, segments=segs, ligne=li))
-        vues.append(VuePage(numero=pt.numero, texte=pt, lignes=lignes, methode=methode, geometrie=geometrie,
-                            tableur=tableur, qualite=qualite))
+        vues.append(
+            VuePage(
+                numero=pt.numero,
+                texte=pt,
+                lignes=lignes,
+                methode=methode,
+                geometrie=geometrie,
+                tableur=tableur,
+                qualite=qualite,
+            )
+        )
     vue = VueDocument(pages=vues, textes={v.numero: v.texte.texte for v in vues})
     vue.separateur_decimal = separateur_decimal or inferer_separateur(vue)
     return vue
@@ -318,7 +342,9 @@ _GROUPE3 = re.compile(r"^\d{3}(?:[.,]\d{1,3})?\)?-?$")
 _TETE = re.compile(r"^[(\-−–]?[$€£¥₩]?\d{1,3}$")
 _SYMBOLES_DEVISE = set("$€£¥₩")
 
-UNITES_MASSE = re.compile(r"^(kgs?|kilos?|kilogrammes?|kilograms?|kilogramos?|lbs?|pounds?|t|tonnes?|tons?|g|grs?)\.?$")
+UNITES_MASSE = re.compile(
+    r"^(kgs?|kilos?|kilogrammes?|kilograms?|kilogramos?|lbs?|pounds?|t|tonnes?|tons?|g|grs?)\.?$"
+)
 MOTS_COLIS = re.compile(
     r"^(cartons?|ctns?|colis|packages?|pkgs?|pcs|pieces?|pallets?|palettes?|bultos?|cajas?|caisses?|cases?|"
     r"boxes|bo[iî]tes|bundles?|rolls?|drums?|bags?|sacs?|pce|uds)\.?$"
@@ -358,9 +384,18 @@ def nombres_dans(mots: Sequence[Mot]) -> list[Nombre]:
             while j < len(mots) and _GROUPE3.match(mots[j].texte) and _ecart_etroit(mots[j - 1], mots[j]):
                 j += 1
         # OCR : espace parasite après un séparateur (« 113, 212.72 », « 1.008, 46 »)
-        while j < len(mots) and _ecart_etroit(mots[j - 1], mots[j]) and (
-                (re.search(r"\d[.,]$", mots[j - 1].texte) and re.match(r"^\d", mots[j].texte) and _est_num(mots[j].texte))
-                or (re.search(r"\d$", mots[j - 1].texte) and re.fullmatch(r"[.,]\d{1,3}\)?-?", mots[j].texte))):
+        while (
+            j < len(mots)
+            and _ecart_etroit(mots[j - 1], mots[j])
+            and (
+                (
+                    re.search(r"\d[.,]$", mots[j - 1].texte)
+                    and re.match(r"^\d", mots[j].texte)
+                    and _est_num(mots[j].texte)
+                )
+                or (re.search(r"\d$", mots[j - 1].texte) and re.fullmatch(r"[.,]\d{1,3}\)?-?", mots[j].texte))
+            )
+        ):
             j += 1  # OCR : espace parasite autour d'un séparateur (« 113, 212.72 », « 2,902 .060 »)
         out.append(Nombre(k, j, " ".join(m.texte for m in mots[k:j])))
         k = j
@@ -416,7 +451,11 @@ def inferer_separateur(vue: VueDocument) -> str | None:
 
 
 def lire_montant_mots(
-    mots: Sequence[Mot], *, vue: VueDocument, devise: str | None = None, dernier: bool = True,
+    mots: Sequence[Mot],
+    *,
+    vue: VueDocument,
+    devise: str | None = None,
+    dernier: bool = True,
     rejeter_masse: bool = True,
 ) -> tuple[int, int, Decimal] | None:
     """Repère un montant dans une suite de mots : (i, j, valeur absolue) en incluant devise et signe
@@ -454,7 +493,9 @@ def lire_montant_mots(
 
 def _est_devise(t: str) -> bool:
     t2 = t.strip(":()")
-    return (t2.upper() in ISO_4217 and t2.isupper()) or (len(t2) <= 3 and bool(t2) and set(t2) <= _SYMBOLES_DEVISE)
+    return (t2.upper() in ISO_4217 and t2.isupper()) or (
+        len(t2) <= 3 and bool(t2) and set(t2) <= _SYMBOLES_DEVISE
+    )
 
 
 def devise_dans(texte: str) -> str | None:
@@ -493,8 +534,12 @@ def _decoupe_mots(segment: Segment) -> tuple[str, list[int]]:
 
 
 def chercher(
-    vue: VueDocument, motifs: Sequence[re.Pattern[str]], *, pages: Iterable[int] | None = None,
-    debut_segment: bool = True, exclure: re.Pattern[str] | None = None,
+    vue: VueDocument,
+    motifs: Sequence[re.Pattern[str]],
+    *,
+    pages: Iterable[int] | None = None,
+    debut_segment: bool = True,
+    exclure: re.Pattern[str] | None = None,
 ) -> list[Trouve]:
     """Segments dont le texte (sans accents, minuscules) commence par un des ``motifs`` (ou le contient
     si ``debut_segment=False``). Ordre de lecture : page, ligne, segment."""
@@ -530,30 +575,38 @@ Accepte = Callable[[Sequence[Mot]], tuple[int, int] | None]
 
 
 def valeur_apres(
-    vue: VueDocument, t: Trouve, accepte: Accepte, *, droite: bool = True, dessous: bool = True,
-    max_dx: float = 0.6, lignes_dessous: int = 2, marge_dessous: float = 0.01, dessous_seul: bool = False,
+    vue: VueDocument,
+    t: Trouve,
+    accepte: Accepte,
+    *,
+    droite: bool = True,
+    dessous: bool = True,
+    max_dx: float = 0.6,
+    lignes_dessous: int = 2,
+    marge_dessous: float = 0.01,
+    dessous_seul: bool = False,
 ) -> Lecture | None:
     """Valeur associée à un libellé : reste du segment, puis segment(s) à droite, puis en dessous."""
     page = t.page
     mots_seg = t.segment.mots
-    reste = mots_seg[t.apres:]
+    reste = mots_seg[t.apres :]
     reste = tuple(m for m in reste if cle_texte(m.texte) not in (":", "#", "-"))
     if reste:
         r = accepte(reste)
         if r is not None:
-            return _lecture(reste[r[0]:r[1]], page, t.ligne)
+            return _lecture(reste[r[0] : r[1]], page, t.ligne)
     if droite:
-        for s in t.ligne.segments[t.segment.rang + 1:]:
+        for s in t.ligne.segments[t.segment.rang + 1 :]:
             if s.x0 - t.segment.x1 > max_dx:
                 break
             mots = tuple(m for m in s.mots if cle_texte(m.texte) not in (":",))
             r = accepte(mots) if mots else None
             if r is not None:
-                return _lecture(mots[r[0]:r[1]], page, t.ligne)
+                return _lecture(mots[r[0] : r[1]], page, t.ligne)
             break  # seulement le segment immédiatement à droite
     if dessous:
         pas = page.pas_ligne
-        for li in page.lignes[t.ligne.rang + 1: t.ligne.rang + 1 + lignes_dessous]:
+        for li in page.lignes[t.ligne.rang + 1 : t.ligne.rang + 1 + lignes_dessous]:
             if li.y0 - t.ligne.y1 > 3.0 * pas + 0.01:
                 break
             for s in li.segments:
@@ -563,9 +616,16 @@ def valeur_apres(
                 if r is not None and dessous_seul and (r[1] - r[0]) < len(s.mots):
                     continue  # la valeur prise dessous doit occuper seule son segment
                 # une valeur prise dessous ne doit pas appartenir à un autre couple « libellé : valeur »
-                if r is not None and not any(m.texte.endswith(":") for m in s.mots[:r[0]]) and not (
-                        r[0] > 0 and re.search(r"[A-Za-z]{3}", s.mots[0].texte) and s.mots[0].texte.endswith(":")):
-                    return _lecture(s.mots[r[0]:r[1]], page, li)
+                if (
+                    r is not None
+                    and not any(m.texte.endswith(":") for m in s.mots[: r[0]])
+                    and not (
+                        r[0] > 0
+                        and re.search(r"[A-Za-z]{3}", s.mots[0].texte)
+                        and s.mots[0].texte.endswith(":")
+                    )
+                ):
+                    return _lecture(s.mots[r[0] : r[1]], page, li)
     return None
 
 
@@ -577,22 +637,27 @@ def lecture_mots(mots: Sequence[Mot], page: VuePage, ligne: VueLigne) -> Lecture
     return _lecture(mots, page, ligne)
 
 
-def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | set = frozenset(),
-         max_lignes: int = 7) -> list[tuple[VueLigne, list[Mot]]]:
+def pave(
+    t: Trouve,
+    *,
+    fin: Sequence[re.Pattern[str]] = (),
+    exclus: frozenset | set = frozenset(),
+    max_lignes: int = 7,
+) -> list[tuple[VueLigne, list[Mot]]]:
     """Lignes du pavé ouvert par le libellé ``t`` : reste du segment, puis segments alignés dessous."""
     page = t.page
     sortie: list[tuple[VueLigne, list[Mot]]] = []
-    reste = [m for m in t.segment.mots[t.apres:] if m.texte not in (":", "/")]
+    reste = [m for m in t.segment.mots[t.apres :] if m.texte not in (":", "/")]
     if reste:
         sortie.append((t.ligne, reste))
     elif page.tableur:
         # formulaire « libellé | valeur » : la valeur est dans la cellule à droite ; les lignes suivantes
         # dont le libellé prolonge celui-ci (« Buyer address », « Buyer VAT No. ») complètent le pavé
-        droite = t.ligne.segments[t.segment.rang + 1:]
+        droite = t.ligne.segments[t.segment.rang + 1 :]
         if droite:
             sortie.append((t.ligne, list(droite[0].mots)))
         tete = cle_texte(t.segment.texte).split()[0] if t.segment.texte else ""
-        for li in page.lignes[t.ligne.rang + 1: t.ligne.rang + 1 + max_lignes]:
+        for li in page.lignes[t.ligne.rang + 1 : t.ligne.rang + 1 + max_lignes]:
             if len(li.segments) < 2 or not li.segments[0].cle.startswith(tete):
                 break
             sortie.append((li, list(li.segments[1].mots)))
@@ -600,8 +665,11 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
     x0 = t.segment.x0
     # largeur de colonne : jusqu'au segment suivant de la ligne du libellé, sinon mi-page
     # (bruit OCR isolé — « 7 », « : » — ignoré : il ne borne pas la colonne, D-2513)
-    suivants = [s for s in t.ligne.segments[t.segment.rang + 1:]
-                if not (page.methode is Methode.ocr and all(_BRUIT_OCR.fullmatch(m.texte) for m in s.mots))]
+    suivants = [
+        s
+        for s in t.ligne.segments[t.segment.rang + 1 :]
+        if not (page.methode is Methode.ocr and all(_BRUIT_OCR.fullmatch(m.texte) for m in s.mots))
+    ]
     xmax = suivants[0].x0 - 0.005 if suivants else max(t.segment.x1 + 0.35, 0.5)
     # en-tête à deux colonnes : les lignes de la colonne de droite s'intercalent avec celles du pavé (D-951)
     droite_col = colonne_droite(page, t.ligne, x0, t.segment.x1) if page.geometrie and not suivants else None
@@ -609,7 +677,7 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
         xmax = min(xmax, droite_col - 0.005)
     pas = page.pas_ligne
     prec_y = t.ligne.y1
-    for li in page.lignes[t.ligne.rang + 1:]:
+    for li in page.lignes[t.ligne.rang + 1 :]:
         if li.y0 - prec_y > 2.6 * pas + 0.005 or len(sortie) >= max_lignes:
             break
         segs = [s for s in li.segments if s.x0 >= x0 - 0.03 and s.x0 < xmax and s.x1 <= xmax + 0.25]
@@ -642,7 +710,6 @@ def pave(t: Trouve, *, fin: Sequence[re.Pattern[str]] = (), exclus: frozenset | 
 
 #: Mot de bruit OCR dans un pavé (ponctuation, chiffre isolé : « 7. », « ‘ »).
 _BRUIT_OCR = re.compile(r"[\W_]*\d?[\W_]*")
-
 
 
 # --- bandeaux, en-têtes et pieds de page répétés (D-953) ----------------------------------------------------
@@ -681,7 +748,9 @@ def lignes_bandeau(vue: VueDocument, *, entetes_repetes: bool = True) -> set[tup
     out: set[tuple[int, int]] = set()
     for p in vue.pages:
         for li in p.lignes:
-            if est_bandeau_texte(li.texte) or (p.geometrie and li.mots and (li.y1 <= MARGE_BANDEAU or li.y0 >= 1 - MARGE_BANDEAU)):
+            if est_bandeau_texte(li.texte) or (
+                p.geometrie and li.mots and (li.y1 <= MARGE_BANDEAU or li.y0 >= 1 - MARGE_BANDEAU)
+            ):
                 out.add((p.numero, li.rang))
     if len(vue.pages) >= 2:
         par_page: list[dict[str, list[VueLigne]]] = []
@@ -703,7 +772,9 @@ def lignes_bandeau(vue: VueDocument, *, entetes_repetes: bool = True) -> set[tup
     return out
 
 
-def colonne_droite(page: VuePage, ligne: VueLigne, x0: float, x1: float, *, n_lignes: int = 8) -> float | None:
+def colonne_droite(
+    page: VuePage, ligne: VueLigne, x0: float, x1: float, *, n_lignes: int = 8
+) -> float | None:
     """Bord gauche d'une colonne de texte imprimée **à droite** d'un pavé ouvert en ``x0`` sur ``ligne`` (en-tête
     à deux colonnes dont les lignes s'intercalent avec celles du pavé) ; ``None`` s'il n'y en a pas.
 
@@ -712,7 +783,7 @@ def colonne_droite(page: VuePage, ligne: VueLigne, x0: float, x1: float, *, n_li
     plus petit début de ces lignes, s'il est confirmé par au moins deux lignes alignées (± 0,02)."""
     rang = ligne.rang
     debuts: list[float] = []
-    voisines = page.lignes[max(0, rang - n_lignes): rang + 1 + n_lignes]
+    voisines = page.lignes[max(0, rang - n_lignes) : rang + 1 + n_lignes]
     for li in voisines:
         segs = li.segments
         if page.methode is Methode.ocr:  # bruit OCR isolé (« . », « —* ») : pas une colonne (D-2513)
@@ -745,17 +816,31 @@ def accepte_reference(mots: Sequence[Mot]) -> tuple[int, int] | None:
         t = m.texte.strip(":;,")
         # OCR : référence coupée par une espace parasite (« EXP -26-00180 », « FAC/2026/0099 -0 »)
         j = k + 1
-        while j < len(mots) and re.fullmatch(r"[\-/.][A-Za-z0-9][A-Za-z0-9./\-_]*|[A-Za-z0-9./\-_]*[\-/.]", t) is None \
-                and re.match(r"^[\-/]", mots[j].texte) and re.search(r"\d", mots[j].texte) \
-                and _ecart_etroit(mots[j - 1], mots[j]):
+        while (
+            j < len(mots)
+            and re.fullmatch(r"[\-/.][A-Za-z0-9][A-Za-z0-9./\-_]*|[A-Za-z0-9./\-_]*[\-/.]", t) is None
+            and re.match(r"^[\-/]", mots[j].texte)
+            and re.search(r"\d", mots[j].texte)
+            and _ecart_etroit(mots[j - 1], mots[j])
+        ):
             t += mots[j].texte
             j += 1
-        if j == k + 1 and t.endswith(("-", "/")) and j < len(mots) and re.match(r"^\w", mots[j].texte) \
-                and _ecart_etroit(mots[j - 1], mots[j]):
+        if (
+            j == k + 1
+            and t.endswith(("-", "/"))
+            and j < len(mots)
+            and re.match(r"^\w", mots[j].texte)
+            and _ecart_etroit(mots[j - 1], mots[j])
+        ):
             t += mots[j].texte
             j += 1
-        if j == k + 1 and re.fullmatch(r"(?i)no\.|nr\.|n°", t) and j < len(mots) \
-                and re.fullmatch(r"\d[\w/\-.]*", mots[j].texte) and mots[j].x0 - m.x1 < (m.x1 - m.x0) / 2:
+        if (
+            j == k + 1
+            and re.fullmatch(r"(?i)no\.|nr\.|n°", t)
+            and j < len(mots)
+            and re.fullmatch(r"\d[\w/\-.]*", mots[j].texte)
+            and mots[j].x0 - m.x1 < (m.x1 - m.x0) / 2
+        ):
             t += mots[j].texte  # « No.202601371 » coupé par l'OCR
             j += 1
         if len(t) >= 3 and re.search(r"\d", t) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./\-_#]*", t):
@@ -805,22 +890,48 @@ _TVA_LIB = re.compile(r"(vat|tva|iva|ust|btw|mwst|nif|cif|tax\s*id|n[°º.]?\s*(
 #: Formats nationaux du numéro de TVA (partie après le code pays), pour écarter les références qui
 #: commencent par deux lettres (« DEMO307604768 » n'est pas une TVA allemande).
 FORMATS_TVA: dict[str, str] = {
-    "AT": r"U\d{8}", "BE": r"[01]\d{9}", "BG": r"\d{9,10}", "CY": r"\d{8}[A-Z]", "CZ": r"\d{8,10}",
-    "DE": r"\d{9}", "DK": r"\d{8}", "EE": r"\d{9}", "EL": r"\d{9}", "GR": r"\d{9}",
-    "ES": r"[0-9A-Z]\d{7}[0-9A-Z]", "FI": r"\d{8}", "FR": r"[0-9A-HJ-NP-Z]{2}\d{9}", "HR": r"\d{11}",
-    "HU": r"\d{8}", "IE": r"\d{7}[A-Z]{1,2}|\d[A-Z+*]\d{5}[A-Z]", "IT": r"\d{11}", "LT": r"\d{9}|\d{12}",
-    "LU": r"\d{8}", "LV": r"\d{11}", "MT": r"\d{8}", "NL": r"\d{9}B\d{2}", "PL": r"\d{10}", "PT": r"\d{9}",
-    "RO": r"\d{2,10}", "SE": r"\d{12}", "SI": r"\d{8}", "SK": r"\d{10}",
-    "GB": r"\d{9}|\d{12}|GD\d{3}|HA\d{3}", "XI": r"\d{9}|\d{12}|GD\d{3}|HA\d{3}", "NO": r"\d{9}(?:MVA)?",
+    "AT": r"U\d{8}",
+    "BE": r"[01]\d{9}",
+    "BG": r"\d{9,10}",
+    "CY": r"\d{8}[A-Z]",
+    "CZ": r"\d{8,10}",
+    "DE": r"\d{9}",
+    "DK": r"\d{8}",
+    "EE": r"\d{9}",
+    "EL": r"\d{9}",
+    "GR": r"\d{9}",
+    "ES": r"[0-9A-Z]\d{7}[0-9A-Z]",
+    "FI": r"\d{8}",
+    "FR": r"[0-9A-HJ-NP-Z]{2}\d{9}",
+    "HR": r"\d{11}",
+    "HU": r"\d{8}",
+    "IE": r"\d{7}[A-Z]{1,2}|\d[A-Z+*]\d{5}[A-Z]",
+    "IT": r"\d{11}",
+    "LT": r"\d{9}|\d{12}",
+    "LU": r"\d{8}",
+    "LV": r"\d{11}",
+    "MT": r"\d{8}",
+    "NL": r"\d{9}B\d{2}",
+    "PL": r"\d{10}",
+    "PT": r"\d{9}",
+    "RO": r"\d{2,10}",
+    "SE": r"\d{12}",
+    "SI": r"\d{8}",
+    "SK": r"\d{10}",
+    "GB": r"\d{9}|\d{12}|GD\d{3}|HA\d{3}",
+    "XI": r"\d{9}|\d{12}|GD\d{3}|HA\d{3}",
+    "NO": r"\d{9}(?:MVA)?",
     "CH": r"E\d{9}(?:MWST|TVA|IVA)?",
 }
 
 
 #: Libellé d'un numéro de TVA de représentant fiscal (« TVA rep. fiscal : FR… ») : ce n'est pas le numéro de la
 #: partie représentée (D-2504).
-REP_FISCAL = re.compile(r"\b(rep\.? fiscal|representant fiscal|representante fiscal|fiscal rep(?:resentative)?|"
-                        r"steuervertret\w*|fiskalvertret\w*|rappresentante fiscale|fiscaal vertegenwoordiger|"
-                        r"przedstawiciel podatkowy)\b")
+REP_FISCAL = re.compile(
+    r"\b(rep\.? fiscal|representant fiscal|representante fiscal|fiscal rep(?:resentative)?|"
+    r"steuervertret\w*|fiskalvertret\w*|rappresentante fiscale|fiscaal vertegenwoordiger|"
+    r"przedstawiciel podatkowy)\b"
+)
 
 
 def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
@@ -831,7 +942,7 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
         t = m.texte.strip(":;,()")
         colle = _LIB_TVA_COLLE.match(t)
         if colle and colle.end() < len(t):
-            t = t[colle.end():]  # libellé collé au numéro (« TVAFR15000100008 », D-952)
+            t = t[colle.end() :]  # libellé collé au numéro (« TVAFR15000100008 », D-952)
         mm = re.match(r"^([A-Z]{2})([0-9A-Z.\-]*)$", t)
         if not mm or mm.group(1) not in PAYS_TVA:
             continue
@@ -844,8 +955,9 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
             meilleur = j
         while j < len(mots) and len(corps) < 15:
             u = re.sub(r"[.\-]", "", mots[j].texte.strip(":;,()"))
-            if not re.fullmatch(r"[0-9A-Z]{1,12}", u) or (not re.search(r"\d", u) and u not in ("B", "MWST", "TVA",
-                                                                                                 "IVA", "MVA")):
+            if not re.fullmatch(r"[0-9A-Z]{1,12}", u) or (
+                not re.search(r"\d", u) and u not in ("B", "MWST", "TVA", "IVA", "MVA")
+            ):
                 break
             corps += u
             j += 1
@@ -853,7 +965,7 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
                 meilleur = j
         if meilleur is None:
             continue
-        brut = t + "".join(re.sub(r"[.\-]", "", x.texte.strip(":;,()")) for x in mots[k + 1:meilleur])
+        brut = t + "".join(re.sub(r"[.\-]", "", x.texte.strip(":;,()")) for x in mots[k + 1 : meilleur])
         norm = normalize_vat(re.sub(r"[.\-]", "", brut))
         if norm and colle and colle.end() < len(m.texte.strip(":;,()")) and not tva_colle_valide(norm):
             continue  # libellé collé : la forme seule ne suffit pas, la clé (ou le format) doit être juste
@@ -863,8 +975,9 @@ def lire_tva_mots(mots: Sequence[Mot]) -> tuple[int, int, str] | None:
 
 
 #: Libellé de TVA collé devant le numéro par la mise en page ou l'OCR (« N°TVAFR… », « VAT:GB… »).
-_LIB_TVA_COLLE = re.compile(r"^(?:N[°º]?\.?)?(?:TVA|VAT|IVA|UST-?IDNR|USTID|NIF)(?:NO|N[°º])?[.:#]?(?=[A-Z]{2}\d)",
-                            re.IGNORECASE)
+_LIB_TVA_COLLE = re.compile(
+    r"^(?:N[°º]?\.?)?(?:TVA|VAT|IVA|UST-?IDNR|USTID|NIF)(?:NO|N[°º])?[.:#]?(?=[A-Z]{2}\d)", re.IGNORECASE
+)
 
 
 def separer_libelle_tva(texte: str) -> str | None:
@@ -874,7 +987,7 @@ def separer_libelle_tva(texte: str) -> str | None:
     m = _LIB_TVA_COLLE.match(t)
     if not m or m.end() >= len(t):
         return None
-    reste = t[m.end():]
+    reste = t[m.end() :]
     norm = normalize_vat(reste)
     return reste if norm and tva_colle_valide(norm) else None
 
@@ -890,8 +1003,21 @@ def tva_colle_valide(norm: str) -> bool:
     return tva_fr_valide(norm) is not False
 
 
-_CONFUSION_CHIFFRE = str.maketrans({"O": "0", "o": "0", "D": "0", "Q": "0", "I": "1", "l": "1", "|": "1", "S": "5",
-                                    "B": "8", "Z": "2", "G": "6"})
+_CONFUSION_CHIFFRE = str.maketrans(
+    {
+        "O": "0",
+        "o": "0",
+        "D": "0",
+        "Q": "0",
+        "I": "1",
+        "l": "1",
+        "|": "1",
+        "S": "5",
+        "B": "8",
+        "Z": "2",
+        "G": "6",
+    }
+)
 
 
 def lire_tva_ocr(mots: Sequence[Mot]) -> tuple[int, int, str, bool] | None:
@@ -911,8 +1037,12 @@ def lire_tva_ocr(mots: Sequence[Mot]) -> tuple[int, int, str, bool] | None:
         pays = mm.group(1)
         corps = re.sub(r"[.\-]", "", mm.group(2))
         j = k + 1
-        while j < len(mots) and len(corps) < 13 and re.fullmatch(r"[0-9A-Za-z|]{1,12}", mots[j].texte.strip(":;,()")) \
-                and re.search(r"\d", mots[j].texte):
+        while (
+            j < len(mots)
+            and len(corps) < 13
+            and re.fullmatch(r"[0-9A-Za-z|]{1,12}", mots[j].texte.strip(":;,()"))
+            and re.search(r"\d", mots[j].texte)
+        ):
             corps += mots[j].texte.strip(":;,()")
             j += 1
         if pays == "FR" and len(corps) == 11:
@@ -951,7 +1081,10 @@ def _cle_entete(t: str) -> str:
 
 
 def reconnaitre_entete(
-    ligne: VueLigne, vocabulaire: dict[str, Sequence[str]], *, min_colonnes: int = 3,
+    ligne: VueLigne,
+    vocabulaire: dict[str, Sequence[str]],
+    *,
+    min_colonnes: int = 3,
 ) -> list[Colonne] | None:
     """Colonnes d'une ligne d'en-tête : chaque type de colonne a des libellés (normalisés, sans accents) ;
     un mot tronqué (« Prix unita… ») est reconnu comme préfixe d'un libellé."""
@@ -965,7 +1098,7 @@ def reconnaitre_entete(
         for typ, lib, n in phrases:
             if k + n > len(mots):
                 continue
-            seq = mots[k:k + n]
+            seq = mots[k : k + n]
             if any(b.x0 - a.x1 > 0.03 for a, b in pairwise(seq)):
                 continue
             txt = " ".join(_cle_entete(m.texte) for m in seq)
@@ -982,8 +1115,10 @@ def reconnaitre_entete(
             k += 1
             continue
         typ, lib, n = trouve
-        seq = mots[k:k + n]
-        cols.append(Colonne(typ, min(m.x0 for m in seq), max(m.x1 for m in seq), " ".join(m.texte for m in seq)))
+        seq = mots[k : k + n]
+        cols.append(
+            Colonne(typ, min(m.x0 for m in seq), max(m.x1 for m in seq), " ".join(m.texte for m in seq))
+        )
         k += n
     types = [c.type for c in cols if c.type != "inconnue"]
     if len(types) < min_colonnes or len(set(types)) < min_colonnes:
@@ -997,7 +1132,9 @@ def reconnaitre_entete(
     return cols
 
 
-def attribuer(mots: Sequence[Mot], colonnes: Sequence[Colonne], *, tableur: bool = False) -> dict[str, list[Mot]]:
+def attribuer(
+    mots: Sequence[Mot], colonnes: Sequence[Colonne], *, tableur: bool = False
+) -> dict[str, list[Mot]]:
     """Répartit les mots d'une ligne dans les colonnes (recouvrement horizontal, sinon centre)."""
     out: dict[str, list[Mot]] = {}
     for m in mots:
@@ -1031,7 +1168,10 @@ class RangeeTableau:
 
 
 def lire_tableau(
-    page: VuePage, rang_entete: int, colonnes: Sequence[Colonne], *,
+    page: VuePage,
+    rang_entete: int,
+    colonnes: Sequence[Colonne],
+    *,
     est_debut: Callable[[dict[str, list[Mot]]], bool],
     est_fin: Callable[[VueLigne], bool],
     est_ignoree: Callable[[VueLigne], bool] | None = None,
@@ -1087,7 +1227,9 @@ CONF_NATIF = 0.95
 PLAFOND_OCR = 0.88
 
 
-def confiance_mots(lecture: Lecture | None, *, natif: float = CONF_NATIF, plafond_ocr: float = PLAFOND_OCR) -> float:
+def confiance_mots(
+    lecture: Lecture | None, *, natif: float = CONF_NATIF, plafond_ocr: float = PLAFOND_OCR
+) -> float:
     """Confiance d'une lecture : ``natif`` sur texte natif ; sur OCR, fonction du minimum des confiances
     OCR des mots lus, plafonnée (une lecture OCR non recoupée n'atteint pas 0,90)."""
     if lecture is None:
@@ -1103,8 +1245,14 @@ def confiance_mots(lecture: Lecture | None, *, natif: float = CONF_NATIF, plafon
 class Fabrique:
     """Construit les ``ValeurSourcee`` d'un document (chemin, normalisation, ancrage, zone, contexte)."""
 
-    def __init__(self, type_document: TypeDocument, document_id: str, extracteur: ExtracteurInfo,
-                 vue: VueDocument, ids: IdGenerator | None = None) -> None:
+    def __init__(
+        self,
+        type_document: TypeDocument,
+        document_id: str,
+        extracteur: ExtracteurInfo,
+        vue: VueDocument,
+        ids: IdGenerator | None = None,
+    ) -> None:
         self.type_document = type_document
         self.document_id = document_id
         self.extracteur = extracteur
@@ -1112,8 +1260,14 @@ class Fabrique:
         self.ids = ids
 
     def valeur(
-        self, chemin: str, lecture: Lecture | None, *, confiance: float | None = None,
-        type_valeur: TypeValeur | None = None, devise: str | None = None, brut: str | None = None,
+        self,
+        chemin: str,
+        lecture: Lecture | None,
+        *,
+        confiance: float | None = None,
+        type_valeur: TypeValeur | None = None,
+        devise: str | None = None,
+        brut: str | None = None,
         separateur: str | None = None,
     ) -> ValeurSourcee | None:
         if lecture is None:
@@ -1124,7 +1278,13 @@ class Fabrique:
         brut_lu = brut if brut is not None else lecture.texte
         tv = type_valeur or type_valeur_pour(chemin)
         a_lire = brut_lu
-        if tv in (TypeValeur.montant, TypeValeur.masse, TypeValeur.decimal, TypeValeur.quantite, TypeValeur.entier):
+        if tv in (
+            TypeValeur.montant,
+            TypeValeur.masse,
+            TypeValeur.decimal,
+            TypeValeur.quantite,
+            TypeValeur.entier,
+        ):
             a_lire = texte_nombre(brut_lu)
         v = valeur_sourcee(
             type_document=self.type_document,
@@ -1146,8 +1306,13 @@ class Fabrique:
         if a_lire != brut_lu:  # lecture corrigée : la valeur brute reste celle lue sur la page
             from controldone.extract.base import anchor
 
-            v = v.model_copy(update={"valeur_brute": brut_lu, "ancree": anchor(brut_lu, self.vue.textes.get(lecture.page)),
-                                     "confiance": min(v.confiance, 0.85)})
+            v = v.model_copy(
+                update={
+                    "valeur_brute": brut_lu,
+                    "ancree": anchor(brut_lu, self.vue.textes.get(lecture.page)),
+                    "confiance": min(v.confiance, 0.85),
+                }
+            )
         if v.valeur is None:
             return v.model_copy(update={"confiance": min(v.confiance, 0.3)})
         if not v.ancree:

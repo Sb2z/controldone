@@ -33,16 +33,29 @@ def test_diagnostic_sur_un_dossier(tmp_path, capsys):
 
     jeu = generer_demo(tmp_path / "jeu")
     out = tmp_path / "rapport"
-    code = main(["diagnostic", str(jeu / "dossiers" / "DEMO-2" / "docs"),
-                 "--client-profile", str(jeu / "clients" / "DEMO" / "profil.json"),
-                 "--grilles", str(jeu / "clients" / "DEMO" / "grilles"), "--out", str(out), "--seed", "3",
-                 "--sans-llm"])
+    code = main(
+        [
+            "diagnostic",
+            str(jeu / "dossiers" / "DEMO-2" / "docs"),
+            "--client-profile",
+            str(jeu / "clients" / "DEMO" / "profil.json"),
+            "--grilles",
+            str(jeu / "clients" / "DEMO" / "grilles"),
+            "--out",
+            str(out),
+            "--seed",
+            "3",
+            "--sans-llm",
+        ]
+    )
     assert code == 0
     assert (out / "report.pdf").exists() and (out / "findings.xlsx").exists()
     f = json.loads((out / "findings.json").read_text(encoding="utf-8"))
     assert {d["file"] for d in f["documents"]} == {
-        "docs/declaration_26FRD2FIC000005822.pdf", "docs/facture_commerciale_INV-FIC-0202.pdf",
-        "docs/facture_transitaire_FT-FIC-0502.pdf"}
+        "docs/declaration_26FRD2FIC000005822.pdf",
+        "docs/facture_commerciale_INV-FIC-0202.pdf",
+        "docs/facture_transitaire_FT-FIC-0502.pdf",
+    }
 
 
 def test_diagnostic_source_introuvable(tmp_path, capsys):

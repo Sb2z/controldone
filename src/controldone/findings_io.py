@@ -171,8 +171,11 @@ def constats_hors_totaux(resultats: Iterable[ResultatControle]) -> dict[str, str
         if r.controle_id == "E6" and r.details.get("remplace_constat_id"):
             exclus[str(r.details["remplace_constat_id"])] = "remplace_par_e6"
     documentaires = [
-        r for r in rs
-        if r.controle_id in ("A4", "A5", "A6") and r.constat is not None and r.constat.montant_en_jeu is not None
+        r
+        for r in rs
+        if r.controle_id in ("A4", "A5", "A6")
+        and r.constat is not None
+        and r.constat.montant_en_jeu is not None
         and r.constat.nature_montant is NatureMontant.ecart_documentaire
     ]
     for r in rs:
@@ -207,8 +210,10 @@ def statut_global_depuis_resultats(
     if any(r.controle_id == "P5" and r.details.get("non_concerne") for r in rs):
         return StatutGlobal.non_concerne
     # D-4206 : un manque commun au lot est signalé par un seul dossier ; les autres restent incomplets.
-    if any(r.controle_id == "P1" and (r.outcome.est_constat or r.details.get("motif") == "manque_commun_du_lot")
-           for r in rs):
+    if any(
+        r.controle_id == "P1" and (r.outcome.est_constat or r.details.get("motif") == "manque_commun_du_lot")
+        for r in rs
+    ):
         return StatutGlobal.document_manquant
 
     def compte(r: ResultatControle) -> bool:
@@ -217,7 +222,8 @@ def statut_global_depuis_resultats(
         if r.constat.statut_validation is StatutValidation.rejete:
             return False
         return not valides_seulement or r.constat.statut_validation in (
-            StatutValidation.valide, StatutValidation.modifie
+            StatutValidation.valide,
+            StatutValidation.modifie,
         )
 
     if any(r.outcome is Outcome.ecart_certain and compte(r) for r in rs):
@@ -318,8 +324,11 @@ def construire_findings(
                 documents_concernes=list(c.documents_concernes),
                 preuves=[
                     FindingsPreuve(
-                        document_id=p.document_id, page=p.page, valeur_brute=p.valeur_brute,
-                        role=p.role.value, calcul=p.calcul,
+                        document_id=p.document_id,
+                        page=p.page,
+                        valeur_brute=p.valeur_brute,
+                        role=p.role.value,
+                        calcul=p.calcul,
                     )
                     for p in c.preuves
                 ],
@@ -351,7 +360,9 @@ def construire_findings(
         documents=f_docs,
         liens=[
             FindingsLien(
-                document_id=lien.document_id, role=lien.role.value, force=lien.force.value,
+                document_id=lien.document_id,
+                role=lien.role.value,
+                force=lien.force.value,
                 signaux=[s.value for s in lien.signaux],
             )
             for lien in dossier.liens

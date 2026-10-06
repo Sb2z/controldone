@@ -60,16 +60,32 @@ class CleApiInfo:
 
 
 def _info(u: User) -> CompteInfo:
-    return CompteInfo(u.id, u.email, u.role, u.mot_de_passe_hash, u.totp_secret_chiffre, u.totp_dernier_pas,
-                      u.actif, u.langue)
+    return CompteInfo(
+        u.id,
+        u.email,
+        u.role,
+        u.mot_de_passe_hash,
+        u.totp_secret_chiffre,
+        u.totp_dernier_pas,
+        u.actif,
+        u.langue,
+    )
 
 
 def _email(email: str) -> str:
     return email.strip().lower()
 
 
-def creer_utilisateur(db: Database, *, user_id: str, email: str, mot_de_passe_hash: str, role: Role,
-                      acteur: Acteur, nom: str | None = None) -> CompteInfo:
+def creer_utilisateur(
+    db: Database,
+    *,
+    user_id: str,
+    email: str,
+    mot_de_passe_hash: str,
+    role: Role,
+    acteur: Acteur,
+    nom: str | None = None,
+) -> CompteInfo:
     """Création d'un compte. Fondateur : tout rôle ; ``client_admin`` : rôles client seulement (le
     rattachement au client se fait ensuite par ``TenantScope.ajouter_membre``)."""
     role = Role(role)
@@ -81,12 +97,21 @@ def creer_utilisateur(db: Database, *, user_id: str, email: str, mot_de_passe_ha
     elif acteur.role is not Role.fondateur:
         raise AccesRefuse("création de compte refusée")
     with db.transaction_systeme() as s:
-        u = User(id=user_id, email=_email(email), nom=nom, role=role.value, mot_de_passe_hash=mot_de_passe_hash)
+        u = User(
+            id=user_id, email=_email(email), nom=nom, role=role.value, mot_de_passe_hash=mot_de_passe_hash
+        )
         s.add(u)
         s.flush()
-        journaliser(s, actor=acteur.id, role=acteur.role.value, action="creer_utilisateur",
-                    tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip,
-                    details={"role": role.value})
+        journaliser(
+            s,
+            actor=acteur.id,
+            role=acteur.role.value,
+            action="creer_utilisateur",
+            tenant_id=acteur.tenant_id,
+            target=f"users:{user_id}",
+            ip=acteur.ip,
+            details={"role": role.value},
+        )
         return _info(u)
 
 
@@ -117,8 +142,15 @@ def enregistrer_totp(db: Database, user_id: str, secret_chiffre: str | None, *, 
         if u is None:
             raise AccesRefuse("introuvable")
         u.totp_secret_chiffre, u.totp_dernier_pas = secret_chiffre, None
-        journaliser(s, actor=acteur.id, role=acteur.role.value, action="enregistrer_totp",
-                    target=f"users:{user_id}", ip=acteur.ip, details={"actif": secret_chiffre is not None})
+        journaliser(
+            s,
+            actor=acteur.id,
+            role=acteur.role.value,
+            action="enregistrer_totp",
+            target=f"users:{user_id}",
+            ip=acteur.ip,
+            details={"actif": secret_chiffre is not None},
+        )
 
 
 def utiliser_pas_totp(db: Database, user_id: str, pas: int) -> bool:
@@ -138,8 +170,9 @@ def marquer_connexion(db: Database, user_id: str, *, ip: str | None = None, role
         u = s.get(User, user_id)
         if u is not None:
             u.derniere_connexion = maintenant()
-            journaliser(s, actor=user_id, role=role or u.role, action="connexion", target=f"users:{user_id}",
-                        ip=ip)
+            journaliser(
+                s, actor=user_id, role=role or u.role, action="connexion", target=f"users:{user_id}", ip=ip
+            )
 
 
 def cle_api_par_prefixe(db: Database, prefixe: str) -> CleApiInfo | None:
@@ -167,8 +200,15 @@ def changer_mot_de_passe(db: Database, user_id: str, nouveau_hash: str, *, acteu
         if u is None:
             raise AccesRefuse("introuvable")
         u.mot_de_passe_hash = nouveau_hash
-        journaliser(s, actor=acteur.id, role=acteur.role.value, action="changer_mot_de_passe",
-                    tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip)
+        journaliser(
+            s,
+            actor=acteur.id,
+            role=acteur.role.value,
+            action="changer_mot_de_passe",
+            tenant_id=acteur.tenant_id,
+            target=f"users:{user_id}",
+            ip=acteur.ip,
+        )
 
 
 #: Langues de l'interface acceptées pour un compte (``web.i18n.LANGUES``).
@@ -187,9 +227,16 @@ def definir_langue(db: Database, user_id: str, langue: str | None, *, acteur: Ac
             raise AccesRefuse("introuvable")
         if u.langue != langue:
             u.langue = langue
-            journaliser(s, actor=acteur.id, role=acteur.role.value, action="choisir_langue",
-                        tenant_id=acteur.tenant_id, target=f"users:{user_id}", ip=acteur.ip,
-                        details={"langue": langue})
+            journaliser(
+                s,
+                actor=acteur.id,
+                role=acteur.role.value,
+                action="choisir_langue",
+                tenant_id=acteur.tenant_id,
+                target=f"users:{user_id}",
+                ip=acteur.ip,
+                details={"langue": langue},
+            )
 
 
 def desactiver_utilisateur(db: Database, user_id: str, *, acteur: Acteur, actif: bool = False) -> None:
@@ -202,5 +249,11 @@ def desactiver_utilisateur(db: Database, user_id: str, *, acteur: Acteur, actif:
         if u is None:
             raise AccesRefuse("introuvable")
         u.actif = bool(actif)
-        journaliser(s, actor=acteur.id, role=acteur.role.value, action="activer_utilisateur" if actif
-                    else "desactiver_utilisateur", target=f"users:{user_id}", ip=acteur.ip)
+        journaliser(
+            s,
+            actor=acteur.id,
+            role=acteur.role.value,
+            action="activer_utilisateur" if actif else "desactiver_utilisateur",
+            target=f"users:{user_id}",
+            ip=acteur.ip,
+        )

@@ -20,8 +20,18 @@ if TYPE_CHECKING:
     from controldone.storage.db import Database
     from controldone.storage.file_jobs import JobInfo
 
-__all__ = ["HANDLERS", "MODULES_HANDLERS", "BailPerdu", "ErreurDefinitive", "Handler", "JobContext", "Reporter",
-           "charger_handlers", "handler", "obtenir_handler"]
+__all__ = [
+    "HANDLERS",
+    "MODULES_HANDLERS",
+    "BailPerdu",
+    "ErreurDefinitive",
+    "Handler",
+    "JobContext",
+    "Reporter",
+    "charger_handlers",
+    "handler",
+    "obtenir_handler",
+]
 
 log = logging.getLogger("controldone.jobs.registre")
 

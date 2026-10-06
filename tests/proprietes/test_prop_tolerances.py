@@ -20,9 +20,12 @@ from controldone.model.referentiel import ProfilTolerances
 pytestmark = pytest.mark.proprietes
 
 T = Tolerances(ProfilTolerances())
-montants = st.decimals(min_value=Decimal("-1e10"), max_value=Decimal("1e10"), places=4, allow_nan=False,
-                       allow_infinity=False)
-positifs = st.decimals(min_value=0, max_value=Decimal("1e10"), places=4, allow_nan=False, allow_infinity=False)
+montants = st.decimals(
+    min_value=Decimal("-1e10"), max_value=Decimal("1e10"), places=4, allow_nan=False, allow_infinity=False
+)
+positifs = st.decimals(
+    min_value=0, max_value=Decimal("1e10"), places=4, allow_nan=False, allow_infinity=False
+)
 
 FONCTIONS_PAIRES = [T.t_valeur, T.s_valeur, T.t_conversion, T.s_conversion, T.t_masse]
 

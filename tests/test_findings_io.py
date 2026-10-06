@@ -25,15 +25,23 @@ from controldone.testing import contexte, declaration, taxation, vs
 
 
 def _run(montant="418.20"):
-    d = declaration(id="doc_dec", taxations=[taxation("doc_dec", article="3", base="2091.00", taux="2.5",
-                                                     montant=montant)],
-                    # Total imprimé qui reprend la ligne : lecture corroborée (D-1700).
-                    total_a_payer=vs("declaration.total_a_payer", montant, document_id="doc_dec"))
+    d = declaration(
+        id="doc_dec",
+        taxations=[taxation("doc_dec", article="3", base="2091.00", taux="2.5", montant=montant)],
+        # Total imprimé qui reprend la ligne : lecture corroborée (D-1700).
+        total_a_payer=vs("declaration.total_a_payer", montant, document_id="doc_dec"),
+    )
     ctx = contexte([d])
     rs = run_controls(ctx, controles=["B1"])
     ex = Execution.nouvelle(id="exe_1", empreinte_tolerances=ctx.empreinte_tolerances, duree_s=1.5)
-    fic = Fichier(id="fic_test", nom_original="envoi.pdf", chemin_relatif="docs/expedition_77/envoi.pdf",
-                  sha256="0" * 64, taille=10, type_mime="application/pdf")
+    fic = Fichier(
+        id="fic_test",
+        nom_original="envoi.pdf",
+        chemin_relatif="docs/expedition_77/envoi.pdf",
+        sha256="0" * 64,
+        taille=10,
+        type_mime="application/pdf",
+    )
     return ctx, d, rs, ex, fic
 
 
@@ -46,8 +54,12 @@ def test_annexe_c(tmp_path):
     assert data["execution"]["execution_id"] == "exe_1" and data["execution"]["cout_ia_eur"] == "0.00"
     assert data["statut_global"] == "ecart_certain"
     assert data["documents"][0] == {
-        "document_id": "doc_dec", "type": "declaration", "sous_type": None,
-        "file": "docs/expedition_77/envoi.pdf", "pages": [1], "confiance_classement": 1.0,
+        "document_id": "doc_dec",
+        "type": "declaration",
+        "sous_type": None,
+        "file": "docs/expedition_77/envoi.pdf",
+        "pages": [1],
+        "confiance_classement": 1.0,
     }
     assert data["liens"][0]["role"] == "declaration" and data["liens"][0]["force"] == "forte"
     assert data["valeurs"]["doc_dec"]["mrn"]["valeur"] == "26FR00000000000001"
@@ -57,8 +69,13 @@ def test_annexe_c(tmp_path):
     c = data["constats"][0]
     assert c["finding_id"].startswith("f_") and c["niveau"] == "ecart_certain"
     assert c["montant_en_jeu"] == "365.93" and c["nature_montant"] == "arithmetique_declaration"
-    assert c["preuves"][2] == {"document_id": "doc_dec", "page": 1, "valeur_brute": "418.20", "role": "valeur_b",
-                               "calcul": None}
+    assert c["preuves"][2] == {
+        "document_id": "doc_dec",
+        "page": 1,
+        "valeur_brute": "418.20",
+        "role": "valeur_b",
+        "calcul": None,
+    }
     assert c["statut_validation"] == "propose"
     assert data["avertissement"] == AVERTISSEMENT
     chemin = ecrire_findings(f, tmp_path / "BX0042" / "findings.json")
@@ -91,15 +108,22 @@ def test_statut_global_18_2():
     ctx, _d, rs, _ex, _fic = _run()
     assert statut_global_depuis_resultats(rs) is StatutGlobal.ecart_certain
     assert statut_global_depuis_resultats(rs, valides_seulement=True) is StatutGlobal.a_verifier
-    rs_valide = [r.model_copy(update={"constat": r.constat.model_copy(
-        update={"statut_validation": StatutValidation.valide})}) for r in rs]
+    rs_valide = [
+        r.model_copy(
+            update={"constat": r.constat.model_copy(update={"statut_validation": StatutValidation.valide})}
+        )
+        for r in rs
+    ]
     assert statut_global_depuis_resultats(rs_valide, valides_seulement=True) is StatutGlobal.ecart_certain
     _, _, conformes, _, _ = _run("52.28")
     assert statut_global_depuis_resultats(conformes) is StatutGlobal.conforme
     nv = ctx.non_verifiable("C1", RaisonCode.valeur_absente)
     assert statut_global_depuis_resultats([*conformes, nv]) is StatutGlobal.a_verifier
-    p1 = ctx.constat("P1", ctx.classify("P1", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[]),
-                     libelle="Aucune déclaration dans le dossier.")
+    p1 = ctx.constat(
+        "P1",
+        ctx.classify("P1", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[]),
+        libelle="Aucune déclaration dans le dossier.",
+    )
     assert p1.outcome is Outcome.a_verifier
     assert statut_global_depuis_resultats([*rs, p1]) is StatutGlobal.document_manquant
     p5 = ctx.non_applicable("P5", RaisonCode.dossier_non_concerne, details={"non_concerne": True})

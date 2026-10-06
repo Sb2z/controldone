@@ -26,18 +26,54 @@ NOTE_JURIDIQUE = "French version prevails — draft to be reviewed by a lawyer"
 
 #: English mirror of SPEC §3.2 (case-insensitive, simple plural forms).
 FORMULATIONS_INTERDITES_EN = [
-    "correct code", "right code", "wrong classification", "misclassified", "should be classified",
-    "duty owed", "duties owed", "tax owed", "overpaid", "refund of duties", "duty refund",
-    "incorrect customs value", "undervaluation", "overvaluation",
-    "incorrect origin", "false origin", "preference applies", "applicable preference",
-    "wrong rate", "incorrect rate", "the applicable rate is",
-    "illegal", "unlawful", "non-compliant with the regulations", "irregular", "infringement", "fraud", "fraudulent",
-    "we claim on behalf of", "we claim", "on behalf of our client", "mandated by",
-    "you must file a refund request", "file a claim with customs", "the declaration must be amended",
-    "we guarantee", "certified compliant",
+    "correct code",
+    "right code",
+    "wrong classification",
+    "misclassified",
+    "should be classified",
+    "duty owed",
+    "duties owed",
+    "tax owed",
+    "overpaid",
+    "refund of duties",
+    "duty refund",
+    "incorrect customs value",
+    "undervaluation",
+    "overvaluation",
+    "incorrect origin",
+    "false origin",
+    "preference applies",
+    "applicable preference",
+    "wrong rate",
+    "incorrect rate",
+    "the applicable rate is",
+    "illegal",
+    "unlawful",
+    "non-compliant with the regulations",
+    "irregular",
+    "infringement",
+    "fraud",
+    "fraudulent",
+    "we claim on behalf of",
+    "we claim",
+    "on behalf of our client",
+    "mandated by",
+    "you must file a refund request",
+    "file a claim with customs",
+    "the declaration must be amended",
+    "we guarantee",
+    "certified compliant",
 ]
-_MOTIFS_EN = [(e, re.compile(r"(?<![a-z])" + r"\s+".join(re.escape(m) for m in e.split()) + r"(?:s|es|ly)?(?![a-z])",
-                             re.IGNORECASE)) for e in FORMULATIONS_INTERDITES_EN]
+_MOTIFS_EN = [
+    (
+        e,
+        re.compile(
+            r"(?<![a-z])" + r"\s+".join(re.escape(m) for m in e.split()) + r"(?:s|es|ly)?(?![a-z])",
+            re.IGNORECASE,
+        ),
+    )
+    for e in FORMULATIONS_INTERDITES_EN
+]
 
 
 def check_text_en(texte: str) -> list[str]:
@@ -47,7 +83,10 @@ def check_text_en(texte: str) -> list[str]:
 
 def test_controle_anglais_detecte():
     assert check_text_en("We guarantee the correct code and the duty owed.") == [
-        "correct code", "duty owed", "we guarantee"]
+        "correct code",
+        "duty owed",
+        "we guarantee",
+    ]
     assert check_text_en("Fraudulent, ILLEGAL, overpaid amounts") == ["overpaid", "illegal", "fraudulent"]
     assert check_text_en("We claim on behalf of you") == ["we claim on behalf of", "we claim"]
     assert check_text_en("The difference found between the documents.") == []
@@ -127,8 +166,16 @@ def test_chiffres_identiques():
     for attendu in ("390 EUR", "20 %", "99 EUR", "Three free diagnostics"):
         assert attendu in tarifs, attendu
     accueil = _lire(EN / "index.html").visible.replace(" ", " ")
-    for attendu in ("EUR 3 per item", "EUR 150", "1 September 2026", "30 September 2027", "21 September 2027",
-                    "2026/382", "2025/2083", "EUR 2,356.28"):
+    for attendu in (
+        "EUR 3 per item",
+        "EUR 150",
+        "1 September 2026",
+        "30 September 2027",
+        "21 September 2027",
+        "2026/382",
+        "2025/2083",
+        "EUR 2,356.28",
+    ):
         assert attendu in accueil, attendu
 
 

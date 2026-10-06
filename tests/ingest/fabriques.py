@@ -16,9 +16,15 @@ from reportlab.pdfgen import canvas
 TVA_CLIENT = "FR32000123459"  # TVA calculée sur un SIREN fictif commençant par 000
 
 
-def pdf(pages: Sequence[Sequence[str]], *, titres: Sequence[str | None] | None = None,
-        texte_blanc: str | None = None, invisible: str | None = None, metadonnees: dict | None = None,
-        micro: str | None = None) -> bytes:
+def pdf(
+    pages: Sequence[Sequence[str]],
+    *,
+    titres: Sequence[str | None] | None = None,
+    texte_blanc: str | None = None,
+    invisible: str | None = None,
+    metadonnees: dict | None = None,
+    micro: str | None = None,
+) -> bytes:
     """PDF natif : une page par liste de lignes ; ``titres[i]`` en grand corps en haut de page."""
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4, invariant=1)
@@ -94,8 +100,15 @@ def chiffrer(contenu: bytes, mot_de_passe: str = "secret") -> bytes:
     return out.getvalue()
 
 
-def image_scan(contenu_pdf: bytes, *, page: int = 0, rotation: int = 0, inclinaison: float = 0.0,
-               dpi: int = 200, fmt: str = "PNG") -> bytes:
+def image_scan(
+    contenu_pdf: bytes,
+    *,
+    page: int = 0,
+    rotation: int = 0,
+    inclinaison: float = 0.0,
+    dpi: int = 200,
+    fmt: str = "PNG",
+) -> bytes:
     """« Scan » d'une page PDF : rendu en niveaux de gris, rotation et inclinaison simulées."""
     import pypdfium2 as pdfium
 
@@ -139,8 +152,14 @@ def zip_octets(entrees: dict[str, bytes], *, compression=zipfile.ZIP_DEFLATED) -
     return b.getvalue()
 
 
-def eml(*, expediteur: str, sujet: str, corps: str, pieces: dict[str, bytes] | None = None,
-        message_id: str = "<fictif-001@exemple.invalid>") -> bytes:
+def eml(
+    *,
+    expediteur: str,
+    sujet: str,
+    corps: str,
+    pieces: dict[str, bytes] | None = None,
+    message_id: str = "<fictif-001@exemple.invalid>",
+) -> bytes:
     m = EmailMessage()
     m["From"] = expediteur
     m["To"] = "depot-fictif@controldone.invalid"
@@ -246,10 +265,21 @@ _NS_CII = (
 )
 
 
-def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, vendeur="FICTIF ELECTRONICS CO LTD",
-        tva_vendeur="CN000000000000001", acheteur="SOCIETE FICTIVE SAS", tva_acheteur=TVA_CLIENT,
-        refs_doc: Sequence[str] = (), ref_origine: str | None = None, note: str | None = None,
-        incoterm: str | None = "FOB") -> bytes:
+def cii(
+    *,
+    numero="INV-2026-0815",
+    type_code="380",
+    devise="USD",
+    lignes=None,
+    vendeur="FICTIF ELECTRONICS CO LTD",
+    tva_vendeur="CN000000000000001",
+    acheteur="SOCIETE FICTIVE SAS",
+    tva_acheteur=TVA_CLIENT,
+    refs_doc: Sequence[str] = (),
+    ref_origine: str | None = None,
+    note: str | None = None,
+    incoterm: str | None = "FOB",
+) -> bytes:
     """CII D16B (profil EN 16931) minimal et valide au schéma. ``lignes`` : (libellé, qté, pu, montant, code SH,
     origine, taux TVA)."""
     lignes = lignes or [("Laptop computer", "10", "1254.00", "12540.00", "847130", "CN", "0")]
@@ -257,9 +287,15 @@ def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, v
     total = sum(float(x[3]) for x in lignes)  # données de test seulement
     tva_total = sum(float(x[3]) * float(x[6]) / 100 for x in lignes)
     for i, (lib, q, pu, mt, sh, origine, taux) in enumerate(lignes, start=1):
-        cls = f"<ram:DesignatedProductClassification><ram:ClassCode listID=\"HS\">{sh}</ram:ClassCode>" \
-              f"</ram:DesignatedProductClassification>" if sh else ""
-        orig = f"<ram:OriginTradeCountry><ram:ID>{origine}</ram:ID></ram:OriginTradeCountry>" if origine else ""
+        cls = (
+            f'<ram:DesignatedProductClassification><ram:ClassCode listID="HS">{sh}</ram:ClassCode>'
+            f"</ram:DesignatedProductClassification>"
+            if sh
+            else ""
+        )
+        orig = (
+            f"<ram:OriginTradeCountry><ram:ID>{origine}</ram:ID></ram:OriginTradeCountry>" if origine else ""
+        )
         cat = "S" if float(taux) > 0 else "Z"
         xl.append(
             f"<ram:IncludedSupplyChainTradeLineItem><ram:AssociatedDocumentLineDocument><ram:LineID>{i}</ram:LineID>"
@@ -267,19 +303,34 @@ def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, v
             f"</ram:SellerAssignedID><ram:Name>{lib}</ram:Name>{cls}{orig}</ram:SpecifiedTradeProduct>"
             f"<ram:SpecifiedLineTradeAgreement><ram:NetPriceProductTradePrice><ram:ChargeAmount>{pu}</ram:ChargeAmount>"
             f"</ram:NetPriceProductTradePrice></ram:SpecifiedLineTradeAgreement><ram:SpecifiedLineTradeDelivery>"
-            f"<ram:BilledQuantity unitCode=\"C62\">{q}</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>"
+            f'<ram:BilledQuantity unitCode="C62">{q}</ram:BilledQuantity></ram:SpecifiedLineTradeDelivery>'
             f"<ram:SpecifiedLineTradeSettlement><ram:ApplicableTradeTax><ram:TypeCode>VAT</ram:TypeCode>"
             f"<ram:CategoryCode>{cat}</ram:CategoryCode><ram:RateApplicablePercent>{taux}</ram:RateApplicablePercent>"
             f"</ram:ApplicableTradeTax><ram:SpecifiedTradeSettlementLineMonetarySummation><ram:LineTotalAmount>{mt}"
             f"</ram:LineTotalAmount></ram:SpecifiedTradeSettlementLineMonetarySummation>"
             f"</ram:SpecifiedLineTradeSettlement></ram:IncludedSupplyChainTradeLineItem>"
         )
-    refs = "".join(f"<ram:AdditionalReferencedDocument><ram:IssuerAssignedID>{r}</ram:IssuerAssignedID>"
-                   f"<ram:TypeCode>130</ram:TypeCode></ram:AdditionalReferencedDocument>" for r in refs_doc)
-    inc = (f"<ram:ApplicableTradeDeliveryTerms><ram:DeliveryTypeCode>{incoterm}</ram:DeliveryTypeCode>"
-           f"</ram:ApplicableTradeDeliveryTerms>") if incoterm else ""
-    origine = (f"<ram:InvoiceReferencedDocument><ram:IssuerAssignedID>{ref_origine}</ram:IssuerAssignedID>"
-               f"</ram:InvoiceReferencedDocument>") if ref_origine else ""
+    refs = "".join(
+        f"<ram:AdditionalReferencedDocument><ram:IssuerAssignedID>{r}</ram:IssuerAssignedID>"
+        f"<ram:TypeCode>130</ram:TypeCode></ram:AdditionalReferencedDocument>"
+        for r in refs_doc
+    )
+    inc = (
+        (
+            f"<ram:ApplicableTradeDeliveryTerms><ram:DeliveryTypeCode>{incoterm}</ram:DeliveryTypeCode>"
+            f"</ram:ApplicableTradeDeliveryTerms>"
+        )
+        if incoterm
+        else ""
+    )
+    origine = (
+        (
+            f"<ram:InvoiceReferencedDocument><ram:IssuerAssignedID>{ref_origine}</ram:IssuerAssignedID>"
+            f"</ram:InvoiceReferencedDocument>"
+        )
+        if ref_origine
+        else ""
+    )
     note_x = f"<ram:IncludedNote><ram:Content>{note}</ram:Content></ram:IncludedNote>" if note else ""
     taxes = {}
     for x in lignes:
@@ -290,7 +341,8 @@ def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, v
         f"<ram:TypeCode>VAT</ram:TypeCode>{'<ram:ExemptionReason>Débours</ram:ExemptionReason>' if float(t) == 0 else ''}"
         f"<ram:BasisAmount>{b:.2f}</ram:BasisAmount><ram:CategoryCode>{'S' if float(t) > 0 else 'Z'}"
         f"</ram:CategoryCode><ram:RateApplicablePercent>{t}</ram:RateApplicablePercent></ram:ApplicableTradeTax>"
-        for t, b in sorted(taxes.items()))
+        for t, b in sorted(taxes.items())
+    )
     return (
         f'<?xml version="1.0" encoding="UTF-8"?><rsm:CrossIndustryInvoice {_NS_CII}>'
         "<rsm:ExchangedDocumentContext><ram:GuidelineSpecifiedDocumentContextParameter><ram:ID>urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended"
@@ -316,8 +368,16 @@ def cii(*, numero="INV-2026-0815", type_code="380", devise="USD", lignes=None, v
     ).encode()
 
 
-def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None, ref_origine: str | None = None,
-        note: str | None = None, livraison: str = "") -> bytes:
+def ubl(
+    *,
+    avoir: bool = False,
+    numero="UBL-2026-001",
+    devise="EUR",
+    lignes=None,
+    ref_origine: str | None = None,
+    note: str | None = None,
+    livraison: str = "",
+) -> bytes:
     """UBL 2.1 Invoice ou CreditNote minimal et valide au schéma. ``lignes`` : (libellé, qté, montant, code SH, origine).
     ``livraison`` : XML ``cac:DeliveryTerms`` inséré tel quel."""
     lignes = lignes or [("Laptop computer", "10", "12540.00", "847130", "CN")]
@@ -328,30 +388,47 @@ def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None
     total = sum(float(x[2]) for x in lignes)
     xl = []
     for i, (lib, q, mt, sh, origine) in enumerate(lignes, start=1):
-        cls = (f"<cac:CommodityClassification><cbc:ItemClassificationCode listID=\"HS\">{sh}</cbc:ItemClassificationCode>"
-               f"</cac:CommodityClassification>") if sh else ""
-        orig = f"<cac:OriginCountry><cbc:IdentificationCode>{origine}</cbc:IdentificationCode></cac:OriginCountry>" \
-            if origine else ""
+        cls = (
+            (
+                f'<cac:CommodityClassification><cbc:ItemClassificationCode listID="HS">{sh}</cbc:ItemClassificationCode>'
+                f"</cac:CommodityClassification>"
+            )
+            if sh
+            else ""
+        )
+        orig = (
+            f"<cac:OriginCountry><cbc:IdentificationCode>{origine}</cbc:IdentificationCode></cac:OriginCountry>"
+            if origine
+            else ""
+        )
         xl.append(
-            f"<cac:{ligne_tag}><cbc:ID>{i}</cbc:ID><cbc:{qte} unitCode=\"C62\">{q}</cbc:{qte}>"
-            f"<cbc:LineExtensionAmount currencyID=\"{devise}\">{mt}</cbc:LineExtensionAmount><cac:Item><cbc:Name>{lib}"
+            f'<cac:{ligne_tag}><cbc:ID>{i}</cbc:ID><cbc:{qte} unitCode="C62">{q}</cbc:{qte}>'
+            f'<cbc:LineExtensionAmount currencyID="{devise}">{mt}</cbc:LineExtensionAmount><cac:Item><cbc:Name>{lib}'
             f"</cbc:Name>{orig}{cls}<cac:ClassifiedTaxCategory><cbc:ID>Z</cbc:ID><cbc:Percent>0</cbc:Percent>"
             "<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory></cac:Item>"
-            f"<cac:Price><cbc:PriceAmount currencyID=\"{devise}\">{float(mt) / float(q):.2f}</cbc:PriceAmount>"
+            f'<cac:Price><cbc:PriceAmount currencyID="{devise}">{float(mt) / float(q):.2f}</cbc:PriceAmount>'
             f"</cac:Price></cac:{ligne_tag}>"
         )
     type_code = "" if avoir else "<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>"
     note_x = f"<cbc:Note>{note}</cbc:Note>" if note else ""
-    bill = (f"<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>{ref_origine}</cbc:ID>"
-            "</cac:InvoiceDocumentReference></cac:BillingReference>") if ref_origine else ""
+    bill = (
+        (
+            f"<cac:BillingReference><cac:InvoiceDocumentReference><cbc:ID>{ref_origine}</cbc:ID>"
+            "</cac:InvoiceDocumentReference></cac:BillingReference>"
+        )
+        if ref_origine
+        else ""
+    )
 
     def partie(nom, tva):
-        return (f"<cac:Party><cac:PartyName><cbc:Name>{nom}</cbc:Name></cac:PartyName><cac:PostalAddress>"
-                "<cbc:StreetName>Rue Fictive</cbc:StreetName><cac:Country><cbc:IdentificationCode>FR"
-                "</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyTaxScheme><cbc:CompanyID>"
-                f"{tva}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>"
-                f"<cac:PartyLegalEntity><cbc:RegistrationName>{nom}</cbc:RegistrationName></cac:PartyLegalEntity>"
-                "</cac:Party>")
+        return (
+            f"<cac:Party><cac:PartyName><cbc:Name>{nom}</cbc:Name></cac:PartyName><cac:PostalAddress>"
+            "<cbc:StreetName>Rue Fictive</cbc:StreetName><cac:Country><cbc:IdentificationCode>FR"
+            "</cbc:IdentificationCode></cac:Country></cac:PostalAddress><cac:PartyTaxScheme><cbc:CompanyID>"
+            f"{tva}</cbc:CompanyID><cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>"
+            f"<cac:PartyLegalEntity><cbc:RegistrationName>{nom}</cbc:RegistrationName></cac:PartyLegalEntity>"
+            "</cac:Party>"
+        )
 
     return (
         f'<?xml version="1.0" encoding="UTF-8"?><{racine} xmlns="{ns}" '
@@ -362,11 +439,11 @@ def ubl(*, avoir: bool = False, numero="UBL-2026-001", devise="EUR", lignes=None
         f"<cac:AccountingSupplierParty>{partie('FICTIF ELECTRONICS CO LTD', 'CN000000000000001')}"
         f"</cac:AccountingSupplierParty><cac:AccountingCustomerParty>{partie('SOCIETE FICTIVE SAS', TVA_CLIENT)}"
         f"</cac:AccountingCustomerParty>{livraison}"
-        f"<cac:TaxTotal><cbc:TaxAmount currencyID=\"{devise}\">0.00</cbc:TaxAmount></cac:TaxTotal>"
-        f"<cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID=\"{devise}\">{total:.2f}</cbc:LineExtensionAmount>"
-        f"<cbc:TaxExclusiveAmount currencyID=\"{devise}\">{total:.2f}</cbc:TaxExclusiveAmount>"
-        f"<cbc:TaxInclusiveAmount currencyID=\"{devise}\">{total:.2f}</cbc:TaxInclusiveAmount>"
-        f"<cbc:PayableAmount currencyID=\"{devise}\">{total:.2f}</cbc:PayableAmount></cac:LegalMonetaryTotal>"
+        f'<cac:TaxTotal><cbc:TaxAmount currencyID="{devise}">0.00</cbc:TaxAmount></cac:TaxTotal>'
+        f'<cac:LegalMonetaryTotal><cbc:LineExtensionAmount currencyID="{devise}">{total:.2f}</cbc:LineExtensionAmount>'
+        f'<cbc:TaxExclusiveAmount currencyID="{devise}">{total:.2f}</cbc:TaxExclusiveAmount>'
+        f'<cbc:TaxInclusiveAmount currencyID="{devise}">{total:.2f}</cbc:TaxInclusiveAmount>'
+        f'<cbc:PayableAmount currencyID="{devise}">{total:.2f}</cbc:PayableAmount></cac:LegalMonetaryTotal>'
         f"{''.join(xl)}</{racine}>"
     ).encode()
 

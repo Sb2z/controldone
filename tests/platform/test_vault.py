@@ -51,7 +51,9 @@ def test_alteration_detectee(vault):
 def test_substitution_de_contenu_detectee(vault):
     sha_a = vault.deposer("cli_a", b"premier")
     sha_b = vault.deposer("cli_a", b"second")
-    vault._chemin("cli_a", sha_a, "fichiers").write_bytes(vault._chemin("cli_a", sha_b, "fichiers").read_bytes())
+    vault._chemin("cli_a", sha_a, "fichiers").write_bytes(
+        vault._chemin("cli_a", sha_b, "fichiers").read_bytes()
+    )
     with pytest.raises(ErreurIntegrite):
         vault.lire("cli_a", sha_a)
 

@@ -30,9 +30,16 @@ FAIBLE = LienDocument(document_id="d2", role=RoleLien.facture_transitaire, force
 
 
 def c(spec="C1", ecart=D("10"), tol=D("0.05"), seuil=D("1"), valeurs=None, **kw):
-    return classify(spec, ecart=ecart, tolerance=tol, seuil_certitude=seuil,
-                    valeurs_cles=valeurs if valeurs is not None else [vs("a", "1"), vs("b", "2")],
-                    c_min_certain=0.9, liens=kw.pop("liens", [FORTE]), **kw)
+    return classify(
+        spec,
+        ecart=ecart,
+        tolerance=tol,
+        seuil_certitude=seuil,
+        valeurs_cles=valeurs if valeurs is not None else [vs("a", "1"), vs("b", "2")],
+        c_min_certain=0.9,
+        liens=kw.pop("liens", [FORTE]),
+        **kw,
+    )
 
 
 def test_conforme_dans_la_tolerance():
@@ -90,8 +97,18 @@ def test_conditions_6_7_8():
     assert r.raisons == (RaisonCode.ecart_explique_par_ligne_de_pied,)
     assert c(renvoi=True).raisons == (RaisonCode.renvoi_reglementaire,)
     # un renvoi est un constat même sans écart chiffré
-    assert classify("A12", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[],
-                    c_min_certain=0.9, renvoi=True).niveau is Niveau.a_verifier
+    assert (
+        classify(
+            "A12",
+            ecart=None,
+            tolerance=None,
+            seuil_certitude=None,
+            valeurs_cles=[],
+            c_min_certain=0.9,
+            renvoi=True,
+        ).niveau
+        is Niveau.a_verifier
+    )
 
 
 def test_ecart_en_faveur_du_client():
@@ -101,15 +118,29 @@ def test_ecart_en_faveur_du_client():
 
 
 def test_raisons_triees_et_uniques():
-    r = c(ecart=D("0.5"), valeurs=[vs("a", "1", confiance=0.5), vs("b", "1", confiance=0.6)], lecture_douteuse=True,
-          raisons_supplementaires=[RaisonCode.devise_incertaine])
-    assert r.raisons == (RaisonCode.ecart_sous_seuil, RaisonCode.confiance_insuffisante,
-                         RaisonCode.lecture_douteuse, RaisonCode.devise_incertaine)
+    r = c(
+        ecart=D("0.5"),
+        valeurs=[vs("a", "1", confiance=0.5), vs("b", "1", confiance=0.6)],
+        lecture_douteuse=True,
+        raisons_supplementaires=[RaisonCode.devise_incertaine],
+    )
+    assert r.raisons == (
+        RaisonCode.ecart_sous_seuil,
+        RaisonCode.confiance_insuffisante,
+        RaisonCode.lecture_douteuse,
+        RaisonCode.devise_incertaine,
+    )
 
 
 def test_constat_qualitatif():
-    r = classify("A1", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[vs("a", "FR1")],
-                 c_min_certain=0.9)
+    r = classify(
+        "A1",
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=[vs("a", "FR1")],
+        c_min_certain=0.9,
+    )
     assert r.niveau is Niveau.ecart_certain
 
 
@@ -119,7 +150,9 @@ def test_montants_8_6():
     assert montant_arithmetique(D("418.20"), D("52.275")) == D("365.93")
     assert montant_ecart_documentaire(D("12450"), D("12540"), devise="EUR") == D("-90.00")
     assert montant_ecart_documentaire(D("12450"), D("12540"), devise="USD") is None
-    assert montant_ecart_documentaire(D("100"), D("90"), devise="USD", taux_eur_par_devise=D("0.9")) == D("9.00")
+    assert montant_ecart_documentaire(D("100"), D("90"), devise="USD", taux_eur_par_devise=D("0.9")) == D(
+        "9.00"
+    )
     assert eur_par_devise(D("1.08"), "devise_par_eur") == D(1) / D("1.08")
     assert eur_par_devise(D("0.92"), "eur_par_devise") == D("0.92")
 

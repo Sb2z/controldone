@@ -54,8 +54,13 @@ def test_rs16_mode_dev_refuse_hors_boucle_locale(monkeypatch):
     monkeypatch.delenv("CONTROLDONE_DEV_RESEAU", raising=False)
     for hote in ("127.0.0.1", "localhost", "::1", "[::1]", "127.0.0.2"):
         verifier_mode_service(hote=hote, mode="dev")
-    for kw in ({"hote": "0.0.0.0"}, {"hote": "192.0.2.10"}, {"hote": "::"},
-               {"hote": "127.0.0.1", "https": True}, {"hote": "127.0.0.1", "proxy": True}):
+    for kw in (
+        {"hote": "0.0.0.0"},
+        {"hote": "192.0.2.10"},
+        {"hote": "::"},
+        {"hote": "127.0.0.1", "https": True},
+        {"hote": "127.0.0.1", "proxy": True},
+    ):
         with pytest.raises(ModeIncoherent, match="CONTROLDONE_ENV=prod"):
             verifier_mode_service(mode="dev", **kw)
         with pytest.raises(ModeIncoherent):
@@ -85,8 +90,16 @@ def test_rs18_url_publique_jamais_depuis_host_en_production(monkeypatch):
 
     from controldone.web.securite import url_publique
 
-    req = Request({"type": "http", "scheme": "https", "path": "/", "query_string": b"", "server": ("piege.test", 443),
-                   "headers": [(b"host", b"piege.exemple.test")]})
+    req = Request(
+        {
+            "type": "http",
+            "scheme": "https",
+            "path": "/",
+            "query_string": b"",
+            "server": ("piege.test", 443),
+            "headers": [(b"host", b"piege.exemple.test")],
+        }
+    )
     for k in ("CONTROLDONE_DOMAIN", "CONTROLDONE_URL_PUBLIQUE"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("CONTROLDONE_ENV", "prod")
@@ -96,8 +109,12 @@ def test_rs18_url_publique_jamais_depuis_host_en_production(monkeypatch):
     assert url_publique(req) == "https://app.controldone-demo.test"
     monkeypatch.setenv("CONTROLDONE_URL_PUBLIQUE", "https://portail.controldone-demo.test:8443/")
     assert url_publique(req) == "https://portail.controldone-demo.test:8443"
-    for mauvaise in ("http://portail.controldone-demo.test", "https://a.test/chemin", "https://u:p@a.test",
-                     "javascript:alert(1)"):
+    for mauvaise in (
+        "http://portail.controldone-demo.test",
+        "https://a.test/chemin",
+        "https://u:p@a.test",
+        "javascript:alert(1)",
+    ):
         monkeypatch.setenv("CONTROLDONE_URL_PUBLIQUE", mauvaise)
         with pytest.raises(ValueError):
             url_publique(req)
@@ -149,7 +166,9 @@ def test_rs19_veille_reponse_bornee_en_flux():
     r = telecharger("https://douane.gouv.fr/annonce", client=http, taille_max=1024 * 1024)
     assert r == {"url": "https://douane.gouv.fr/annonce", "statut": "non_verifie", "motif": "trop_volumineux"}
     r = telecharger("https://douane.gouv.fr/flux", client=http, taille_max=1024 * 1024)
-    assert r["motif"] == "trop_volumineux" and len(lus) < 40  # abandon dès le plafond, pas 10 000 morceaux lus
+    assert (
+        r["motif"] == "trop_volumineux" and len(lus) < 40
+    )  # abandon dès le plafond, pas 10 000 morceaux lus
     r = telecharger("https://douane.gouv.fr/ok", client=http)
     assert r["statut"] == "ok" and r["titre"] == "Page FICTIVE"
 
@@ -194,8 +213,11 @@ def test_rs20_processus_de_rendu_borne_et_liste_fermee():
     with pytest.raises(ValueError):
         executer_isole("os:system", {})
     # mémoire insuffisante pour pdfium : échec contenu dans l'enfant, le processus appelant continue
-    png, motif = executer_isole("rendu_page", {"contenu": _pdf(), "mime": "application/pdf", "numero": 1,
-                                               "largeur": 1240}, memoire_mo=40)
+    png, motif = executer_isole(
+        "rendu_page",
+        {"contenu": _pdf(), "mime": "application/pdf", "numero": 1, "largeur": 1240},
+        memoire_mo=40,
+    )
     assert png is None and motif is not None and motif.startswith("processus_pages_code_")
     png, motif = executer_isole("rendu_page", {"contenu": _pdf(), "mime": "application/pdf", "numero": 1})
     assert motif is None and png.startswith(b"\x89PNG")
@@ -224,10 +246,16 @@ def test_rs21_chiffrement_du_volume_detecte(tmp_path):
 
     st = os.stat(tmp_path)
     dev = (os.major(st.st_dev), os.minor(st.st_dev))
-    assert chiffrement_volume(tmp_path, sys_dir=_faux_sys(tmp_path / "s1", dev, ["CRYPT-LUKS2-abc-racine"])) == "chiffre"
+    assert (
+        chiffrement_volume(tmp_path, sys_dir=_faux_sys(tmp_path / "s1", dev, ["CRYPT-LUKS2-abc-racine"]))
+        == "chiffre"
+    )
     lvm_sur_luks = _faux_sys(tmp_path / "s2", dev, ["LVM-xyz", "CRYPT-LUKS2-def-pv"])
     assert chiffrement_volume(tmp_path, sys_dir=lvm_sur_luks) == "chiffre"
-    assert chiffrement_volume(tmp_path, sys_dir=_faux_sys(tmp_path / "s3", dev, ["LVM-sans-chiffrement"])) == "non_chiffre"
+    assert (
+        chiffrement_volume(tmp_path, sys_dir=_faux_sys(tmp_path / "s3", dev, ["LVM-sans-chiffrement"]))
+        == "non_chiffre"
+    )
     assert chiffrement_volume(tmp_path, sys_dir=tmp_path / "absent") == "inconnu"
     assert chiffrement_volume(tmp_path / "inexistant", sys_dir=tmp_path / "s1") == "inconnu"
 
@@ -277,7 +305,9 @@ def test_rendu_ocr_d_une_page_demesuree_plafonne(monkeypatch):
 
     monkeypatch.setattr(pdfium.PdfPage, "render", espion)
     monkeypatch.setattr(pages, "ocr_disponible", lambda: True)
-    monkeypatch.setattr(pages, "_ocr_image", lambda image, opts, numero: pages._page_illisible(numero, "essai"))
+    monkeypatch.setattr(
+        pages, "_ocr_image", lambda image, opts, numero: pages._page_illisible(numero, "essai")
+    )
     opts = pages.OptionsPages(isoler=False)
     sortie = pages._pages_pdf(_pdf(14173, 14173, texte=""), opts)  # page de 5 m × 5 m, sans texte
     assert demandes and max(demandes) <= pages.MAX_PIXELS_RENDU_OCR
@@ -304,21 +334,32 @@ def test_cookies_secondaires_prefixes_en_production(_modele, tmp_path):
         r = connecter(c, FONDATEUR_EMAIL, MDP_FONDATEUR)
         assert r.status_code == 303
         entete = r.headers["set-cookie"]
-        assert "__Host-cd_2fa=" in entete and "Secure" in entete and "Path=/" in entete and "Domain=" not in entete
+        assert (
+            "__Host-cd_2fa=" in entete
+            and "Secure" in entete
+            and "Path=/" in entete
+            and "Domain=" not in entete
+        )
         assert "cd_2fa" not in entete.replace("__Host-cd_2fa", "")
         tj = jeton(c.get("/connexion/totp").text)
         r = c.post("/connexion/totp", data={"csrf": tj, "code": code_totp(m.totp)}, follow_redirects=False)
         assert r.status_code == 303 and r.headers["location"] == "/admin"
         poses = r.headers.get_list("set-cookie")
         assert any(x.startswith("__Host-cd_session=") for x in poses)
-        assert any(x.startswith("__Host-cd_2fa=") and "Max-Age=0" in x and "Secure" in x for x in poses)  # effacé
+        assert any(
+            x.startswith("__Host-cd_2fa=") and "Max-Age=0" in x and "Secure" in x for x in poses
+        )  # effacé
         r = poster(c, "/admin", "/deconnexion")
         flash = [x for x in r.headers.get_list("set-cookie") if "flash" in x]
-        assert flash and all(x.startswith("__Host-cd_flash=") and "Secure" in x and "Path=/" in x for x in flash)
+        assert flash and all(
+            x.startswith("__Host-cd_flash=") and "Secure" in x and "Path=/" in x for x in flash
+        )
         r = c.get("/connexion")
         assert "déconnecté" in r.text
-        assert any(x.startswith("__Host-cd_flash=") and "Max-Age=0" in x and "Secure" in x
-                   for x in r.headers.get_list("set-cookie"))
+        assert any(
+            x.startswith("__Host-cd_flash=") and "Max-Age=0" in x and "Secure" in x
+            for x in r.headers.get_list("set-cookie")
+        )
     finally:
         m.pf.db.fermer()
 
@@ -334,8 +375,9 @@ def test_cookies_secondaires_sans_prefixe_en_developpement(monde):
 
 def test_revocations_locales_bornees_la_base_fait_foi(db):
     h = Horloge()
-    g = GestionnaireSessions(SECRET_SESSION, horloge=h, registre=RegistreRevocations(db, horloge=h),
-                             max_revocations_locales=5)
+    g = GestionnaireSessions(
+        SECRET_SESSION, horloge=h, registre=RegistreRevocations(db, horloge=h), max_revocations_locales=5
+    )
     jetons = [g.emettre(ACTEUR) for _ in range(20)]
     for j in jetons:
         d = g.lire(j)
@@ -377,8 +419,11 @@ def test_sessions_actives_lister_et_fermer_les_autres(db):
 
     j1 = g.emettre(ACTEUR, appareil=reduire_appareil(ua_firefox), reseau=reduire_reseau("203.0.113.57"))
     h.t += 60
-    j2 = g.emettre(ACTEUR, appareil=reduire_appareil("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Safari/604.1"),
-                   reseau=reduire_reseau("2001:db8:1:2::9"))
+    j2 = g.emettre(
+        ACTEUR,
+        appareil=reduire_appareil("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Safari/604.1"),
+        reseau=reduire_reseau("2001:db8:1:2::9"),
+    )
     h.t += 60
     j3 = g.emettre(ACTEUR)
     j_autre = g.emettre(autre_compte)
@@ -445,7 +490,9 @@ def test_sessions_actives_sans_registre():
 
 def test_connexion_web_enregistre_la_session(monde):
     c = monde.client()
-    c.headers["user-agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
+    c.headers["user-agent"] = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36"
+    )
     connecter_client(c, monde)
     c2 = monde.client()
     connecter_client(c2, monde)
@@ -471,14 +518,18 @@ def test_caddy_corps_bornes_comme_l_application():
 
     texte = (Path(__file__).resolve().parents[2] / "deploy" / "Caddyfile").read_text(encoding="utf-8")
     unites = {"KiB": 1024, "MiB": 1024**2}
-    blocs = {m.group(1): int(m.group(2)) * unites[m.group(3)]
-             for m in re.finditer(r"request_body @(\w+) \{\s*max_size (\d+)(KiB|MiB)\s*\}", texte)}
+    blocs = {
+        m.group(1): int(m.group(2)) * unites[m.group(3)]
+        for m in re.finditer(r"request_body @(\w+) \{\s*max_size (\d+)(KiB|MiB)\s*\}", texte)
+    }
     matchers = {m.group(1): m.group(2).split() for m in re.finditer(r"@(\w+) (?:not )?path ([^\n]+)", texte)}
     assert set(blocs) == {"depot", "csp", "autres"}
     assert matchers["depot"] == list(CHEMINS_DEPOT)
     assert set(matchers["autres"]) == {*CHEMINS_DEPOT, "/csp-rapport"}  # aucun chemin couvert deux fois
     assert TAILLE_MAX_RAPPORT_CSP <= blocs["csp"] <= 64 * 1024
-    assert blocs["depot"] >= Limites().taille_lot + 16 * 1024 * 1024  # l'application reste seule juge du dépôt
+    assert (
+        blocs["depot"] >= Limites().taille_lot + 16 * 1024 * 1024
+    )  # l'application reste seule juge du dépôt
     assert 2 * 1024 * 1024 <= blocs["autres"] <= 8 * 1024 * 1024
 
 
@@ -489,17 +540,41 @@ def test_audit_image_bloque_seulement_les_graves_corrigeables():
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "audit_dependances", Path(__file__).resolve().parents[2] / "scripts" / "audit_dependances.py")
+        "audit_dependances", Path(__file__).resolve().parents[2] / "scripts" / "audit_dependances.py"
+    )
     audit = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(audit)
-    donnees = {"Metadata": {"OS": {"Family": "debian", "Name": "13.7"}}, "Results": [
-        {"Target": "image (debian 13.7)", "Vulnerabilities": [
-            {"PkgName": "libtiff6", "InstalledVersion": "4.7", "VulnerabilityID": "CVE-FICTIF-1", "Severity": "HIGH"},
-            {"PkgName": "libxml2", "InstalledVersion": "2.14", "VulnerabilityID": "CVE-FICTIF-2", "Severity": "CRITICAL",
-             "FixedVersion": "2.14.1"},
-            {"PkgName": "bash", "InstalledVersion": "5.2", "VulnerabilityID": "CVE-FICTIF-3", "Severity": "LOW",
-             "FixedVersion": "5.3"}]},
-        {"Target": "Python", "Vulnerabilities": None}]}
+    donnees = {
+        "Metadata": {"OS": {"Family": "debian", "Name": "13.7"}},
+        "Results": [
+            {
+                "Target": "image (debian 13.7)",
+                "Vulnerabilities": [
+                    {
+                        "PkgName": "libtiff6",
+                        "InstalledVersion": "4.7",
+                        "VulnerabilityID": "CVE-FICTIF-1",
+                        "Severity": "HIGH",
+                    },
+                    {
+                        "PkgName": "libxml2",
+                        "InstalledVersion": "2.14",
+                        "VulnerabilityID": "CVE-FICTIF-2",
+                        "Severity": "CRITICAL",
+                        "FixedVersion": "2.14.1",
+                    },
+                    {
+                        "PkgName": "bash",
+                        "InstalledVersion": "5.2",
+                        "VulnerabilityID": "CVE-FICTIF-3",
+                        "Severity": "LOW",
+                        "FixedVersion": "5.3",
+                    },
+                ],
+            },
+            {"Target": "Python", "Vulnerabilities": None},
+        ],
+    }
     r = audit.resumer_trivy(donnees)
     assert r["systeme"] == "debian 13.7" and r["par_gravite"] == {"HIGH": 1, "CRITICAL": 1, "LOW": 1}
     assert [v["id"] for v in r["corrigeables"]] == ["CVE-FICTIF-2"]
@@ -515,7 +590,9 @@ def test_requirements_lock_avec_empreintes():
         blocs = [b for b in texte.replace("\\\n", " ").splitlines() if b.strip() and not b.startswith("#")]
         assert blocs, nom
         for b in blocs:
-            assert "==" in b and "--hash=sha256:" in b, f"{nom} : {b[:60]} sans version figée ou sans empreinte"
+            assert "==" in b and "--hash=sha256:" in b, (
+                f"{nom} : {b[:60]} sans version figée ou sans empreinte"
+            )
     dockerfile = (racine / "deploy" / "Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.count("--require-hashes") >= 2 and "--no-build-isolation" in dockerfile
     ignore = (racine / "deploy" / "Dockerfile.dockerignore").read_text(encoding="utf-8")

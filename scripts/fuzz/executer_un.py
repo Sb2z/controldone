@@ -32,17 +32,27 @@ def main() -> int:
             prep = preparer_lot(lot, None, [], options=options)
             res = controler_lot(prep, options=options)
         pages = [p for ps in prep.pages.values() for p in ps]
-        bilan.update({
-            "ok": True,
-            "fichiers": [{"chemin": f.chemin_relatif, "statut": str(f.statut), "motif": f.motif_refus,
-                          "mime": f.type_mime, "pages": f.nombre_pages} for f in prep.fichiers.values()],
-            "non_lus": [{"fichier": n.fichier, "motif": n.motif} for n in prep.non_lus],
-            "documents": sorted(str(d.type) for d in prep.documents.values()),
-            "dossiers": len(res),
-            "pages": len(pages),
-            "qualites": sorted({str(p.qualite_texte) for p in pages}),
-            "avertissements": sorted(set(prep.avertissements))[:30],
-        })
+        bilan.update(
+            {
+                "ok": True,
+                "fichiers": [
+                    {
+                        "chemin": f.chemin_relatif,
+                        "statut": str(f.statut),
+                        "motif": f.motif_refus,
+                        "mime": f.type_mime,
+                        "pages": f.nombre_pages,
+                    }
+                    for f in prep.fichiers.values()
+                ],
+                "non_lus": [{"fichier": n.fichier, "motif": n.motif} for n in prep.non_lus],
+                "documents": sorted(str(d.type) for d in prep.documents.values()),
+                "dossiers": len(res),
+                "pages": len(pages),
+                "qualites": sorted({str(p.qualite_texte) for p in pages}),
+                "avertissements": sorted(set(prep.avertissements))[:30],
+            }
+        )
         code = 0
     except BaseException as e:  # précisément ce que la campagne cherche
         bilan.update({"ok": False, "exception": type(e).__name__, "trace": traceback.format_exc()[-4000:]})

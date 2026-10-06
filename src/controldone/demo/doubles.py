@@ -68,7 +68,9 @@ class ExtracteurDemo:
     def supports(self, document: Document, pages: Sequence[Page]) -> bool:
         return self._trouver(document, pages) is not None
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         info = ExtracteurInfo(type=TypeExtracteur.deterministe, id=self.id, version=self.version)
         demo = self._trouver(document, pages)
         cls = classe_champs(document.type)
@@ -84,10 +86,19 @@ class ExtracteurDemo:
         def vs(chemin: str, brut: str):
             z = zones.get(chemin)
             return valeur_sourcee(
-                type_document=document.type, chemin=chemin, brut=brut, document_id=document.id, page=page,
-                extracteur=info, methode=Methode.texte_natif, confiance=CONFIANCE, textes_pages=textes,
+                type_document=document.type,
+                chemin=chemin,
+                brut=brut,
+                document_id=document.id,
+                page=page,
+                extracteur=info,
+                methode=Methode.texte_natif,
+                confiance=CONFIANCE,
+                textes_pages=textes,
                 zone=Zone(x0=z[0], y0=z[1], x1=z[2], y1=z[3]) if z else None,
-                type_valeur=type_valeur_pour(chemin), separateur_decimal=sep, devise=devise,
+                type_valeur=type_valeur_pour(chemin),
+                separateur_decimal=sep,
+                devise=devise,
                 id_valeur=context.ids.nouveau(Prefixe.valeur),
             )
 
@@ -101,10 +112,12 @@ class ExtracteurDemo:
         for t in demo.tableaux:
             for i, ligne in enumerate(t.lignes):
                 if t.liste == "documents_references":
-                    champs.documents_references.append(DocumentReference(
-                        type_code=vs(f"documents_references[{i}].type_code", ligne["type_code"]),
-                        reference=vs(f"documents_references[{i}].reference", ligne["reference"]),
-                    ))
+                    champs.documents_references.append(
+                        DocumentReference(
+                            type_code=vs(f"documents_references[{i}].type_code", ligne["type_code"]),
+                            reference=vs(f"documents_references[{i}].reference", ligne["reference"]),
+                        )
+                    )
                     continue
                 for feuille, brut in ligne.items():
                     champs.definir(f"{t.liste}[{i}].{feuille}", vs(f"{t.liste}[{i}].{feuille}", brut))
@@ -113,10 +126,13 @@ class ExtracteurDemo:
         for liste, objets in demo.objets.items():
             if liste == "indices_autoliquidation":
                 for i, o in enumerate(objets):
-                    champs.indices_autoliquidation.append(IndiceAutoliquidation(
-                        type=o["type"], valeur=vs(f"indices_autoliquidation[{i}].valeur", o["valeur"]),
-                        tva=vs(f"indices_autoliquidation[{i}].tva", o["tva"]) if o.get("tva") else None,
-                    ))
+                    champs.indices_autoliquidation.append(
+                        IndiceAutoliquidation(
+                            type=o["type"],
+                            valeur=vs(f"indices_autoliquidation[{i}].valeur", o["valeur"]),
+                            tva=vs(f"indices_autoliquidation[{i}].tva", o["tva"]) if o.get("tva") else None,
+                        )
+                    )
         if document.type is TypeDocument.facture_transitaire and champs.refs_mrn:
             # débours d'une facture mono-MRN : rattachés au MRN imprimé en en-tête (valeur ancrée sur la page)
             brut_mrn = champs.refs_mrn[0].valeur_brute or ""
@@ -139,9 +155,17 @@ class DecoupeurDemo:
         f = source.fichier
         pdf = pdfium.PdfDocument(source.contenu)
         try:
-            pages = [Page(id=ids.nouveau(Prefixe.page), client_id=client_id, fichier_id=f.id, numero=i + 1,
-                          texte=pdf[i].get_textpage().get_text_range(), qualite_texte=QualiteTexte.natif)
-                     for i in range(len(pdf))]
+            pages = [
+                Page(
+                    id=ids.nouveau(Prefixe.page),
+                    client_id=client_id,
+                    fichier_id=f.id,
+                    numero=i + 1,
+                    texte=pdf[i].get_textpage().get_text_range(),
+                    qualite_texte=QualiteTexte.natif,
+                )
+                for i in range(len(pdf))
+            ]
         finally:
             pdf.close()
         texte = " ".join(p.texte for p in pages)
@@ -150,7 +174,9 @@ class DecoupeurDemo:
             if d.cle in texte and d.titre in texte:
                 type_ = d.type
         doc = Document(
-            id=ids.nouveau(Prefixe.document), client_id=client_id, type=type_,
+            id=ids.nouveau(Prefixe.document),
+            client_id=client_id,
+            type=type_,
             confiance_classement=0.98 if type_ is not TypeDocument.inconnu else 0.3,
             pages=[PageRef(fichier_id=f.id, numero=p.numero, qualite_texte=p.qualite_texte) for p in pages],
             identite=f.sha256,

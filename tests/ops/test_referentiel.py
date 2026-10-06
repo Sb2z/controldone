@@ -32,17 +32,30 @@ NOM_TRA, TVA_TRA = "TRANSIT EXPRESS FICTIF SAS", "FR40123456789"
 
 
 def _enr(i, *, client=None, tra=NOM_TRA, tva=TVA_TRA, ecart=False, prix=None, pays="CN", mois="2026-08"):
-    return EnregistrementFlux(client_id=client or f"cli_{i % 5}", transitaire_nom=tra, transitaire_tva=tva,
-                              pays_origine=pays, incoterm="FOB", sous_type_declaration="h1", mois=mois,
-                              avec_ecart=ecart, prix=prix if prix is not None else
-                              {"frais_dedouanement": Decimal("60.00") + i})
+    return EnregistrementFlux(
+        client_id=client or f"cli_{i % 5}",
+        transitaire_nom=tra,
+        transitaire_tva=tva,
+        pays_origine=pays,
+        incoterm="FOB",
+        sous_type_declaration="h1",
+        mois=mois,
+        avec_ecart=ecart,
+        prix=prix if prix is not None else {"frais_dedouanement": Decimal("60.00") + i},
+    )
 
 
 def test_regroupements():
     assert groupe_pays("cn") == "chine" and groupe_pays("DE") == "ue" and groupe_pays("BR") == "autre"
     assert groupe_pays(None) == "inconnu"
-    assert famille_incoterm("FOB Shanghai") == "F" and famille_incoterm("DDP") == "D" and famille_incoterm("?") == "inconnue"
-    assert arrondir_montant(Decimal("62.40")) == Decimal("60.00") and arrondir_montant(Decimal("62.50")) == Decimal("65.00")
+    assert (
+        famille_incoterm("FOB Shanghai") == "F"
+        and famille_incoterm("DDP") == "D"
+        and famille_incoterm("?") == "inconnue"
+    )
+    assert arrondir_montant(Decimal("62.40")) == Decimal("60.00") and arrondir_montant(
+        Decimal("62.50")
+    ) == Decimal("65.00")
 
 
 def test_cle_transitaire_salee_et_alias_public():
@@ -72,8 +85,12 @@ def test_seuils_de_publication():
 
 
 def test_statistique_de_prix_soumise_aux_memes_seuils():
-    enr = [_enr(i, prix={"frais_dedouanement": Decimal("60")} | ({"magasinage": Decimal("100")} if i < 4 else {}))
-           for i in range(10)]
+    enr = [
+        _enr(
+            i, prix={"frais_dedouanement": Decimal("60")} | ({"magasinage": Decimal("100")} if i < 4 else {})
+        )
+        for i in range(10)
+    ]
     a = agreger(enr, sel=SEL).agregats[0]
     assert "frais_dedouanement" in a.prix and "magasinage" not in a.prix  # 4 dossiers seulement
 
@@ -102,31 +119,58 @@ def _peupler_flux(db, tenant, n_dossiers, *, opt_out=False, propose=False):
     from controldone.storage.db import Database  # noqa: F401
 
     with db.operateur(FONDATEUR) as op:
-        op.creer_client(tenant, f"CLIENT {tenant.upper()} FICTIF",
-                        reglages={"referentiel_opt_out": True} if opt_out else {})
+        op.creer_client(
+            tenant,
+            f"CLIENT {tenant.upper()} FICTIF",
+            reglages={"referentiel_opt_out": True} if opt_out else {},
+        )
     with db.tenant(tenant, SYSTEME) as sc:
         sc._ajouter_interne(Transitaire(id=f"tra_{tenant}", nom=NOM_TRA, tva=TVA_TRA))
         for i in range(n_dossiers):
             did = f"dos_{tenant}_{i}"
-            sc.enregistrer_dossier(DossierModele(id=did, client_id=tenant, transitaire_id=f"tra_{tenant}",
-                                                 reference=f"D-2026-{i:05d}"))
-            fc = doc_row(f"fc_{tenant}_{i}", "facture_commerciale", {"numero": f"FC-{tenant}-{i}", "incoterm": "FOB"},
-                         dossier_id=did)
+            sc.enregistrer_dossier(
+                DossierModele(
+                    id=did, client_id=tenant, transitaire_id=f"tra_{tenant}", reference=f"D-2026-{i:05d}"
+                )
+            )
+            fc = doc_row(
+                f"fc_{tenant}_{i}",
+                "facture_commerciale",
+                {"numero": f"FC-{tenant}-{i}", "incoterm": "FOB"},
+                dossier_id=did,
+            )
             fc.contenu["champs"]["lignes"] = [{"pays_origine": {"valeur": "CN"}}]
             sc._ajouter_interne(fc)
-            dec = doc_row(f"dec_{tenant}_{i}", "declaration", {"mrn": f"26FR0000000000{i:04d}",
-                                                              "date_acceptation": "2026-08-14"}, dossier_id=did,
-                          extra={"sous_type": "h1"})
+            dec = doc_row(
+                f"dec_{tenant}_{i}",
+                "declaration",
+                {"mrn": f"26FR0000000000{i:04d}", "date_acceptation": "2026-08-14"},
+                dossier_id=did,
+                extra={"sous_type": "h1"},
+            )
             sc._ajouter_interne(dec)
-            ft = doc_row(f"ft_{tenant}_{i}", "facture_transitaire", {"numero": f"FT-{tenant}-{i}"}, dossier_id=did)
-            ft.contenu["champs"]["lignes"] = [{"nature": "frais_dedouanement", "montant_ht": {"valeur": "65.00"}},
-                                              {"nature": "debours_droits", "montant_ht": {"valeur": "999.00"}}]
+            ft = doc_row(
+                f"ft_{tenant}_{i}", "facture_transitaire", {"numero": f"FT-{tenant}-{i}"}, dossier_id=did
+            )
+            ft.contenu["champs"]["lignes"] = [
+                {"nature": "frais_dedouanement", "montant_ht": {"valeur": "65.00"}},
+                {"nature": "debours_droits", "montant_ht": {"valeur": "999.00"}},
+            ]
             sc._ajouter_interne(ft)
             if i == 0:
-                sc._ajouter_interne(Constat(id=f"f_{tenant}_{i}", dossier_id=did, dossier_version=1, controle_id="C1",
-                                            niveau="ecart_certain", montant_en_jeu=Decimal("10.00"),
-                                            nature_montant="recouvrable",
-                                            statut_validation="propose" if propose else "valide", contenu={}))
+                sc._ajouter_interne(
+                    Constat(
+                        id=f"f_{tenant}_{i}",
+                        dossier_id=did,
+                        dossier_version=1,
+                        controle_id="C1",
+                        niveau="ecart_certain",
+                        montant_en_jeu=Decimal("10.00"),
+                        nature_montant="recouvrable",
+                        statut_validation="propose" if propose else "valide",
+                        contenu={},
+                    )
+                )
 
 
 def test_recalcul_par_job_et_opt_out(db, tmp_path):
@@ -134,8 +178,21 @@ def test_recalcul_par_job_et_opt_out(db, tmp_path):
         _peupler_flux(db, t, 2)
     _peupler_flux(db, "cli_opt", 2, opt_out=True)
     sortie = tmp_path / "ref"
-    job = JobInfo("job_x", "referentiel_recalculer", {"dossier_sortie": str(sortie)}, "referentiel:1", None,
-                  "running", 1, 5, None, None, None, None, None)  # type: ignore[arg-type]
+    job = JobInfo(
+        "job_x",
+        "referentiel_recalculer",
+        {"dossier_sortie": str(sortie)},
+        "referentiel:1",
+        None,
+        "running",
+        1,
+        5,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )  # type: ignore[arg-type]
     import os
 
     os.environ["CONTROLDONE_REFERENTIEL_SEL"] = "sel-FICTIF"

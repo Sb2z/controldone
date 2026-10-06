@@ -54,8 +54,9 @@ def detenteur(data_dir: Path | str) -> dict[str, object] | None:
 
 
 @contextlib.contextmanager
-def verrou_maintenance(data_dir: Path | str, operation: str, *, attente_s: float = 0.0,
-                       intervalle_s: float = 1.0) -> Iterator[Path]:
+def verrou_maintenance(
+    data_dir: Path | str, operation: str, *, attente_s: float = 0.0, intervalle_s: float = 1.0
+) -> Iterator[Path]:
     """Prend le verrou exclusif (attend au plus ``attente_s`` secondes), sinon lève ``VerrouOccupe``."""
     chemin = chemin_verrou(data_dir)
     chemin.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -70,7 +71,11 @@ def verrou_maintenance(data_dir: Path | str, operation: str, *, attente_s: float
                 if time.monotonic() >= fin:
                     raise VerrouOccupe(operation, detenteur(data_dir)) from None
                 time.sleep(min(intervalle_s, max(0.01, fin - time.monotonic())))
-        info = {"operation": operation, "pid": os.getpid(), "depuis": datetime.now(UTC).isoformat(timespec="seconds")}
+        info = {
+            "operation": operation,
+            "pid": os.getpid(),
+            "depuis": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
         os.ftruncate(fd, 0)
         os.pwrite(fd, json.dumps(info).encode(), 0)
         try:

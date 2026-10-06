@@ -30,8 +30,15 @@ _SIMPLE_RE = re.compile(r"^\d+(?:[.,]\d+)?$")
 _GROUPES_RE = re.compile(r"^\d{1,3}(?:(?P<sep>[ .,])\d{3})+(?:(?P<dec>[.,])\d+)?$")
 
 
-def montant_saisi(texte: object, *, nom: str = "montant", maximum: Decimal = MONTANT_MAX, decimales: int = 2,
-                  negatif: bool = False, zero: bool = False) -> Decimal:
+def montant_saisi(
+    texte: object,
+    *,
+    nom: str = "montant",
+    maximum: Decimal = MONTANT_MAX,
+    decimales: int = 2,
+    negatif: bool = False,
+    zero: bool = False,
+) -> Decimal:
     """``Decimal`` exact du montant saisi, ou ``RequeteInvalide`` (message lisible, jamais une erreur 500)."""
     if texte is None:
         raise RequeteInvalide(f"{nom} : valeur obligatoire")
@@ -54,7 +61,7 @@ def montant_saisi(texte: object, *, nom: str = "montant", maximum: Decimal = MON
         partie_entiere = compact[: m.start("dec")] if m.group("dec") else compact
         normal = partie_entiere.replace(m.group("sep"), "")
         if m.group("dec"):
-            normal += "." + compact[m.end("dec"):]
+            normal += "." + compact[m.end("dec") :]
     if "." in normal and len(normal.split(".", 1)[1]) > decimales:
         raise RequeteInvalide(f"{nom} : {decimales} décimales au plus")
     try:

@@ -124,7 +124,9 @@ class Tolerances:
     def t_debours(self, nb_articles: int) -> Decimal:
         """``T_DEBOURS`` (C1–C5, G4) : ``max(0,05 ; min(0,01 × nb_articles ; 0,50))``."""
         p = self.profil
-        return max(p.t_debours_minimum, min(p.t_debours_par_article * max(nb_articles, 0), p.t_debours_plafond))
+        return max(
+            p.t_debours_minimum, min(p.t_debours_par_article * max(nb_articles, 0), p.t_debours_plafond)
+        )
 
     def s_debours(self, nb_articles: int = 0) -> Decimal:
         """``S_DEBOURS`` (C, F3, G4, G5) : 1,00 EUR."""

@@ -31,13 +31,21 @@ class _Req:
         self.query_params = QueryParams(qs)
 
 
-PARAMS = {"q": Param("Recherche"), "statut": Param("Statut", "choix", ("a", "b")), "min": Param("Min", "montant"),
-          "du": Param("Du", "date")}
+PARAMS = {
+    "q": Param("Recherche"),
+    "statut": Param("Statut", "choix", ("a", "b")),
+    "min": Param("Min", "montant"),
+    "du": Param("Du", "date"),
+}
 
 
 def test_lire_requete_valide_et_urls():
-    r = lire_requete(_Req("q=%20MRN%20&statut=a&min=1%20234,50&tri=-x&page=2&taille=50&inconnu=1"), PARAMS,
-                     ("x", "-x"), "x")
+    r = lire_requete(
+        _Req("q=%20MRN%20&statut=a&min=1%20234,50&tri=-x&page=2&taille=50&inconnu=1"),
+        PARAMS,
+        ("x", "-x"),
+        "x",
+    )
     assert r.filtres["q"] == "MRN" and r.filtres["statut"] == "a" and str(r.filtres["min"]) == "1234.50"
     assert r.page == 2 and r.taille == 50 and r.tri == "-x" and r.actif
     # un changement de filtre ou de tri ramène à la page 1 ; le paramètre inconnu n'est jamais réémis
@@ -46,9 +54,24 @@ def test_lire_requete_valide_et_urls():
     assert r.sens("x") == "descending"
 
 
-@pytest.mark.parametrize("qs", ["statut=zzz", "taille=7", "taille=1000", "page=0", "page=abc", "page=99999999",
-                                "tri=nimporte", "q=" + "x" * 81, "q=a%00b", "min=1e9", "min=-5", "du=2026-13-01",
-                                "statut=a&statut=b"])
+@pytest.mark.parametrize(
+    "qs",
+    [
+        "statut=zzz",
+        "taille=7",
+        "taille=1000",
+        "page=0",
+        "page=abc",
+        "page=99999999",
+        "tri=nimporte",
+        "q=" + "x" * 81,
+        "q=a%00b",
+        "min=1e9",
+        "min=-5",
+        "du=2026-13-01",
+        "statut=a&statut=b",
+    ],
+)
 def test_lire_requete_refuse(qs):
     with pytest.raises(RequeteInvalide):
         lire_requete(_Req(qs), PARAMS, ("x", "-x"), "x")
@@ -57,7 +80,9 @@ def test_lire_requete_refuse(qs):
 def test_paginer_borne_la_page():
     r = lire_requete(_Req("page=9"), PARAMS, ("x",), "x")
     p = paginer(list(range(60)), r)
-    assert p.page == 3 and p.pages == 3 and p.elements == list(range(50, 60)) and p.debut == 51 and p.fin == 60
+    assert (
+        p.page == 3 and p.pages == 3 and p.elements == list(range(50, 60)) and p.debut == 51 and p.fin == 60
+    )
     assert p.numeros == [1, 2, 3]
 
 
@@ -126,7 +151,9 @@ def test_file_validation_filtres(monde):
     n = len(re.findall(r'<article class="constat', tout))
     assert n == 3 and "3 constats proposés." in tout
     assert len(re.findall(r'<article class="constat', c.get(f"/admin/validation?client={B}").text)) == 2
-    assert len(re.findall(r'<article class="constat', c.get("/admin/validation?niveau=ecart_certain").text)) == 1
+    assert (
+        len(re.findall(r'<article class="constat', c.get("/admin/validation?niveau=ecart_certain").text)) == 1
+    )
     assert len(re.findall(r'<article class="constat', c.get("/admin/validation?controle=A12").text)) == 2
     assert len(re.findall(r'<article class="constat', c.get("/admin/validation?min=10&max=30").text)) == 1
     vide = c.get("/admin/validation?min=1000000")
@@ -179,8 +206,12 @@ def test_jobs_filtres(monde):
 def test_listes_fondateur_inaccessibles_au_client(monde):
     c = monde.client()
     connecter_client(c, monde, ADMIN_A)
-    for url in ("/admin/journal?page=2", "/admin/jobs?statut=done", "/admin/validation?client=demo_nord",
-                "/admin/jobs/etat"):
+    for url in (
+        "/admin/journal?page=2",
+        "/admin/jobs?statut=done",
+        "/admin/validation?client=demo_nord",
+        "/admin/jobs/etat",
+    ):
         assert c.get(url).status_code == 404, url
 
 
@@ -189,7 +220,9 @@ def test_listes_fondateur_inaccessibles_au_client(monde):
 
 def test_etat_traitement_etapes():
     assert etat_traitement("recu", None)["etape"] == "recu"
-    assert etat_traitement("recu", {"statut": "pending", "essais": 0})["detail"] == "En attente de traitement."
+    assert (
+        etat_traitement("recu", {"statut": "pending", "essais": 0})["detail"] == "En attente de traitement."
+    )
     assert etat_traitement("recu", {"statut": "running", "etape": "controles"})["etape"] == "controles"
     assert etat_traitement("recu", {"statut": "running", "etape": "<script>"})["etape"] == "pages"
     # étapes fines du pipeline (D-3709, D-3805) : « <etape> <fait>/<total> » ; ancien « lecture » = lecture des pages
@@ -218,8 +251,21 @@ def test_point_de_suivi_lot(monde):
     assert r.headers["cache-control"] == "no-store"
     d = r.json()
     assert d["lot_id"] == lot and d["etape"] == "termine" and d["fini"] and d["dossiers"] == 3
-    assert set(d) == {"lot_id", "etape", "libelle", "rang", "fini", "erreur", "pourcentage", "detail", "dossiers",
-                      "fichiers", "fait", "total", "texte"}
+    assert set(d) == {
+        "lot_id",
+        "etape",
+        "libelle",
+        "rang",
+        "fini",
+        "erreur",
+        "pourcentage",
+        "detail",
+        "dossiers",
+        "fichiers",
+        "fait",
+        "total",
+        "texte",
+    }
     lecteur = monde.client()
     connecter_client(lecteur, monde, LECTEUR_A)
     assert lecteur.get(f"/espace/lots/{lot}/etat").status_code == 200
@@ -237,7 +283,10 @@ def test_point_de_suivi_cloisonne(monde):
     s = c.get("/espace/suivi").json()
     assert {x["lot_id"] for x in s["lots"]} == set(monde.ids[B]["lot"])
     anonyme = monde.client()
-    assert anonyme.get(f"/espace/lots/{monde.ids[A]['lot'][0]}/etat", follow_redirects=False).status_code in (303, 401)
+    assert anonyme.get(f"/espace/lots/{monde.ids[A]['lot'][0]}/etat", follow_redirects=False).status_code in (
+        303,
+        401,
+    )
 
 
 def test_point_de_suivi_limite_de_debit(monde):
@@ -256,10 +305,18 @@ def test_depot_suivi_etapes_et_page(monde):
     c = monde.client()
     connecter_client(c, monde, ADMIN_A)
     t = jeton(c.get("/espace/depot").text)
-    source = Path(__file__).resolve().parents[2] / "demo/dossiers/DEMO-2/docs/facture_commerciale_INV-FIC-0202.pdf"
-    contenu = source.read_bytes() + b"\n% copie FICTIVE pour le test de suivi\n"  # empreinte nouvelle : pas un doublon
-    r = c.post("/espace/depot", data={"csrf": t}, files=[("fichiers", ("FICTIF.pdf", contenu, "application/pdf"))],
-               follow_redirects=False)
+    source = (
+        Path(__file__).resolve().parents[2] / "demo/dossiers/DEMO-2/docs/facture_commerciale_INV-FIC-0202.pdf"
+    )
+    contenu = (
+        source.read_bytes() + b"\n% copie FICTIVE pour le test de suivi\n"
+    )  # empreinte nouvelle : pas un doublon
+    r = c.post(
+        "/espace/depot",
+        data={"csrf": t},
+        files=[("fichiers", ("FICTIF.pdf", contenu, "application/pdf"))],
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     url = r.headers["location"]
     page = c.get(url).text

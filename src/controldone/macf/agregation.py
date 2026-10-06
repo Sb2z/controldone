@@ -44,17 +44,28 @@ def agreger(lignes: Iterable[LigneMACF], *, annee: int | None = None) -> list[Ag
     for li in lignes:
         if annee is not None and li.annee != annee:
             continue
-        cle = (li.periode, _cle(li.code_imprime, "non lu"), _cle(li.pays_origine, "non lu"),
-               _cle(li.fournisseur, "non lu"), _cle(li.installation, "à demander au fournisseur"),
-               _cle(li.secteur_libelle, "—"))
+        cle = (
+            li.periode,
+            _cle(li.code_imprime, "non lu"),
+            _cle(li.pays_origine, "non lu"),
+            _cle(li.fournisseur, "non lu"),
+            _cle(li.installation, "à demander au fournisseur"),
+            _cle(li.secteur_libelle, "—"),
+        )
         groupes.setdefault(cle, []).append(li)
     sortie = []
     for cle in sorted(groupes):
         ls = groupes[cle]
         masses = [li.masse_nette_kg for li in ls if li.masse_nette_kg is not None]
-        sortie.append(Agregat(*cle, nombre_lignes=len(ls), masse_nette_kg=sum(masses, Decimal("0.000")),
-                              lignes_sans_masse=len(ls) - len(masses),
-                              dossiers=tuple(sorted({li.dossier_reference or li.dossier_id for li in ls}))))
+        sortie.append(
+            Agregat(
+                *cle,
+                nombre_lignes=len(ls),
+                masse_nette_kg=sum(masses, Decimal("0.000")),
+                lignes_sans_masse=len(ls) - len(masses),
+                dossiers=tuple(sorted({li.dossier_reference or li.dossier_id for li in ls})),
+            )
+        )
     return sortie
 
 
@@ -87,7 +98,9 @@ def _t(x: Decimal) -> str:
     return f"{format_nombre(x, 3)} t"
 
 
-def synthese_seuil(lignes: Iterable[LigneMACF], annee: int, *, seuil_t: Decimal | str = "50") -> SyntheseSeuil:
+def synthese_seuil(
+    lignes: Iterable[LigneMACF], annee: int, *, seuil_t: Decimal | str = "50"
+) -> SyntheseSeuil:
     """Cumul annuel des masses nettes lues comparé, par simple soustraction, au seuil cité."""
     seuil = Decimal(str(seuil_t))
     ls = list(lignes)
@@ -97,14 +110,22 @@ def synthese_seuil(lignes: Iterable[LigneMACF], annee: int, *, seuil_t: Decimal 
     comptables = [li for li in de_l_annee if not li.hors_cumul_50t]
     avec_masse = [li for li in comptables if li.masse_nette_kg is not None]
     total = sum((li.masse_nette_kg for li in avec_masse), Decimal("0.000"))
-    s = SyntheseSeuil(annee=annee, seuil_t=seuil, masse_cumulee_kg=total, lignes_comptees=len(avec_masse),
-                      lignes_sans_masse=len(comptables) - len(avec_masse), lignes_hors_cumul=len(hors),
-                      lignes_sans_date=sans_date)
+    s = SyntheseSeuil(
+        annee=annee,
+        seuil_t=seuil,
+        masse_cumulee_kg=total,
+        lignes_comptees=len(avec_masse),
+        lignes_sans_masse=len(comptables) - len(avec_masse),
+        lignes_hors_cumul=len(hors),
+        lignes_sans_date=sans_date,
+    )
     d = s.difference_t
     if d >= 0:
         comparaison = f"Calcul : {_t(seuil)} - {_t(s.masse_cumulee_t)} = {_t(d)} (masse lue inférieure ou égale au seuil cité)."
     else:
-        comparaison = f"Calcul : {_t(s.masse_cumulee_t)} - {_t(seuil)} = {_t(-d)} (masse lue supérieure au seuil cité)."
+        comparaison = (
+            f"Calcul : {_t(s.masse_cumulee_t)} - {_t(seuil)} = {_t(-d)} (masse lue supérieure au seuil cité)."
+        )
     textes = [
         f"Année {annee} : masse nette cumulée lue sur {s.lignes_comptees} ligne(s) de déclaration traitée(s) "
         f"par ControlDOne dont le code imprimé figure dans la liste MACF : {_t(s.masse_cumulee_t)} "
@@ -113,10 +134,14 @@ def synthese_seuil(lignes: Iterable[LigneMACF], annee: int, *, seuil_t: Decimal 
         "Ce cumul ne porte que sur les dossiers transmis à ControlDOne, pas sur l'ensemble de vos importations.",
     ]
     if s.lignes_sans_masse:
-        textes.append(f"{s.lignes_sans_masse} ligne(s) sans masse nette lisible ne sont pas comptée(s) : "
-                      "masse à compléter.")
+        textes.append(
+            f"{s.lignes_sans_masse} ligne(s) sans masse nette lisible ne sont pas comptée(s) : "
+            "masse à compléter."
+        )
     if sans_date:
-        textes.append(f"{sans_date} ligne(s) sans date d'acceptation lisible ne sont rattachée(s) à aucune année.")
+        textes.append(
+            f"{sans_date} ligne(s) sans date d'acceptation lisible ne sont rattachée(s) à aucune année."
+        )
     textes.append(PHRASE_RENVOI)
     for t in textes:
         assert_clean(t)

@@ -183,12 +183,21 @@ def test_revocation_persistante_entre_processus(db):
 def _seconde_app(monde):
     """Même base, autre instance de l'application : un autre processus web ou un redémarrage."""
     db2 = Database(monde.pf.db.url)
-    pf2 = Plateforme(db=db2, vault=FileVault(monde.pf.vault.racine, [CLE_MAITRESSE]), cles_maitresses=[CLE_MAITRESSE],
-                     limites=monde.pf.limites, dossier_sorties=monde.pf.dossier_sorties)
-    return create_app(ParametresWeb(plateforme=pf2, secrets_session=[SECRET_SESSION], prod=False, https=False)), db2
+    pf2 = Plateforme(
+        db=db2,
+        vault=FileVault(monde.pf.vault.racine, [CLE_MAITRESSE]),
+        cles_maitresses=[CLE_MAITRESSE],
+        limites=monde.pf.limites,
+        dossier_sorties=monde.pf.dossier_sorties,
+    )
+    return create_app(
+        ParametresWeb(plateforme=pf2, secrets_session=[SECRET_SESSION], prod=False, https=False)
+    ), db2
 
 
-def test_verrou_de_connexion_survit_au_redemarrage_et_se_leve_en_ligne_de_commande(monde, monkeypatch, capsys):
+def test_verrou_de_connexion_survit_au_redemarrage_et_se_leve_en_ligne_de_commande(
+    monde, monkeypatch, capsys
+):
     from fastapi.testclient import TestClient
 
     from controldone.cli import main
@@ -243,8 +252,12 @@ def test_changement_de_mot_de_passe_ferme_les_autres_sessions(monde):
     c1, c2 = monde.client(), monde.client()
     connecter_client(c1, monde)
     connecter_client(c2, monde)
-    r = poster(c1, "/compte/mot-de-passe", "/compte/mot-de-passe",
-               {"actuel": monde.comptes[ADMIN_A], "nouveau": nouveau, "confirmation": nouveau})
+    r = poster(
+        c1,
+        "/compte/mot-de-passe",
+        "/compte/mot-de-passe",
+        {"actuel": monde.comptes[ADMIN_A], "nouveau": nouveau, "confirmation": nouveau},
+    )
     assert r.status_code == 303
     assert c1.get("/espace", follow_redirects=False).status_code == 200  # session neuve
     r = c2.get("/espace", follow_redirects=False)
@@ -254,9 +267,15 @@ def test_changement_de_mot_de_passe_ferme_les_autres_sessions(monde):
 def test_changement_de_mot_de_passe_limite(monde):
     c = monde.client()
     connecter_client(c, monde)
-    statuts = [poster(c, "/compte/mot-de-passe", "/compte/mot-de-passe",
-                      {"actuel": "faux-mot-de-passe-FICTIF", "nouveau": "x" * 12, "confirmation": "x" * 12}).status_code
-               for _ in range(6)]
+    statuts = [
+        poster(
+            c,
+            "/compte/mot-de-passe",
+            "/compte/mot-de-passe",
+            {"actuel": "faux-mot-de-passe-FICTIF", "nouveau": "x" * 12, "confirmation": "x" * 12},
+        ).status_code
+        for _ in range(6)
+    ]
     assert statuts[0] == 400 and statuts[-1] == 429
 
 
@@ -298,46 +317,86 @@ def test_cookie_de_session_en_production(_modele, tmp_path):
         m.pf.db.fermer()
 
 
-_RAPPORT = {"csp-report": {
-    "document-uri": "http://testserver/espace/dossiers/dos_FICTIF?q=Societe+FICTIVE&email=a%40exemple.test",
-    "effective-directive": "script-src-elem", "violated-directive": "script-src-elem",
-    "blocked-uri": "https://cdn.exemple.test/piege.js?jeton=SECRET-FICTIF", "disposition": "enforce",
-    "script-sample": "alert('donnee personnelle FICTIVE')"}}
+_RAPPORT = {
+    "csp-report": {
+        "document-uri": "http://testserver/espace/dossiers/dos_FICTIF?q=Societe+FICTIVE&email=a%40exemple.test",
+        "effective-directive": "script-src-elem",
+        "violated-directive": "script-src-elem",
+        "blocked-uri": "https://cdn.exemple.test/piege.js?jeton=SECRET-FICTIF",
+        "disposition": "enforce",
+        "script-sample": "alert('donnee personnelle FICTIVE')",
+    }
+}
 
 
 def test_rapport_csp_journalise_sans_donnee_personnelle(monde, caplog):
     c = monde.client()
     with caplog.at_level(logging.WARNING, logger="controldone.web.securite"):
-        r = c.post("/csp-rapport", content=json.dumps(_RAPPORT), headers={"content-type": "application/csp-report"})
+        r = c.post(
+            "/csp-rapport", content=json.dumps(_RAPPORT), headers={"content-type": "application/csp-report"}
+        )
     assert r.status_code == 204
     journal = caplog.text
     assert "directive=script-src-elem" in journal and "bloque=https://cdn.exemple.test" in journal
     assert "document=/espace/dossiers/dos_FICTIF" in journal
-    for interdit in ("SECRET-FICTIF", "piege.js", "exemple.test/espace", "Societe", "a%40", "alert", "testclient"):
+    for interdit in (
+        "SECRET-FICTIF",
+        "piege.js",
+        "exemple.test/espace",
+        "Societe",
+        "a%40",
+        "alert",
+        "testclient",
+    ):
         assert interdit not in journal
-    rapports = [{"type": "csp-violation", "body": {"effectiveDirective": "img-src", "blockedURL": "data",
-                                                   "documentURL": "http://testserver/admin", "disposition": "report"}}]
-    r = c.post("/csp-rapport", content=json.dumps(rapports), headers={"content-type": "application/reports+json"})
+    rapports = [
+        {
+            "type": "csp-violation",
+            "body": {
+                "effectiveDirective": "img-src",
+                "blockedURL": "data",
+                "documentURL": "http://testserver/admin",
+                "disposition": "report",
+            },
+        }
+    ]
+    r = c.post(
+        "/csp-rapport", content=json.dumps(rapports), headers={"content-type": "application/reports+json"}
+    )
     assert r.status_code == 204
 
 
 def test_rapport_csp_borne(monde):
     c = monde.client()
     gros = json.dumps({"csp-report": {"blocked-uri": "x" * 20_000}})
-    assert c.post("/csp-rapport", content=gros, headers={"content-type": "application/csp-report"}).status_code == 413
+    assert (
+        c.post("/csp-rapport", content=gros, headers={"content-type": "application/csp-report"}).status_code
+        == 413
+    )
     assert c.post("/csp-rapport", content="{}", headers={"content-type": "text/plain"}).status_code == 415
-    assert c.post("/csp-rapport", content="{pas du json", headers={"content-type": "application/csp-report"}).status_code == 400
+    assert (
+        c.post(
+            "/csp-rapport", content="{pas du json", headers={"content-type": "application/csp-report"}
+        ).status_code
+        == 400
+    )
     assert c.get("/csp-rapport").status_code in (404, 405)
-    statuts = [c.post("/csp-rapport", content=json.dumps(_RAPPORT),
-                      headers={"content-type": "application/csp-report"}).status_code for _ in range(25)]
+    statuts = [
+        c.post(
+            "/csp-rapport", content=json.dumps(_RAPPORT), headers={"content-type": "application/csp-report"}
+        ).status_code
+        for _ in range(25)
+    ]
     assert 429 in statuts
 
 
 # --- JavaScript de l'interface -----------------------------------------------------------------------------------------
 
-_PUITS = re.compile(r"\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write|\beval\s*\(|new\s+Function\b|"
-                    r"\bsrcdoc\b|createContextualFragment|setTimeout\(\s*[\"']|setInterval\(\s*[\"']|javascript:|"
-                    r"DOMParser|parseFromString|setHTMLUnsafe|createPolicy|createElement\(\s*[\"']script")
+_PUITS = re.compile(
+    r"\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write|\beval\s*\(|new\s+Function\b|"
+    r"\bsrcdoc\b|createContextualFragment|setTimeout\(\s*[\"']|setInterval\(\s*[\"']|javascript:|"
+    r"DOMParser|parseFromString|setHTMLUnsafe|createPolicy|createElement\(\s*[\"']script"
+)
 
 
 def test_javascript_sans_puits_html():
@@ -353,7 +412,9 @@ def test_javascript_sans_puits_html():
         texte = gabarit.read_text(encoding="utf-8")
         # Seul bloc admis sans ``src`` : des **données** JSON (non exécutées, hors ``script-src``) produites par
         # ``|tojson`` (qui échappe ``<``, ``>``, ``&`` et ``'`` : pas de sortie du bloc possible).
-        donnees = re.compile(r'<script type="application/json" id="[a-z0-9-]+">\{\{ [a-z_]+\|tojson \}\}</script>')
+        donnees = re.compile(
+            r'<script type="application/json" id="[a-z0-9-]+">\{\{ [a-z_]+\|tojson \}\}</script>'
+        )
         texte = donnees.sub("", texte)
         assert not re.search(r"<script(?![^>]*\bsrc=)", texte), gabarit.name  # aucun script en ligne
         assert not re.search(r"\son[a-z]+\s*=", texte), gabarit.name  # aucun gestionnaire en ligne
@@ -364,7 +425,9 @@ def test_javascript_sans_puits_html():
 
 
 def _audit():
-    spec = importlib.util.spec_from_file_location("audit_dependances", RACINE / "scripts/audit_dependances.py")
+    spec = importlib.util.spec_from_file_location(
+        "audit_dependances", RACINE / "scripts/audit_dependances.py"
+    )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -372,12 +435,26 @@ def _audit():
 
 def test_classement_des_licences():
     a = _audit()
-    for lic in ("MIT", "MIT License", "BSD-3-Clause", "Apache-2.0 OR BSD-3-Clause", "MIT-CMU", "PSF-2.0",
-                "Apache Software License; BSD License", "Public Domain", "OFL-1.1", "MIT-0",
-                "BSD-3-Clause, Apache-2.0, dependency licenses"):
+    for lic in (
+        "MIT",
+        "MIT License",
+        "BSD-3-Clause",
+        "Apache-2.0 OR BSD-3-Clause",
+        "MIT-CMU",
+        "PSF-2.0",
+        "Apache Software License; BSD License",
+        "Public Domain",
+        "OFL-1.1",
+        "MIT-0",
+        "BSD-3-Clause, Apache-2.0, dependency licenses",
+    ):
         assert a.classer_licence(lic) == "permissive", lic
-    for lic in ("GNU Lesser General Public License v2 or later (LGPLv2+)", "GPL-3.0", "AGPL-3.0-only",
-                "Mozilla Public License 2.0 (MPL 2.0)"):
+    for lic in (
+        "GNU Lesser General Public License v2 or later (LGPLv2+)",
+        "GPL-3.0",
+        "AGPL-3.0-only",
+        "Mozilla Public License 2.0 (MPL 2.0)",
+    ):
         assert a.classer_licence(lic) == "copyleft", lic
     assert a.classer_licence("UNKNOWN") == "inconnue" and a.classer_licence("Proprietary") == "inconnue"
 
@@ -397,8 +474,11 @@ def test_composants_embarques_declares():
 
 
 def _declaration_xml(n: int, entete: str = "<MRN>26FR000000000000A1</MRN>") -> bytes:
-    articles = "".join(f'<Item seq="{i}"><CommodityCode>8544429090</CommodityCode><Duty type="A00"><Rate>2</Rate>'
-                       f"<Amount>1.00</Amount></Duty></Item>" for i in range(n))
+    articles = "".join(
+        f'<Item seq="{i}"><CommodityCode>8544429090</CommodityCode><Duty type="A00"><Rate>2</Rate>'
+        f"<Amount>1.00</Amount></Duty></Item>"
+        for i in range(n)
+    )
     return f"<Declaration>{entete}{articles}</Declaration>".encode()
 
 
@@ -418,9 +498,11 @@ def test_fiche_deduite_lineaire():
 def test_fiche_deduite_xxe_et_entites():
     from controldone.ingest.structure import _xml, fiche_deduite
 
-    xxe = (b'<?xml version="1.0"?><!DOCTYPE d [<!ENTITY x SYSTEM "file:///etc/passwd">'
-           b'<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;"><!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]>'
-           + _declaration_xml(2, "<MRN>&x;</MRN><Note>&c;&c;&c;</Note>"))
+    xxe = (
+        b'<?xml version="1.0"?><!DOCTYPE d [<!ENTITY x SYSTEM "file:///etc/passwd">'
+        b'<!ENTITY a "aaaaaaaaaa"><!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;"><!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]>'
+        + _declaration_xml(2, "<MRN>&x;</MRN><Note>&c;&c;&c;</Note>")
+    )
     racine = _xml(xxe)
     if racine is not None:
         texte = "".join(racine.itertext())
@@ -478,8 +560,16 @@ def test_csv_de_grille_sans_effet_global_ni_erreur_500():
 def test_listes_parametres_hostiles_sans_erreur_500(monde):
     c = monde.client()
     connecter_client(c, monde)
-    for q in ("page=²", "page=١٢", "taille=⁵⁰", "page=99999999999", "tri=__class__", "q=" + "x" * 5000,
-              "q=%00", "page=1&page=2"):
+    for q in (
+        "page=²",
+        "page=١٢",
+        "taille=⁵⁰",
+        "page=99999999999",
+        "tri=__class__",
+        "q=" + "x" * 5000,
+        "q=%00",
+        "page=1&page=2",
+    ):
         r = c.get(f"/espace/dossiers?{q}", follow_redirects=False)
         assert r.status_code in (200, 400), (q, r.status_code)
 

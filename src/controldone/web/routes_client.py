@@ -62,8 +62,10 @@ def _pf(request: Request) -> Plateforme:
 
 
 def _contexte(acteur: Acteur) -> dict[str, Any]:
-    return {"peut_deposer": peut(acteur, Action.deposer, acteur),
-            "peut_declarer": peut(acteur, Action.declarer_recouvrement, acteur)}
+    return {
+        "peut_deposer": peut(acteur, Action.deposer, acteur),
+        "peut_declarer": peut(acteur, Action.declarer_recouvrement, acteur),
+    }
 
 
 @routeur.get("")
@@ -83,11 +85,28 @@ def tableau(request: Request) -> Response:
     for lot_ in lots:
         lot_["suivi"] = etat_traitement(lot_["statut"], job_du_lot(pf.db, a.tenant_id, lot_["id"]))
     rapports = publication.actions_client(pf, a, TypeAction.rapport_publication)
-    kpi = {"dossiers": ind.dossiers, "constats": ind.constats, "certain": ind.certain, "a_verifier": ind.a_verifier,
-           "reste": totaux["reste"], "credite": totaux["credite"]}
-    return page(request, "client/tableau.html.j2", titre="Tableau de bord", nav="tableau", info=info,
-                dossiers=dossiers, lots=lots, kpi=kpi, rapports=rapports[-3:],
-                graphes=graphes, demo=info["demo"], **_contexte(a))
+    kpi = {
+        "dossiers": ind.dossiers,
+        "constats": ind.constats,
+        "certain": ind.certain,
+        "a_verifier": ind.a_verifier,
+        "reste": totaux["reste"],
+        "credite": totaux["credite"],
+    }
+    return page(
+        request,
+        "client/tableau.html.j2",
+        titre="Tableau de bord",
+        nav="tableau",
+        info=info,
+        dossiers=dossiers,
+        lots=lots,
+        kpi=kpi,
+        rapports=rapports[-3:],
+        graphes=graphes,
+        demo=info["demo"],
+        **_contexte(a),
+    )
 
 
 @routeur.get("/depot")
@@ -99,8 +118,17 @@ def depot_form(request: Request) -> Response:
         lots = lister_lots(scope, limite=10)
     for lot_ in lots:
         lot_["suivi"] = etat_traitement(lot_["statut"], job_du_lot(pf.db, a.tenant_id, lot_["id"]))
-    return page(request, "client/depot.html.j2", titre="Déposer des documents", nav="depot", info=info, lots=lots,
-                limites=pf.limites, demo=info["demo"], **_contexte(a))
+    return page(
+        request,
+        "client/depot.html.j2",
+        titre="Déposer des documents",
+        nav="depot",
+        info=info,
+        lots=lots,
+        limites=pf.limites,
+        demo=info["demo"],
+        **_contexte(a),
+    )
 
 
 @routeur.post("/depot")
@@ -110,7 +138,9 @@ def deposer(request: Request) -> Response:
     if not peut(a, Action.deposer, a):
         raise Interdit("dépôt non autorisé")
     form = depuis_boucle(request.form, max_files=2000, max_fields=10, max_part_size=64 * 1024)
-    request.app.state.securite.verifier(request, form.get("csrf") if isinstance(form.get("csrf"), str) else None)
+    request.app.state.securite.verifier(
+        request, form.get("csrf") if isinstance(form.get("csrf"), str) else None
+    )
     transmis = []
     for item in form.getlist("fichiers"):
         if not isinstance(item, UploadFile) or not (item.filename or "").strip():
@@ -139,8 +169,19 @@ def lot(request: Request, lot_id: str) -> Response:
         info = client_info(scope)
         donnees = lire_lot(scope, lot_id, job=job)
     suivi = etat_traitement(donnees["statut"], job)
-    return page(request, "client/lot.html.j2", titre="Dépôt", nav="depot", lot=donnees, info=info, demo=info["demo"],
-                suivi=suivi, etapes=ETAPES, rafraichir=not suivi["fini"], **_contexte(a))
+    return page(
+        request,
+        "client/lot.html.j2",
+        titre="Dépôt",
+        nav="depot",
+        lot=donnees,
+        info=info,
+        demo=info["demo"],
+        suivi=suivi,
+        etapes=ETAPES,
+        rafraichir=not suivi["fini"],
+        **_contexte(a),
+    )
 
 
 def _limiter_suivi(request: Request, a: Acteur) -> Response | None:
@@ -184,8 +225,14 @@ def etat_lot(request: Request, lot_id: str) -> Response:
     except AccesRefuse:
         return JSONResponse({"erreur": "introuvable"}, status_code=404, headers={"Cache-Control": "no-store"})
     e = etat_traitement(donnees["statut"], job)
-    return _json_suivi({"lot_id": donnees["id"], **e, "dossiers": len(donnees["dossiers"]),
-                        "fichiers": len(donnees["fichiers"])})
+    return _json_suivi(
+        {
+            "lot_id": donnees["id"],
+            **e,
+            "dossiers": len(donnees["dossiers"]),
+            "fichiers": len(donnees["fichiers"]),
+        }
+    )
 
 
 @routeur.get("/dossiers")
@@ -195,8 +242,19 @@ def dossiers(request: Request) -> Response:
     with _pf(request).db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
         p, total_dossiers = page_dossiers(scope, req)  # filtres, tri et pagination en SQL (D-3801)
-    return page(request, "client/dossiers.html.j2", titre="Dossiers", nav="dossiers", p=p, req=req,
-                statuts=STATUTS_DOSSIER, total_dossiers=total_dossiers, info=info, demo=info["demo"], **_contexte(a))
+    return page(
+        request,
+        "client/dossiers.html.j2",
+        titre="Dossiers",
+        nav="dossiers",
+        p=p,
+        req=req,
+        statuts=STATUTS_DOSSIER,
+        total_dossiers=total_dossiers,
+        info=info,
+        demo=info["demo"],
+        **_contexte(a),
+    )
 
 
 @routeur.get("/dossiers/{dossier_id}")
@@ -207,9 +265,20 @@ def dossier(request: Request, dossier_id: str) -> Response:
         info = client_info(scope)
         lu = detail_dossier(scope, dossier_id)
         images = images_dossier(pf.vault, scope, lu)
-    return page(request, "dossier.html.j2", titre=_("Dossier {ref}", ref=lu.ligne.reference), nav="dossiers", lu=lu,
-                img=images, base="/espace", client=info, fondateur=False, demo=info["demo"], retour=request.url.path,
-                **_contexte(a))
+    return page(
+        request,
+        "dossier.html.j2",
+        titre=_("Dossier {ref}", ref=lu.ligne.reference),
+        nav="dossiers",
+        lu=lu,
+        img=images,
+        base="/espace",
+        client=info,
+        fondateur=False,
+        demo=info["demo"],
+        retour=request.url.path,
+        **_contexte(a),
+    )
 
 
 @routeur.get("/documents/{document_id}/pages/{numero}.png")
@@ -245,8 +314,17 @@ def rapports(request: Request) -> Response:
         info = client_info(scope)
     liste = list(reversed(publication.actions_client(pf, a, TypeAction.rapport_publication)))
     dossiers_rec = list(reversed(publication.actions_client(pf, a, TypeAction.reclamation_dossier)))
-    return page(request, "client/rapports.html.j2", titre="Rapports et relevés d'écarts", nav="rapports",
-                rapports=liste, reclamations=dossiers_rec, info=info, demo=info["demo"], **_contexte(a))
+    return page(
+        request,
+        "client/rapports.html.j2",
+        titre="Rapports et relevés d'écarts",
+        nav="rapports",
+        rapports=liste,
+        reclamations=dossiers_rec,
+        info=info,
+        demo=info["demo"],
+        **_contexte(a),
+    )
 
 
 @routeur.get("/rapports/{action_id}/{fmt}")
@@ -266,10 +344,22 @@ def recouvrement(request: Request) -> Response:
         req = lire_requete(request, params_registre(transitaires), TRIS_REGISTRE, "-reste")
         totaux, total_lignes = totaux_registre(scope)
         p = page_registre(scope, req, transitaires)  # filtres, tri et pagination en SQL (D-3801)
-    return page(request, "client/recouvrement.html.j2", titre="Suivi des avoirs reçus", nav="recouvrement",
-                p=p, req=req, statuts=STATUTS_ECART, transitaires=sorted(transitaires.items(), key=lambda t: t[1]),
-                total_lignes=total_lignes, totaux=totaux, info=info, demo=info["demo"],
-                retour=retour_sur("/espace/recouvrement" + req.url(), "/espace/recouvrement"), **_contexte(a))
+    return page(
+        request,
+        "client/recouvrement.html.j2",
+        titre="Suivi des avoirs reçus",
+        nav="recouvrement",
+        p=p,
+        req=req,
+        statuts=STATUTS_ECART,
+        transitaires=sorted(transitaires.items(), key=lambda t: t[1]),
+        total_lignes=total_lignes,
+        totaux=totaux,
+        info=info,
+        demo=info["demo"],
+        retour=retour_sur("/espace/recouvrement" + req.url(), "/espace/recouvrement"),
+        **_contexte(a),
+    )
 
 
 def _formulaire_client(request: Request) -> Any:
@@ -284,7 +374,9 @@ def declarer_envoi(request: Request, ecart_id: str) -> Response:
     form = _formulaire_client(request)
     retour = retour_sur(form.get("retour"), "/espace/recouvrement")
     try:
-        reclamations.declarer_envoi_releve(_pf(request), a, ecart_id, str(form.get("commentaire") or "")[:500])
+        reclamations.declarer_envoi_releve(
+            _pf(request), a, ecart_id, str(form.get("commentaire") or "")[:500]
+        )
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
     return redirection(request, retour, message="Envoi de votre courrier enregistré.")
@@ -298,11 +390,22 @@ def avoir(request: Request, ecart_id: str) -> Response:
     try:
         montant = montant_saisi(form.get("montant"), nom="montant HT de l'avoir")
         tva = form.get("montant_tva")
-        montant_tva = montant_saisi(tva, nom="TVA de l'avoir", zero=True) if isinstance(tva, str) and tva.strip() else None
+        montant_tva = (
+            montant_saisi(tva, nom="TVA de l'avoir", zero=True)
+            if isinstance(tva, str) and tva.strip()
+            else None
+        )
         origine = "administration" if form.get("origine") == "administration" else "transitaire"
-        reclamations.enregistrer_avoir_recu(_pf(request), a, ecart_id, montant, str(form.get("reference") or "")[:200],
-                                            str(form.get("commentaire") or "")[:500], origine=origine,
-                                            montant_tva=montant_tva)
+        reclamations.enregistrer_avoir_recu(
+            _pf(request),
+            a,
+            ecart_id,
+            montant,
+            str(form.get("reference") or "")[:200],
+            str(form.get("commentaire") or "")[:500],
+            origine=origine,
+            montant_tva=montant_tva,
+        )
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
     return redirection(request, retour, message="Avoir enregistré.")

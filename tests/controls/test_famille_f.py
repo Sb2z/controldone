@@ -52,9 +52,13 @@ def ft(id, numero, date, *lignes, total=None, emetteur="Transit Fictif SA", refs
         return vs(f"facture_transitaire.{champ}", val, document_id=id)
 
     return facture_transitaire(
-        id=id, numero=f("numero", numero), date=f("date", date), emetteur=Partie(nom=f("emetteur.nom", emetteur)),
+        id=id,
+        numero=f("numero", numero),
+        date=f("date", date),
+        emetteur=Partie(nom=f("emetteur.nom", emetteur)),
         lignes=[ln(id, *x) if isinstance(x, tuple) else x for x in lignes],
-        total_ttc=f("total_ttc", total) if total else None, refs_mrn=[f("refs_mrn[]", m) for m in refs_mrn],
+        total_ttc=f("total_ttc", total) if total else None,
+        refs_mrn=[f("refs_mrn[]", m) for m in refs_mrn],
     )
 
 
@@ -62,9 +66,12 @@ def ln(doc, montant, nature=NatureLigne.debours_droits, mrn=MRN, ref=None):
     def f(champ, val):
         return vs(f"facture_transitaire.{champ}", val, document_id=doc)
 
-    return LigneFactureTransitaire(nature=nature, montant_ht=f("lignes[].montant_ht", montant),
-                                   mrn=f("lignes[].mrn", mrn) if mrn else None,
-                                   ref_transport=f("lignes[].ref_transport", ref) if ref else None)
+    return LigneFactureTransitaire(
+        nature=nature,
+        montant_ht=f("lignes[].montant_ht", montant),
+        mrn=f("lignes[].mrn", mrn) if mrn else None,
+        ref_transport=f("lignes[].ref_transport", ref) if ref else None,
+    )
 
 
 def propre(r):
@@ -89,7 +96,10 @@ def test_f1_meme_identite_dans_un_autre_dossier():
     assert r.constat.montant_en_jeu is None and "dos_autre" in r.constat.libelle
     propre(r)
     # l'occurrence la plus ancienne ne porte pas le constat
-    assert un(f1_document_en_double(contexte([ancien], autres_dossiers=[autre(nouveau)]))).outcome is Outcome.conforme
+    assert (
+        un(f1_document_en_double(contexte([ancien], autres_dossiers=[autre(nouveau)]))).outcome
+        is Outcome.conforme
+    )
 
 
 def test_f1_doublon_marque_dans_le_dossier():
@@ -142,7 +152,9 @@ def test_f3_meme_mrn_refacture_deux_fois_certain():
 
 
 def test_f3_facture_complementaire_conforme():
-    dec = declaration(id="doc_dec", mrn=MRN, taxations=[taxation("doc_dec", base="1000", taux="10", montant="100.00")])
+    dec = declaration(
+        id="doc_dec", mrn=MRN, taxations=[taxation("doc_dec", base="1000", taux="10", montant="100.00")]
+    )
     ancien = ft("doc_0001", "FT-001", "2026-08-01", ("60.00",))
     nouveau = ft("doc_0002", "FT-002", "2026-09-01", ("40.00",))
     r = un(f3_declaration_refacturee_deux_fois(contexte([dec, nouveau], autres_dossiers=[autre(ancien)])))
@@ -152,12 +164,20 @@ def test_f3_facture_complementaire_conforme():
 def test_f3_annulee_par_avoir():
     ancien = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
     nouveau = ft("doc_0002", "FT-002", "2026-09-01", ("50.00",))
-    av = document(TypeDocument.avoir, ChampsAvoir(
-        numero=vs("avoir.numero", "AV-1", document_id="doc_av"),
-        refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-001", document_id="doc_av")],
-        lignes=[LigneFactureTransitaire(nature=NatureLigne.debours_droits,
-                                        montant_ht=vs("avoir.lignes[].montant_ht", "50.00", document_id="doc_av"))],
-    ), id="doc_av")
+    av = document(
+        TypeDocument.avoir,
+        ChampsAvoir(
+            numero=vs("avoir.numero", "AV-1", document_id="doc_av"),
+            refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-001", document_id="doc_av")],
+            lignes=[
+                LigneFactureTransitaire(
+                    nature=NatureLigne.debours_droits,
+                    montant_ht=vs("avoir.lignes[].montant_ht", "50.00", document_id="doc_av"),
+                )
+            ],
+        ),
+        id="doc_av",
+    )
     r = un(f3_declaration_refacturee_deux_fois(contexte([nouveau], autres_dossiers=[autre(ancien, av)])))
     assert r.outcome is Outcome.conforme and r.details["annulee_par_avoir"] is True
 
@@ -175,7 +195,9 @@ def test_f3_a_verifier_montants_differents_mrn_non_lu_ou_lien_faible():
     r = un(f3_declaration_refacturee_deux_fois(contexte([nouveau], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.a_verifier and r.constat.montant_en_jeu == D("50.00")
     # MRN lu seulement en en-tête de l'autre facture (affectation §12.2) : toujours certain s'il est lu
-    ancien = ft("doc_0001", "FT-001", "2026-08-01", ("50.00", NatureLigne.debours_droits, None), refs_mrn=(MRN,))
+    ancien = ft(
+        "doc_0001", "FT-001", "2026-08-01", ("50.00", NatureLigne.debours_droits, None), refs_mrn=(MRN,)
+    )
     r = un(f3_declaration_refacturee_deux_fois(contexte([nouveau], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.ecart_certain
     # aucun MRN imprimé sur l'autre facture : rattachement impossible -> pas de doublon détecté
@@ -183,8 +205,11 @@ def test_f3_a_verifier_montants_differents_mrn_non_lu_ou_lien_faible():
     r = un(f3_declaration_refacturee_deux_fois(contexte([nouveau], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.conforme
     ancien = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
-    r = un(f3_declaration_refacturee_deux_fois(
-        contexte([nouveau], autres_dossiers=[autre(ancien, force=ForceLien.faible)])))
+    r = un(
+        f3_declaration_refacturee_deux_fois(
+            contexte([nouveau], autres_dossiers=[autre(ancien, force=ForceLien.faible)])
+        )
+    )
     assert r.outcome is Outcome.a_verifier and RaisonCode.rattachement_faible in r.constat.raisons
 
 
@@ -206,13 +231,16 @@ def test_f3_sans_facture_transitaire():
 def test_f4_meme_prestation():
     presta = ("45.00", NatureLigne.frais_dedouanement, None, "999-11112222")
     ancien = ft("doc_0001", "FT-001", "2026-08-01", presta)
-    nouveau = ft("doc_0002", "FT-002", "2026-09-01", ("45.00", NatureLigne.frais_dedouanement, None, "99911112222"))
+    nouveau = ft(
+        "doc_0002", "FT-002", "2026-09-01", ("45.00", NatureLigne.frais_dedouanement, None, "99911112222")
+    )
     r = un(f4_prestation_facturee_deux_fois(contexte([nouveau], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.a_verifier and r.constat.montant_en_jeu == D("45.00")
     assert r.constat.composante.value == "prestation"
     propre(r)
-    autre_montant = ft("doc_0002", "FT-002", "2026-09-01", ("46.00", NatureLigne.frais_dedouanement, None,
-                                                            "999-11112222"))
+    autre_montant = ft(
+        "doc_0002", "FT-002", "2026-09-01", ("46.00", NatureLigne.frais_dedouanement, None, "999-11112222")
+    )
     r = un(f4_prestation_facturee_deux_fois(contexte([autre_montant], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.conforme
 
@@ -224,8 +252,13 @@ def fc_doc(id="doc_fc", total="1000.00"):
     def f(champ, val):
         return vs(f"facture_commerciale.{champ}", val, document_id=id)
 
-    return facture_commerciale(id=id, numero=f("numero", "INV-2026-001"), total_facture=f("total_facture", total),
-                               devise=f("devise", "EUR"), date=f("date", "2026-07-20"))
+    return facture_commerciale(
+        id=id,
+        numero=f("numero", "INV-2026-001"),
+        total_facture=f("total_facture", total),
+        devise=f("devise", "EUR"),
+        date=f("date", "2026-07-20"),
+    )
 
 
 def dec_f5(id, mrn, montant, date):
@@ -233,31 +266,44 @@ def dec_f5(id, mrn, montant, date):
         return vs(f"declaration.{champ}", val, document_id=id)
 
     return declaration(
-        id=id, mrn=mrn, montant_total_facture=d("montant_total_facture", montant),
-        devise_facture=d("devise_facture", "EUR"), date_acceptation=d("date_acceptation", date),
-        documents_references=[DocumentReference(type_code=d("documents_references[].type_code", "N380"),
-                                                reference=d("documents_references[].reference", "INV 2026 001"))],
+        id=id,
+        mrn=mrn,
+        montant_total_facture=d("montant_total_facture", montant),
+        devise_facture=d("devise_facture", "EUR"),
+        date_acceptation=d("date_acceptation", date),
+        documents_references=[
+            DocumentReference(
+                type_code=d("documents_references[].type_code", "N380"),
+                reference=d("documents_references[].reference", "INV 2026 001"),
+            )
+        ],
     )
 
 
 def test_f5_facture_sur_plusieurs_declarations():
     ici = dec_f5("doc_dec2", MRN2, "700.00", "2026-09-01")
     ailleurs = dec_f5("doc_dec1", MRN, "600.00", "2026-08-01")
-    r = un(f5_facture_sur_plusieurs_declarations(contexte([fc_doc(), ici], autres_dossiers=[autre(ailleurs)])))
+    r = un(
+        f5_facture_sur_plusieurs_declarations(contexte([fc_doc(), ici], autres_dossiers=[autre(ailleurs)]))
+    )
     c = r.constat
     assert r.outcome is Outcome.a_verifier and c.montant_en_jeu == D("300.00")
     assert c.nature_montant is NatureMontant.ecart_documentaire and c.autres_dossiers == ["dos_autre"]
     assert "1 300,00 EUR" in esp(c.libelle)
     propre(r)
     # le dossier de la déclaration la plus ancienne ne porte pas le constat
-    r = un(f5_facture_sur_plusieurs_declarations(contexte([fc_doc(), ailleurs], autres_dossiers=[autre(ici)])))
+    r = un(
+        f5_facture_sur_plusieurs_declarations(contexte([fc_doc(), ailleurs], autres_dossiers=[autre(ici)]))
+    )
     assert r.outcome is Outcome.non_applicable
 
 
 def test_f5_envois_partiels_conformes():
     ici = dec_f5("doc_dec2", MRN2, "400.00", "2026-09-01")
     ailleurs = dec_f5("doc_dec1", MRN, "600.00", "2026-08-01")
-    r = un(f5_facture_sur_plusieurs_declarations(contexte([fc_doc(), ici], autres_dossiers=[autre(ailleurs)])))
+    r = un(
+        f5_facture_sur_plusieurs_declarations(contexte([fc_doc(), ici], autres_dossiers=[autre(ailleurs)]))
+    )
     assert r.outcome is Outcome.conforme
 
 
@@ -271,7 +317,9 @@ def test_f5_versions_du_meme_mrn_ne_comptent_qu_une_fois():
 def test_moteur_famille_f():
     ancien = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
     nouveau = ft("doc_0002", "FT-002", "2026-09-01", ("50.00",))
-    rs = run_controls(contexte([nouveau], autres_dossiers=[autre(ancien)]), controles=["F1", "F2", "F3", "F4", "F5"])
+    rs = run_controls(
+        contexte([nouveau], autres_dossiers=[autre(ancien)]), controles=["F1", "F2", "F3", "F4", "F5"]
+    )
     f3 = [r for r in rs if r.controle_id == "F3"]
     assert f3[0].outcome is Outcome.ecart_certain and f3[0].constat.motif_blocage is None
 
@@ -289,10 +337,14 @@ def test_f3_autre_facture_illisible_signal():
     # la facture illisible est la plus récente : pas de constat ici
     ancien_lu = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
     recent_illisible = ft("doc_0002", "FT-002", "2026-09-01", refs_mrn=(MRN,))
-    r = un(f3_declaration_refacturee_deux_fois(contexte([ancien_lu], autres_dossiers=[autre(recent_illisible)])))
+    r = un(
+        f3_declaration_refacturee_deux_fois(contexte([ancien_lu], autres_dossiers=[autre(recent_illisible)]))
+    )
     assert r.outcome is Outcome.conforme
     # facture couvrant seulement une partie du liquidé : complémentarité possible, pas de signal
-    dec = declaration(id="doc_dec", mrn=MRN, taxations=[taxation("doc_dec", base="1000", taux="10", montant="100.00")])
+    dec = declaration(
+        id="doc_dec", mrn=MRN, taxations=[taxation("doc_dec", base="1000", taux="10", montant="100.00")]
+    )
     r = un(f3_declaration_refacturee_deux_fois(contexte([dec, nouveau], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.conforme
 
@@ -303,9 +355,13 @@ def test_f1_document_partage_entre_dossiers_un_seul_constat():
     a = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
     b = ft("doc_0002", "FT-001", "2026-08-01", ("50.00",))
     b.doublon_de = a.id
-    rs = {r.unite: r for r in f1_document_en_double(contexte([a, b], autres_dossiers=[autre(a, b, id="dos_a")]))}
+    rs = {
+        r.unite: r for r in f1_document_en_double(contexte([a, b], autres_dossiers=[autre(a, b, id="dos_a")]))
+    }
     r = rs["doc:doc_0002"]
     assert r.outcome is Outcome.non_applicable and r.raison_code is RaisonCode.couvert_par_autre_controle
     assert r.details["dossier"] == "dos_a"
-    rs = {r.unite: r for r in f1_document_en_double(contexte([a, b], autres_dossiers=[autre(a, b, id="dos_z")]))}
+    rs = {
+        r.unite: r for r in f1_document_en_double(contexte([a, b], autres_dossiers=[autre(a, b, id="dos_z")]))
+    }
     assert rs["doc:doc_0002"].outcome is Outcome.a_verifier

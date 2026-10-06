@@ -73,93 +73,292 @@ _ENTETE: dict[str, frozenset[str]] = {
     "mrn": _ens("MRN", "MovementReferenceNumber", "MasterReferenceNumber"),
     "lrn": _ens("LRN", "LocalReferenceNumber", "LocalReference", "ReferenceLocale"),
     "version": _ens("Version", "VersionNumber", "Rang", "AmendmentNumber"),
-    "date_acceptation": _ens("AcceptanceDate", "DateOfAcceptance", "AcceptedOn", "DateAcceptation", "AccepteeLe",
-                             "Annahmedatum", "DataAccettazione", "FechaAdmision", "FechaAceptacion"),
-    "devise_facture": _ens("InvoiceCurrency", "CurrencyOfInvoice", "MonnaieFacture", "MonnaieFacturation",
-                           "DeviseFacture", "Rechnungswaehrung", "Rechnungswahrung", "ValutaFattura",
-                           "MonedaFactura"),
-    "montant_total_facture": _ens("InvoiceTotal", "TotalInvoiceAmount", "TotalAmountInvoiced", "InvoiceAmount",
-                                  "MontantTotalFacture", "TotalFacture", "MontantFacture", "Rechnungsbetrag",
-                                  "ImportoFattura", "ImporteFactura"),
-    "taux_change": _ens("ExchangeRate", "RateOfExchange", "TauxChange", "TauxDeChange", "Wechselkurs",
-                        "TassoCambio", "TipoCambio"),
-    "masse_brute_totale": _ens("GrossMass", "TotalGrossMass", "GrossWeight", "TotalGrossWeight", "MasseBrute",
-                               "MasseBruteTotale", "PoidsBrut", "Rohmasse", "MassaLorda", "MasaBruta"),
-    "nombre_colis_total": _ens("Packages", "TotalPackages", "NumberOfPackages", "Colis", "NombreColis",
-                               "Packstuecke", "Packstucke", "Colli", "Bultos"),
-    "nombre_articles": _ens("ItemCount", "NumberOfItems", "TotalItems", "NombreArticles", "NombrePositions",
-                            "AnzahlPositionen", "NumeroArticoli", "NumeroPartidas"),
-    "pays_expedition": _ens("DispatchCountry", "CountryOfDispatch", "CountryOfExport", "PaysExpedition",
-                            "PaysProvenance", "Versendungsland", "PaeseSpedizione", "PaisExpedicion"),
+    "date_acceptation": _ens(
+        "AcceptanceDate",
+        "DateOfAcceptance",
+        "AcceptedOn",
+        "DateAcceptation",
+        "AccepteeLe",
+        "Annahmedatum",
+        "DataAccettazione",
+        "FechaAdmision",
+        "FechaAceptacion",
+    ),
+    "devise_facture": _ens(
+        "InvoiceCurrency",
+        "CurrencyOfInvoice",
+        "MonnaieFacture",
+        "MonnaieFacturation",
+        "DeviseFacture",
+        "Rechnungswaehrung",
+        "Rechnungswahrung",
+        "ValutaFattura",
+        "MonedaFactura",
+    ),
+    "montant_total_facture": _ens(
+        "InvoiceTotal",
+        "TotalInvoiceAmount",
+        "TotalAmountInvoiced",
+        "InvoiceAmount",
+        "MontantTotalFacture",
+        "TotalFacture",
+        "MontantFacture",
+        "Rechnungsbetrag",
+        "ImportoFattura",
+        "ImporteFactura",
+    ),
+    "taux_change": _ens(
+        "ExchangeRate",
+        "RateOfExchange",
+        "TauxChange",
+        "TauxDeChange",
+        "Wechselkurs",
+        "TassoCambio",
+        "TipoCambio",
+    ),
+    "masse_brute_totale": _ens(
+        "GrossMass",
+        "TotalGrossMass",
+        "GrossWeight",
+        "TotalGrossWeight",
+        "MasseBrute",
+        "MasseBruteTotale",
+        "PoidsBrut",
+        "Rohmasse",
+        "MassaLorda",
+        "MasaBruta",
+    ),
+    "nombre_colis_total": _ens(
+        "Packages",
+        "TotalPackages",
+        "NumberOfPackages",
+        "Colis",
+        "NombreColis",
+        "Packstuecke",
+        "Packstucke",
+        "Colli",
+        "Bultos",
+    ),
+    "nombre_articles": _ens(
+        "ItemCount",
+        "NumberOfItems",
+        "TotalItems",
+        "NombreArticles",
+        "NombrePositions",
+        "AnzahlPositionen",
+        "NumeroArticoli",
+        "NumeroPartidas",
+    ),
+    "pays_expedition": _ens(
+        "DispatchCountry",
+        "CountryOfDispatch",
+        "CountryOfExport",
+        "PaysExpedition",
+        "PaysProvenance",
+        "Versendungsland",
+        "PaeseSpedizione",
+        "PaisExpedicion",
+    ),
     "pays_destination": _ens("DestinationCountry", "CountryOfDestination", "PaysDestination"),
-    "total_droits_taxes": _ens("TotalDutiesAndTaxes", "TotalDutiesTaxes", "TotalDroitsEtTaxes", "TotalDroitsTaxes",
-                               "SummeAbgaben", "TotaleDaziImposte", "TotalDerechosImpuestos"),
-    "total_a_payer": _ens("TotalPayable", "TotalToPay", "AmountPayable", "TotalAPayer", "TotalAAcquitter",
-                          "ZuZahlen", "TotaleDaPagare", "TotalAPagar"),
+    "total_droits_taxes": _ens(
+        "TotalDutiesAndTaxes",
+        "TotalDutiesTaxes",
+        "TotalDroitsEtTaxes",
+        "TotalDroitsTaxes",
+        "SummeAbgaben",
+        "TotaleDaziImposte",
+        "TotalDerechosImpuestos",
+    ),
+    "total_a_payer": _ens(
+        "TotalPayable",
+        "TotalToPay",
+        "AmountPayable",
+        "TotalAPayer",
+        "TotalAAcquitter",
+        "ZuZahlen",
+        "TotaleDaPagare",
+        "TotalAPagar",
+    ),
 }
 #: Conditions de livraison : élément dont le texte ou l'attribut « code » est l'Incoterm, l'attribut « place » le lieu.
-_LIVRAISON = _ens("DeliveryTerms", "TermsOfDelivery", "Incoterm", "Incoterms", "ConditionsLivraison", "Livraison",
-                  "Lieferbedingungen", "CondizioniConsegna", "CondicionesEntrega")
+_LIVRAISON = _ens(
+    "DeliveryTerms",
+    "TermsOfDelivery",
+    "Incoterm",
+    "Incoterms",
+    "ConditionsLivraison",
+    "Livraison",
+    "Lieferbedingungen",
+    "CondizioniConsegna",
+    "CondicionesEntrega",
+)
 _ATTR_INCOTERM = _ens("code", "incoterm", "terms")
 _ATTR_LIEU = _ens("place", "lieu", "location", "ort", "luogo", "lugar")
 #: Sens du taux de change : attribut de l'élément du taux.
 _ATTR_SENS = _ens("basis", "expression", "direction", "sens", "quotation", "base")
 
 _PARTIES: dict[str, frozenset[str]] = {
-    "importateur": _ens("Importer", "Importateur", "Consignee", "Destinataire", "Einfuehrer", "Einfuhrer",
-                        "Importatore", "Importador"),
+    "importateur": _ens(
+        "Importer",
+        "Importateur",
+        "Consignee",
+        "Destinataire",
+        "Einfuehrer",
+        "Einfuhrer",
+        "Importatore",
+        "Importador",
+    ),
     "declarant": _ens("Declarant", "Anmelder", "Dichiarante", "Declarante"),
-    "representant": _ens("FiscalRepresentative", "RepresentantFiscal", "Representative", "Representant",
-                         "TaxRepresentative", "Fiskalvertreter", "RappresentanteFiscale", "RepresentanteFiscal"),
+    "representant": _ens(
+        "FiscalRepresentative",
+        "RepresentantFiscal",
+        "Representative",
+        "Representant",
+        "TaxRepresentative",
+        "Fiskalvertreter",
+        "RappresentanteFiscale",
+        "RepresentanteFiscal",
+    ),
 }
 _PARTIE_CHAMPS: dict[str, frozenset[str]] = {
     "nom": _ens("Name", "Nom", "RaisonSociale", "CompanyName", "Firma", "Denominazione", "Nombre"),
-    "tva": _ens("VATNumber", "VAT", "VATId", "VATNo", "TVA", "NumeroTVA", "TVAIntracom", "UStIdNr", "PartitaIVA",
-                "NIF"),
+    "tva": _ens(
+        "VATNumber",
+        "VAT",
+        "VATId",
+        "VATNo",
+        "TVA",
+        "NumeroTVA",
+        "TVAIntracom",
+        "UStIdNr",
+        "PartitaIVA",
+        "NIF",
+    ),
     "eori": _ens("EORI", "EORINumber", "NumeroEORI"),
 }
 
 _ARTICLE: dict[str, frozenset[str]] = {
-    "code_marchandise": _ens("CommodityCode", "HSCode", "CNCode", "CodeNC", "TaricCode", "GoodsCode",
-                             "CodeMarchandise", "Nomenclature", "Warennummer", "CodiceMerce", "CodigoMercancia"),
-    "description": _ens("Description", "GoodsDescription", "Designation", "Libelle", "Warenbezeichnung",
-                        "Descrizione", "Descripcion"),
-    "pays_origine": _ens("Origin", "CountryOfOrigin", "OriginCountry", "Origine", "PaysOrigine", "Ursprungsland",
-                         "PaeseOrigine", "PaisOrigen"),
-    "code_preference": _ens("Preference", "PreferenceCode", "Preference", "Praeferenz", "Preferenza",
-                            "Preferencia"),
+    "code_marchandise": _ens(
+        "CommodityCode",
+        "HSCode",
+        "CNCode",
+        "CodeNC",
+        "TaricCode",
+        "GoodsCode",
+        "CodeMarchandise",
+        "Nomenclature",
+        "Warennummer",
+        "CodiceMerce",
+        "CodigoMercancia",
+    ),
+    "description": _ens(
+        "Description",
+        "GoodsDescription",
+        "Designation",
+        "Libelle",
+        "Warenbezeichnung",
+        "Descrizione",
+        "Descripcion",
+    ),
+    "pays_origine": _ens(
+        "Origin",
+        "CountryOfOrigin",
+        "OriginCountry",
+        "Origine",
+        "PaysOrigine",
+        "Ursprungsland",
+        "PaeseOrigine",
+        "PaisOrigen",
+    ),
+    "code_preference": _ens(
+        "Preference", "PreferenceCode", "Preference", "Praeferenz", "Preferenza", "Preferencia"
+    ),
     "regime": _ens("Procedure", "ProcedureCode", "Regime", "Verfahren", "Regimen"),
-    "montant_facture_article": _ens("InvoicedAmount", "InvoiceAmount", "AmountInvoiced", "ItemPrice",
-                                    "MontantFacture", "PrixArticle", "Rechnungsbetrag", "ImportoFatturato",
-                                    "ImporteFacturado"),
-    "valeur_statistique": _ens("StatisticalValue", "ValeurStatistique", "StatistischerWert", "ValoreStatistico",
-                               "ValorEstadistico"),
-    "masse_nette": _ens("NetMass", "NetWeight", "MasseNette", "PoidsNet", "Eigenmasse", "MassaNetta", "MasaNeta"),
-    "masse_brute": _ens("GrossMass", "GrossWeight", "MasseBrute", "PoidsBrut", "Rohmasse", "MassaLorda",
-                        "MasaBruta"),
-    "quantite_unite_supplementaire": _ens("SupplementaryUnits", "SupplementaryQuantity", "SupplementaryUnit",
-                                          "UnitesSupplementaires", "QuantiteSupplementaire",
-                                          "BesondereMasseinheit", "UnitaSupplementari"),
-    "nombre_colis": _ens("Packages", "NumberOfPackages", "Colis", "NombreColis", "Packstuecke", "Colli",
-                         "Bultos"),
+    "montant_facture_article": _ens(
+        "InvoicedAmount",
+        "InvoiceAmount",
+        "AmountInvoiced",
+        "ItemPrice",
+        "MontantFacture",
+        "PrixArticle",
+        "Rechnungsbetrag",
+        "ImportoFatturato",
+        "ImporteFacturado",
+    ),
+    "valeur_statistique": _ens(
+        "StatisticalValue", "ValeurStatistique", "StatistischerWert", "ValoreStatistico", "ValorEstadistico"
+    ),
+    "masse_nette": _ens(
+        "NetMass", "NetWeight", "MasseNette", "PoidsNet", "Eigenmasse", "MassaNetta", "MasaNeta"
+    ),
+    "masse_brute": _ens(
+        "GrossMass", "GrossWeight", "MasseBrute", "PoidsBrut", "Rohmasse", "MassaLorda", "MasaBruta"
+    ),
+    "quantite_unite_supplementaire": _ens(
+        "SupplementaryUnits",
+        "SupplementaryQuantity",
+        "SupplementaryUnit",
+        "UnitesSupplementaires",
+        "QuantiteSupplementaire",
+        "BesondereMasseinheit",
+        "UnitaSupplementari",
+    ),
+    "nombre_colis": _ens(
+        "Packages", "NumberOfPackages", "Colis", "NombreColis", "Packstuecke", "Colli", "Bultos"
+    ),
 }
 #: Numéro d'article : attribut ou élément enfant.
-_NUMERO_ARTICLE = _ens("seq", "number", "no", "num", "numero", "rang", "position", "itemnumber", "itemno",
-                       "sequence", "sequencenumber", "pos", "line", "linenumber")
+_NUMERO_ARTICLE = _ens(
+    "seq",
+    "number",
+    "no",
+    "num",
+    "numero",
+    "rang",
+    "position",
+    "itemnumber",
+    "itemno",
+    "sequence",
+    "sequencenumber",
+    "pos",
+    "line",
+    "linenumber",
+)
 
 _TAXE: dict[str, frozenset[str]] = {
     "type_taxe": _ens("type", "code", "TaxType", "DutyType", "TaxCode", "CodeTaxe", "TypeTaxe", "Abgabenart"),
-    "base_montant": _ens("Base", "TaxBase", "Assiette", "BaseImposition", "Bemessungsgrundlage", "BaseImponibile",
-                         "BaseImponible", "BaseAmount"),
+    "base_montant": _ens(
+        "Base",
+        "TaxBase",
+        "Assiette",
+        "BaseImposition",
+        "Bemessungsgrundlage",
+        "BaseImponibile",
+        "BaseImponible",
+        "BaseAmount",
+    ),
     "base_quantite": _ens("BaseQuantity", "QuantityBase", "AssietteQuantite", "BaseQuantite"),
     "taux": _ens("Rate", "Taux", "TaxRate", "DutyRate", "Quotite", "Satz", "Aliquota", "Tipo"),
     "montant": _ens("Amount", "Montant", "TaxAmount", "DutyAmount", "Betrag", "Importo", "Importe"),
-    "montant_a_payer": _ens("Payable", "AmountPayable", "APayer", "Exigible", "ZuZahlen", "DaPagare", "APagar"),
-    "mode_paiement": _ens("Payment", "PaymentMethod", "MethodOfPayment", "MP", "ModePaiement", "Paiement",
-                          "Zahlungsart", "Pagamento", "Pago"),
+    "montant_a_payer": _ens(
+        "Payable", "AmountPayable", "APayer", "Exigible", "ZuZahlen", "DaPagare", "APagar"
+    ),
+    "mode_paiement": _ens(
+        "Payment",
+        "PaymentMethod",
+        "MethodOfPayment",
+        "MP",
+        "ModePaiement",
+        "Paiement",
+        "Zahlungsart",
+        "Pagamento",
+        "Pago",
+    ),
 }
 #: Rattachement d'une taxation à un article (attribut de l'élément de la taxe).
-_ATTR_ARTICLE_TAXE = _ens("item", "article", "position", "itemseq", "itemnumber", "pos", "line", "positionnumber")
+_ATTR_ARTICLE_TAXE = _ens(
+    "item", "article", "position", "itemseq", "itemnumber", "pos", "line", "positionnumber"
+)
 _LIBELLE_TAXE = _ens("label", "libelle", "description", "name", "bezeichnung")
 _ATTR_UNITE = _ens("unit", "unite", "unitcode", "uom", "einheit", "unita", "unidad")
 _ATTR_DEVISE = _ens("currency", "currencyid", "devise", "monnaie", "waehrung", "valuta", "moneda")
@@ -174,15 +373,29 @@ _CODE_NC_RE = re.compile(r"^\d{8}(?:\d{2})?$")
 
 #: Catégorie d'après le libellé imprimé (ordre significatif) — mêmes notions que l'extracteur des PDF.
 _CATEGORIES_LIBELLE: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"forfait|petits? envois?|faible valeur|low.?value|flat.?rate|pauschal"), "forfait_petits_envois"),
+    (
+        re.compile(r"forfait|petits? envois?|faible valeur|low.?value|flat.?rate|pauschal"),
+        "forfait_petits_envois",
+    ),
     (re.compile(r"\b(?:tva|vat|iva|btw|mwst|einfuhrumsatzsteuer|import sales tax)\b"), "tva"),
-    (re.compile(r"dumping|compensat|countervail|specifique|specific|accise|excise|additionnel|additional|autre"),
-     "autre_taxe"),
+    (
+        re.compile(
+            r"dumping|compensat|countervail|specifique|specific|accise|excise|additionnel|additional|autre"
+        ),
+        "autre_taxe",
+    ),
     (re.compile(r"droits?( de douane)?\b|customs dut|\bdut(?:y|ies)\b|\bzoll\b|\bdazi|\barancel"), "droit"),
 )
 #: Modes de paiement (lettres de la nomenclature de l'Union).
-_PAIEMENT_UE = {"A": "comptant", "B": "comptant", "C": "comptant", "D": "comptant", "H": "comptant",
-                "E": "differe", "G": "autoliquide"}
+_PAIEMENT_UE = {
+    "A": "comptant",
+    "B": "comptant",
+    "C": "comptant",
+    "D": "comptant",
+    "H": "comptant",
+    "E": "differe",
+    "G": "autoliquide",
+}
 
 
 # --- outils ---------------------------------------------------------------------------------------------------
@@ -265,9 +478,15 @@ def _code_taxe_de(el: etree._Element) -> tuple[str, str] | None:
 
 
 def _est_taxe(el: etree._Element) -> bool:
-    return _code_taxe_de(el) is not None and _enfant(el, _TAXE["montant"]) is not None and (
-        _enfant(el, _TAXE["taux"]) is not None or _enfant(el, _TAXE["base_montant"]) is not None
-        or _enfant(el, _TAXE["base_quantite"]) is not None)
+    return (
+        _code_taxe_de(el) is not None
+        and _enfant(el, _TAXE["montant"]) is not None
+        and (
+            _enfant(el, _TAXE["taux"]) is not None
+            or _enfant(el, _TAXE["base_montant"]) is not None
+            or _enfant(el, _TAXE["base_quantite"]) is not None
+        )
+    )
 
 
 #: Élément d'un total par code de taxe (« TypeTotal », « TotalParType », « total », « Summe ») : D-3101.
@@ -281,16 +500,22 @@ def _est_total_code(el: etree._Element, codes: set[str]) -> bool:
     if len(_enfants(el)) or not _TOTAL_RE.search(_cle(_local(el.tag))):
         return False
     a = _attr(el, _TAXE["type_taxe"])
-    return (a is not None and (el.get(a) or "").strip() in codes
-            and bool(_NOMBRE_RE.match(_texte(el).replace(" ", ""))))
+    return (
+        a is not None
+        and (el.get(a) or "").strip() in codes
+        and bool(_NOMBRE_RE.match(_texte(el).replace(" ", "")))
+    )
 
 
 def _est_document(el: etree._Element) -> bool:
     if _est_taxe(el) or _est_article(el):
         return False
     a = _attr(el, _DOC_CODE)
-    if a is not None and _CODE_DOC_RE.match((el.get(a) or "").strip()) and (
-            _texte(el) or _enfant(el, _DOC_REF) is not None or _attr(el, _DOC_REF)):
+    if (
+        a is not None
+        and _CODE_DOC_RE.match((el.get(a) or "").strip())
+        and (_texte(el) or _enfant(el, _DOC_REF) is not None or _attr(el, _DOC_REF))
+    ):
         return True
     x = _enfant(el, _DOC_CODE)
     return x is not None and bool(_CODE_DOC_RE.match(_texte(x))) and _enfant(el, _DOC_REF) is not None
@@ -387,8 +612,10 @@ def deduire_fiche_declaration(racine: etree._Element | None) -> dict[str, Any] |
             poser(chemin, arbre.chemin(el))
             a = _attr(el, _ATTR_SENS)
             if a is not None and _valeurs_sens(el.get(a) or ""):
-                poser("taux_change_sens", {"source": f"{arbre.chemin(el)}/@{a}",
-                                           "valeurs": _valeurs_sens(el.get(a) or "")})
+                poser(
+                    "taux_change_sens",
+                    {"source": f"{arbre.chemin(el)}/@{a}", "valeurs": _valeurs_sens(el.get(a) or "")},
+                )
             continue
         a_dev = _attr(el, _ATTR_DEVISE)
         if chemin in ("montant_total_facture", "total_droits_taxes", "total_a_payer") and a_dev is not None:
@@ -479,11 +706,15 @@ def deduire_fiche_declaration(racine: etree._Element | None) -> dict[str, Any] |
             tables["categorie"] = cats
         # totaux imprimés par code de taxe (D-3101), hors des groupes déjà reconnus
         codes = {c[1] for t in taxes if (c := _code_taxe_de(t)) is not None}
-        totaux = [el for el in _groupes(arbre, lambda el: _est_total_code(el, codes)) if not _dans(el, groupes)]
+        totaux = [
+            el for el in _groupes(arbre, lambda el: _est_total_code(el, codes)) if not _dans(el, groupes)
+        ]
         if totaux:
             a_code = _attr(totaux[0], _TAXE["type_taxe"])
-            listes["totaux_par_code"] = {"source": arbre.chemin(totaux[0]),
-                                         "champs": {"type_taxe": f"@{a_code}", "montant": "."}}
+            listes["totaux_par_code"] = {
+                "source": arbre.chemin(totaux[0]),
+                "champs": {"type_taxe": f"@{a_code}", "montant": "."},
+            }
     if documents:
         d0 = documents[0]
         champs = {}
@@ -552,7 +783,8 @@ def coherence_declaration(champs: ChampsDeclaration) -> tuple[int, int]:
             continue
         calcule = b * r / 100
         if abs(calcule - m) <= Decimal("0.011") + abs(m) * Decimal("0.0005") or (
-                m == m.to_integral_value() and abs(calcule - m) < 1):  # montant arrondi à l'euro
+            m == m.to_integral_value() and abs(calcule - m) < 1
+        ):  # montant arrondi à l'euro
             ok += 1
         else:
             ko += 1

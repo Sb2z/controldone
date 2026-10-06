@@ -108,14 +108,22 @@ _MRN_RE = re.compile(r"\b(\d{2}[A-Z]{2}[A-Z0-9]{14})\b")
 _RX_TRANSPORT_NOTE = re.compile(
     r"^\s*(?:titre de transport|transport document|document de transport|lta|awb|hawb|mawb|b/l|bl|cmr|"
     r"connaissement|bill of lading|lettre de transport|air waybill)(?:\s*/\s*(?:lta|awb|b/l|bl|cmr))*"
-    r"\s*(?:n°|no\.?)?\s*:\s*(\S.*)$", re.IGNORECASE)
+    r"\s*(?:n°|no\.?)?\s*:\s*(\S.*)$",
+    re.IGNORECASE,
+)
 #: Codes de type de document (UNTDID 1001) : avoirs.
 CODES_AVOIR = {"381", "261", "262", "396", "532"}
 
 
 def _parser() -> etree.XMLParser:
-    return etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, huge_tree=False,
-                           remove_comments=True, remove_pis=True)
+    return etree.XMLParser(
+        resolve_entities=False,
+        no_network=True,
+        load_dtd=False,
+        huge_tree=False,
+        remove_comments=True,
+        remove_pis=True,
+    )
 
 
 def _xml(contenu: bytes) -> etree._Element | None:
@@ -198,6 +206,7 @@ def _schema_valide(racine: etree._Element, flavor: str) -> bool:
 
 
 # --- natures de lignes, catégories de taxes, paiement ----------------------------------------------------
+
 
 def _norm(t: str) -> str:
     from controldone.normalize.text import sans_accents
@@ -298,13 +307,19 @@ class FicheCorrespondance:
         if d["type"] not in ("xml", "csv"):
             raise ValueError("type de fiche : xml ou csv")
         fiche = cls(
-            format_id=str(d["format_id"]), version=str(d.get("version", "1.0.0")), type=d["type"],
+            format_id=str(d["format_id"]),
+            version=str(d.get("version", "1.0.0")),
+            type=d["type"],
             sous_type=d.get("sous_type") or ("export_xml" if d["type"] == "xml" else "export_csv"),
-            detection=dict(d.get("detection") or {}), entete=dict(d.get("entete") or {}),
-            listes=dict(d.get("listes") or {}), tables={k: dict(v or {}) for k, v in (d.get("tables") or {}).items()},
+            detection=dict(d.get("detection") or {}),
+            entete=dict(d.get("entete") or {}),
+            listes=dict(d.get("listes") or {}),
+            tables={k: dict(v or {}) for k, v in (d.get("tables") or {}).items()},
             constantes=dict(d.get("constantes") or {}),
-            espaces_noms=dict((d.get("xml") or {}).get("espaces_noms") or {}), csv=dict(d.get("csv") or {}),
-            devise_par_defaut=d.get("devise_par_defaut"), source=source,
+            espaces_noms=dict((d.get("xml") or {}).get("espaces_noms") or {}),
+            csv=dict(d.get("csv") or {}),
+            devise_par_defaut=d.get("devise_par_defaut"),
+            source=source,
         )
         fiche._verifier_chemins()
         return fiche
@@ -316,8 +331,15 @@ class FicheCorrespondance:
             if chemin not in valides:
                 raise ValueError(f"{self.format_id} : champ inconnu du modèle : {chemin}")
         for nom, spec in self.listes.items():
-            a_plat = self.type == "csv" and not self.csv.get("multi_enregistrements")  # une ligne = un élément
-            if "source" not in spec and "type_enregistrement" not in spec and "eclater" not in spec and not a_plat:
+            a_plat = self.type == "csv" and not self.csv.get(
+                "multi_enregistrements"
+            )  # une ligne = un élément
+            if (
+                "source" not in spec
+                and "type_enregistrement" not in spec
+                and "eclater" not in spec
+                and not a_plat
+            ):
                 raise ValueError(f"{self.format_id} : liste {nom} sans source")
             for chemin in [*(spec.get("champs") or {}), *(spec.get("enumerations") or {})]:
                 if f"{nom}[].{chemin}" not in valides:
@@ -338,8 +360,10 @@ class FicheCorrespondance:
             ns = etree.QName(racine.tag).namespace
             if det.get("espace_noms") and ns != det["espace_noms"]:
                 return False
-            return not (det.get("marqueur")
-                        and not re.search(det["marqueur"], contenu[:4096].decode("utf-8", "ignore")))
+            return not (
+                det.get("marqueur")
+                and not re.search(det["marqueur"], contenu[:4096].decode("utf-8", "ignore"))
+            )
         if mime != MIME_CSV:
             return False
         texte = decoder_texte(contenu) or ""
@@ -348,8 +372,11 @@ class FicheCorrespondance:
         except ValueError:
             return False
         requis = det.get("colonnes_requises") or []
-        return bool(entete) and all(c in entete for c in requis) and (
-            not det.get("marqueur") or bool(re.search(det["marqueur"], texte[:4096])))
+        return (
+            bool(entete)
+            and all(c in entete for c in requis)
+            and (not det.get("marqueur") or bool(re.search(det["marqueur"], texte[:4096])))
+        )
 
     def _lire_csv(self, texte: str) -> tuple[list[str], list[dict[str, str]], list[int]]:
         """(colonnes, enregistrements, numéros de ligne). En mode ``multi_enregistrements`` (une ligne
@@ -391,11 +418,13 @@ class FicheCorrespondance:
         def commentaire(r: list[str]) -> bool:
             return bool(prefixe) and bool(r) and r[0].lstrip().startswith(str(prefixe))
 
-        debut = next((k for k, r in enumerate(rangs) if any(c.strip() for c in r) and not commentaire(r)), None)
+        debut = next(
+            (k for k, r in enumerate(rangs) if any(c.strip() for c in r) and not commentaire(r)), None
+        )
         if debut is None:
             return [], [], []
         entete = [c.strip() for c in rangs[debut]]
-        for i, r in enumerate(rangs[debut + 1:], start=debut + 2):
+        for i, r in enumerate(rangs[debut + 1 :], start=debut + 2):
             if not any(c.strip() for c in r) or commentaire(r):
                 continue
             out.append({entete[j]: r[j].strip() for j in range(min(len(entete), len(r)))})
@@ -446,18 +475,37 @@ class InfoStructure:
 
 
 def _cii_libelles(racine: etree._Element, ns: dict[str, str] = NS_CII) -> tuple[list[str], int]:
-    libs = [_txt(x) for x in racine.xpath(
-        ".//ram:IncludedSupplyChainTradeLineItem/ram:SpecifiedTradeProduct/ram:Name", namespaces=ns)]
-    codes = len(racine.xpath(".//ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode | "
-                             ".//ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID", namespaces=ns))
+    libs = [
+        _txt(x)
+        for x in racine.xpath(
+            ".//ram:IncludedSupplyChainTradeLineItem/ram:SpecifiedTradeProduct/ram:Name", namespaces=ns
+        )
+    ]
+    codes = len(
+        racine.xpath(
+            ".//ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode | "
+            ".//ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID",
+            namespaces=ns,
+        )
+    )
     return [x for x in libs if x], codes
 
 
 def _ubl_libelles(racine: etree._Element) -> tuple[list[str], int]:
-    libs = [_txt(x) for x in racine.xpath(".//cac:InvoiceLine/cac:Item/cbc:Name | .//cac:CreditNoteLine/cac:Item/cbc:Name",
-                                          namespaces=NS_UBL)]
-    codes = len(racine.xpath(".//cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode | "
-                             ".//cac:Item/cac:OriginCountry/cbc:IdentificationCode", namespaces=NS_UBL))
+    libs = [
+        _txt(x)
+        for x in racine.xpath(
+            ".//cac:InvoiceLine/cac:Item/cbc:Name | .//cac:CreditNoteLine/cac:Item/cbc:Name",
+            namespaces=NS_UBL,
+        )
+    ]
+    codes = len(
+        racine.xpath(
+            ".//cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode | "
+            ".//cac:Item/cac:OriginCountry/cbc:IdentificationCode",
+            namespaces=NS_UBL,
+        )
+    )
     return [x for x in libs if x], codes
 
 
@@ -478,8 +526,9 @@ def _total_negatif(racine: etree._Element, syntaxe: str) -> bool:
     if syntaxe == "ubl":
         brut = _txt_first(racine, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount", NS_UBL)
     elif syntaxe == "zf1":
-        brut = _txt_first(racine, f"{_ZF1_SET}/ram:SpecifiedTradeSettlementMonetarySummation/ram:GrandTotalAmount",
-                          NS_ZF1)
+        brut = _txt_first(
+            racine, f"{_ZF1_SET}/ram:SpecifiedTradeSettlementMonetarySummation/ram:GrandTotalAmount", NS_ZF1
+        )
     else:
         brut = _txt_first(racine, f"{_CII_SUM}/ram:GrandTotalAmount", NS_CII)
     return bool(brut) and brut.lstrip().startswith("-") and bool(re.search(r"[1-9]", brut))
@@ -492,15 +541,25 @@ def est_facture_transitaire(libelles: Sequence[str], nb_codes_marchandise: int) 
         return False
     natures = [nature_ligne(x) for x in libelles]
     debours = sum(1 for n in natures if n.est_debours)
-    douane = sum(1 for n in natures if n in (NatureLigne.frais_dedouanement, NatureLigne.frais_avance_fonds,
-                                              NatureLigne.frais_ligne_supplementaire, NatureLigne.magasinage))
+    douane = sum(
+        1
+        for n in natures
+        if n
+        in (
+            NatureLigne.frais_dedouanement,
+            NatureLigne.frais_avance_fonds,
+            NatureLigne.frais_ligne_supplementaire,
+            NatureLigne.magasinage,
+        )
+    )
     if nb_codes_marchandise >= max(1, len(libelles) // 2):
         return False
     return debours >= 1 or douane >= 1
 
 
-def analyser_contenu_structure(contenu: bytes, mime: str | None = None,
-                               fiches: Iterable[FicheCorrespondance] | None = None) -> InfoStructure | None:
+def analyser_contenu_structure(
+    contenu: bytes, mime: str | None = None, fiches: Iterable[FicheCorrespondance] | None = None
+) -> InfoStructure | None:
     """Reconnaît un fichier structuré : Factur-X, CII, UBL, export de déclaration (fiche). ``None`` sinon."""
     mime = mime or detecter_type(contenu)
     fiches = tuple(fiches) if fiches is not None else charger_fiches()
@@ -514,8 +573,13 @@ def analyser_contenu_structure(contenu: bytes, mime: str | None = None,
     elif mime == MIME_CSV:
         for f in fiches:
             if f.type == "csv" and f.reconnait(contenu, mime):
-                return InfoStructure(format=f.format_id, type=TypeDocument.declaration, sous_type=f.sous_type,
-                                     confiance=0.99, fiche=f)
+                return InfoStructure(
+                    format=f.format_id,
+                    type=TypeDocument.declaration,
+                    sous_type=f.sous_type,
+                    confiance=0.99,
+                    fiche=f,
+                )
         return None
     elif mime != MIME_XML:
         return None
@@ -535,33 +599,59 @@ def analyser_contenu_structure(contenu: bytes, mime: str | None = None,
         fmt = fmt or "zugferd1"
     elif syntaxe == "ubl":
         credit = _local(racine.tag) == "CreditNote"
-        code = (_txt_first(racine, "cbc:CreditNoteTypeCode", NS_UBL) or "381") if credit else (
-            _txt_first(racine, "cbc:InvoiceTypeCode", NS_UBL) or "380")
+        code = (
+            (_txt_first(racine, "cbc:CreditNoteTypeCode", NS_UBL) or "381")
+            if credit
+            else (_txt_first(racine, "cbc:InvoiceTypeCode", NS_UBL) or "380")
+        )
         libs, codes = _ubl_libelles(racine)
         valide = _schema_valide(racine, "ubl-2.1-creditnote" if credit else "ubl-2.1-invoice")
         fmt = fmt or "ubl"
     elif _est_commande(racine):
         # Bon de commande structuré (Order-X, UBL Order) : jamais une facture (§5.3.1, P2 ; D-1507).
-        return InfoStructure(format="commande", type=TypeDocument.document_non_exploitable, sous_type=None,
-                             confiance=0.98, xml=xml, motif=MotifNonExploitable.bon_commande)
+        return InfoStructure(
+            format="commande",
+            type=TypeDocument.document_non_exploitable,
+            sous_type=None,
+            confiance=0.98,
+            xml=xml,
+            motif=MotifNonExploitable.bon_commande,
+        )
     else:
         for f in fiches:
             if f.type == "xml" and f.reconnait(xml, MIME_XML):
-                return InfoStructure(format=f.format_id, type=TypeDocument.declaration, sous_type=f.sous_type,
-                                     confiance=0.99, xml=xml, fiche=f)
+                return InfoStructure(
+                    format=f.format_id,
+                    type=TypeDocument.declaration,
+                    sous_type=f.sous_type,
+                    confiance=0.99,
+                    xml=xml,
+                    fiche=f,
+                )
         fiche = fiche_deduite(racine)
         if fiche is not None:  # export de déclaration de format inconnu, lu par ses noms d'éléments (D-2401)
-            return InfoStructure(format=fiche.format_id, type=TypeDocument.declaration, sous_type=fiche.sous_type,
-                                 confiance=0.9, xml=xml, fiche=fiche)
+            return InfoStructure(
+                format=fiche.format_id,
+                type=TypeDocument.declaration,
+                sous_type=fiche.sous_type,
+                confiance=0.9,
+                xml=xml,
+                fiche=fiche,
+            )
         return None
-    if code in CODES_AVOIR or (syntaxe == "ubl" and _local(racine.tag) == "CreditNote") or _total_negatif(racine, syntaxe):
+    if (
+        code in CODES_AVOIR
+        or (syntaxe == "ubl" and _local(racine.tag) == "CreditNote")
+        or _total_negatif(racine, syntaxe)
+    ):
         t, st = TypeDocument.avoir, None
     elif est_facture_transitaire(libs, codes):
         t, st = TypeDocument.facture_transitaire, None
     else:
         t, st = TypeDocument.facture_commerciale, ("pro_forma" if code == "325" else "facture")
-    return InfoStructure(format=fmt, type=t, sous_type=st, confiance=0.98 if valide else 0.9, xml=xml,
-                         schema_valide=valide)
+    return InfoStructure(
+        format=fmt, type=t, sous_type=st, confiance=0.98 if valide else 0.9, xml=xml, schema_valide=valide
+    )
 
 
 # --- outils XPath -------------------------------------------------------------------------------------------
@@ -627,9 +717,17 @@ def _chemin_xpath(el: etree._Element, cache: dict | None = None) -> str:
 
 
 class _Constructeur:
-    def __init__(self, document: Document, type_doc: TypeDocument, extracteur: ExtracteurInfo, methode: Methode,
-                 confiance: float, ctx: ExtractionContext, separateur_decimal: str = ".",
-                 format_date: str | None = None):
+    def __init__(
+        self,
+        document: Document,
+        type_doc: TypeDocument,
+        extracteur: ExtracteurInfo,
+        methode: Methode,
+        confiance: float,
+        ctx: ExtractionContext,
+        separateur_decimal: str = ".",
+        format_date: str | None = None,
+    ):
         self.document = document
         self.type_doc = type_doc
         self.extracteur = extracteur
@@ -640,16 +738,32 @@ class _Constructeur:
         self.format_date = format_date
         self.page = document.pages[0].numero if document.pages else 1
 
-    def vs(self, chemin: str, brut: str | None, contexte: str | None, *, devise: str | None = None,
-           page: int | None = None, sep: str | None = None) -> ValeurSourcee | None:
+    def vs(
+        self,
+        chemin: str,
+        brut: str | None,
+        contexte: str | None,
+        *,
+        devise: str | None = None,
+        page: int | None = None,
+        sep: str | None = None,
+    ) -> ValeurSourcee | None:
         if brut is None or not str(brut).strip():
             return None
         brut = str(brut).strip()
         tv = type_valeur_pour(chemin)
         v = valeur_sourcee(
-            type_document=self.type_doc, chemin=chemin, brut=brut, document_id=self.document.id,
-            page=page or self.page, extracteur=self.extracteur, methode=self.methode, confiance=self.confiance,
-            texte_contexte=contexte, separateur_decimal=sep or self.sep, devise=devise,
+            type_document=self.type_doc,
+            chemin=chemin,
+            brut=brut,
+            document_id=self.document.id,
+            page=page or self.page,
+            extracteur=self.extracteur,
+            methode=self.methode,
+            confiance=self.confiance,
+            texte_contexte=contexte,
+            separateur_decimal=sep or self.sep,
+            devise=devise,
             id_valeur=self.ctx.ids.nouveau("vs") if self.ctx.ids is not None else None,
         )
         if tv is TypeValeur.date and v.valeur is None:
@@ -698,7 +812,9 @@ _RX_COLIS = re.compile(r"(?:packages|colis|bultos)\s*:?\s*(\d+)", re.I)
 _RX_POURCENT = re.compile(r"(\d+(?:[.,]\d+)?)\s?%")
 _RX_PERIODE = re.compile(r"(\d{2}/\d{2}/\d{4})\s*(?:-|au|to)\s*(\d{2}/\d{2}/\d{4})")
 _RX_MOTIF = re.compile(r"^\s*(?:motif|reason|motivo)\s*:\s*(.+)$", re.I)
-_TRANSPORT_NOMS = re.compile(r"\b(?:b/?l|lta|awb|bill of lading|air ?way ?bill|connaissement|cmr|hawb|mawb)\b", re.I)
+_TRANSPORT_NOMS = re.compile(
+    r"\b(?:b/?l|lta|awb|bill of lading|air ?way ?bill|connaissement|cmr|hawb|mawb)\b", re.I
+)
 
 
 def _premier(rx: re.Pattern[str], texte: str) -> str | None:
@@ -730,8 +846,11 @@ def _sous_total_type(raison: str | None, charge: bool, code: str | None = None):
 
 def _champs_notes_fc(c, champs: ChampsFactureCommerciale, notes: list[tuple[str, str]]) -> None:
     for texte, cx in notes:
-        for chemin, rx in (("masse_brute_totale", _RX_MASSE_BRUTE), ("masse_nette_totale", _RX_MASSE_NETTE),
-                           ("nombre_colis", _RX_COLIS)):
+        for chemin, rx in (
+            ("masse_brute_totale", _RX_MASSE_BRUTE),
+            ("masse_nette_totale", _RX_MASSE_NETTE),
+            ("nombre_colis", _RX_COLIS),
+        ):
             if champs.obtenir(chemin) is None:
                 _definir(champs, chemin, c.vs(chemin, _premier(rx, texte), cx))
 
@@ -769,7 +888,9 @@ class _Lecteur:
         self.cache: dict[etree._Element, dict[etree._Element, int]] = {}
         self._compiles: dict[str, etree.XPath] = {}
 
-    def un(self, base: etree._Element | None, xp: str) -> tuple[str | None, str | None, etree._Element | None]:
+    def un(
+        self, base: etree._Element | None, xp: str
+    ) -> tuple[str | None, str | None, etree._Element | None]:
         base = self.racine if base is None else base
         r = self._xp(xp)(base)
         if not r:
@@ -778,8 +899,11 @@ class _Lecteur:
         if isinstance(el, str):
             parent = getattr(el, "getparent", lambda: None)()
             nom_attr = getattr(el, "attrname", None)
-            ctx_ = (f"{_chemin_xpath(parent, self.cache)}/@{_local(nom_attr) if nom_attr else ''}"
-                    if parent is not None else xp)
+            ctx_ = (
+                f"{_chemin_xpath(parent, self.cache)}/@{_local(nom_attr) if nom_attr else ''}"
+                if parent is not None
+                else xp
+            )
             return el.strip() or None, ctx_, None
         v = _txt(el)
         return (v or None), _chemin_xpath(el, self.cache), el
@@ -795,8 +919,9 @@ class _Lecteur:
             f = self._compiles[xp] = etree.XPath(xp, namespaces=self.ns)
         return f
 
-    def montant_devise(self, base: etree._Element | None, xp: str, devise: str | None
-                       ) -> tuple[str | None, str | None, etree._Element | None]:
+    def montant_devise(
+        self, base: etree._Element | None, xp: str, devise: str | None
+    ) -> tuple[str | None, str | None, etree._Element | None]:
         """Premier montant dont ``currencyID`` est la devise de la facture : le total de TVA (BT-110) peut être
         répété dans la devise de comptabilisation (BT-111), qui n'est pas celui de la facture (D-1503)."""
         els = self.tous(base, xp)
@@ -814,8 +939,10 @@ def _partie(c: _Constructeur, lec: _Lecteur, champs, prefixe: str, base_xp: str,
         noms = ("cac:Party/cac:PartyLegalEntity/cbc:RegistrationName", "cac:Party/cac:PartyName/cbc:Name")
         # BT-31 / BT-48 : schéma « VAT » ; une autre immatriculation fiscale (BT-32, schéma « FC »…) n'est
         # pas un numéro de TVA (D-1503).
-        tva_xps = ("cac:Party/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID",
-                   "cac:Party/cac:PartyTaxScheme[not(cac:TaxScheme/cbc:ID)]/cbc:CompanyID")
+        tva_xps = (
+            "cac:Party/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID",
+            "cac:Party/cac:PartyTaxScheme[not(cac:TaxScheme/cbc:ID)]/cbc:CompanyID",
+        )
         adr = "cac:Party/cac:PostalAddress"
         siren_xp = "cac:Party/cac:PartyLegalEntity/cbc:CompanyID"
     else:
@@ -844,8 +971,11 @@ def _partie(c: _Constructeur, lec: _Lecteur, champs, prefixe: str, base_xp: str,
     if adresses:
         parties = [_txt(x) for x in adresses[0] if _txt(x)]
         if parties:
-            _definir(champs, f"{prefixe}.adresse",
-                     c.vs(f"{prefixe}.adresse", ", ".join(parties), _chemin_xpath(adresses[0], lec.cache)))
+            _definir(
+                champs,
+                f"{prefixe}.adresse",
+                c.vs(f"{prefixe}.adresse", ", ".join(parties), _chemin_xpath(adresses[0], lec.cache)),
+            )
 
 
 def _total_imprime(v: ValeurSourcee | None) -> ValeurSourcee | None:
@@ -878,17 +1008,31 @@ def _remplir_fc(c: _Constructeur, champs: ChampsFactureCommerciale, d: dict[str,
         if brut and champs.ref_transport is None and (not nom or _TRANSPORT_NOMS.search(nom)):
             _definir(champs, "ref_transport", c.vs("ref_transport", brut, cx))
     for k, (raison, montant, charge, cx_r, cx_m, code) in enumerate(d["frais"]):
-        champs.definir(f"sous_totaux[{k}].type", _sous_total_type(raison[0] if raison else None, charge, code))
+        champs.definir(
+            f"sous_totaux[{k}].type", _sous_total_type(raison[0] if raison else None, charge, code)
+        )
         if raison and raison[0]:
             _definir(champs, f"sous_totaux[{k}].libelle", c.vs(f"sous_totaux[{k}].libelle", raison[0], cx_r))
-        _definir(champs, f"sous_totaux[{k}].montant", c.vs(f"sous_totaux[{k}].montant", montant, cx_m, devise=devise))
+        _definir(
+            champs,
+            f"sous_totaux[{k}].montant",
+            c.vs(f"sous_totaux[{k}].montant", montant, cx_m, devise=devise),
+        )
     _champs_notes_fc(c, champs, d["notes"])
     for i, lg in enumerate(d["lignes"]):
         p = f"lignes[{i}]"
-        for rel in ("numero_ligne", "reference_article", "description", "code_marchandise_imprime", "pays_origine"):
+        for rel in (
+            "numero_ligne",
+            "reference_article",
+            "description",
+            "code_marchandise_imprime",
+            "pays_origine",
+        ):
             _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", *lg[rel][:2]))
         _definir(champs, f"{p}.quantite", _quantite(c, f"{p}.quantite", lg["quantite"]))
-        _definir(champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", *lg["prix_unitaire"][:2], devise=devise))
+        _definir(
+            champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", *lg["prix_unitaire"][:2], devise=devise)
+        )
         _definir(champs, f"{p}.montant_ligne", c.vs(f"{p}.montant_ligne", *lg["montant"][:2], devise=devise))
         _champs_notes_ligne_fc(c, champs, p, lg["notes"])
 
@@ -907,20 +1051,30 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
     d: dict[str, Any] = {
         "numero": lec.un(None, "rsm:ExchangedDocument/ram:ID"),
         "date": lec.un(None, "rsm:ExchangedDocument/ram:IssueDateTime/udt:DateTimeString"),
-        "devise_lu": devise_lu, "devise": (devise_lu[0] or "").upper() or None, "total": total,
+        "devise_lu": devise_lu,
+        "devise": (devise_lu[0] or "").upper() or None,
+        "total": total,
         "incoterm": lec.un(None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:DeliveryTypeCode"),
-        "incoterm_lieu": lec.un(None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:RelevantTradeLocation/ram:Name"),
+        "incoterm_lieu": lec.un(
+            None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:RelevantTradeLocation/ram:Name"
+        ),
         "notes": _notes(lec, None, "rsm:ExchangedDocument/ram:IncludedNote/ram:Content"),
-        "refs_doc": [], "frais": [], "lignes": [],
-        "refs_origine": [lec.un(x, ".") for x in lec.tous(None, f"{st}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")],
+        "refs_doc": [],
+        "frais": [],
+        "lignes": [],
+        "refs_origine": [
+            lec.un(x, ".") for x in lec.tous(None, f"{st}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")
+        ],
         "totaux": {
             "ht": lec.un(None, f"{sm}/ram:TaxBasisTotalAmount"),
             "tva": lec.montant_devise(None, f"{sm}/ram:TaxTotalAmount", (devise_lu[0] or "").upper() or None),
-            "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
+            "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"),
+            "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
             "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
             "arrondi": lec.un(None, f"{sm}/ram:RoundingAmount"),
         },
-        "vendeur": f"{hdr}/ram:SellerTradeParty", "acheteur": f"{hdr}/ram:BuyerTradeParty",
+        "vendeur": f"{hdr}/ram:SellerTradeParty",
+        "acheteur": f"{hdr}/ram:BuyerTradeParty",
         "destinataire": f"{dl}/ram:ShipToTradeParty",
     }
     for el in lec.tous(None, f"{hdr}/ram:AdditionalReferencedDocument"):
@@ -928,27 +1082,48 @@ def _lire_cii(lec: _Lecteur) -> dict[str, Any]:
         d["refs_doc"].append((brut, cx, lec.un(el, "ram:Name")[0]))
     _frais_cii(lec, d, st)
     for el in lec.tous(None, "rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem"):
-        d["lignes"].append({
-            "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
-            "reference_article": lec.un(el, "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
-            "description": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
-            "libelle": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
-            "code_marchandise_imprime": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
-            "code_marchandise": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
-            "pays_origine": lec.un(el, "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
-            "quantite": lec.un(el, "ram:SpecifiedLineTradeDelivery/ram:BilledQuantity"),
-            "prix_unitaire": lec.un(el, "ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount"),
-            "montant": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/"
-                                  "ram:LineTotalAmount"),
-            "taux_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent"),
-            "marqueur_tva": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"),
-            "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
-            # période de facturation de la ligne (BG-26, BT-134/135 ; magasinage, D-2301)
-            "periode_debut": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/"
-                                        "ram:StartDateTime/udt:DateTimeString"),
-            "periode_fin": lec.un(el, "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/"
-                                      "ram:EndDateTime/udt:DateTimeString"),
-        })
+        d["lignes"].append(
+            {
+                "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
+                "reference_article": lec.un(el, "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
+                "description": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+                "libelle": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+                "code_marchandise_imprime": lec.un(
+                    el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"
+                ),
+                "code_marchandise": lec.un(
+                    el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"
+                ),
+                "pays_origine": lec.un(el, "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
+                "quantite": lec.un(el, "ram:SpecifiedLineTradeDelivery/ram:BilledQuantity"),
+                "prix_unitaire": lec.un(
+                    el, "ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount"
+                ),
+                "montant": lec.un(
+                    el,
+                    "ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/"
+                    "ram:LineTotalAmount",
+                ),
+                "taux_tva": lec.un(
+                    el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent"
+                ),
+                "marqueur_tva": lec.un(
+                    el, "ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"
+                ),
+                "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
+                # période de facturation de la ligne (BG-26, BT-134/135 ; magasinage, D-2301)
+                "periode_debut": lec.un(
+                    el,
+                    "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/"
+                    "ram:StartDateTime/udt:DateTimeString",
+                ),
+                "periode_fin": lec.un(
+                    el,
+                    "ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod/"
+                    "ram:EndDateTime/udt:DateTimeString",
+                ),
+            }
+        )
     return d
 
 
@@ -978,21 +1153,32 @@ def _lire_zf1(lec: _Lecteur) -> dict[str, Any]:
     d: dict[str, Any] = {
         "numero": lec.un(None, "rsm:HeaderExchangedDocument/ram:ID"),
         "date": lec.un(None, "rsm:HeaderExchangedDocument/ram:IssueDateTime/udt:DateTimeString"),
-        "devise_lu": devise_lu, "devise": devise, "total": total,
+        "devise_lu": devise_lu,
+        "devise": devise,
+        "total": total,
         "incoterm": lec.un(None, f"{hdr}/ram:ApplicableTradeDeliveryTerms/ram:DeliveryTypeCode"),
         "incoterm_lieu": (None, None, None),
         "notes": _notes(lec, None, "rsm:HeaderExchangedDocument/ram:IncludedNote/ram:Content"),
-        "refs_doc": [], "frais": [], "lignes": [],
-        "refs_origine": [lec.un(x, ".") for x in lec.tous(
-            None, f"{st}/ram:InvoiceReferencedDocument/ram:ID | {hdr}/ram:InvoiceReferencedDocument/ram:ID")],
+        "refs_doc": [],
+        "frais": [],
+        "lignes": [],
+        "refs_origine": [
+            lec.un(x, ".")
+            for x in lec.tous(
+                None,
+                f"{st}/ram:InvoiceReferencedDocument/ram:ID | {hdr}/ram:InvoiceReferencedDocument/ram:ID",
+            )
+        ],
         "totaux": {
             "ht": lec.un(None, f"{sm}/ram:TaxBasisTotalAmount"),
             "tva": lec.montant_devise(None, f"{sm}/ram:TaxTotalAmount", devise),
-            "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"), "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
+            "ttc": lec.un(None, f"{sm}/ram:GrandTotalAmount"),
+            "net": lec.un(None, f"{sm}/ram:DuePayableAmount"),
             "acomptes": lec.un(None, f"{sm}/ram:TotalPrepaidAmount"),
             "arrondi": lec.un(None, f"{sm}/ram:RoundingAmount"),
         },
-        "vendeur": f"{hdr}/ram:SellerTradeParty", "acheteur": f"{hdr}/ram:BuyerTradeParty",
+        "vendeur": f"{hdr}/ram:SellerTradeParty",
+        "acheteur": f"{hdr}/ram:BuyerTradeParty",
         "destinataire": f"{dl}/ram:ShipToTradeParty",
     }
     for el in lec.tous(None, f"{hdr}/ram:AdditionalReferencedDocument"):
@@ -1000,23 +1186,38 @@ def _lire_zf1(lec: _Lecteur) -> dict[str, Any]:
         d["refs_doc"].append((brut, cx, lec.un(el, "ram:Name")[0]))
     _frais_cii(lec, d, st)
     for el in lec.tous(None, f"{_ZF1_TR}/ram:IncludedSupplyChainTradeLineItem"):
-        d["lignes"].append({
-            "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
-            "reference_article": lec.un(el, "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
-            "description": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
-            "libelle": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
-            "code_marchandise_imprime": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
-            "code_marchandise": lec.un(el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"),
-            "pays_origine": lec.un(el, "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
-            "quantite": lec.un(el, "ram:SpecifiedSupplyChainTradeDelivery/ram:BilledQuantity"),
-            "prix_unitaire": lec.un(el, "ram:SpecifiedSupplyChainTradeAgreement/ram:NetPriceProductTradePrice/"
-                                        "ram:ChargeAmount"),
-            "montant": lec.un(el, "ram:SpecifiedSupplyChainTradeSettlement/ram:SpecifiedTradeSettlementMonetarySummation/"
-                                  "ram:LineTotalAmount"),
-            "taux_tva": lec.un(el, "ram:SpecifiedSupplyChainTradeSettlement/ram:ApplicableTradeTax/ram:ApplicablePercent"),
-            "marqueur_tva": lec.un(el, "ram:SpecifiedSupplyChainTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"),
-            "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
-        })
+        d["lignes"].append(
+            {
+                "numero_ligne": lec.un(el, "ram:AssociatedDocumentLineDocument/ram:LineID"),
+                "reference_article": lec.un(el, "ram:SpecifiedTradeProduct/ram:SellerAssignedID"),
+                "description": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+                "libelle": lec.un(el, "ram:SpecifiedTradeProduct/ram:Name"),
+                "code_marchandise_imprime": lec.un(
+                    el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"
+                ),
+                "code_marchandise": lec.un(
+                    el, "ram:SpecifiedTradeProduct/ram:DesignatedProductClassification/ram:ClassCode"
+                ),
+                "pays_origine": lec.un(el, "ram:SpecifiedTradeProduct/ram:OriginTradeCountry/ram:ID"),
+                "quantite": lec.un(el, "ram:SpecifiedSupplyChainTradeDelivery/ram:BilledQuantity"),
+                "prix_unitaire": lec.un(
+                    el,
+                    "ram:SpecifiedSupplyChainTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount",
+                ),
+                "montant": lec.un(
+                    el,
+                    "ram:SpecifiedSupplyChainTradeSettlement/ram:SpecifiedTradeSettlementMonetarySummation/"
+                    "ram:LineTotalAmount",
+                ),
+                "taux_tva": lec.un(
+                    el, "ram:SpecifiedSupplyChainTradeSettlement/ram:ApplicableTradeTax/ram:ApplicablePercent"
+                ),
+                "marqueur_tva": lec.un(
+                    el, "ram:SpecifiedSupplyChainTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode"
+                ),
+                "notes": _notes(lec, el, "ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content"),
+            }
+        )
     return d
 
 
@@ -1051,29 +1252,43 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
         total = lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount")
     devise_lu = lec.un(None, "cbc:DocumentCurrencyCode")
     d: dict[str, Any] = {
-        "numero": lec.un(None, "cbc:ID"), "date": lec.un(None, "cbc:IssueDate"),
-        "devise_lu": devise_lu, "devise": (devise_lu[0] or "").upper() or None, "total": total,
+        "numero": lec.un(None, "cbc:ID"),
+        "date": lec.un(None, "cbc:IssueDate"),
+        "devise_lu": devise_lu,
+        "devise": (devise_lu[0] or "").upper() or None,
+        "total": total,
         "incoterm": lec.un(None, "cac:DeliveryTerms/cbc:ID | cac:Delivery/cac:DeliveryTerms/cbc:ID"),
-        "incoterm_lieu": lec.un(None, "cac:DeliveryTerms/cac:DeliveryLocation/cbc:ID | "
-                                      "cac:DeliveryTerms/cac:DeliveryLocation/cac:Address/cbc:CityName"),
+        "incoterm_lieu": lec.un(
+            None,
+            "cac:DeliveryTerms/cac:DeliveryLocation/cbc:ID | "
+            "cac:DeliveryTerms/cac:DeliveryLocation/cac:Address/cbc:CityName",
+        ),
         "notes": _notes(lec, None, "cbc:Note"),
-        "refs_doc": [], "frais": [], "lignes": [],
-        "refs_origine": [lec.un(x, ".") for x in lec.tous(None, "cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")],
+        "refs_doc": [],
+        "frais": [],
+        "lignes": [],
+        "refs_origine": [
+            lec.un(x, ".") for x in lec.tous(None, "cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")
+        ],
         "totaux": {
             "ht": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount"),
-            "tva": lec.montant_devise(None, "cac:TaxTotal/cbc:TaxAmount", (devise_lu[0] or "").upper() or None),
+            "tva": lec.montant_devise(
+                None, "cac:TaxTotal/cbc:TaxAmount", (devise_lu[0] or "").upper() or None
+            ),
             "ttc": lec.un(None, "cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount"),
             "net": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableAmount"),
             "acomptes": lec.un(None, "cac:LegalMonetaryTotal/cbc:PrepaidAmount"),
             "arrondi": lec.un(None, "cac:LegalMonetaryTotal/cbc:PayableRoundingAmount"),
         },
-        "vendeur": "cac:AccountingSupplierParty", "acheteur": "cac:AccountingCustomerParty",
+        "vendeur": "cac:AccountingSupplierParty",
+        "acheteur": "cac:AccountingCustomerParty",
         "destinataire": None,
     }
     if d["incoterm_lieu"][0] is None:
         # lieu écrit seulement dans les conditions en clair (« DAP Le Havre Incoterms 2020 », D-2013)
-        libre, cx_libre, _ = lec.un(None, "cac:DeliveryTerms/cbc:SpecialTerms | "
-                                          "cac:Delivery/cac:DeliveryTerms/cbc:SpecialTerms")
+        libre, cx_libre, _ = lec.un(
+            None, "cac:DeliveryTerms/cbc:SpecialTerms | cac:Delivery/cac:DeliveryTerms/cbc:SpecialTerms"
+        )
         lieu = _lieu_conditions_libres(libre, d["incoterm"][0])
         if lieu:
             d["incoterm_lieu"] = (lieu, cx_libre, None)
@@ -1086,26 +1301,34 @@ def _lire_ubl(lec: _Lecteur, credit: bool) -> dict[str, Any]:
         charge = (lec.un(el, "cbc:ChargeIndicator")[0] or "").strip().lower() == "true"
         raison = lec.un(el, "cbc:AllowanceChargeReason")
         montant, cx_m, _ = lec.un(el, "cbc:Amount")
-        d["frais"].append((raison, montant, charge, raison[1], cx_m, lec.un(el, "cbc:AllowanceChargeReasonCode")[0]))
+        d["frais"].append(
+            (raison, montant, charge, raison[1], cx_m, lec.un(el, "cbc:AllowanceChargeReasonCode")[0])
+        )
     for el in lec.tous(None, ligne_xp):
-        d["lignes"].append({
-            "numero_ligne": lec.un(el, "cbc:ID"),
-            "reference_article": lec.un(el, "cac:Item/cac:SellersItemIdentification/cbc:ID"),
-            "description": lec.un(el, "cac:Item/cbc:Name"),
-            "libelle": lec.un(el, "cac:Item/cbc:Name"),
-            "code_marchandise_imprime": lec.un(el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"),
-            "code_marchandise": lec.un(el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"),
-            "pays_origine": lec.un(el, "cac:Item/cac:OriginCountry/cbc:IdentificationCode"),
-            "quantite": lec.un(el, qte_xp),
-            "prix_unitaire": lec.un(el, "cac:Price/cbc:PriceAmount"),
-            "montant": lec.un(el, "cbc:LineExtensionAmount"),
-            "taux_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent"),
-            "marqueur_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:ID"),
-            "notes": _notes(lec, el, "cbc:Note"),
-            # période de facturation de la ligne (BG-26, BT-134/135 ; magasinage, D-2301)
-            "periode_debut": lec.un(el, "cac:InvoicePeriod/cbc:StartDate"),
-            "periode_fin": lec.un(el, "cac:InvoicePeriod/cbc:EndDate"),
-        })
+        d["lignes"].append(
+            {
+                "numero_ligne": lec.un(el, "cbc:ID"),
+                "reference_article": lec.un(el, "cac:Item/cac:SellersItemIdentification/cbc:ID"),
+                "description": lec.un(el, "cac:Item/cbc:Name"),
+                "libelle": lec.un(el, "cac:Item/cbc:Name"),
+                "code_marchandise_imprime": lec.un(
+                    el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"
+                ),
+                "code_marchandise": lec.un(
+                    el, "cac:Item/cac:CommodityClassification/cbc:ItemClassificationCode"
+                ),
+                "pays_origine": lec.un(el, "cac:Item/cac:OriginCountry/cbc:IdentificationCode"),
+                "quantite": lec.un(el, qte_xp),
+                "prix_unitaire": lec.un(el, "cac:Price/cbc:PriceAmount"),
+                "montant": lec.un(el, "cbc:LineExtensionAmount"),
+                "taux_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:Percent"),
+                "marqueur_tva": lec.un(el, "cac:Item/cac:ClassifiedTaxCategory/cbc:ID"),
+                "notes": _notes(lec, el, "cbc:Note"),
+                # période de facturation de la ligne (BG-26, BT-134/135 ; magasinage, D-2301)
+                "periode_debut": lec.un(el, "cac:InvoicePeriod/cbc:StartDate"),
+                "periode_fin": lec.un(el, "cac:InvoicePeriod/cbc:EndDate"),
+            }
+        )
     return d
 
 
@@ -1176,7 +1399,9 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
         champs.definir(f"{p}.nature", nature)
         _definir(champs, f"{p}.libelle", c.vs(f"{p}.libelle", *lg["libelle"][:2]))
         _definir(champs, f"{p}.quantite", _quantite(c, f"{p}.quantite", lg["quantite"]))
-        _definir(champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", *lg["prix_unitaire"][:2], devise=devise))
+        _definir(
+            champs, f"{p}.prix_unitaire", c.vs(f"{p}.prix_unitaire", *lg["prix_unitaire"][:2], devise=devise)
+        )
         _definir(champs, f"{p}.montant_ht", c.vs(f"{p}.montant_ht", *lg["montant"][:2], devise=devise))
         for rel in ("taux_tva", "marqueur_tva", "code_marchandise"):
             _definir(champs, f"{p}.{rel}", c.vs(f"{p}.{rel}", *lg[rel][:2]))
@@ -1190,8 +1415,11 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
             reste = _MRN_RE.sub(" ", texte.upper())
             pct = _RX_POURCENT.search(reste)
             if pct and champs.obtenir(f"{p}.pourcentage") is None:
-                _definir(champs, f"{p}.pourcentage", c.vs(f"{p}.pourcentage", pct.group(1), cx,
-                                                         sep="," if "," in pct.group(1) else "."))
+                _definir(
+                    champs,
+                    f"{p}.pourcentage",
+                    c.vs(f"{p}.pourcentage", pct.group(1), cx, sep="," if "," in pct.group(1) else "."),
+                )
             per = _RX_PERIODE.search(texte)
             if per:
                 _definir(champs, f"{p}.date_debut", c.vs(f"{p}.date_debut", per.group(1), cx))
@@ -1222,9 +1450,15 @@ def _remplir_ft(c: _Constructeur, champs, d: dict[str, Any]) -> None:
         if _non_nul(ac[0]):
             _definir(champs, "acomptes", c.vs("acomptes", *ac[:2], devise=devise))
         if debours:
-            total = deriver_somme(chemin_complet(c.type_doc, "total_debours"), debours, document_id=c.document.id,
-                                  extracteur=c.extracteur, unite=devise, regle="somme_lignes_debours",
-                                  total_reconstruit=True)
+            total = deriver_somme(
+                chemin_complet(c.type_doc, "total_debours"),
+                debours,
+                document_id=c.document.id,
+                extracteur=c.extracteur,
+                unite=devise,
+                regle="somme_lignes_debours",
+                total_reconstruit=True,
+            )
             champs.total_debours = total.model_copy(update={"page": c.page})
     else:
         for brut, cx, _ in d["refs_origine"]:
@@ -1259,8 +1493,9 @@ def _valeur_table(v: ValeurSourcee | None, spec: dict[str, Any]) -> ValeurSource
     return v
 
 
-def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: bytes,
-                        avert: list[str]) -> ChampsDeclaration:
+def _champs_declaration(
+    c: _Constructeur, fiche: FicheCorrespondance, contenu: bytes, avert: list[str]
+) -> ChampsDeclaration:
     champs = ChampsDeclaration()
     devise_defaut = fiche.devise_par_defaut
     if fiche.type == "xml":
@@ -1287,8 +1522,12 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
             if col and col not in connues:
                 avert.append(f"colonne_ignoree:{col}")
                 # nom de colonne lu dans le document : jamais en clair dans les journaux (RS-12)
-                log.info("colonne_inconnue format=%s longueur=%d empreinte=%s", fiche.format_id, len(col),
-                         hashlib.sha256(col.encode("utf-8")).hexdigest()[:12])
+                log.info(
+                    "colonne_inconnue format=%s longueur=%d empreinte=%s",
+                    fiche.format_id,
+                    len(col),
+                    hashlib.sha256(col.encode("utf-8")).hexdigest()[:12],
+                )
         col_type = "__type__" if fiche.csv.get("multi_enregistrements") else fiche.csv.get("colonne_type")
 
         def lire(base, src: str):
@@ -1347,17 +1586,26 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
         if spec.get("source_unite"):
             unite = lire(base, spec["source_unite"])[0] or unite
         if unite is None and type_valeur_pour(chemin) is TypeValeur.montant:
-            unite = devise_lue if chemin in ("montant_total_facture",) else (spec.get("unite") or devise_defaut)
+            unite = (
+                devise_lue if chemin in ("montant_total_facture",) else (spec.get("unite") or devise_defaut)
+            )
         v = _valeur_table(c.vs(chemin, val, ctx_, devise=unite), spec)
         _definir(champs, chemin, v)
         if chemin == "devise_facture" and v is not None:
             devise_lue = v.valeur
     for chemin, constante in fiche.constantes.items():
         v = ValeurSourcee(
-            chemin=chemin_complet(TypeDocument.declaration, chemin), valeur=str(constante),
-            type=type_valeur_pour(chemin), valeur_brute=f"{fiche.format_id}:{constante}",
-            document_id=c.document.id, page=c.page, texte_contexte=f"fiche {fiche.format_id} v{fiche.version}",
-            extracteur=c.extracteur, methode=c.methode, confiance=c.confiance, ancree=True,
+            chemin=chemin_complet(TypeDocument.declaration, chemin),
+            valeur=str(constante),
+            type=type_valeur_pour(chemin),
+            valeur_brute=f"{fiche.format_id}:{constante}",
+            document_id=c.document.id,
+            page=c.page,
+            texte_contexte=f"fiche {fiche.format_id} v{fiche.version}",
+            extracteur=c.extracteur,
+            methode=c.methode,
+            confiance=c.confiance,
+            ancree=True,
         )
         champs.definir(chemin, v)
 
@@ -1378,8 +1626,9 @@ def _champs_declaration(c: _Constructeur, fiche: FicheCorrespondance, contenu: b
                 tv = type_valeur_pour(rel)
                 if unite is None and tv is TypeValeur.montant:
                     unite = (devise_lue if rel == "montant_facture_article" else None) or devise_defaut
-                v = _valeur_table(c.vs(f"{p}.{rel}", val, ctx_, devise=unite if tv is TypeValeur.montant else None),
-                                  spec)
+                v = _valeur_table(
+                    c.vs(f"{p}.{rel}", val, ctx_, devise=unite if tv is TypeValeur.montant else None), spec
+                )
                 if v is not None and tv is TypeValeur.quantite and unite:
                     u = normalize_unit(unite)
                     v = v.model_copy(update={"unite": u.code, "unite_brute": u.brut})
@@ -1465,7 +1714,8 @@ def _deriver_declaration(champs: ChampsDeclaration, fiche: FicheCorrespondance) 
     for t in champs.taxations:
         t.categorie = categorie_taxe(t.type_taxe.valeur if t.type_taxe else None, t_cat)
         t.paiement_normalise = paiement_normalise(
-            (t.mode_paiement.valeur_brute or t.mode_paiement.valeur) if t.mode_paiement else None, t_pai)
+            (t.mode_paiement.valeur_brute or t.mode_paiement.valeur) if t.mode_paiement else None, t_pai
+        )
         if t.taux is not None and t.taux_nature is None:
             if t.base_quantite is not None and t.base_montant is None:
                 t.taux_nature = TauxNature.specifique
@@ -1482,17 +1732,31 @@ def _indices_autoliquidation(c: _Constructeur, champs: ChampsDeclaration) -> Non
             k = len(champs.indices_autoliquidation)
             tva = None
             if ref.reference is not None:
-                tva = c.vs(f"indices_autoliquidation[{k}].tva", ref.reference.valeur_brute,
-                           ref.reference.texte_contexte)
-            champs.indices_autoliquidation.append(IndiceAutoliquidation(
-                type=TypeIndiceAutoliquidation.code_1008, valeur=ref.type_code, tva=tva))
+                tva = c.vs(
+                    f"indices_autoliquidation[{k}].tva",
+                    ref.reference.valeur_brute,
+                    ref.reference.texte_contexte,
+                )
+            champs.indices_autoliquidation.append(
+                IndiceAutoliquidation(type=TypeIndiceAutoliquidation.code_1008, valeur=ref.type_code, tva=tva)
+            )
         elif re.match(r"^\s*FR7", refv.upper()) or re.search(r"\bFR7\b", code.upper()):
-            champs.indices_autoliquidation.append(IndiceAutoliquidation(
-                type=TypeIndiceAutoliquidation.reference_fr7, valeur=ref.reference or ref.type_code))
+            champs.indices_autoliquidation.append(
+                IndiceAutoliquidation(
+                    type=TypeIndiceAutoliquidation.reference_fr7, valeur=ref.reference or ref.type_code
+                )
+            )
     for t in champs.taxations:
-        if t.categorie is CategorieTaxe.tva and t.paiement_normalise is PaiementNormalise.autoliquide and t.mode_paiement:
-            champs.indices_autoliquidation.append(IndiceAutoliquidation(
-                type=TypeIndiceAutoliquidation.mode_paiement_tva, valeur=t.mode_paiement))
+        if (
+            t.categorie is CategorieTaxe.tva
+            and t.paiement_normalise is PaiementNormalise.autoliquide
+            and t.mode_paiement
+        ):
+            champs.indices_autoliquidation.append(
+                IndiceAutoliquidation(
+                    type=TypeIndiceAutoliquidation.mode_paiement_tva, valeur=t.mode_paiement
+                )
+            )
 
 
 # --- extracteurs ---------------------------------------------------------------------------------------------
@@ -1517,10 +1781,15 @@ class ExtracteurFactureXML:
 
     def supports(self, document: Document, pages: Sequence[Page]) -> bool:
         # Un XML est lu tel quel (page = texte brut) ; un PDF peut être un Factur-X (vérifié à l'extraction).
-        return document.type in (TypeDocument.facture_commerciale, TypeDocument.facture_transitaire,
-                                 TypeDocument.avoir)
+        return document.type in (
+            TypeDocument.facture_commerciale,
+            TypeDocument.facture_transitaire,
+            TypeDocument.avoir,
+        )
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         info_ex = _extracteur_info(self.id)
         contenu, mime = _contenu_et_mime(context)
         if contenu is None or mime not in (MIME_PDF, MIME_XML):
@@ -1567,7 +1836,9 @@ class ExtracteurDeclarationExport:
     def supports(self, document: Document, pages: Sequence[Page]) -> bool:
         return document.type is TypeDocument.declaration
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         info_ex = _extracteur_info(self.id)
         contenu, mime = _contenu_et_mime(context)
         if contenu is None or mime not in (MIME_XML, MIME_CSV):
@@ -1580,17 +1851,28 @@ class ExtracteurDeclarationExport:
         if fiche is None:
             return ExtractionResult(extracteur=info_ex)
         methode = Methode.xml_structure if fiche.type == "xml" else Methode.csv_structure
-        sep = fiche.csv.get("separateur_decimal", ".") if fiche.type == "csv" else (
-            fiche.detection.get("separateur_decimal") or ".")
-        c = _Constructeur(document, TypeDocument.declaration, info_ex, methode, CONFIANCE_VALIDE, context,
-                          separateur_decimal=sep, format_date=fiche.csv.get("format_date") or fiche.detection.get(
-                              "format_date"))
+        sep = (
+            fiche.csv.get("separateur_decimal", ".")
+            if fiche.type == "csv"
+            else (fiche.detection.get("separateur_decimal") or ".")
+        )
+        c = _Constructeur(
+            document,
+            TypeDocument.declaration,
+            info_ex,
+            methode,
+            CONFIANCE_VALIDE,
+            context,
+            separateur_decimal=sep,
+            format_date=fiche.csv.get("format_date") or fiche.detection.get("format_date"),
+        )
         avert: list[str] = []
         try:
             champs = _champs_declaration(c, fiche, contenu, avert)
         except (ValueError, KeyError, etree.XPathError) as e:
-            return ExtractionResult(extracteur=info_ex, avertissements=[f"export_illisible:{type(e).__name__}"],
-                                    partielle=True)
+            return ExtractionResult(
+                extracteur=info_ex, avertissements=[f"export_illisible:{type(e).__name__}"], partielle=True
+            )
         if deduite:
             # Correspondance déduite des noms d'éléments (D-2401) : jamais la certitude d'une fiche écrite ;
             # confiance selon les recoupements internes du fichier.
@@ -1606,8 +1888,11 @@ class ExtracteurDeclarationExport:
             _plafonner(champs, conf)
             avert = [a for a in avert if not a.startswith("element_ignore:")]
             avert.append(f"fiche_deduite:recoupements_ok={ok}:echecs={ko}")
-        return ExtractionResult(extracteur=info_ex, champs=champs,
-                                avertissements=[f"fiche:{fiche.format_id}@{fiche.version}", *sorted(set(avert))])
+        return ExtractionResult(
+            extracteur=info_ex,
+            champs=champs,
+            avertissements=[f"fiche:{fiche.format_id}@{fiche.version}", *sorted(set(avert))],
+        )
 
 
 def fiche_deduite(racine: etree._Element | None) -> FicheCorrespondance | None:

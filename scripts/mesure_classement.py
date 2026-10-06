@@ -86,14 +86,24 @@ def _mesurer(args: tuple[str, str, str | None]) -> dict[str, Any]:
             d = prep.documents.get(did) if did else None
             if did:
                 couverts[did] += 1
-            pages_out.append({
-                "doc": td["doc_id"], "fichier": f, "page": n, "type": td["type"], "sous_type": td.get("sous_type"),
-                "format": td.get("format"), "langue": td.get("language"),
-                "gabarit": td.get("transitaire_template") or td.get("declaration_layout") or td.get("ci_layout"),
-                "pred": d.type.value if d else None, "pred_st": d.sous_type if d else None,
-                "conf": d.confiance_classement if d else None,
-                "texte": (textes.get((f, n)) or "")[:400],
-            })
+            pages_out.append(
+                {
+                    "doc": td["doc_id"],
+                    "fichier": f,
+                    "page": n,
+                    "type": td["type"],
+                    "sous_type": td.get("sous_type"),
+                    "format": td.get("format"),
+                    "langue": td.get("language"),
+                    "gabarit": td.get("transitaire_template")
+                    or td.get("declaration_layout")
+                    or td.get("ci_layout"),
+                    "pred": d.type.value if d else None,
+                    "pred_st": d.sous_type if d else None,
+                    "conf": d.confiance_classement if d else None,
+                    "texte": (textes.get((f, n)) or "")[:400],
+                }
+            )
         appariement[td["doc_id"]] = couverts.most_common(1)[0][0] if couverts else None
     # groupes de vérité : un document appartient au(x) groupe(s) des documents qu'il cite (expected_links), un
     # document qui ne cite rien forme son groupe ; une facture de transitaire mensuelle est dans plusieurs groupes.
@@ -114,10 +124,12 @@ def _mesurer(args: tuple[str, str, str | None]) -> dict[str, Any]:
     tp = fp = fn = 0
     paires_ko = []
     for i, a in enumerate(ids):
-        for b in ids[i + 1:]:
+        for b in ids[i + 1 :]:
             attendu = bool(anc[a] & anc[b])
             da, db = appariement[a], appariement[b]
-            ensemble = bool(da and db and (da == db or set(dossier_de.get(da, [])) & set(dossier_de.get(db, []))))
+            ensemble = bool(
+                da and db and (da == db or set(dossier_de.get(da, [])) & set(dossier_de.get(db, [])))
+            )
             if attendu and ensemble:
                 tp += 1
             elif attendu:
@@ -128,7 +140,12 @@ def _mesurer(args: tuple[str, str, str | None]) -> dict[str, Any]:
                 paires_ko.append(("en_trop", a, b))
     faibles = [doc for doc, did in appariement.items() if did and force_de.get(did) == "faible"]
     return {
-        "dossier": dossier_id, "pages": pages_out, "tp": tp, "fp": fp, "fn": fn, "paires_ko": paires_ko,
+        "dossier": dossier_id,
+        "pages": pages_out,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "paires_ko": paires_ko,
         "faibles": len([li for dos in prep.dossiers for li in dos.liens if li.force.value == "faible"]),
         "faibles_docs": faibles,
         "incomplets": sum(1 for dos in prep.dossiers if dos.incomplet),
@@ -162,7 +179,9 @@ def main(argv: list[str] | None = None) -> int:
         res = [_mesurer(t) for t in taches]
     pages = [p for r in res for p in r.get("pages", [])]
     ok_t = sum(1 for p in pages if p["pred"] == p["type"])
-    ok_st = sum(1 for p in pages if p["pred"] == p["type"] and (p["pred_st"] or None) == (p["sous_type"] or None))
+    ok_st = sum(
+        1 for p in pages if p["pred"] == p["type"] and (p["pred_st"] or None) == (p["sous_type"] or None)
+    )
     tp, fp, fn = (sum(r.get(k, 0) for r in res) for k in ("tp", "fp", "fn"))
     prec = tp / (tp + fp) if tp + fp else 1.0
     rap = tp / (tp + fn) if tp + fn else 1.0
@@ -171,9 +190,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"classement type : {ok_t}/{len(pages)} = {ok_t / max(1, len(pages)):.4f}")
     print(f"type+sous-type  : {ok_st}/{len(pages)} = {ok_st / max(1, len(pages)):.4f}")
     print(f"regroupement paires : TP {tp} FP {fp} FN {fn} précision {prec:.4f} rappel {rap:.4f} F1 {f1:.4f}")
-    print(f"liens faibles (P4) : {sum(r.get('faibles', 0) for r in res)} ; dossiers incomplets : "
-          f"{sum(r.get('incomplets', 0) for r in res)} ; dossiers produits/attendus : "
-          f"{sum(r.get('dossiers', 0) for r in res)}/{sum(r.get('attendus', 0) for r in res)}")
+    print(
+        f"liens faibles (P4) : {sum(r.get('faibles', 0) for r in res)} ; dossiers incomplets : "
+        f"{sum(r.get('incomplets', 0) for r in res)} ; dossiers produits/attendus : "
+        f"{sum(r.get('dossiers', 0) for r in res)}/{sum(r.get('attendus', 0) for r in res)}"
+    )
     erreurs = [r for r in res if "erreur" in r]
     if erreurs:
         print("erreurs :", [(r["dossier"], r["erreur"]) for r in erreurs])
@@ -195,8 +216,10 @@ def main(argv: list[str] | None = None) -> int:
             for p in r.get("pages", []):
                 if p["pred"] != p["type"] and a.erreurs > 0:
                     a.erreurs -= 1
-                    print(f"--- {r['dossier']} {p['doc']} {p['fichier']} p{p['page']} {p['type']}/{p['sous_type']} "
-                          f"-> {p['pred']}/{p['pred_st']} ({p['conf']}) {p['format']} {p['langue']} {p['gabarit']}")
+                    print(
+                        f"--- {r['dossier']} {p['doc']} {p['fichier']} p{p['page']} {p['type']}/{p['sous_type']} "
+                        f"-> {p['pred']}/{p['pred_st']} ({p['conf']}) {p['format']} {p['langue']} {p['gabarit']}"
+                    )
                     print("    " + p["texte"][:300].replace("\n", " | "))
     if a.json:
         Path(a.json).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")

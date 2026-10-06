@@ -27,4 +27,6 @@ def lire(db: Any) -> VueNotifications:
     from controldone.services.notifications import ConfigNotifications, historique
 
     config = ConfigNotifications.depuis_env()
-    return VueNotifications(mode=config.mode, historique=historique(db, limite=LIMITE, jours=JOURS, config=config))
+    return VueNotifications(
+        mode=config.mode, historique=historique(db, limite=LIMITE, jours=JOURS, config=config)
+    )

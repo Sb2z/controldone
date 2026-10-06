@@ -64,9 +64,13 @@ def test_valeur_sourcee_lecture_typee():
 
 
 def test_llm_non_ancree_plafonnee():
-    v = ValeurSourcee(chemin="a", valeur="1", extracteur=EX, methode=Methode.llm, confiance=0.95, ancree=False)
+    v = ValeurSourcee(
+        chemin="a", valeur="1", extracteur=EX, methode=Methode.llm, confiance=0.95, ancree=False
+    )
     assert v.confiance == 0.5
-    v2 = ValeurSourcee(chemin="a", valeur="1", extracteur=EX, methode=Methode.llm, confiance=0.95, ancree=True)
+    v2 = ValeurSourcee(
+        chemin="a", valeur="1", extracteur=EX, methode=Methode.llm, confiance=0.95, ancree=True
+    )
     assert v2.confiance == 0.95
 
 
@@ -93,9 +97,12 @@ def test_confiance_derivee_8_5_2():
 
 
 def test_deriver_somme_total_reconstruit():
-    lignes = [vs(f"facture_commerciale.lignes[{i}].montant_ligne", m) for i, m in enumerate(["10.10", "20.205"])]
-    t = deriver_somme("facture_commerciale.total_facture", lignes, document_id="d", extracteur=EX,
-                      total_reconstruit=True)
+    lignes = [
+        vs(f"facture_commerciale.lignes[{i}].montant_ligne", m) for i, m in enumerate(["10.10", "20.205"])
+    ]
+    t = deriver_somme(
+        "facture_commerciale.total_facture", lignes, document_id="d", extracteur=EX, total_reconstruit=True
+    )
     assert t.valeur == "30.305"  # aucune perte d'arrondi intermédiaire
     assert t.methode is Methode.derive and t.total_origine is TotalOrigine.reconstruit
     assert t.confiance <= 0.6 and t.derivee_de == [x.id for x in lignes]
@@ -130,7 +137,13 @@ def test_champs_definir_obtenir_iterer():
 
 def test_feuilles_et_champs_cles():
     chemins = {f.chemin for f in ChampsFactureCommerciale.feuilles()}
-    assert {"numero", "acheteur.tva", "total_facture", "lignes[].montant_ligne", "sous_totaux[].montant"} <= chemins
+    assert {
+        "numero",
+        "acheteur.tva",
+        "total_facture",
+        "lignes[].montant_ligne",
+        "sous_totaux[].montant",
+    } <= chemins
     for td, cles in CHAMPS_CLES.items():
         from controldone.model import classe_champs
 
@@ -198,7 +211,12 @@ def test_surcharges_seulement_elargir_les_seuils():
     p = ProfilTolerances()
     p2 = p.appliquer_surcharges({"s_debours": "2.00", "c_min_certain": 0.95, "t_masse_kg": "0.2"})
     assert p2.version == p.version + 1 and p2.s_debours == D("2.00") and p2.t_masse_kg == D("0.2")
-    for nom, val in [("s_debours", "0.50"), ("c_min_certain", 0.8), ("s_valeur_unites", "1"), ("s_tarif", "0.01")]:
+    for nom, val in [
+        ("s_debours", "0.50"),
+        ("c_min_certain", 0.8),
+        ("s_valeur_unites", "1"),
+        ("s_tarif", "0.01"),
+    ]:
         with pytest.raises(ErreurTolerance):
             p.appliquer_surcharges({nom: val})
     with pytest.raises(ErreurTolerance):
@@ -210,8 +228,13 @@ def test_surcharges_seulement_elargir_les_seuils():
 def test_grille_applicable():
     from datetime import date
 
-    g = GrilleTarifaire(transitaire_id="tra_1", reference="DEV-1", statut=StatutGrille.validee,
-                        valide_du=date(2026, 1, 1), valide_au=date(2026, 12, 31))
+    g = GrilleTarifaire(
+        transitaire_id="tra_1",
+        reference="DEV-1",
+        statut=StatutGrille.validee,
+        valide_du=date(2026, 1, 1),
+        valide_au=date(2026, 12, 31),
+    )
     assert g.applicable("tra_1", date(2026, 6, 1))
     assert not g.applicable("tra_2", date(2026, 6, 1))
     assert not g.applicable("tra_1", date(2027, 1, 1))
@@ -222,8 +245,13 @@ def test_grille_applicable():
 
 
 def _constat(**kw):
-    base = dict(controle_id="C1", niveau=Niveau.a_verifier, raisons=[RaisonCode.ecart_sous_seuil],
-                nature_montant=NatureMontant.recouvrable, montant_en_jeu=D("0.50"))
+    base = dict(
+        controle_id="C1",
+        niveau=Niveau.a_verifier,
+        raisons=[RaisonCode.ecart_sous_seuil],
+        nature_montant=NatureMontant.recouvrable,
+        montant_en_jeu=D("0.50"),
+    )
     base.update(kw)
     return Constat(**base)
 
@@ -249,10 +277,12 @@ def test_invariants_resultat():
     with pytest.raises(ValidationError):
         ResultatControle(controle_id="C1", dossier_id="d", dossier_version=1, outcome=Outcome.non_verifiable)
     with pytest.raises(ValidationError):
-        ResultatControle(controle_id="C1", dossier_id="d", dossier_version=1, outcome=Outcome.conforme,
-                         constat=_constat())
-    r = ResultatControle(controle_id="C1", dossier_id="d", dossier_version=1, outcome=Outcome.a_verifier,
-                         constat=_constat())
+        ResultatControle(
+            controle_id="C1", dossier_id="d", dossier_version=1, outcome=Outcome.conforme, constat=_constat()
+        )
+    r = ResultatControle(
+        controle_id="C1", dossier_id="d", dossier_version=1, outcome=Outcome.a_verifier, constat=_constat()
+    )
     assert r.constat.niveau is Niveau.a_verifier
 
 
@@ -284,7 +314,11 @@ def test_totaux_par_code_feuilles_et_types():
     from controldone.model import ChampsDeclaration, TypeValeur, type_valeur_pour
 
     chemins = {f.chemin for f in ChampsDeclaration.feuilles()}
-    assert {"totaux_par_code[].type_taxe", "totaux_par_code[].montant", "totaux_par_code[].base_montant"} <= chemins
+    assert {
+        "totaux_par_code[].type_taxe",
+        "totaux_par_code[].montant",
+        "totaux_par_code[].base_montant",
+    } <= chemins
     assert type_valeur_pour("declaration.totaux_par_code[0].montant") is TypeValeur.montant
     assert type_valeur_pour("declaration.totaux_par_code[0].type_taxe") is TypeValeur.code
     c = ChampsDeclaration()

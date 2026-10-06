@@ -43,35 +43,60 @@ def ft_e(*lignes, numero="FT-001", id=FT, emetteur=EMETTEUR, total_ht=None):
     def f(champ, val):
         return vs(f"facture_transitaire.{champ}", val, document_id=id)
 
-    lignes = lignes or (LigneFactureTransitaire(nature=NatureLigne.debours_droits,
-                                                montant_ht=f("lignes[].montant_ht", "50.00"),
-                                                mrn=f("lignes[].mrn", MRN)),)
-    return facture_transitaire(id=id, numero=f("numero", numero), date=f("date", "2026-08-05"),
-                               emetteur=Partie(nom=f("emetteur.nom", emetteur)), lignes=list(lignes),
-                               total_ht=f("total_ht", total_ht) if total_ht else None)
+    lignes = lignes or (
+        LigneFactureTransitaire(
+            nature=NatureLigne.debours_droits,
+            montant_ht=f("lignes[].montant_ht", "50.00"),
+            mrn=f("lignes[].mrn", MRN),
+        ),
+    )
+    return facture_transitaire(
+        id=id,
+        numero=f("numero", numero),
+        date=f("date", "2026-08-05"),
+        emetteur=Partie(nom=f("emetteur.nom", emetteur)),
+        lignes=list(lignes),
+        total_ht=f("total_ht", total_ht) if total_ht else None,
+    )
 
 
 def ligne_av(doc, montant, nature=NatureLigne.debours_droits, *, quantite=None, pu=None):
     def a(champ, val):
         return vs(f"avoir.{champ}", val, document_id=doc)
 
-    return LigneFactureTransitaire(nature=nature, montant_ht=a("lignes[].montant_ht", montant),
-                                   quantite=a("lignes[].quantite", quantite) if quantite else None,
-                                   prix_unitaire=a("lignes[].prix_unitaire", pu) if pu else None)
+    return LigneFactureTransitaire(
+        nature=nature,
+        montant_ht=a("lignes[].montant_ht", montant),
+        quantite=a("lignes[].quantite", quantite) if quantite else None,
+        prix_unitaire=a("lignes[].prix_unitaire", pu) if pu else None,
+    )
 
 
-def avoir(id, *lignes, numero="AV-001", origine=("FT-001",), mrns=(), date="2026-09-01", emetteur=EMETTEUR,
-          total_ht=None, total_tva=None, total_ttc=None, montant="30.00"):
+def avoir(
+    id,
+    *lignes,
+    numero="AV-001",
+    origine=("FT-001",),
+    mrns=(),
+    date="2026-09-01",
+    emetteur=EMETTEUR,
+    total_ht=None,
+    total_tva=None,
+    total_ttc=None,
+    montant="30.00",
+):
     def a(champ, val):
         return vs(f"avoir.{champ}", val, document_id=id)
 
     if not lignes:
         lignes = (ligne_av(id, montant),)
     c = ChampsAvoir(
-        numero=a("numero", numero) if numero else None, date=a("date", date) if date else None,
+        numero=a("numero", numero) if numero else None,
+        date=a("date", date) if date else None,
         emetteur=Partie(nom=a("emetteur.nom", emetteur)),
         refs_facture_origine=[a("refs_facture_origine[]", o) for o in origine],
-        refs_mrn=[a("refs_mrn[]", m) for m in mrns], lignes=list(lignes),
+        refs_mrn=[a("refs_mrn[]", m) for m in mrns],
+        lignes=list(lignes),
         total_credite_ht=a("total_credite_ht", total_ht) if total_ht else None,
         total_tva=a("total_tva", total_tva) if total_tva else None,
         total_credite_ttc=a("total_credite_ttc", total_ttc) if total_ttc else None,
@@ -94,12 +119,30 @@ def propre(r):
 
 
 def ecart_registre(montant="40.00", statut=StatutEcart.reclame, comp=Composante.droit, id="eca_1"):
-    return EcartARecouvrer(id=id, constat_id="f_origine", transitaire_id="tra_fictif", facture_transitaire_id=FT,
-                           mrn=MRN, composante=comp, montant_initial=D(montant), reste=D(montant), statut=statut)
+    return EcartARecouvrer(
+        id=id,
+        constat_id="f_origine",
+        transitaire_id="tra_fictif",
+        facture_transitaire_id=FT,
+        mrn=MRN,
+        composante=comp,
+        montant_initial=D(montant),
+        reste=D(montant),
+        statut=statut,
+    )
 
 
-@pytest.mark.parametrize("fn", [e1_rattachement, e2_avoir_superieur_origine, e3_avoir_recu_deux_fois,
-                                e4_arithmetique_avoir, e5_avoir_sans_ecart, e6_avoir_partiel])
+@pytest.mark.parametrize(
+    "fn",
+    [
+        e1_rattachement,
+        e2_avoir_superieur_origine,
+        e3_avoir_recu_deux_fois,
+        e4_arithmetique_avoir,
+        e5_avoir_sans_ecart,
+        e6_avoir_partiel,
+    ],
+)
 def test_sans_avoir_non_applicable(fn):
     (r,) = fn(contexte([dec_e(), ft_e()]))
     assert r.outcome is Outcome.non_applicable
@@ -147,8 +190,11 @@ def test_e2():
 
 
 def test_e2_plusieurs_avoirs_et_tolerance():
-    docs = [ft_e(), avoir("doc_av1", montant="30.00"), avoir("doc_av2", numero="AV-002", montant="20.01",
-                                                              date="2026-09-20")]
+    docs = [
+        ft_e(),
+        avoir("doc_av1", montant="30.00"),
+        avoir("doc_av2", numero="AV-002", montant="20.01", date="2026-09-20"),
+    ]
     rs = e2_avoir_superieur_origine(contexte(docs))
     assert all(r.outcome is Outcome.conforme for r in rs)  # 0,01 ≤ T_SOMME(3)
     docs[2] = avoir("doc_av2", numero="AV-002", montant="25.00", date="2026-09-20")
@@ -213,20 +259,35 @@ def test_e3_dans_un_autre_dossier():
 def test_e4_montants_negatifs_d_un_avoir():
     # D-2207 : l'avoir imprime la ligne « -15,00 » (quantité 1, prix 15,00) et ses totaux en positif : même
     # crédit, aucune discordance.
-    av = avoir("doc_av1", ligne_av("doc_av1", "-15.00", quantite="1", pu="15.00"), total_ht="15.00",
-               total_tva="3.00", total_ttc="18.00")
+    av = avoir(
+        "doc_av1",
+        ligne_av("doc_av1", "-15.00", quantite="1", pu="15.00"),
+        total_ht="15.00",
+        total_tva="3.00",
+        total_ttc="18.00",
+    )
     rs = e4_arithmetique_avoir(contexte([av]))
     assert rs and all(r.outcome is Outcome.conforme for r in rs)
 
 
 def test_e4():
-    av = avoir("doc_av1", ligne_av("doc_av1", "30.00", quantite="3", pu="10.00"), total_ht="30.00",
-               total_tva="6.00", total_ttc="36.00")
+    av = avoir(
+        "doc_av1",
+        ligne_av("doc_av1", "30.00", quantite="3", pu="10.00"),
+        total_ht="30.00",
+        total_tva="6.00",
+        total_ttc="36.00",
+    )
     rs = e4_arithmetique_avoir(contexte([av]))
     assert {r.sous_controle for r in rs} == {"ligne", "total_ht", "total_ttc"}
     assert all(r.outcome is Outcome.conforme for r in rs)
-    av = avoir("doc_av1", ligne_av("doc_av1", "35.00", quantite="3", pu="10.00"), total_ht="30.00",
-               total_tva="6.00", total_ttc="38.00")
+    av = avoir(
+        "doc_av1",
+        ligne_av("doc_av1", "35.00", quantite="3", pu="10.00"),
+        total_ht="30.00",
+        total_tva="6.00",
+        total_ttc="38.00",
+    )
     rs = {r.sous_controle: r for r in e4_arithmetique_avoir(contexte([av]))}
     assert rs["ligne"].outcome is Outcome.a_verifier  # E4 n'est jamais certain
     assert RaisonCode.controle_signal_seulement in rs["ligne"].constat.raisons
@@ -291,8 +352,9 @@ def test_e6_avoir_partiel():
 def test_e6_entierement_credite_et_ecart_non_reclame():
     ctx = contexte([ft_e(), avoir("doc_av1", montant="40.00")], ecarts_recouvrement=[ecart_registre("40.00")])
     assert un(e6_avoir_partiel(ctx)).outcome is Outcome.conforme
-    ctx = contexte([ft_e(), avoir("doc_av1")],
-                   ecarts_recouvrement=[ecart_registre("40.00", statut=StatutEcart.ouvert)])
+    ctx = contexte(
+        [ft_e(), avoir("doc_av1")], ecarts_recouvrement=[ecart_registre("40.00", statut=StatutEcart.ouvert)]
+    )
     assert un(e6_avoir_partiel(ctx)).outcome is Outcome.non_applicable
 
 
@@ -314,16 +376,20 @@ def test_moteur_famille_e():
 
 
 def _ligne_ft(nature, montant, mrn, doc=FT):
-    return LigneFactureTransitaire(nature=nature, montant_ht=vs("facture_transitaire.lignes[].montant_ht", montant,
-                                                                 document_id=doc),
-                                   mrn=vs("facture_transitaire.lignes[].mrn", mrn, document_id=doc))
+    return LigneFactureTransitaire(
+        nature=nature,
+        montant_ht=vs("facture_transitaire.lignes[].montant_ht", montant, document_id=doc),
+        mrn=vs("facture_transitaire.lignes[].mrn", mrn, document_id=doc),
+    )
 
 
 def test_e2_par_mrn_cite_sur_la_ligne():
     """L'avoir crédite 145,73 de dédouanement sur le MRN A, facturé 85 sur ce MRN (85 aussi sur le MRN B)."""
     mrn_b = "26FR99999999999992"
-    ft = ft_e(_ligne_ft(NatureLigne.frais_dedouanement, "85.00", MRN),
-              _ligne_ft(NatureLigne.frais_dedouanement, "85.00", mrn_b))
+    ft = ft_e(
+        _ligne_ft(NatureLigne.frais_dedouanement, "85.00", MRN),
+        _ligne_ft(NatureLigne.frais_dedouanement, "85.00", mrn_b),
+    )
     la = ligne_av("doc_av1", "145.73", NatureLigne.frais_dedouanement)
     la.mrn = vs("avoir.lignes[].mrn", MRN, document_id="doc_av1")
     r = un(e2_avoir_superieur_origine(contexte([ft, avoir("doc_av1", la)])))
@@ -335,8 +401,11 @@ def test_e2_par_mrn_cite_sur_la_ligne():
 
 
 def test_e2_facture_sans_ligne_lue_et_numero_illisible():
-    ft_vide = facture_transitaire(id=FT, numero=vs("facture_transitaire.numero", "FT-001", document_id=FT),
-                                  emetteur=Partie(nom=vs("facture_transitaire.emetteur.nom", EMETTEUR, document_id=FT)))
+    ft_vide = facture_transitaire(
+        id=FT,
+        numero=vs("facture_transitaire.numero", "FT-001", document_id=FT),
+        emetteur=Partie(nom=vs("facture_transitaire.emetteur.nom", EMETTEUR, document_id=FT)),
+    )
     r = un(e2_avoir_superieur_origine(contexte([ft_vide, avoir("doc_av1", montant="60.00")])))
     assert r.outcome is Outcome.non_verifiable  # jamais « 0 facturé »
     ft = ft_e()
@@ -356,7 +425,9 @@ def test_e6_ecart_releve_dans_le_dossier():
     assert c1.constat is not None
     e6 = [r for r in rs if r.controle_id == "E6"]
     assert len(e6) == 1 and e6[0].outcome is Outcome.a_verifier
-    assert e6[0].constat.montant_en_jeu == D("10.00") and e6[0].details["remplace_constat_id"] == c1.constat.id
+    assert (
+        e6[0].constat.montant_en_jeu == D("10.00") and e6[0].details["remplace_constat_id"] == c1.constat.id
+    )
     assert "écart relevé" in esp(e6[0].constat.libelle)
     propre(e6[0])
 
@@ -372,4 +443,7 @@ def test_e5_avoir_partage_entre_dossiers_un_seul_constat():
     assert r.outcome is Outcome.non_applicable and r.raison_code is RaisonCode.couvert_par_autre_controle
     assert r.details["dossier"] == "dos_a"
     for fn in (e1_rattachement, e2_avoir_superieur_origine, e3_avoir_recu_deux_fois, e4_arithmetique_avoir):
-        assert all(x.outcome is Outcome.non_applicable for x in fn(contexte([ft_e(), av], autres_dossiers=[autre_sans_mrn])))
+        assert all(
+            x.outcome is Outcome.non_applicable
+            for x in fn(contexte([ft_e(), av], autres_dossiers=[autre_sans_mrn]))
+        )

@@ -41,8 +41,17 @@ def test_chemin_nominal_autorise():
         verifier_transition(de, vers)
 
 
-@pytest.mark.parametrize("de,vers", [(S.brouillon, S.envoyee), (S.brouillon, S.credite), (S.clos, S.envoyee),
-                                     (S.abandonnee, S.valide), (S.credite, S.envoyee), (S.valide, S.brouillon)])
+@pytest.mark.parametrize(
+    "de,vers",
+    [
+        (S.brouillon, S.envoyee),
+        (S.brouillon, S.credite),
+        (S.clos, S.envoyee),
+        (S.abandonnee, S.valide),
+        (S.credite, S.envoyee),
+        (S.valide, S.brouillon),
+    ],
+)
 def test_transitions_interdites(de, vers):
     with pytest.raises(TransitionReclamationInterdite):
         verifier_transition(de, vers)
@@ -114,8 +123,21 @@ def test_preparer_dossier_redige_pour_le_client(monde, service):
     assert "[Nom, fonction — à compléter]" in t
     assert check_text(t) == []
     assert AVERTISSEMENT in t
-    for mot in ("illégal", "dû", "fraude", "délai légal", "mise en demeure", "réclamons", "pénalit", "délai",
-                "conformément", "article L", "code des douanes", "Demande d'avoir", "recouvrement"):
+    for mot in (
+        "illégal",
+        "dû",
+        "fraude",
+        "délai légal",
+        "mise en demeure",
+        "réclamons",
+        "pénalit",
+        "délai",
+        "conformément",
+        "article L",
+        "code des douanes",
+        "Demande d'avoir",
+        "recouvrement",
+    ):
         assert mot.casefold() not in t.casefold(), mot
     assert d.pdf_sha256 and monde.vault.lire("cli_a", d.pdf_sha256).startswith(b"%PDF")
     # rejouer : aucun écart déjà demandé n'est repris
@@ -172,8 +194,13 @@ def test_cycle_complet_relances_avoir_commission(monde, service):
     assert service.creer_relances_dues("cli_a", maintenant_=T0 + timedelta(days=16)) == []
 
     # avoir partiel sur les droits : 200 sur 240
-    avoir = AvoirRecu.declare("av_1", "tra_a", {NatureLigne.debours_droits: Decimal("200.00")}, numero="AV-1",
-                              factures_origine=["FT-a-001"])
+    avoir = AvoirRecu.declare(
+        "av_1",
+        "tra_a",
+        {NatureLigne.debours_droits: Decimal("200.00")},
+        numero="AV-1",
+        factures_origine=["FT-a-001"],
+    )
     res = service.enregistrer_avoir(admin, "cli_a", avoir)
     assert res.statuts[d.id] == "partiellement_credite"
     assert sum(res.imputations.values()) == Decimal("200.00")
@@ -185,9 +212,13 @@ def test_cycle_complet_relances_avoir_commission(monde, service):
     assert service.enregistrer_avoir(admin, "cli_a", avoir).deja_traite
 
     # second avoir : solde des droits (40) + TVA (60) + 10 de trop -> crédité, reliquat signalé
-    avoir2 = AvoirRecu.declare("av_2", "tra_a", {NatureLigne.debours_droits: Decimal("40.00"),
-                                                 NatureLigne.debours_tva: Decimal("70.00")}, numero="AV-2",
-                               factures_origine=["FT-a-001"])
+    avoir2 = AvoirRecu.declare(
+        "av_2",
+        "tra_a",
+        {NatureLigne.debours_droits: Decimal("40.00"), NatureLigne.debours_tva: Decimal("70.00")},
+        numero="AV-2",
+        factures_origine=["FT-a-001"],
+    )
     res2 = service.enregistrer_avoir(admin, "cli_a", avoir2)
     assert res2.statuts[d.id] == "credite"
     assert res2.reliquat == Decimal("10.00")
@@ -209,9 +240,16 @@ def test_commission_exclut_constat_devalide(monde, service):
     # le fondateur revient sur le constat TVA : l'avoir est imputé mais n'entre pas dans la base
     with monde.db.operateur(monde.acteurs["fondateur"]) as op:
         op.client("cli_a", "révision").valider_constat("f_a2", "rejete", "lecture douteuse")
-    res = service.enregistrer_avoir(admin, "cli_a", AvoirRecu.declare(
-        "av_t", "tra_a", {NatureLigne.debours_tva: Decimal("60.00"), NatureLigne.debours_droits: Decimal("240.00")},
-        factures_origine=["FT-a-001"]))
+    res = service.enregistrer_avoir(
+        admin,
+        "cli_a",
+        AvoirRecu.declare(
+            "av_t",
+            "tra_a",
+            {NatureLigne.debours_tva: Decimal("60.00"), NatureLigne.debours_droits: Decimal("240.00")},
+            factures_origine=["FT-a-001"],
+        ),
+    )
     assert sum(res.imputations.values()) == Decimal("300.00")
     assert res.base_commission == Decimal("240.00") and res.commission == Decimal("48.00")
 
@@ -239,7 +277,9 @@ def test_inactifs(monde, service):
     service.valider(monde.acteurs["fondateur"], "cli_a", d.id)
     service.declarer_envoi(admin, "cli_a", d.id, le=T0)
     assert service.inactifs(SYSTEME, "cli_a", jours=60, maintenant_=T0 + timedelta(days=10)) == []
-    assert [x.id for x in service.inactifs(SYSTEME, "cli_a", jours=60, maintenant_=T0 + timedelta(days=61))] == [d.id]
+    assert [
+        x.id for x in service.inactifs(SYSTEME, "cli_a", jours=60, maintenant_=T0 + timedelta(days=61))
+    ] == [d.id]
 
 
 def test_constats_jamais_modifies_par_les_litiges(monde, service):

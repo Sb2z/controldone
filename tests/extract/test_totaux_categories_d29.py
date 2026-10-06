@@ -38,13 +38,22 @@ def _pdf(elements: list[tuple]) -> bytes:
 
 
 def _page(taxes: list[tuple], totaux: str | None, total: str = "74,47") -> bytes:
-    el = [(0.04, 0.05, "LOGICIEL FICTIF — EDITION DE LA DECLARATION ACCEPTEE"),
-          (0.04, 0.08, f"MRN: {MRN}   LRN: LRN-TEST-0077   Version: 1   Date d'acceptation: 12/05/2026"),
-          (0.04, 0.10, f"Importateur: Atelier Fictif SARL   TVA: {TVA_IMP}"),
-          (0.04, 0.14, "Monnaie de facturation: EUR   Montant total facturé: 300,00"),
-          (0.04, 0.16, "Masse brute totale: 30,000 kg   Colis: 4   Nombre d'articles: 2")]
-    tcols = [(0.05, "Art"), (0.09, "Type"), (0.20, "Base"), (0.28, "Taux"), (0.36, "Montant"), (0.44, "A payer"),
-             (0.50, "MP")]
+    el = [
+        (0.04, 0.05, "LOGICIEL FICTIF — EDITION DE LA DECLARATION ACCEPTEE"),
+        (0.04, 0.08, f"MRN: {MRN}   LRN: LRN-TEST-0077   Version: 1   Date d'acceptation: 12/05/2026"),
+        (0.04, 0.10, f"Importateur: Atelier Fictif SARL   TVA: {TVA_IMP}"),
+        (0.04, 0.14, "Monnaie de facturation: EUR   Montant total facturé: 300,00"),
+        (0.04, 0.16, "Masse brute totale: 30,000 kg   Colis: 4   Nombre d'articles: 2"),
+    ]
+    tcols = [
+        (0.05, "Art"),
+        (0.09, "Type"),
+        (0.20, "Base"),
+        (0.28, "Taux"),
+        (0.36, "Montant"),
+        (0.44, "A payer"),
+        (0.50, "MP"),
+    ]
     el += [(0.04, 0.31, "LIQUIDATION")] + [(x, 0.33, t) for x, t in tcols]
     for k, ligne in enumerate(taxes):
         el += [(x, 0.35 + 0.02 * k, t) for (x, _), t in zip(tcols, ligne, strict=True)]
@@ -56,13 +65,28 @@ def _page(taxes: list[tuple], totaux: str | None, total: str = "74,47") -> bytes
 
 def _extraire_ocr(contenu: bytes, conf: float = 0.96) -> ChampsDeclaration:
     """Extraction sur le texte natif du PDF présenté comme une lecture OCR (confiance ``conf`` par mot)."""
-    pe = extraire_pages(contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, isoler=False))[0]
-    lignes = [Ligne(texte=li.texte, mots=tuple(replace(m, confiance=conf) for m in li.mots)) for li in pe.texte.lignes]
-    pt = PageText(numero=1, texte=pe.texte.texte, lignes=lignes, qualite=QualiteTexte.ocr, source="ocr",
-                  score_ocr=0.93, largeur=842.0, hauteur=595.0)
+    pe = extraire_pages(contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, isoler=False))[
+        0
+    ]
+    lignes = [
+        Ligne(texte=li.texte, mots=tuple(replace(m, confiance=conf) for m in li.mots))
+        for li in pe.texte.lignes
+    ]
+    pt = PageText(
+        numero=1,
+        texte=pe.texte.texte,
+        lignes=lignes,
+        qualite=QualiteTexte.ocr,
+        source="ocr",
+        score_ocr=0.93,
+        largeur=842.0,
+        hauteur=595.0,
+    )
     page = Page(fichier_id="fic_test", numero=1, qualite_texte=QualiteTexte.ocr, texte=pt.texte)
-    doc = Document(type=TypeDocument.declaration,
-                   pages=[PageRef(fichier_id="fic_test", numero=1, qualite_texte=QualiteTexte.ocr)])
+    doc = Document(
+        type=TypeDocument.declaration,
+        pages=[PageRef(fichier_id="fic_test", numero=1, qualite_texte=QualiteTexte.ocr)],
+    )
     ctx = ExtractionContext(ids=IdGenerator.deterministe(5), options={"textes_pages": {1: pt}})
     res = ExtracteurDeclaration().extract(doc, [page], ctx)
     assert isinstance(res.champs, ChampsDeclaration)
@@ -70,8 +94,12 @@ def _extraire_ocr(contenu: bytes, conf: float = 0.96) -> ChampsDeclaration:
 
 
 # montant de la ligne 1 / A00 imprimé faux (base × taux = 5,67) : la ligne est incohérente
-TAXES = [("1", "A00", "210,00", "2,7 %", "8,67", "8,67", "E"), ("1", "B00", "215,67", "20,0 %", "43,13", "43,13", "E"),
-         ("2", "A00", "105,00", "3,7 %", "3,89", "3,89", "E"), ("2", "B00", "108,89", "20,0 %", "21,78", "21,78", "E")]
+TAXES = [
+    ("1", "A00", "210,00", "2,7 %", "8,67", "8,67", "E"),
+    ("1", "B00", "215,67", "20,0 %", "43,13", "43,13", "E"),
+    ("2", "A00", "105,00", "3,7 %", "3,89", "3,89", "E"),
+    ("2", "B00", "108,89", "20,0 %", "21,78", "21,78", "E"),
+]
 
 
 def _taxe(c: ChampsDeclaration, article: str, code: str):
@@ -115,7 +143,9 @@ def test_total_de_code_faux_ne_confirme_ni_n_infirme():
 def test_montant_de_devise_n_est_pas_un_total_de_code():
     taxes = [list(t) for t in TAXES]
     taxes[2][4] = taxes[2][5] = "3:8"
-    contenu = _page([tuple(t) for t in taxes], "Total TRY 1 616,35   Total A00: 12,56   Total B00: 64,91", total="77,47")
+    contenu = _page(
+        [tuple(t) for t in taxes], "Total TRY 1 616,35   Total A00: 12,56   Total B00: 64,91", total="77,47"
+    )
     c = _extraire_ocr(contenu)
     assert c.total_droits_taxes.confiance >= 0.9  # « TRY » n'est pas un code de taxe lu : Σ A00 + B00 = total
 
@@ -181,17 +211,27 @@ def test_totaux_par_code_confirmes_par_le_total_sans_ligne_lue():
     # tableau de taxation illisible (aucune ligne lue) ; récapitulatif « code : montant » complet
     c = _extraire_ocr(_page([], "A00 : 12,56   B00 : 61,91"))
     assert all(t.montant is None for t in c.taxations)
-    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "12.56"), ("B00", "61.91")]
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [
+        ("A00", "12.56"),
+        ("B00", "61.91"),
+    ]
     # somme différente du total des droits et taxes : le code sans ligne lue n'est pas retenu
     c = _extraire_ocr(_page([], "A00 : 12,56   B00 : 60,91"))
     assert "B00" not in {t.type_taxe.valeur for t in c.totaux_par_code}
 
 
 def test_total_de_categorie_sans_code_rattache_au_seul_code_lu():
-    taxes = [("1", "A00", "210,00", "2,7 %", "5,67", "5,67", "E"), ("1", "A30", "100,00", "5,0 %", "5,00", "5,00", "E"),
-             ("1", "B00", "320,67", "20,0 %", "64,13", "64,13", "E")]
-    c = _extraire_ocr(_page(taxes, "Total droits (A00) 5,67   Total autres taxes 5,00   Total TVA (B00) 64,13",
-                            total="74,80"), conf=0.99)
+    taxes = [
+        ("1", "A00", "210,00", "2,7 %", "5,67", "5,67", "E"),
+        ("1", "A30", "100,00", "5,0 %", "5,00", "5,00", "E"),
+        ("1", "B00", "320,67", "20,0 %", "64,13", "64,13", "E"),
+    ]
+    c = _extraire_ocr(
+        _page(
+            taxes, "Total droits (A00) 5,67   Total autres taxes 5,00   Total TVA (B00) 64,13", total="74,80"
+        ),
+        conf=0.99,
+    )
     par = {t.type_taxe.valeur: t.montant for t in c.totaux_par_code}
     assert set(par) == {"A00", "A30", "B00"} and par["A30"].valeur == "5.00"
     assert par["A30"].confiance < 0.90  # rattachement déduit : jamais une valeur certaine

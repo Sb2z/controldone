@@ -77,7 +77,11 @@ def test_normalize_vat_idempotent(x):
         assert normalize_vat(t) == t
 
 
-@given(p=pays, corps=st.text(alphabet="0123456789", min_size=8, max_size=12), prefixe=st.sampled_from(["", "TVA ", "VAT: ", "USt-IdNr. "]))
+@given(
+    p=pays,
+    corps=st.text(alphabet="0123456789", min_size=8, max_size=12),
+    prefixe=st.sampled_from(["", "TVA ", "VAT: ", "USt-IdNr. "]),
+)
 def test_normalize_vat_prefixes(p, corps, prefixe):
     assert normalize_vat(f"{prefixe}{p} {corps}") == p + corps
 
@@ -90,8 +94,12 @@ def test_luhn_un_chiffre_de_controle_exactement(base):
 
 # --- MRN -----------------------------------------------------------------------------------------------------
 
-mrns = st.builds(lambda a, p, r: f"{a:02d}{p}{r}", st.integers(0, 99), pays,
-                 st.text(alphabet=alnum, min_size=14, max_size=14))
+mrns = st.builds(
+    lambda a, p, r: f"{a:02d}{p}{r}",
+    st.integers(0, 99),
+    pays,
+    st.text(alphabet=alnum, min_size=14, max_size=14),
+)
 
 
 @given(mrn=mrns, data=st.data())

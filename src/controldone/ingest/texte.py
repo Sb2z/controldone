@@ -127,8 +127,10 @@ class PageText:
                             break  # l'occurrence commence plus loin : essayer le mot suivant
                         sel = mots[i : j + 1]
                         return Zone(
-                            x0=_b(min(m.x0 for m in sel)), y0=_b(min(m.y0 for m in sel)),
-                            x1=_b(max(m.x1 for m in sel)), y1=_b(max(m.y1 for m in sel)),
+                            x0=_b(min(m.x0 for m in sel)),
+                            y0=_b(min(m.y0 for m in sel)),
+                            x1=_b(max(m.x1 for m in sel)),
+                            y1=_b(max(m.y1 for m in sel)),
                         )
                     if len(acc) > len(cible) + 60:
                         break
@@ -142,7 +144,9 @@ class PageText:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["qualite"] = self.qualite.value
-        d["lignes"] = [{"texte": li.texte, "mots": [list(_mot_tuple(m)) for m in li.mots]} for li in self.lignes]
+        d["lignes"] = [
+            {"texte": li.texte, "mots": [list(_mot_tuple(m)) for m in li.mots]} for li in self.lignes
+        ]
         return d
 
     @classmethod

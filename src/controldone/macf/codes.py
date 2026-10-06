@@ -101,7 +101,9 @@ class ListeCodesMACF:
         """Rapproche un code imprimé de la liste (par préfixe, jamais par interprétation)."""
         c = chiffres_code(code_imprime)
         if len(c) < 2:
-            return CorrespondanceCode(code_imprime, StatutCode.illisible, motif="code imprimé absent ou illisible")
+            return CorrespondanceCode(
+                code_imprime, StatutCode.illisible, motif="code imprimé absent ou illisible"
+            )
         ambigu: EntreeCode | None = None
         for e in self.entrees:
             p = e.prefixe
@@ -111,14 +113,23 @@ class ListeCodesMACF:
                 if any(x.startswith(c) for x in e.prefixes_exclus):
                     ambigu = ambigu or e
                     continue
-                return CorrespondanceCode(code_imprime, StatutCode.dans_liste, e, self.secteurs[e.secteur],
-                                          motif=f"le code imprimé commence par {e.code} (liste annexe I)")
+                return CorrespondanceCode(
+                    code_imprime,
+                    StatutCode.dans_liste,
+                    e,
+                    self.secteurs[e.secteur],
+                    motif=f"le code imprimé commence par {e.code} (liste annexe I)",
+                )
             if p.startswith(c):
                 ambigu = ambigu or e
         if ambigu is not None:
             return CorrespondanceCode(
-                code_imprime, StatutCode.a_preciser, ambigu, self.secteurs[ambigu.secteur],
-                motif=f"code imprimé trop court pour être rapproché de {ambigu.code} : à préciser")
+                code_imprime,
+                StatutCode.a_preciser,
+                ambigu,
+                self.secteurs[ambigu.secteur],
+                motif=f"code imprimé trop court pour être rapproché de {ambigu.code} : à préciser",
+            )
         return CorrespondanceCode(code_imprime, StatutCode.hors_liste, motif="aucun code de la liste")
 
 
@@ -137,18 +148,25 @@ def _charger(chemin: str) -> ListeCodesMACF:
     secteurs: dict[str, Secteur] = {}
     entrees: list[EntreeCode] = []
     for s in data["secteurs"]:
-        secteurs[s["id"]] = Secteur(s["id"], s["libelle"], tuple(s.get("gaz", ())), bool(s.get("hors_cumul_50t")))
+        secteurs[s["id"]] = Secteur(
+            s["id"], s["libelle"], tuple(s.get("gaz", ())), bool(s.get("hors_cumul_50t"))
+        )
         for c in s["codes"]:
             entrees.append(EntreeCode(str(c["code"]), c["libelle"], s["id"], tuple(c.get("exclusions", ()))))
     # préfixes les plus longs d'abord : l'entrée la plus précise l'emporte (« 7301 » avant « 72 »… disjoints ici)
     entrees.sort(key=lambda e: -len(e.prefixe))
     src = data.get("source", {})
     return ListeCodesMACF(
-        version=str(data["version"]), statut=str(data.get("statut", "a_verifier")),
-        source_url=src.get("url", ""), source_texte=src.get("texte", ""), consulte_le=str(src.get("consulte_le", "")),
+        version=str(data["version"]),
+        statut=str(data.get("statut", "a_verifier")),
+        source_url=src.get("url", ""),
+        source_texte=src.get("texte", ""),
+        consulte_le=str(src.get("consulte_le", "")),
         seuil_tonnes=str(data.get("seuil_annuel_tonnes", "50")),
         seuil_source_url=data.get("seuil_source", {}).get("url", ""),
-        secteurs=secteurs, entrees=tuple(entrees), brut=data,
+        secteurs=secteurs,
+        entrees=tuple(entrees),
+        brut=data,
     )
 
 

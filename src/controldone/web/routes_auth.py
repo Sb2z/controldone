@@ -35,7 +35,9 @@ def _ouvrir_session(request: Request, acteur, *, deux_facteurs: bool) -> Respons
     rep = redirection(request, "/admin" if acteur.role is Role.fondateur else "/espace")
     etat.ouvrir_session(request, rep, acteur, deux_facteurs=deux_facteurs)  # enregistrée (sessions actives)
     etat.effacer_2fa(rep)
-    langue = langue_du_compte(request, acteur.id)  # préférence du compte, reposée dans ce navigateur (bloc I3)
+    langue = langue_du_compte(
+        request, acteur.id
+    )  # préférence du compte, reposée dans ce navigateur (bloc I3)
     if langue is not None:
         poser_langue(request, rep, langue)
     return rep
@@ -67,10 +69,17 @@ def connexion(request: Request) -> Response:
     etat = _etat(request)
     email = str(form.get("email") or "").strip().lower()[:320]
     mdp = str(form.get("mot_de_passe") or "")[:1024]
-    if not (etat.limiteur_connexion_ip.autoriser(_ip(request))
-            and etat.limiteur_connexion_compte.autoriser(email or "-")):
-        return page(request, "connexion.html.j2", titre="Connexion", statut=429,
-                    erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.")
+    if not (
+        etat.limiteur_connexion_ip.autoriser(_ip(request))
+        and etat.limiteur_connexion_compte.autoriser(email or "-")
+    ):
+        return page(
+            request,
+            "connexion.html.j2",
+            titre="Connexion",
+            statut=429,
+            erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.",
+        )
     pf = request.app.state.plateforme
     try:
         user_id, role = verifier_mot_de_passe_compte(pf.db, email, mdp)
@@ -81,8 +90,14 @@ def connexion(request: Request) -> Response:
             return rep
         acteur = acteur_client(pf.db, user_id, ip=_ip(request))
     except EchecAuthentification:
-        return page(request, "connexion.html.j2", titre="Connexion", statut=401, email=email,
-                    erreur="Identifiants invalides.")
+        return page(
+            request,
+            "connexion.html.j2",
+            titre="Connexion",
+            statut=401,
+            email=email,
+            erreur="Identifiants invalides.",
+        )
     return _ouvrir_session(request, acteur, deux_facteurs=False)
 
 
@@ -101,14 +116,26 @@ def totp(request: Request) -> Response:
     if user_id is None:
         return redirection(request, "/connexion", erreur="Étape expirée : reconnectez-vous.")
     if not etat.limiteur_connexion_compte.autoriser("2fa:" + user_id):
-        return page(request, "totp.html.j2", titre="Code de vérification", statut=429,
-                    erreur="Trop de tentatives. Patientez quelques minutes.")
+        return page(
+            request,
+            "totp.html.j2",
+            titre="Code de vérification",
+            statut=429,
+            erreur="Trop de tentatives. Patientez quelques minutes.",
+        )
     pf = request.app.state.plateforme
     try:
-        acteur = verifier_second_facteur(pf.db, user_id, str(form.get("code") or "")[:12],
-                                         cles_maitresses=pf.cles_maitresses, ip=_ip(request))
+        acteur = verifier_second_facteur(
+            pf.db,
+            user_id,
+            str(form.get("code") or "")[:12],
+            cles_maitresses=pf.cles_maitresses,
+            ip=_ip(request),
+        )
     except EchecAuthentification:
-        return page(request, "totp.html.j2", titre="Code de vérification", statut=401, erreur="Code invalide.")
+        return page(
+            request, "totp.html.j2", titre="Code de vérification", statut=401, erreur="Code invalide."
+        )
     etat.limiteur_connexion_compte.effacer("2fa:" + user_id)
     return _ouvrir_session(request, acteur, deux_facteurs=True)
 
@@ -138,21 +165,43 @@ def mdp(request: Request) -> Response:
     pf = request.app.state.plateforme
     etat = _etat(request)
     if not etat.limiteur_connexion_compte.autoriser("mdp:" + acteur.id):
-        return page(request, "mot_de_passe.html.j2", titre="Changer de mot de passe", statut=429,
-                    erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.")
-    actuel, nouveau, confirmation = (str(form.get(k) or "")[:1024] for k in ("actuel", "nouveau", "confirmation"))
+        return page(
+            request,
+            "mot_de_passe.html.j2",
+            titre="Changer de mot de passe",
+            statut=429,
+            erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.",
+        )
+    actuel, nouveau, confirmation = (
+        str(form.get(k) or "")[:1024] for k in ("actuel", "nouveau", "confirmation")
+    )
     compte = utilisateur(pf.db, acteur.id)
     if compte is None or not verifier_mot_de_passe(compte.mot_de_passe_hash, actuel):
-        return page(request, "mot_de_passe.html.j2", titre="Changer de mot de passe", statut=400,
-                    erreur="Mot de passe actuel incorrect.")
+        return page(
+            request,
+            "mot_de_passe.html.j2",
+            titre="Changer de mot de passe",
+            statut=400,
+            erreur="Mot de passe actuel incorrect.",
+        )
     if nouveau != confirmation:
-        return page(request, "mot_de_passe.html.j2", titre="Changer de mot de passe", statut=400,
-                    erreur="Les deux saisies du nouveau mot de passe diffèrent.")
+        return page(
+            request,
+            "mot_de_passe.html.j2",
+            titre="Changer de mot de passe",
+            statut=400,
+            erreur="Les deux saisies du nouveau mot de passe diffèrent.",
+        )
     try:
         empreinte = hacher_mot_de_passe(nouveau)
     except MotDePasseFaible:
-        return page(request, "mot_de_passe.html.j2", titre="Changer de mot de passe", statut=400,
-                    erreur="Le nouveau mot de passe doit comporter au moins 12 caractères.")
+        return page(
+            request,
+            "mot_de_passe.html.j2",
+            titre="Changer de mot de passe",
+            statut=400,
+            erreur="Le nouveau mot de passe doit comporter au moins 12 caractères.",
+        )
     changer_mot_de_passe(pf.db, acteur.id, empreinte, acteur=acteur)
     # Toutes les sessions ouvertes avec l'ancien mot de passe sont révoquées (autres navigateurs, cookie volé) ;
     # celle-ci est remplacée par une session neuve (D-3202, RS-17).

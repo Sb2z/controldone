@@ -16,8 +16,10 @@ def dv(champ, val, **kw):
 
 
 def art(numero, **champs):
-    return ArticleDeclaration(numero_article=dv("articles[].numero_article", numero),
-                              **{k: dv(f"articles[].{k}", v) for k, v in champs.items()})
+    return ArticleDeclaration(
+        numero_article=dv("articles[].numero_article", numero),
+        **{k: dv(f"articles[].{k}", v) for k, v in champs.items()},
+    )
 
 
 def _masses(*articles, total=None, nombre=None):
@@ -50,7 +52,9 @@ def test_masses_coherentes_sans_motif():
 
 
 def test_nombre_d_articles_illisible_ou_different():
-    assert any("nombre d'articles" in m for m in _masses(art("1", masse_brute="10"), total="10", nombre="trois"))
+    assert any(
+        "nombre d'articles" in m for m in _masses(art("1", masse_brute="10"), total="10", nombre="trois")
+    )
     assert any("nombre d'articles" in m for m in _masses(art("1", masse_brute="10"), total="10", nombre="2"))
 
 

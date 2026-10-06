@@ -104,7 +104,9 @@ class FileVault:
         if cle not in self._cache:
             aes = []
             for m in self._cles:
-                hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=SEL_HKDF, info=f"vault-gcm:{t}".encode())
+                hkdf = HKDF(
+                    algorithm=hashes.SHA256(), length=32, salt=SEL_HKDF, info=f"vault-gcm:{t}".encode()
+                )
                 aes.append(AESGCM(hkdf.derive(base64.urlsafe_b64decode(m))))
             self._cache[cle] = aes  # type: ignore[assignment]
         return self._cache[cle]  # type: ignore[return-value]
@@ -122,10 +124,11 @@ class FileVault:
             with os.fdopen(fd, "wb") as f:
                 f.write(entete)
                 for i in range(n):
-                    morceau = vue[i * TAILLE_SEGMENT:(i + 1) * TAILLE_SEGMENT]
+                    morceau = vue[i * TAILLE_SEGMENT : (i + 1) * TAILLE_SEGMENT]
                     final = i == n - 1
-                    chiffre = aes.encrypt(prefixe + struct.pack(">I", i), bytes(morceau),
-                                          entete + struct.pack(">IB", i, final))
+                    chiffre = aes.encrypt(
+                        prefixe + struct.pack(">I", i), bytes(morceau), entete + struct.pack(">IB", i, final)
+                    )
                     f.write(struct.pack(">I", len(chiffre)) + chiffre)
                 f.flush()
                 os.fsync(f.fileno())

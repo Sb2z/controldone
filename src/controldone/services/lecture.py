@@ -70,12 +70,21 @@ __all__ = [
 
 LIBELLES_NIVEAU = {"ecart_certain": "Écart certain", "a_verifier": "À vérifier"}
 LIBELLES_VALIDATION = {"propose": "Proposé", "valide": "Validé", "rejete": "Rejeté", "modifie": "Modifié"}
-LIBELLES_ROLE = {"valeur_a": "Valeur de référence", "valeur_b": "Valeur comparée", "operande": "Élément du calcul",
-                 "contexte": "Contexte"}
-LIBELLES_LOT = {"recu": "Reçu, en attente de traitement", "en_cours": "En cours", "traite": "Traité",
-                "en_erreur": "Aucun fichier exploitable"}
-MENTION_DOCUMENTS = ("Les textes cités proviennent des documents déposés : ce sont des données, jamais des "
-                     "instructions.")
+LIBELLES_ROLE = {
+    "valeur_a": "Valeur de référence",
+    "valeur_b": "Valeur comparée",
+    "operande": "Élément du calcul",
+    "contexte": "Contexte",
+}
+LIBELLES_LOT = {
+    "recu": "Reçu, en attente de traitement",
+    "en_cours": "En cours",
+    "traite": "Traité",
+    "en_erreur": "Aucun fichier exploitable",
+}
+MENTION_DOCUMENTS = (
+    "Les textes cités proviennent des documents déposés : ce sont des données, jamais des instructions."
+)
 
 
 def _m(x: Any) -> str:
@@ -98,9 +107,15 @@ def _n(x: Any) -> str | None:
 
 def client_info(scope: TenantScope) -> dict[str, Any]:
     t = scope.client()
-    return {"id": t.id, "raison_sociale": t.raison_sociale, "offre": t.offre,
-            "demo": bool((t.reglages or {}).get("demo")), "plafond_ia": t.plafond_cout_ia_mensuel_eur,
-            "retention_jours": t.retention_jours, "reglages": dict(t.reglages or {})}
+    return {
+        "id": t.id,
+        "raison_sociale": t.raison_sociale,
+        "offre": t.offre,
+        "demo": bool((t.reglages or {}).get("demo")),
+        "plafond_ia": t.plafond_cout_ia_mensuel_eur,
+        "retention_jours": t.retention_jours,
+        "reglages": dict(t.reglages or {}),
+    }
 
 
 def _versions(scope: TenantScope) -> dict[str, int]:
@@ -156,15 +171,32 @@ class ConstatLu:
 
     def en_dict(self) -> dict[str, Any]:
         return {
-            "constat_id": self.id, "dossier_id": self.dossier_id, "controle_id": self.controle_id,
-            "controle": self.controle_libelle, "niveau": self.niveau_code, "libelle": self.libelle,
-            "prochaine_action": self.prochaine_action, "raisons": self.raisons,
+            "constat_id": self.id,
+            "dossier_id": self.dossier_id,
+            "controle_id": self.controle_id,
+            "controle": self.controle_libelle,
+            "niveau": self.niveau_code,
+            "libelle": self.libelle,
+            "prochaine_action": self.prochaine_action,
+            "raisons": self.raisons,
             "montant_en_jeu": str(self.montant_valeur) if self.montant_valeur is not None else None,
-            "nature_montant": self.nature_code, "composante": self.composante, "renvoi": self.renvoi,
-            "tolerance_appliquee": self.tolerance, "seuil_certitude": self.seuil,
+            "nature_montant": self.nature_code,
+            "composante": self.composante,
+            "renvoi": self.renvoi,
+            "tolerance_appliquee": self.tolerance,
+            "seuil_certitude": self.seuil,
             "statut_validation": self.statut_validation_code,
-            "preuves": [{"role": p.role_code, "document_id": p.document_id, "document": p.document, "page": p.page,
-                         "valeur_lue": p.valeur_lue, "calcul": p.calcul} for p in self.preuves],
+            "preuves": [
+                {
+                    "role": p.role_code,
+                    "document_id": p.document_id,
+                    "document": p.document,
+                    "page": p.page,
+                    "valeur_lue": p.valeur_lue,
+                    "calcul": p.calcul,
+                }
+                for p in self.preuves
+            ],
         }
 
 
@@ -186,8 +218,10 @@ def vue_constat(c: Constat, libelles_docs: dict[str, str] | None = None) -> Cons
     libelle = j.get("libelle") or ""
     action = j.get("prochaine_action") or ""
     if bloque:
-        libelle = ("Libellé retenu pour relecture avant publication (formulation à revoir) ; les valeurs "
-                   "comparées figurent ci-dessous.")
+        libelle = (
+            "Libellé retenu pour relecture avant publication (formulation à revoir) ; les valeurs "
+            "comparées figurent ci-dessous."
+        )
         action = ""
     if renvoi and PHRASE_RENVOI not in libelle and PHRASE_RENVOI not in action:
         action = (action + " " + PHRASE_RENVOI).strip()
@@ -195,14 +229,27 @@ def vue_constat(c: Constat, libelles_docs: dict[str, str] | None = None) -> Cons
     montant = c.montant_en_jeu
     preuves = []
     ordre = ["valeur_a", "valeur_b", "operande", "contexte"]
-    brutes = sorted(enumerate(j.get("preuves") or []),
-                    key=lambda ip: ordre.index(ip[1].get("role")) if ip[1].get("role") in ordre else 9)
+    brutes = sorted(
+        enumerate(j.get("preuves") or []),
+        key=lambda ip: ordre.index(ip[1].get("role")) if ip[1].get("role") in ordre else 9,
+    )
     for i, p in brutes:
         doc_id = p.get("document_id")
-        lib = libelles_docs.get(doc_id or "", "Document") if doc_id else ("Calcul" if p.get("calcul") else "—")
-        preuves.append(PreuveLue(role=LIBELLES_ROLE.get(p.get("role"), p.get("role") or ""),
-                                 role_code=p.get("role") or "", document_id=doc_id, document=lib, page=p.get("page"),
-                                 valeur_lue=p.get("valeur_brute"), calcul=p.get("calcul"), index=i))
+        lib = (
+            libelles_docs.get(doc_id or "", "Document") if doc_id else ("Calcul" if p.get("calcul") else "—")
+        )
+        preuves.append(
+            PreuveLue(
+                role=LIBELLES_ROLE.get(p.get("role"), p.get("role") or ""),
+                role_code=p.get("role") or "",
+                document_id=doc_id,
+                document=lib,
+                page=p.get("page"),
+                valeur_lue=p.get("valeur_brute"),
+                calcul=p.get("calcul"),
+                index=i,
+            )
+        )
     try:
         nature_lib = LIBELLES_NATURE[NatureMontant(nature)]
     except ValueError:
@@ -213,24 +260,39 @@ def vue_constat(c: Constat, libelles_docs: dict[str, str] | None = None) -> Cons
     except ValueError:
         composante_lib = composante
     return ConstatLu(
-        id=c.id, dossier_id=c.dossier_id, controle_id=c.controle_id, controle_libelle=spec.libelle,
-        niveau=LIBELLES_NIVEAU.get(c.niveau, c.niveau), niveau_code=c.niveau, libelle=libelle,
-        prochaine_action=action, raisons=[RAISON_LIBELLES.get(x, x.value) for x in codes],
+        id=c.id,
+        dossier_id=c.dossier_id,
+        controle_id=c.controle_id,
+        controle_libelle=spec.libelle,
+        niveau=LIBELLES_NIVEAU.get(c.niveau, c.niveau),
+        niveau_code=c.niveau,
+        libelle=libelle,
+        prochaine_action=action,
+        raisons=[RAISON_LIBELLES.get(x, x.value) for x in codes],
         montant=_m(montant) if nature not in ("renvoi", "aucun") else "—",
         montant_valeur=montant if nature not in ("renvoi", "aucun") else None,
-        nature=nature_lib, nature_code=nature, composante=composante_lib, renvoi=renvoi,
-        tolerance=_n(j.get("tolerance_appliquee")), seuil=_n(j.get("seuil_certitude_applique")),
+        nature=nature_lib,
+        nature_code=nature,
+        composante=composante_lib,
+        renvoi=renvoi,
+        tolerance=_n(j.get("tolerance_appliquee")),
+        seuil=_n(j.get("seuil_certitude_applique")),
         statut_validation=LIBELLES_VALIDATION.get(c.statut_validation, c.statut_validation),
-        statut_validation_code=c.statut_validation, commentaire=c.commentaire_validation,
-        bloque=bloque, motif_blocage=j.get("motif_blocage"), preuves=preuves,
+        statut_validation_code=c.statut_validation,
+        commentaire=c.commentaire_validation,
+        bloque=bloque,
+        motif_blocage=j.get("motif_blocage"),
+        preuves=preuves,
     )
 
 
 def trier_constats(constats: list[ConstatLu]) -> list[ConstatLu]:
     """Ordre §7.7 : écarts certains à montant décroissant, puis à vérifier, puis renvois."""
     rang = {"ecart_certain": 0, "a_verifier": 1}
-    return sorted(constats, key=lambda c: (c.renvoi, rang.get(c.niveau_code, 2), -(c.montant_valeur or 0),
-                                           c.controle_id))
+    return sorted(
+        constats,
+        key=lambda c: (c.renvoi, rang.get(c.niveau_code, 2), -(c.montant_valeur or 0), c.controle_id),
+    )
 
 
 # --- dossiers --------------------------------------------------------------------------------------------
@@ -252,20 +314,28 @@ class DossierLigne:
     recouvrable_a_verifier: Decimal
 
     def en_dict(self) -> dict[str, Any]:
-        return {"dossier_id": self.id, "reference": self.reference, "statut": self.statut_code,
-                "version": self.version, "lot_id": self.lot_id,
-                "cree_le": self.cree_le.isoformat() if self.cree_le else None,
-                "cles": dict(self.cles), "nb_constats": self.nb_constats,
-                "recouvrable_certain_eur": str(self.recouvrable_certain),
-                "recouvrable_a_verifier_eur": str(self.recouvrable_a_verifier)}
+        return {
+            "dossier_id": self.id,
+            "reference": self.reference,
+            "statut": self.statut_code,
+            "version": self.version,
+            "lot_id": self.lot_id,
+            "cree_le": self.cree_le.isoformat() if self.cree_le else None,
+            "cles": dict(self.cles),
+            "nb_constats": self.nb_constats,
+            "recouvrable_certain_eur": str(self.recouvrable_certain),
+            "recouvrable_a_verifier_eur": str(self.recouvrable_a_verifier),
+        }
 
 
 def _cles(contenu: dict[str, Any]) -> list[tuple[str, str]]:
     c = contenu.get("cles") or {}
-    return [("Facture du transitaire", ", ".join(c.get("num_facture_transitaire") or []) or "—"),
-            ("Transport", ", ".join(c.get("ref_transport") or []) or "—"),
-            ("MRN", ", ".join(c.get("mrn") or []) or "—"),
-            ("Facture commerciale", ", ".join(c.get("num_facture_commerciale") or []) or "—")]
+    return [
+        ("Facture du transitaire", ", ".join(c.get("num_facture_transitaire") or []) or "—"),
+        ("Transport", ", ".join(c.get("ref_transport") or []) or "—"),
+        ("MRN", ", ".join(c.get("mrn") or []) or "—"),
+        ("Facture commerciale", ", ".join(c.get("num_facture_commerciale") or []) or "—"),
+    ]
 
 
 def _statut(code: str | None, constats: list[Constat], *, client: bool) -> tuple[str, str]:
@@ -298,8 +368,10 @@ def lister_dossiers(scope: TenantScope) -> list[DossierLigne]:
     par_dossier: dict[str, list[Constat]] = {}
     for c in constats:
         par_dossier.setdefault(c.dossier_id, []).append(c)
-    return [ligne_dossier(d, par_dossier.get(d.id, []), client=client)
-            for d in scope.lister(Dossier, ordre=Dossier.reference)]
+    return [
+        ligne_dossier(d, par_dossier.get(d.id, []), client=client)
+        for d in scope.lister(Dossier, ordre=Dossier.reference)
+    ]
 
 
 def ligne_dossier(d: Any, cs: list[Constat], *, client: bool) -> DossierLigne:
@@ -307,16 +379,43 @@ def ligne_dossier(d: Any, cs: list[Constat], *, client: bool) -> DossierLigne:
     courants visibles). Partagée par ``lister_dossiers`` et la liste paginée en SQL (``web/listes_sql.py``)."""
     statut, code = _statut(d.statut_global, cs, client=client)
     totaux = [c for c in cs if not hors_totaux(c)]  # même règle que le rapport (D-1319)
-    cert = sum((c.montant_en_jeu for c in totaux if c.niveau == "ecart_certain" and c.statut_validation == "valide"
-                and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
-    aver = sum((c.montant_en_jeu for c in totaux if c.niveau == "a_verifier" and c.statut_validation != "rejete"
-                and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
+    cert = sum(
+        (
+            c.montant_en_jeu
+            for c in totaux
+            if c.niveau == "ecart_certain"
+            and c.statut_validation == "valide"
+            and c.nature_montant == "recouvrable"
+            and c.montant_en_jeu
+            and c.montant_en_jeu > 0
+        ),
+        Decimal(0),
+    )
+    aver = sum(
+        (
+            c.montant_en_jeu
+            for c in totaux
+            if c.niveau == "a_verifier"
+            and c.statut_validation != "rejete"
+            and c.nature_montant == "recouvrable"
+            and c.montant_en_jeu
+            and c.montant_en_jeu > 0
+        ),
+        Decimal(0),
+    )
     return DossierLigne(
-        id=d.id, reference=d.reference or d.id, statut=statut, statut_code=code, version=d.version,
-        lot_id=d.lot_id, cree_le=d.cree_le, cles=_cles(d.contenu or {}),
+        id=d.id,
+        reference=d.reference or d.id,
+        statut=statut,
+        statut_code=code,
+        version=d.version,
+        lot_id=d.lot_id,
+        cree_le=d.cree_le,
+        cles=_cles(d.contenu or {}),
         nb_constats=len([c for c in cs if c.statut_validation != "rejete"]),
         nb_proposes=len([c for c in cs if c.statut_validation == "propose"]),
-        recouvrable_certain=cert, recouvrable_a_verifier=aver,
+        recouvrable_certain=cert,
+        recouvrable_a_verifier=aver,
     )
 
 
@@ -408,26 +507,58 @@ def detail_dossier(scope: TenantScope, dossier_id: str) -> DossierLu:
                 f = scope.obtenir(Fichier, fid)
             except AccesRefuse:
                 f = None
-        valeurs = [ValeurLue(
-            id=v.id, chemin=v.chemin, libelle=v.chemin.partition(".")[2] or v.chemin, valeur=v.valeur,
-            valeur_brute=v.valeur_brute, unite=v.unite, page=v.page, methode=v.methode.value,
-            confiance=f"{round(v.confiance * 100)} %", ancree=v.ancree, texte_contexte=v.texte_contexte,
-            remplace=v.remplace) for v in d.valeurs()]
-        documents.append(DocumentLu(
-            id=d.id, type=LIBELLES_TYPE.get(d.type, d.type.value), type_code=d.type.value, libelle=libelles[d.id],
-            sous_type=d.sous_type, confiance=f"{round(d.confiance_classement * 100)} %",
-            lien=LIBELLES_FORCE[lien.force], signaux=", ".join(LIBELLES_SIGNAL.get(s, s.value) for s in lien.signaux),
-            faible=lien.force.value == "faible", pages=[(p.fichier_id, p.numero) for p in d.pages],
-            fichier_id=f.id if f else None, fichier_nom=f.chemin_relatif if f else None,
-            fichier_mime=f.type_mime if f else None, valeurs=valeurs))
+        valeurs = [
+            ValeurLue(
+                id=v.id,
+                chemin=v.chemin,
+                libelle=v.chemin.partition(".")[2] or v.chemin,
+                valeur=v.valeur,
+                valeur_brute=v.valeur_brute,
+                unite=v.unite,
+                page=v.page,
+                methode=v.methode.value,
+                confiance=f"{round(v.confiance * 100)} %",
+                ancree=v.ancree,
+                texte_contexte=v.texte_contexte,
+                remplace=v.remplace,
+            )
+            for v in d.valeurs()
+        ]
+        documents.append(
+            DocumentLu(
+                id=d.id,
+                type=LIBELLES_TYPE.get(d.type, d.type.value),
+                type_code=d.type.value,
+                libelle=libelles[d.id],
+                sous_type=d.sous_type,
+                confiance=f"{round(d.confiance_classement * 100)} %",
+                lien=LIBELLES_FORCE[lien.force],
+                signaux=", ".join(LIBELLES_SIGNAL.get(s, s.value) for s in lien.signaux),
+                faible=lien.force.value == "faible",
+                pages=[(p.fichier_id, p.numero) for p in d.pages],
+                fichier_id=f.id if f else None,
+                fichier_nom=f.chemin_relatif if f else None,
+                fichier_mime=f.type_mime if f else None,
+                valeurs=valeurs,
+            )
+        )
     constats_rows = constats_courants(scope, dossier_id)
     constats = trier_constats([vue_constat(c, libelles) for c in constats_rows])
     statut, code = _statut(row.statut_global, constats_rows, client=scope.actor.est_client)
     ligne = DossierLigne(
-        id=row.id, reference=row.reference or row.id, statut=statut, statut_code=code, version=row.version,
-        lot_id=row.lot_id, cree_le=row.cree_le, cles=_cles(row.contenu or {}),
-        nb_constats=len(constats), nb_proposes=len([c for c in constats if c.statut_validation_code == "propose"]),
-        recouvrable_certain=Decimal(0), recouvrable_a_verifier=Decimal(0))
+        id=row.id,
+        reference=row.reference or row.id,
+        statut=statut,
+        statut_code=code,
+        version=row.version,
+        lot_id=row.lot_id,
+        cree_le=row.cree_le,
+        cles=_cles(row.contenu or {}),
+        nb_constats=len(constats),
+        nb_proposes=len([c for c in constats if c.statut_validation_code == "propose"]),
+        recouvrable_certain=Decimal(0),
+        recouvrable_a_verifier=Decimal(0),
+    )
     resultats: list[dict[str, Any]] = []
     corrections: list[Any] = []
     if not scope.actor.est_client:
@@ -439,18 +570,31 @@ def detail_dossier(scope: TenantScope, dossier_id: str) -> DossierLu:
                 res = LIBELLES_OUTCOME[Outcome(r.outcome)]
             except ValueError:
                 res = r.outcome
-            resultats.append({"controle_id": r.controle_id, "libelle": get_spec(r.controle_id).libelle,
-                              "resultat": res, "code": r.outcome, "attendu": j.get("attendu") or "—",
-                              "constate": j.get("constate") or "—",
-                              "raison": RAISON_LIBELLES.get(RaisonCode(j["raison_code"]), "")
-                              if j.get("raison_code") in RaisonCode.__members__ else ""})
+            resultats.append(
+                {
+                    "controle_id": r.controle_id,
+                    "libelle": get_spec(r.controle_id).libelle,
+                    "resultat": res,
+                    "code": r.outcome,
+                    "attendu": j.get("attendu") or "—",
+                    "constate": j.get("constate") or "—",
+                    "raison": RAISON_LIBELLES.get(RaisonCode(j["raison_code"]), "")
+                    if j.get("raison_code") in RaisonCode.__members__
+                    else "",
+                }
+            )
         corrections = scope.corrections(dossier_id)
     transitaires = {t.id: t.nom for t in _transitaires(scope)}
     return DossierLu(
-        ligne=ligne, modele=modele, documents=documents, constats=constats, resultats=resultats,
+        ligne=ligne,
+        modele=modele,
+        documents=documents,
+        constats=constats,
+        resultats=resultats,
         corrections=corrections,
         documents_manquants=[LIBELLES_TYPE.get(TypeDocument(x), x) for x in modele.documents_manquants],
-        transitaire=transitaires.get(modele.transitaire_id or "", modele.transitaire_id))
+        transitaire=transitaires.get(modele.transitaire_id or "", modele.transitaire_id),
+    )
 
 
 def _transitaires(scope: TenantScope) -> list[Any]:
@@ -462,8 +606,17 @@ def _transitaires(scope: TenantScope) -> list[Any]:
 
 def lister_lots(scope: TenantScope, limite: int = 50) -> list[dict[str, Any]]:
     lots = scope.lister(Lot, ordre=Lot.recu_le.desc(), limite=limite)
-    return [{"id": lot.id, "canal": lot.canal, "statut": lot.statut, "statut_libelle": LIBELLES_LOT.get(lot.statut,
-             lot.statut), "recu_le": lot.recu_le, "resume": resume_visible(scope, lot.resume)} for lot in lots]
+    return [
+        {
+            "id": lot.id,
+            "canal": lot.canal,
+            "statut": lot.statut,
+            "statut_libelle": LIBELLES_LOT.get(lot.statut, lot.statut),
+            "recu_le": lot.recu_le,
+            "resume": resume_visible(scope, lot.resume),
+        }
+        for lot in lots
+    ]
 
 
 def jobs_du_client(db: Any, tenant_id: str, limite: int = 200) -> list[Any]:
@@ -480,8 +633,9 @@ def job_du_lot(db: Any, tenant_id: str, lot_id: str) -> Any:
 #: Clés du résumé d'un lot montrées à un rôle client. Le résumé du moteur compte aussi les constats **non
 #: publiés** (``constats``) et indique l'usage du modèle de langage (``llm``) : réservé au fondateur (règle de
 #: publication §4 ; revue de sécurité RS-05).
-CLES_RESUME_CLIENT = frozenset({"fichiers", "doublons", "refuses", "dossiers", "non_lus", "avant_paiement", "source",
-                                "format"})
+CLES_RESUME_CLIENT = frozenset(
+    {"fichiers", "doublons", "refuses", "dossiers", "non_lus", "avant_paiement", "source", "format"}
+)
 
 
 def resume_visible(scope: TenantScope, resume: dict[str, Any] | None) -> dict[str, Any]:
@@ -491,7 +645,9 @@ def resume_visible(scope: TenantScope, resume: dict[str, Any] | None) -> dict[st
     return resume
 
 
-def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None, job: Any = None) -> dict[str, Any]:
+def lire_lot(
+    scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None, job: Any = None
+) -> dict[str, Any]:
     lot = scope.obtenir(Lot, lot_id)
     fichiers = scope.lister(Fichier, lot_id=lot_id, ordre=Fichier.chemin_relatif)
     if job is not None and (job.tenant_id != scope.tenant_id or job.payload.get("lot_id") != lot_id):
@@ -501,11 +657,24 @@ def lire_lot(scope: TenantScope, lot_id: str, *, jobs: list[Any] | None = None, 
             job = j
     dossiers = [d for d in scope.lister(Dossier, lot_id=lot_id, ordre=Dossier.reference)]
     return {
-        "id": lot.id, "canal": lot.canal, "statut": lot.statut, "statut_libelle": LIBELLES_LOT.get(lot.statut, lot.statut),
-        "recu_le": lot.recu_le, "resume": resume_visible(scope, lot.resume),
-        "fichiers": [{"id": f.id, "chemin": f.chemin_relatif, "taille": f.taille, "type": f.type_mime,
-                      "statut": f.statut, "motif": f.motif_refus, "doublon": f.doublon_de is not None}
-                     for f in fichiers],
+        "id": lot.id,
+        "canal": lot.canal,
+        "statut": lot.statut,
+        "statut_libelle": LIBELLES_LOT.get(lot.statut, lot.statut),
+        "recu_le": lot.recu_le,
+        "resume": resume_visible(scope, lot.resume),
+        "fichiers": [
+            {
+                "id": f.id,
+                "chemin": f.chemin_relatif,
+                "taille": f.taille,
+                "type": f.type_mime,
+                "statut": f.statut,
+                "motif": f.motif_refus,
+                "doublon": f.doublon_de is not None,
+            }
+            for f in fichiers
+        ],
         "job": {"id": job.id, "statut": job.statut, "essais": job.attempts} if job else None,
         "dossiers": [{"id": d.id, "reference": d.reference or d.id} for d in dossiers],
     }
@@ -517,11 +686,17 @@ def resume_lot(plateforme: Any, acteur: Any, lot_id: str) -> dict[str, Any]:
     job = job_du_lot(plateforme.db, acteur.tenant_id, lot_id)
     with plateforme.db.tenant(acteur.tenant_id, acteur, lecture=True) as scope:
         d = lire_lot(scope, lot_id, job=job)
-    return {"lot_id": d["id"], "statut": d["statut"], "traitement": d["job"]["statut"] if d["job"] else None,
-            "resume": d["resume"], "dossiers": [{"dossier_id": x["id"], "reference": x["reference"]}
-                                                 for x in d["dossiers"]],
-            "fichiers": [{"fichier": f["chemin"], "statut": f["statut"], "motif": f["motif"], "taille": f["taille"]}
-                         for f in d["fichiers"]]}
+    return {
+        "lot_id": d["id"],
+        "statut": d["statut"],
+        "traitement": d["job"]["statut"] if d["job"] else None,
+        "resume": d["resume"],
+        "dossiers": [{"dossier_id": x["id"], "reference": x["reference"]} for x in d["dossiers"]],
+        "fichiers": [
+            {"fichier": f["chemin"], "statut": f["statut"], "motif": f["motif"], "taille": f["taille"]}
+            for f in d["fichiers"]
+        ],
+    }
 
 
 def pages_du_fichier(scope: TenantScope, fichier_id: str) -> list[PageTexte]:

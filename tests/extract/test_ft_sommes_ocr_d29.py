@@ -18,30 +18,59 @@ from controldone.model.enums import QualiteTexte, TypeDocument
 def _facture(ttc: str = "1 278,62", total_ht: str = "190,00") -> bytes:
     el = _entete("FACTURE", "N° F-2610777")
     el += [
-        (0.08, 0.23, "Désignation", "g"), (0.62, 0.23, "Qté", "d"), (0.68, 0.23, "Montant HT", "d"),
-        (0.80, 0.23, "TVA %", "d"), (0.90, 0.23, "Mt TVA", "d"),
-        (0.08, 0.25, "Droits de douane (débours)", "g"), (0.62, 0.25, "1", "d"), (0.68, 0.25, "1 050,62", "d"),
-        (0.80, 0.25, "0,00", "d"), (0.90, 0.25, "0,00", "d"),
-        (0.08, 0.27, "Frais de dédouanement", "g"), (0.62, 0.27, "1", "d"), (0.68, 0.27, "65,00", "d"),
-        (0.80, 0.27, "20,00", "d"), (0.90, 0.27, "13,00", "d"),
-        (0.08, 0.29, "Livraison", "g"), (0.62, 0.29, "1", "d"), (0.68, 0.29, "125,00", "d"),
-        (0.80, 0.29, "20,00", "d"), (0.90, 0.29, "25,00", "d"),
-        (0.60, 0.33, "Total débours", "g"), (0.93, 0.33, "1 050,62", "d"),
-        (0.60, 0.35, "Total HT prestations", "g"), (0.93, 0.35, total_ht, "d"),
-        (0.60, 0.37, "Total TVA", "g"), (0.93, 0.37, "38,00", "d"),
-        (0.60, 0.39, "Total TTC", "g"), (0.93, 0.39, ttc, "d"),
+        (0.08, 0.23, "Désignation", "g"),
+        (0.62, 0.23, "Qté", "d"),
+        (0.68, 0.23, "Montant HT", "d"),
+        (0.80, 0.23, "TVA %", "d"),
+        (0.90, 0.23, "Mt TVA", "d"),
+        (0.08, 0.25, "Droits de douane (débours)", "g"),
+        (0.62, 0.25, "1", "d"),
+        (0.68, 0.25, "1 050,62", "d"),
+        (0.80, 0.25, "0,00", "d"),
+        (0.90, 0.25, "0,00", "d"),
+        (0.08, 0.27, "Frais de dédouanement", "g"),
+        (0.62, 0.27, "1", "d"),
+        (0.68, 0.27, "65,00", "d"),
+        (0.80, 0.27, "20,00", "d"),
+        (0.90, 0.27, "13,00", "d"),
+        (0.08, 0.29, "Livraison", "g"),
+        (0.62, 0.29, "1", "d"),
+        (0.68, 0.29, "125,00", "d"),
+        (0.80, 0.29, "20,00", "d"),
+        (0.90, 0.29, "25,00", "d"),
+        (0.60, 0.33, "Total débours", "g"),
+        (0.93, 0.33, "1 050,62", "d"),
+        (0.60, 0.35, "Total HT prestations", "g"),
+        (0.93, 0.35, total_ht, "d"),
+        (0.60, 0.37, "Total TVA", "g"),
+        (0.93, 0.37, "38,00", "d"),
+        (0.60, 0.39, "Total TTC", "g"),
+        (0.93, 0.39, ttc, "d"),
     ]
     return _pdf(el)
 
 
 def _extraire_ocr(contenu: bytes, conf: float):
     pe = extraire_pages(contenu, options=OptionsPages(ocr=False, isoler=False))[0]
-    lignes = [Ligne(texte=li.texte, mots=tuple(replace(m, confiance=conf) for m in li.mots)) for li in pe.texte.lignes]
-    pt = PageText(numero=1, texte=pe.texte.texte, lignes=lignes, qualite=QualiteTexte.ocr, source="ocr",
-                  score_ocr=0.9, largeur=595.0, hauteur=842.0)
+    lignes = [
+        Ligne(texte=li.texte, mots=tuple(replace(m, confiance=conf) for m in li.mots))
+        for li in pe.texte.lignes
+    ]
+    pt = PageText(
+        numero=1,
+        texte=pe.texte.texte,
+        lignes=lignes,
+        qualite=QualiteTexte.ocr,
+        source="ocr",
+        score_ocr=0.9,
+        largeur=595.0,
+        hauteur=842.0,
+    )
     page = Page(fichier_id="fic_test", numero=1, qualite_texte=QualiteTexte.ocr, texte=pt.texte)
-    doc = Document(type=TypeDocument.facture_transitaire,
-                   pages=[PageRef(fichier_id="fic_test", numero=1, qualite_texte=QualiteTexte.ocr)])
+    doc = Document(
+        type=TypeDocument.facture_transitaire,
+        pages=[PageRef(fichier_id="fic_test", numero=1, qualite_texte=QualiteTexte.ocr)],
+    )
     ctx = ExtractionContext(ids=IdGenerator.deterministe(7), options={"textes_pages": {1: pt}})
     res = ExtracteurFactureTransitaire().extract(doc, [page], ctx)
     assert res.champs is not None
@@ -89,11 +118,17 @@ def test_ligne_de_credit_valeurs_deduites_negatives():
 
     el = _entete("RECHNUNG", "Nr. F-2610778")
     el += [
-        (0.08, 0.23, "Bezeichnung", "g"), (0.62, 0.23, "Menge", "d"), (0.76, 0.23, "Betrag", "d"),
-        (0.08, 0.25, "Verzollung", "g"), (0.62, 0.25, "1", "d"), (0.76, 0.25, "65.00", "d"),
-        (0.08, 0.27, "Gutschrift zu Rechnung FIC-26-0001", "g"), (0.62, 0.27, "1", "d"),
+        (0.08, 0.23, "Bezeichnung", "g"),
+        (0.62, 0.23, "Menge", "d"),
+        (0.76, 0.23, "Betrag", "d"),
+        (0.08, 0.25, "Verzollung", "g"),
+        (0.62, 0.25, "1", "d"),
+        (0.76, 0.25, "65.00", "d"),
+        (0.08, 0.27, "Gutschrift zu Rechnung FIC-26-0001", "g"),
+        (0.62, 0.27, "1", "d"),
         (0.76, 0.27, "-18.50", "d"),
-        (0.60, 0.31, "Total netto", "g"), (0.93, 0.31, "46.50", "d"),
+        (0.60, 0.31, "Total netto", "g"),
+        (0.93, 0.31, "46.50", "d"),
     ]
     c = _extraire(_pdf(el))
     credit = next(lg for lg in c.lignes if lg.libelle is not None and "Gutschrift" in lg.libelle.valeur)

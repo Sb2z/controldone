@@ -26,11 +26,17 @@ def _nom_ascii(nom: str) -> str:
 
 def fichier_attache(contenu: bytes, nom: str, mime: str | None = None, *, en_ligne: bool = False) -> Response:
     if mime is None:
-        mime = "application/pdf" if nom.lower().endswith(".pdf") and contenu[:5] == b"%PDF-" else \
-            "application/octet-stream"
+        mime = (
+            "application/pdf"
+            if nom.lower().endswith(".pdf") and contenu[:5] == b"%PDF-"
+            else "application/octet-stream"
+        )
     if not en_ligne:
-        mime = mime if mime in ("application/pdf", "application/json", "text/plain; charset=utf-8") else \
-            "application/octet-stream"
+        mime = (
+            mime
+            if mime in ("application/pdf", "application/json", "text/plain; charset=utf-8")
+            else "application/octet-stream"
+        )
     dispo = "inline" if en_ligne else "attachment"
     entetes = {
         "Content-Disposition": f"{dispo}; filename=\"{_nom_ascii(nom)}\"; filename*=UTF-8''{quote(nom)}",

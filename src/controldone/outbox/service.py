@@ -51,8 +51,9 @@ _RESERVATION = "envoi_en_cours:"
 #: Clés non textuelles (identifiants, adresses, références de pièces) exclues du contrôle de formulation.
 #: ``donnees_entrantes`` : texte reçu d'un tiers et cité tel quel (question d'un client, extrait de source
 #: officielle) — ce n'est pas une formulation du produit ; il n'est jamais envoyé comme notre texte.
-_CLES_NON_TEXTE = frozenset({"destinataires", "cc", "pieces", "attachments", "ref", "refs", "id", "url",
-                             "donnees_entrantes"})
+_CLES_NON_TEXTE = frozenset(
+    {"destinataires", "cc", "pieces", "attachments", "ref", "refs", "id", "url", "donnees_entrantes"}
+)
 
 
 def textes_du_contenu(contenu: Any) -> list[str]:
@@ -81,10 +82,21 @@ def verifier_textes(contenu: dict[str, Any]) -> list[str]:
 
 def _instantane(o: Outbox) -> ActionSortante:
     return ActionSortante(
-        id=o.id, tenant_id=o.tenant_id, kind=TypeAction(o.kind), statut=StatutAction(o.statut),
-        payload=dict(o.payload or {}), payload_corrige=o.payload_corrige, motif_blocage=o.motif_blocage,
-        motif_refus=o.motif_refus, idempotency_key=o.idempotency_key, auto=o.auto, cree_par=o.cree_par,
-        cree_le=o.cree_le, decide_par=o.decide_par, decide_le=o.decide_le, envoye_le=o.envoye_le,
+        id=o.id,
+        tenant_id=o.tenant_id,
+        kind=TypeAction(o.kind),
+        statut=StatutAction(o.statut),
+        payload=dict(o.payload or {}),
+        payload_corrige=o.payload_corrige,
+        motif_blocage=o.motif_blocage,
+        motif_refus=o.motif_refus,
+        idempotency_key=o.idempotency_key,
+        auto=o.auto,
+        cree_par=o.cree_par,
+        cree_le=o.cree_le,
+        decide_par=o.decide_par,
+        decide_le=o.decide_le,
+        envoye_le=o.envoye_le,
         reference_envoi=o.reference_envoi,
     )
 
@@ -101,9 +113,16 @@ class FileSortante:
 
     @staticmethod
     def _audit(s: Any, acteur: Acteur, o: Outbox, action: str, details: dict[str, Any] | None = None) -> None:
-        journaliser(s, actor=acteur.id, role=Role(acteur.role).value, action=f"outbox_{action}",
-                    tenant_id=o.tenant_id, target=f"outbox:{o.id}", ip=acteur.ip,
-                    details={"kind": o.kind, "statut": o.statut, **(details or {})})
+        journaliser(
+            s,
+            actor=acteur.id,
+            role=Role(acteur.role).value,
+            action=f"outbox_{action}",
+            tenant_id=o.tenant_id,
+            target=f"outbox:{o.id}",
+            ip=acteur.ip,
+            details={"kind": o.kind, "statut": o.statut, **(details or {})},
+        )
 
     @staticmethod
     def _transition(o: Outbox, vers: StatutAction) -> None:
@@ -124,13 +143,26 @@ class FileSortante:
         with self.db.transaction_systeme() as s:
             avant = sorties.autonomie(s, kind.value)
             sorties.definir_autonomie(s, kind.value, mode.value, acteur.id)
-            journaliser(s, actor=acteur.id, role=Role.fondateur.value, action="outbox_autonomie",
-                        target=f"outbox_autonomie:{kind.value}", ip=acteur.ip,
-                        details={"de": avant, "vers": mode.value})
+            journaliser(
+                s,
+                actor=acteur.id,
+                role=Role.fondateur.value,
+                action="outbox_autonomie",
+                target=f"outbox_autonomie:{kind.value}",
+                ip=acteur.ip,
+                details={"de": avant, "vers": mode.value},
+            )
 
     # --- cycle ---
-    def proposer(self, kind: TypeAction | str, payload: dict[str, Any], acteur: Acteur, *,
-                 tenant_id: str | None = None, idempotency_key: str | None = None) -> ActionSortante:
+    def proposer(
+        self,
+        kind: TypeAction | str,
+        payload: dict[str, Any],
+        acteur: Acteur,
+        *,
+        tenant_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ActionSortante:
         """Crée un brouillon (idempotent par ``idempotency_key``). En mode ``auto``, il est approuvé
         aussitôt si les garde-fous passent ; sinon il reste brouillon avec le motif de blocage."""
         kind = TypeAction(kind)
@@ -142,9 +174,17 @@ class FileSortante:
                     return _instantane(existant)
             if tenant_id is not None and not sorties.client_existe(s, tenant_id):
                 raise AccesRefuse("client introuvable")
-            o, cree = sorties.inserer_ou_lire(s, id=nouvel_id("out"), tenant_id=tenant_id, kind=kind.value, statut="brouillon",
-                                payload=payload, idempotency_key=idempotency_key, cree_par=acteur.id,
-                                cree_le=maintenant())
+            o, cree = sorties.inserer_ou_lire(
+                s,
+                id=nouvel_id("out"),
+                tenant_id=tenant_id,
+                kind=kind.value,
+                statut="brouillon",
+                payload=payload,
+                idempotency_key=idempotency_key,
+                cree_par=acteur.id,
+                cree_le=maintenant(),
+            )
             if not cree:  # course rattrapée : action créée entre-temps par une transaction concurrente
                 return _instantane(o)
             self._audit(s, acteur, o, "proposer")
@@ -153,8 +193,15 @@ class FileSortante:
             if not motifs and sorties.autonomie(s, kind.value) == ModeAutonomie.auto.value:
                 self._transition(o, StatutAction.approuve)
                 o.auto, o.decide_par, o.decide_le = True, "systeme:autonomie", maintenant()
-                journaliser(s, actor="systeme:autonomie", role=Role.systeme.value, action="outbox_approuver_auto",
-                            tenant_id=o.tenant_id, target=f"outbox:{o.id}", details={"kind": o.kind})
+                journaliser(
+                    s,
+                    actor="systeme:autonomie",
+                    role=Role.systeme.value,
+                    action="outbox_approuver_auto",
+                    tenant_id=o.tenant_id,
+                    target=f"outbox:{o.id}",
+                    details={"kind": o.kind},
+                )
             s.flush()
             return _instantane(o)
 
@@ -173,7 +220,9 @@ class FileSortante:
                 bloque = exc
         raise bloque
 
-    def _bloquer_si_besoin(self, s: Any, acteur: Acteur, o: Outbox, contenu: dict[str, Any], **details: Any) -> None:
+    def _bloquer_si_besoin(
+        self, s: Any, acteur: Acteur, o: Outbox, contenu: dict[str, Any], **details: Any
+    ) -> None:
         motifs = verifier_textes(contenu)
         if motifs:
             o.motif_blocage = "; ".join(motifs)
@@ -260,7 +309,10 @@ class FileSortante:
             return _instantane(o)
 
     def envoyer_approuves(self, expediteur: Expediteur, acteur: Acteur) -> list[ActionSortante]:
-        return [self.envoyer(a.id, expediteur, acteur) for a in self.lister(acteur, statuts=["approuve", "corrige"])]
+        return [
+            self.envoyer(a.id, expediteur, acteur)
+            for a in self.lister(acteur, statuts=["approuve", "corrige"])
+        ]
 
     def par_cle(self, idempotency_key: str, acteur: Acteur) -> ActionSortante | None:
         """Action d'une clé d'idempotence (fondateur et système)."""
@@ -270,7 +322,9 @@ class FileSortante:
             o = sorties.lire_par_cle(s, idempotency_key)
             return _instantane(o) if o is not None else None
 
-    def remplacer_brouillon(self, action_id: str, payload: dict[str, Any], acteur: Acteur, *, motif: str) -> ActionSortante:
+    def remplacer_brouillon(
+        self, action_id: str, payload: dict[str, Any], acteur: Acteur, *, motif: str
+    ) -> ActionSortante:
         """Remplace le contenu d'un **brouillon** par une source qui fait foi (ex. paiement Stripe reçu pour
         une échéance déjà proposée par un agent, F-08). Refusé hors ``brouillon`` ; garde-fous revérifiés ;
         journalisé (``outbox_remplacer``)."""
@@ -293,13 +347,22 @@ class FileSortante:
         with self.db.transaction_systeme() as s:
             o = sorties.lire(s, action_id)
             client = Role(acteur.role) not in (Role.fondateur, Role.systeme)
-            if (o is None or not peut(acteur, Action.lire, Ressource("outbox", o.tenant_id))
-                    or (client and o.statut != StatutAction.envoye.value)):
+            if (
+                o is None
+                or not peut(acteur, Action.lire, Ressource("outbox", o.tenant_id))
+                or (client and o.statut != StatutAction.envoye.value)
+            ):
                 raise AccesRefuse("introuvable ou hors périmètre")
             return _instantane(o)
 
-    def lister(self, acteur: Acteur, *, statuts: list[str] | None = None, kind: str | None = None,
-               tenant_id: str | None = None) -> list[ActionSortante]:
+    def lister(
+        self,
+        acteur: Acteur,
+        *,
+        statuts: list[str] | None = None,
+        kind: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list[ActionSortante]:
         """Fondateur et système : toute la file ; rôle client : les actions de son client seulement."""
         if Role(acteur.role) in (Role.fondateur, Role.systeme):
             filtre_tenant = tenant_id
@@ -310,9 +373,12 @@ class FileSortante:
         with self.db.transaction_systeme() as s:
             lignes = sorties.lister(s, statuts=statuts, kind=kind, tenant_id=filtre_tenant)
             client = Role(acteur.role) not in (Role.fondateur, Role.systeme)
-            return [_instantane(o) for o in lignes
-                    if peut(acteur, Action.lire, Ressource("outbox", o.tenant_id))
-                    and not (client and o.statut != StatutAction.envoye.value)]
+            return [
+                _instantane(o)
+                for o in lignes
+                if peut(acteur, Action.lire, Ressource("outbox", o.tenant_id))
+                and not (client and o.statut != StatutAction.envoye.value)
+            ]
 
 
 def _reservation_active(reference: str | None) -> bool:
@@ -322,7 +388,7 @@ def _reservation_active(reference: str | None) -> bool:
     from datetime import datetime
 
     try:  # « envoi_en_cours:<jeton>:<horodatage ISO> »
-        depuis = datetime.fromisoformat(reference[len(_RESERVATION):].split(":", 1)[1])
+        depuis = datetime.fromisoformat(reference[len(_RESERVATION) :].split(":", 1)[1])
     except (IndexError, ValueError):
         return False
     return maintenant() - depuis < timedelta(seconds=RESERVATION_ENVOI_S)

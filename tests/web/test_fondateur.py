@@ -23,7 +23,9 @@ def test_valider_publie_au_client(monde):
     f = monde.client()
     connecter_fondateur(f, monde)
     cid = monde.ids[B]["constat_propose"][0]
-    r = poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/valider", {"retour": "/admin/validation"})
+    r = poster(
+        f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/valider", {"retour": "/admin/validation"}
+    )
     assert r.status_code == 303 and r.headers["location"] == "/admin/validation"
     assert _constat(monde, B, cid)[0] == "valide"
     c = monde.client()
@@ -39,8 +41,12 @@ def test_rejet_exige_un_motif(monde):
     r = poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/rejeter", {"motif": "  "})
     assert r.status_code == 303
     assert _constat(monde, B, cid)[0] == "propose"
-    r = poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/rejeter",
-               {"motif": "lecture erronée, voir l'original"})
+    r = poster(
+        f,
+        "/admin/validation",
+        f"/admin/clients/{B}/constats/{cid}/rejeter",
+        {"motif": "lecture erronée, voir l'original"},
+    )
     assert _constat(monde, B, cid)[:1] == ("rejete",)
     assert _constat(monde, B, cid)[2] == "lecture erronée, voir l'original"
     # décision déjà prise : une seconde décision est refusée
@@ -57,8 +63,12 @@ def test_retrograder_un_ecart_certain(monde):
     cid = certains[0]
     poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/retrograder", {"motif": ""})
     assert _constat(monde, B, cid)[1] == "ecart_certain"  # motif obligatoire
-    poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/retrograder",
-           {"motif": "montant à confirmer sur l'original"})
+    poster(
+        f,
+        "/admin/validation",
+        f"/admin/clients/{B}/constats/{cid}/retrograder",
+        {"motif": "montant à confirmer sur l'original"},
+    )
     statut, niveau, _ = _constat(monde, B, cid)
     assert niveau == "a_verifier" and statut == "propose"
     with monde.pf.db.tenant(B, Acteur.systeme("t"), lecture=True) as s:
@@ -74,8 +84,12 @@ def test_aucune_promotion_directe(monde):
     a_verifier = [c.id for c in proposes if c.niveau == "a_verifier"]
     cid = a_verifier[0] if a_verifier else proposes[0].id
     if not a_verifier:
-        poster(f, "/admin/validation", f"/admin/clients/{B}/constats/{cid}/retrograder",
-               {"motif": "montant à confirmer sur l'original"})
+        poster(
+            f,
+            "/admin/validation",
+            f"/admin/clients/{B}/constats/{cid}/retrograder",
+            {"motif": "montant à confirmer sur l'original"},
+        )
     t = jeton(f.get("/admin/validation").text)
     for chemin in ("promouvoir", "certain", "ecart_certain"):
         r = f.post(f"/admin/clients/{B}/constats/{cid}/{chemin}", data={"csrf": t}, follow_redirects=False)
@@ -90,11 +104,17 @@ def test_correction_de_valeur_relance_les_controles(monde):
     page = f.get(f"/admin/clients/{A}/dossiers/{dossier}").text
     import re
 
-    m = re.search(r'name="document_id" value="([^"]+)"><input type="hidden" name="valeur_id" value="([^"]+)">', page)
+    m = re.search(
+        r'name="document_id" value="([^"]+)"><input type="hidden" name="valeur_id" value="([^"]+)">', page
+    )
     assert m
     doc_id, vs_id = m.groups()
-    r = poster(f, f"/admin/clients/{A}/dossiers/{dossier}", f"/admin/clients/{A}/dossiers/{dossier}/corriger",
-               {"document_id": doc_id, "valeur_id": vs_id, "valeur": "", "motif": "x"})
+    r = poster(
+        f,
+        f"/admin/clients/{A}/dossiers/{dossier}",
+        f"/admin/clients/{A}/dossiers/{dossier}/corriger",
+        {"document_id": doc_id, "valeur_id": vs_id, "valeur": "", "motif": "x"},
+    )
     assert r.status_code == 303  # valeur vide : refus (message)
     with monde.pf.db.tenant(A, Acteur.systeme("t"), lecture=True) as s:
         v0 = s.obtenir(Dossier, dossier).version
@@ -105,9 +125,17 @@ def test_correction_de_valeur_relance_les_controles(monde):
     with monde.pf.db.tenant(A, Acteur.systeme("t"), lecture=True) as s:
         doc = DocumentModele.model_validate(s.obtenir(Document, doc_id).contenu)
     ancienne = next(v for v in doc.valeurs() if v.id == vs_id)
-    r = poster(f, f"/admin/clients/{A}/dossiers/{dossier}", f"/admin/clients/{A}/dossiers/{dossier}/corriger",
-               {"document_id": doc_id, "valeur_id": vs_id, "valeur": ancienne.valeur_brute or ancienne.valeur,
-                "motif": "confirmé sur l'original (test FICTIF)"})
+    r = poster(
+        f,
+        f"/admin/clients/{A}/dossiers/{dossier}",
+        f"/admin/clients/{A}/dossiers/{dossier}/corriger",
+        {
+            "document_id": doc_id,
+            "valeur_id": vs_id,
+            "valeur": ancienne.valeur_brute or ancienne.valeur,
+            "motif": "confirmé sur l'original (test FICTIF)",
+        },
+    )
     assert r.status_code == 303
     with monde.pf.db.tenant(A, Acteur.systeme("t"), lecture=True) as s:
         assert s.obtenir(Dossier, dossier).version == v0 + 1
@@ -131,10 +159,17 @@ def test_correction_d_un_document_hors_dossier_refusee(monde):
     page = f.get(f"/admin/clients/{A}/dossiers/{d1}").text
     import re
 
-    doc_id, vs_id = re.search(r'name="document_id" value="([^"]+)"><input type="hidden" name="valeur_id" '
-                              r'value="([^"]+)">', page).groups()
-    r = poster(f, f"/admin/clients/{A}/dossiers/{d0}", f"/admin/clients/{A}/dossiers/{d0}/corriger",
-               {"document_id": doc_id, "valeur_id": vs_id, "valeur": "1", "motif": "x"})
+    doc_id, vs_id = re.search(
+        r'name="document_id" value="([^"]+)"><input type="hidden" name="valeur_id" '
+        r'value="([^"]+)">',
+        page,
+    ).groups()
+    r = poster(
+        f,
+        f"/admin/clients/{A}/dossiers/{d0}",
+        f"/admin/clients/{A}/dossiers/{d0}/corriger",
+        {"document_id": doc_id, "valeur_id": vs_id, "valeur": "1", "motif": "x"},
+    )
     assert r.status_code == 404
 
 
@@ -177,8 +212,12 @@ def test_correction_d_une_sortie_bloquee_par_les_garde_fous(monde):
     connecter_fondateur(f, monde)
     fs = FileSortante(monde.pf.db)
     action = fs.lister(FONDATEUR, statuts=["brouillon"])[0]
-    poster(f, "/admin/validation", f"/admin/sorties/{action.id}/corriger",
-           {"objet": "Demande", "corps": "Nous réclamons le remboursement des droits."})
+    poster(
+        f,
+        "/admin/validation",
+        f"/admin/sorties/{action.id}/corriger",
+        {"objet": "Demande", "corps": "Nous réclamons le remboursement des droits."},
+    )
     a = fs.obtenir(action.id, FONDATEUR)
     assert a.statut is StatutAction.brouillon and a.motif_blocage
 
@@ -189,7 +228,11 @@ def test_publication_d_un_rapport(monde):
     r = poster(f, f"/admin/clients/{B}", f"/admin/clients/{B}/publier")
     assert r.status_code == 303 and r.headers["location"].startswith("/admin/validation")
     fs = FileSortante(monde.pf.db)
-    nouveaux = [a for a in fs.lister(FONDATEUR, statuts=["brouillon"], tenant_id=B) if a.kind.value == "rapport_publication"]
+    nouveaux = [
+        a
+        for a in fs.lister(FONDATEUR, statuts=["brouillon"], tenant_id=B)
+        if a.kind.value == "rapport_publication"
+    ]
     assert len(nouveaux) == 1
     c = monde.client()
     connecter_client(c, monde, ADMIN_B)
@@ -246,10 +289,14 @@ def test_journal_et_chaine(monde):
 def test_creation_client_utilisateur_entite_transitaire_grille(monde):
     f = monde.client()
     connecter_fondateur(f, monde)
-    r = poster(f, "/admin/clients", "/admin/clients", {"raison_sociale": "NÉGOCE TEST FICTIF", "offre": "continu"})
+    r = poster(
+        f, "/admin/clients", "/admin/clients", {"raison_sociale": "NÉGOCE TEST FICTIF", "offre": "continu"}
+    )
     tid = r.headers["location"].rsplit("/", 1)[1]
     base = f"/admin/clients/{tid}"
-    r = poster(f, base, f"{base}/utilisateurs", {"email": "compta@negoce-fictif.test", "role": "client_admin"})
+    r = poster(
+        f, base, f"{base}/utilisateurs", {"email": "compta@negoce-fictif.test", "role": "client_admin"}
+    )
     assert r.status_code == 200 and "Mot de passe provisoire" in r.text
     poster(f, base, f"{base}/entites", {"raison_sociale": "NÉGOCE TEST FICTIF", "tva": "FR00999999999"})
     poster(f, base, f"{base}/transitaires", {"nom": "TRANSIT TEST FICTIF"})
@@ -258,11 +305,17 @@ def test_creation_client_utilisateur_entite_transitaire_grille(monde):
     import re
 
     tr = re.search(r'<select id="g-tr" name="transitaire_id" required><option value="([^"]+)"', page).group(1)
-    csv = ("code_poste;nature;mode;prix;devise;libelles_reconnus\n"
-           "DEDOUANEMENT;frais_dedouanement;forfait;55,00;EUR;dédouanement|frais de dédouanement\n")
+    csv = (
+        "code_poste;nature;mode;prix;devise;libelles_reconnus\n"
+        "DEDOUANEMENT;frais_dedouanement;forfait;55,00;EUR;dédouanement|frais de dédouanement\n"
+    )
     t = jeton(page)
-    r = f.post(f"{base}/grilles", data={"csrf": t, "transitaire_id": tr, "reference": "DEVIS FICTIF 1"},
-               files={"fichier": ("grille.csv", csv.encode(), "text/csv")}, follow_redirects=False)
+    r = f.post(
+        f"{base}/grilles",
+        data={"csrf": t, "transitaire_id": tr, "reference": "DEVIS FICTIF 1"},
+        files={"fichier": ("grille.csv", csv.encode(), "text/csv")},
+        follow_redirects=False,
+    )
     assert r.status_code == 303
     page = f.get(base).text
     assert "Brouillon" in page

@@ -114,8 +114,9 @@ def rogner(
             if img.width * img.height > MAX_PIXELS:
                 img.draft("RGB", (img.width // 4, img.height // 4))  # JPEG : décodage réduit
                 ratio = (MAX_PIXELS / (img.width * img.height)) ** 0.5 * 0.9
-                img = img.resize((max(1, int(img.width * ratio)), max(1, int(img.height * ratio))),
-                                 reducing_gap=2.0)
+                img = img.resize(
+                    (max(1, int(img.width * ratio)), max(1, int(img.height * ratio))), reducing_gap=2.0
+                )
             img = img.convert("RGB")
         elif type_mime in (None, "application/pdf"):
             if zone is None and valeur:
@@ -140,9 +141,14 @@ def rogner(
         dessin = ImageDraw.Draw(rogne)
         pad = 4
         dessin.rectangle(
-            (int(x0 * w) - boite[0] - pad, int(y0 * h) - boite[1] - pad,
-             int(x1 * w) - boite[0] + pad, int(y1 * h) - boite[1] + pad),
-            outline=(196, 120, 0), width=3,
+            (
+                int(x0 * w) - boite[0] - pad,
+                int(y0 * h) - boite[1] - pad,
+                int(x1 * w) - boite[0] + pad,
+                int(y1 * h) - boite[1] + pad,
+            ),
+            outline=(196, 120, 0),
+            width=3,
         )
         sortie = io.BytesIO()
         rogne.save(sortie, format="PNG")  # sans ``optimize`` : 3x plus rapide, même image (D-1406)

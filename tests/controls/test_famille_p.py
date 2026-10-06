@@ -30,7 +30,9 @@ FC, DEC = "doc_fc1", "doc_dec1"
 SIREN_A = "123456782"
 TVA_A = tva_fr_depuis_siren(SIREN_A)
 TVA_AUTRE = tva_fr_depuis_siren("999000001")  # entité fictive hors client
-ENTITES = [Entite(id="ent_a", raison_sociale="ALPHA IMPORT FICTIF", tva=TVA_A, siren=SIREN_A, alias=["Alpha Import"])]
+ENTITES = [
+    Entite(id="ent_a", raison_sociale="ALPHA IMPORT FICTIF", tva=TVA_A, siren=SIREN_A, alias=["Alpha Import"])
+]
 
 
 def facture(id=FC, *, tva=TVA_A, confiance=0.99, nom=None, **champs):
@@ -39,7 +41,9 @@ def facture(id=FC, *, tva=TVA_A, confiance=0.99, nom=None, **champs):
         devise=vs("facture_commerciale.devise", "USD", document_id=id),
         total_facture=vs("facture_commerciale.total_facture", "100.00", document_id=id),
         acheteur=Partie(
-            tva=vs("facture_commerciale.acheteur.tva", tva, document_id=id, confiance=confiance) if tva else None,
+            tva=vs("facture_commerciale.acheteur.tva", tva, document_id=id, confiance=confiance)
+            if tva
+            else None,
             nom=vs("facture_commerciale.acheteur.nom", nom, document_id=id) if nom else None,
         ),
         **champs,
@@ -60,7 +64,9 @@ def declaration(id=DEC, *, tva=TVA_A, devise="USD", taux="0.92", **champs):
 
 
 def non_exploitable(id="doc_ne", motif=MotifNonExploitable.pre_alerte):
-    return document(TypeDocument.document_non_exploitable, None, id=id, motif_non_exploitable=motif, pages=(1, 2))
+    return document(
+        TypeDocument.document_non_exploitable, None, id=id, motif_non_exploitable=motif, pages=(1, 2)
+    )
 
 
 def un(fn, ctx):
@@ -149,7 +155,9 @@ def test_p3_champs_cles_illisibles():
 def test_p3_confiance_et_taux_inutile_en_eur():
     f = facture(confiance=0.4)
     rs = fp.p3_champ_cle_illisible(contexte([f, declaration(devise="EUR", taux=None)]))
-    assert [(r.details["champ"], r.raison_code) for r in rs] == [("acheteur.tva", RaisonCode.confiance_insuffisante)]
+    assert [(r.details["champ"], r.raison_code) for r in rs] == [
+        ("acheteur.tva", RaisonCode.confiance_insuffisante)
+    ]
     assert fp.champs_cles_illisibles(contexte([facture()]), facture()) == []
 
 
@@ -158,12 +166,23 @@ def test_p3_confiance_et_taux_inutile_en_eur():
 
 def test_p4_rattachement_faible():
     docs = [facture(), declaration()]
-    dossier = Dossier(id="dos_test", liens=[
-        LienDocument(document_id=FC, role=RoleLien.facture_commerciale, force=ForceLien.forte,
-                     signaux=[SignalLien.graine]),
-        LienDocument(document_id=DEC, role=RoleLien.declaration, force=ForceLien.faible,
-                     signaux=[SignalLien.montant_egal, SignalLien.nom_fichier]),
-    ])
+    dossier = Dossier(
+        id="dos_test",
+        liens=[
+            LienDocument(
+                document_id=FC,
+                role=RoleLien.facture_commerciale,
+                force=ForceLien.forte,
+                signaux=[SignalLien.graine],
+            ),
+            LienDocument(
+                document_id=DEC,
+                role=RoleLien.declaration,
+                force=ForceLien.faible,
+                signaux=[SignalLien.montant_egal, SignalLien.nom_fichier],
+            ),
+        ],
+    )
     ctx = ControlContext.construire(dossier, docs, ProfilTolerances(id="tol_test"))
     par = {r.documents_concernes[0]: r for r in fp.p4_rattachement_faible(ctx)}
     assert par[FC].outcome is Outcome.conforme
@@ -194,11 +213,14 @@ def test_p5_non_concerne_arrete_le_moteur():
 
 def test_p5_concerne():
     cas = [
-        ([facture(), declaration()], ENTITES),                                         # tout est au client
+        ([facture(), declaration()], ENTITES),  # tout est au client
         ([facture(tva=TVA_AUTRE, confiance=0.85), declaration(tva=TVA_AUTRE)], ENTITES),  # lecture < 0,90
-        ([facture(tva=TVA_AUTRE), declaration(tva=TVA_A)], ENTITES),                    # TVA client déclarée
-        ([facture(tva=TVA_AUTRE, nom="Alpha Import"), declaration(tva=TVA_AUTRE)], ENTITES),  # alias du client
-        ([facture(tva=TVA_AUTRE), declaration(tva=None)], ENTITES),                     # importateur illisible
+        ([facture(tva=TVA_AUTRE), declaration(tva=TVA_A)], ENTITES),  # TVA client déclarée
+        (
+            [facture(tva=TVA_AUTRE, nom="Alpha Import"), declaration(tva=TVA_AUTRE)],
+            ENTITES,
+        ),  # alias du client
+        ([facture(tva=TVA_AUTRE), declaration(tva=None)], ENTITES),  # importateur illisible
     ]
     for docs, entites in cas:
         r = un(fp.p5_dossier_non_concerne, contexte(docs, entites=entites))
@@ -257,13 +279,26 @@ def test_p4_copie_doublon_sans_constat():
     """La copie d'un fichier déjà reçu (doublon_de) suit le lien de l'original : pas de second P4."""
     copie = facture(id="doc_fc_copie").model_copy(update={"doublon_de": FC})
     docs = [facture(), copie, declaration()]
-    dossier = Dossier(id="dos_test", liens=[
-        LienDocument(document_id=FC, role=RoleLien.facture_commerciale, force=ForceLien.faible,
-                     signaux=[SignalLien.meme_dossier_source]),
-        LienDocument(document_id="doc_fc_copie", role=RoleLien.facture_commerciale, force=ForceLien.faible,
-                     signaux=[SignalLien.meme_dossier_source]),
-        LienDocument(document_id=DEC, role=RoleLien.declaration, force=ForceLien.forte, signaux=[SignalLien.graine]),
-    ])
+    dossier = Dossier(
+        id="dos_test",
+        liens=[
+            LienDocument(
+                document_id=FC,
+                role=RoleLien.facture_commerciale,
+                force=ForceLien.faible,
+                signaux=[SignalLien.meme_dossier_source],
+            ),
+            LienDocument(
+                document_id="doc_fc_copie",
+                role=RoleLien.facture_commerciale,
+                force=ForceLien.faible,
+                signaux=[SignalLien.meme_dossier_source],
+            ),
+            LienDocument(
+                document_id=DEC, role=RoleLien.declaration, force=ForceLien.forte, signaux=[SignalLien.graine]
+            ),
+        ],
+    )
     ctx = ControlContext.construire(dossier, docs, ProfilTolerances(id="tol_test"))
     par = {r.documents_concernes[0]: r for r in fp.p4_rattachement_faible(ctx)}
     assert par[FC].outcome is Outcome.a_verifier

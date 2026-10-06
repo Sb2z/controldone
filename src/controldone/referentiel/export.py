@@ -26,7 +26,7 @@ SCHEMA_REFERENTIEL = "controldone.referentiel/1.0.0"
 def sel_referentiel() -> bytes:
     """Sel secret du hachage des transitaires : ``CONTROLDONE_REFERENTIEL_SEL``, sinon dérivé de la clé
     maîtresse (HMAC, usage « referentiel »). Jamais exporté."""
-    brut = (env("CONTROLDONE_REFERENTIEL_SEL") or None)
+    brut = env("CONTROLDONE_REFERENTIEL_SEL") or None
     if brut:
         return brut.encode("utf-8")
     from controldone.storage.cles import charger_cles_maitresses
@@ -43,27 +43,49 @@ def en_json(res: ResultatReferentiel, *, genere_le: datetime | None = None) -> d
         "agregats_publies": len(res.agregats),
         "agregats_supprimes": res.supprimes,
         "agregats": [
-            {"transitaire": a.transitaire, "groupe_origine": a.groupe_origine, "regime": a.regime,
-             "famille_incoterm": a.famille_incoterm, "mois": a.mois, "dossiers": a.dossiers,
-             "taux_dossiers_avec_ecart": None if a.taux_dossiers_avec_ecart is None else str(a.taux_dossiers_avec_ecart),
-             "transitaire_nomme": a.nomme,
-             "prix": {n: {k: str(v) for k, v in s.items()} for n, s in a.prix.items()}}
+            {
+                "transitaire": a.transitaire,
+                "groupe_origine": a.groupe_origine,
+                "regime": a.regime,
+                "famille_incoterm": a.famille_incoterm,
+                "mois": a.mois,
+                "dossiers": a.dossiers,
+                "taux_dossiers_avec_ecart": None
+                if a.taux_dossiers_avec_ecart is None
+                else str(a.taux_dossiers_avec_ecart),
+                "transitaire_nomme": a.nomme,
+                "prix": {n: {k: str(v) for k, v in s.items()} for n, s in a.prix.items()},
+            }
             for a in res.agregats
         ],
     }
 
 
 def en_csv(res: ResultatReferentiel) -> str:
-    entetes = ["transitaire", "groupe_origine", "regime", "famille_incoterm", "mois", "dossiers",
-               "taux_dossiers_avec_ecart"]
+    entetes = [
+        "transitaire",
+        "groupe_origine",
+        "regime",
+        "famille_incoterm",
+        "mois",
+        "dossiers",
+        "taux_dossiers_avec_ecart",
+    ]
     for n in NATURES_PRIX:
         entetes += [f"{n}_p25", f"{n}_mediane", f"{n}_p75"]
     tampon = io.StringIO()
     w = csv.writer(tampon, lineterminator="\n")
     w.writerow(entetes)
     for a in res.agregats:
-        ligne = [a.transitaire, a.groupe_origine, a.regime, a.famille_incoterm, a.mois, a.dossiers,
-                 "" if a.taux_dossiers_avec_ecart is None else str(a.taux_dossiers_avec_ecart)]
+        ligne = [
+            a.transitaire,
+            a.groupe_origine,
+            a.regime,
+            a.famille_incoterm,
+            a.mois,
+            a.dossiers,
+            "" if a.taux_dossiers_avec_ecart is None else str(a.taux_dossiers_avec_ecart),
+        ]
         for n in NATURES_PRIX:
             s = a.prix.get(n) or {}
             ligne += [str(s.get("p25", "")), str(s.get("mediane", "")), str(s.get("p75", ""))]
@@ -71,8 +93,14 @@ def en_csv(res: ResultatReferentiel) -> str:
     return tampon.getvalue()
 
 
-def recalculer(db: Database, *, dossier_sortie: Path | str | None = None, sel: bytes | None = None,
-               alias_publics: dict | None = None, seuils: Seuils | None = None) -> dict[str, Any]:
+def recalculer(
+    db: Database,
+    *,
+    dossier_sortie: Path | str | None = None,
+    sel: bytes | None = None,
+    alias_publics: dict | None = None,
+    seuils: Seuils | None = None,
+) -> dict[str, Any]:
     """Collecte, agrège, écrit ``referentiel.json`` et ``referentiel.csv`` ; renvoie un résumé."""
     if dossier_sortie is None:
         from controldone.config import get_settings
@@ -81,8 +109,14 @@ def recalculer(db: Database, *, dossier_sortie: Path | str | None = None, sel: b
     sortie = Path(dossier_sortie)
     sortie.mkdir(parents=True, exist_ok=True)
     enregistrements, stats = collecter(db)
-    res = agreger(enregistrements, sel=sel or sel_referentiel(),
-                  alias_publics=charger_alias_publics() if alias_publics is None else alias_publics, seuils=seuils)
-    (sortie / "referentiel.json").write_text(json.dumps(en_json(res), ensure_ascii=False, indent=2), encoding="utf-8")
+    res = agreger(
+        enregistrements,
+        sel=sel or sel_referentiel(),
+        alias_publics=charger_alias_publics() if alias_publics is None else alias_publics,
+        seuils=seuils,
+    )
+    (sortie / "referentiel.json").write_text(
+        json.dumps(en_json(res), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (sortie / "referentiel.csv").write_text(en_csv(res), encoding="utf-8")
     return {"publies": len(res.agregats), "supprimes": res.supprimes, **stats, "dossier": str(sortie)}

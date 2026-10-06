@@ -41,7 +41,9 @@ def cle_periode(periode: str, quand: datetime) -> str:
     raise ValueError(f"période inconnue : {periode}")
 
 
-def planifier(db: Database, *, agents: Sequence[str] | None = None, quand: datetime | None = None) -> list[dict[str, Any]]:
+def planifier(
+    db: Database, *, agents: Sequence[str] | None = None, quand: datetime | None = None
+) -> list[dict[str, Any]]:
     """Met en file les jobs de la période ; renvoie ``[{agent, tenant_id, job_id, cree}]``."""
     quand = quand or maintenant()
     store = JobStore(db)
@@ -55,8 +57,13 @@ def planifier(db: Database, *, agents: Sequence[str] | None = None, quand: datet
         periode = cle_periode(cls.periode, quand)
         cibles: list[str | None] = [None] if cls.plateforme else list(clients)
         for tenant in cibles:
-            job, cree = store.enqueue("agent", {"agent": nom, "params": {}},
-                                      f"agent:{nom}:{tenant or 'plateforme'}:{periode}", tenant, now=quand)
+            job, cree = store.enqueue(
+                "agent",
+                {"agent": nom, "params": {}},
+                f"agent:{nom}:{tenant or 'plateforme'}:{periode}",
+                tenant,
+                now=quand,
+            )
             sortie.append({"agent": nom, "tenant_id": tenant, "job_id": job.id, "cree": cree})
     return sortie
 
@@ -88,8 +95,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         while True:
             jobs = planifier(db, agents=agents)
-            resume: dict[str, Any] = {"planifies": sum(1 for j in jobs if j["cree"]), "deja_planifies":
-                                      sum(1 for j in jobs if not j["cree"])}
+            resume: dict[str, Any] = {
+                "planifies": sum(1 for j in jobs if j["cree"]),
+                "deja_planifies": sum(1 for j in jobs if not j["cree"]),
+            }
             if args.executer:
                 from controldone.storage.vault import FileVault
 

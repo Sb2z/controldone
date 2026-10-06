@@ -47,9 +47,14 @@ class ConfigImap:
 
     @classmethod
     def depuis_reglages(cls, d: dict[str, Any]) -> ConfigImap:
-        return cls(hote=str(d["hote"]), utilisateur=str(d["utilisateur"]), secret_env=str(d["secret_env"]),
-                   port=int(d.get("port", 993)), dossier=str(d.get("dossier", "INBOX")),
-                   dossier_quarantaine=str(d.get("dossier_quarantaine", "Quarantaine")))
+        return cls(
+            hote=str(d["hote"]),
+            utilisateur=str(d["utilisateur"]),
+            secret_env=str(d["secret_env"]),
+            port=int(d.get("port", 993)),
+            dossier=str(d.get("dossier", "INBOX")),
+            dossier_quarantaine=str(d.get("dossier_quarantaine", "Quarantaine")),
+        )
 
 
 def _octets(reponse: list[Any]) -> bytes | None:
@@ -62,8 +67,14 @@ def _octets(reponse: list[Any]) -> bytes | None:
 class BoiteImap:
     nom = "boite_imap"
 
-    def __init__(self, tenant_id: str, config: ConfigImap, *, fabrique: Callable[[], Any] | None = None,
-                 max_messages: int = 50) -> None:
+    def __init__(
+        self,
+        tenant_id: str,
+        config: ConfigImap,
+        *,
+        fabrique: Callable[[], Any] | None = None,
+        max_messages: int = 50,
+    ) -> None:
         self.tenant_id = tenant_id
         self.config = config
         self.fabrique = fabrique
@@ -73,7 +84,9 @@ class BoiteImap:
         if self.fabrique is not None:
             m = self.fabrique()
         else:  # pragma: no cover - réseau
-            m = imaplib.IMAP4_SSL(self.config.hote, self.config.port, ssl_context=ssl.create_default_context())
+            m = imaplib.IMAP4_SSL(
+                self.config.hote, self.config.port, ssl_context=ssl.create_default_context()
+            )
         mot_de_passe = os.environ.get(self.config.secret_env)
         if not mot_de_passe:
             raise RuntimeError(f"mot de passe IMAP absent (variable {self.config.secret_env})")
@@ -104,8 +117,16 @@ class BoiteImap:
                     continue
                 entetes = BytesHeaderParser(policy=politique_defaut).parsebytes(brut)
                 message_id = str(entetes.get("Message-ID", "")).strip() or None
-                depots.append(Depot(tenant_id=self.tenant_id, canal="courriel", source=self.nom, courriel=brut,
-                                    message_id=message_id, reference=uid.decode("ascii", "replace")))
+                depots.append(
+                    Depot(
+                        tenant_id=self.tenant_id,
+                        canal="courriel",
+                        source=self.nom,
+                        courriel=brut,
+                        message_id=message_id,
+                        reference=uid.decode("ascii", "replace"),
+                    )
+                )
             return depots
         finally:
             self._fermer(m)

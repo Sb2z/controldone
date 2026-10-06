@@ -39,14 +39,40 @@ NE_FAIT_PAS = (
 )
 
 COLONNES_LIGNES = [
-    "Dossier", "MRN", "Date d'acceptation", "Période", "Article", "Code imprimé", "Description imprimée",
-    "Correspondance liste", "Code de la liste", "Secteur", "Pays d'origine imprimé", "Masse nette lue (kg)",
-    "Masse nette imprimée", "Fournisseur (tel qu'imprimé)", "Installation", "Page", "Vérification",
+    "Dossier",
+    "MRN",
+    "Date d'acceptation",
+    "Période",
+    "Article",
+    "Code imprimé",
+    "Description imprimée",
+    "Correspondance liste",
+    "Code de la liste",
+    "Secteur",
+    "Pays d'origine imprimé",
+    "Masse nette lue (kg)",
+    "Masse nette imprimée",
+    "Fournisseur (tel qu'imprimé)",
+    "Installation",
+    "Page",
+    "Vérification",
 ]
-COLONNES_AGREGATS = ["Période", "Code imprimé", "Pays d'origine", "Fournisseur", "Installation", "Secteur",
-                     "Lignes", "Masse nette lue (kg)", "Lignes sans masse", "Dossiers"]
-LIBELLES_STATUT = {"dans_liste": "code imprimé dans la liste — à faire vérifier",
-                   "a_preciser": "code imprimé incomplet — à préciser et à faire vérifier"}
+COLONNES_AGREGATS = [
+    "Période",
+    "Code imprimé",
+    "Pays d'origine",
+    "Fournisseur",
+    "Installation",
+    "Secteur",
+    "Lignes",
+    "Masse nette lue (kg)",
+    "Lignes sans masse",
+    "Dossiers",
+]
+LIBELLES_STATUT = {
+    "dans_liste": "code imprimé dans la liste — à faire vérifier",
+    "a_preciser": "code imprimé incomplet — à préciser et à faire vérifier",
+}
 
 
 @dataclass
@@ -64,8 +90,14 @@ class PackMACF:
     textes: list[str] = field(default_factory=list)
 
 
-def preparer_pack(lignes: Iterable[LigneMACF], *, annee: int, client: str, date_preparation: date,
-                  liste: ListeCodesMACF | None = None) -> PackMACF:
+def preparer_pack(
+    lignes: Iterable[LigneMACF],
+    *,
+    annee: int,
+    client: str,
+    date_preparation: date,
+    liste: ListeCodesMACF | None = None,
+) -> PackMACF:
     liste = liste or charger_liste()
     tout = list(lignes)
     ls = [li for li in tout if li.annee == annee]
@@ -73,8 +105,16 @@ def preparer_pack(lignes: Iterable[LigneMACF], *, annee: int, client: str, date_
     textes = [MENTION_PREPARATION, NE_FAIT_PAS, *seuil.textes]
     for t in textes:
         assert_clean(t)
-    return PackMACF(client=client, annee=annee, lignes=ls, agregats=agreger(ls, annee=annee), seuil=seuil,
-                    liste=liste, date_preparation=date_preparation, textes=textes)
+    return PackMACF(
+        client=client,
+        annee=annee,
+        lignes=ls,
+        agregats=agreger(ls, annee=annee),
+        seuil=seuil,
+        liste=liste,
+        date_preparation=date_preparation,
+        textes=textes,
+    )
 
 
 def _statut_liste(pack: PackMACF) -> str:
@@ -88,22 +128,53 @@ def _neutre(x: Any) -> Any:
 
 
 def _ligne(li: LigneMACF) -> list[Any]:
-    return [li.dossier_reference or li.dossier_id, li.mrn, li.date_acceptation.isoformat() if li.date_acceptation else None,
-            li.periode, li.numero_article, li.code_imprime, li.description, LIBELLES_STATUT.get(li.statut_code.value),
-            li.code_liste, li.secteur_libelle, li.pays_origine,
-            str(li.masse_nette_kg) if li.masse_nette_kg is not None else None, li.masse_nette_brut, li.fournisseur,
-            li.installation or "à demander au fournisseur", li.page, li.verification]
+    return [
+        li.dossier_reference or li.dossier_id,
+        li.mrn,
+        li.date_acceptation.isoformat() if li.date_acceptation else None,
+        li.periode,
+        li.numero_article,
+        li.code_imprime,
+        li.description,
+        LIBELLES_STATUT.get(li.statut_code.value),
+        li.code_liste,
+        li.secteur_libelle,
+        li.pays_origine,
+        str(li.masse_nette_kg) if li.masse_nette_kg is not None else None,
+        li.masse_nette_brut,
+        li.fournisseur,
+        li.installation or "à demander au fournisseur",
+        li.page,
+        li.verification,
+    ]
 
 
 def _agregat(a: Agregat) -> list[Any]:
-    return [a.periode, a.code_imprime, a.pays_origine, a.fournisseur, a.installation, a.secteur, a.nombre_lignes,
-            str(a.masse_nette_kg), a.lignes_sans_masse, ", ".join(a.dossiers)]
+    return [
+        a.periode,
+        a.code_imprime,
+        a.pays_origine,
+        a.fournisseur,
+        a.installation,
+        a.secteur,
+        a.nombre_lignes,
+        str(a.masse_nette_kg),
+        a.lignes_sans_masse,
+        ", ".join(a.dossiers),
+    ]
 
 
 def _entete(pack: PackMACF) -> list[list[Any]]:
-    return [[MENTION_PREPARATION.upper()], [f"Client : {pack.client}"], [f"Année : {pack.annee}"],
-            [f"Liste des codes : version {pack.liste.version} ({_statut_liste(pack)}) — {pack.liste.source_url}"],
-            [NE_FAIT_PAS], [PHRASE_RENVOI], [AVERTISSEMENT], []]
+    return [
+        [MENTION_PREPARATION.upper()],
+        [f"Client : {pack.client}"],
+        [f"Année : {pack.annee}"],
+        [f"Liste des codes : version {pack.liste.version} ({_statut_liste(pack)}) — {pack.liste.source_url}"],
+        [NE_FAIT_PAS],
+        [PHRASE_RENVOI],
+        [AVERTISSEMENT],
+        [],
+    ]
 
 
 def ecrire_csv(pack: PackMACF, dossier: Path | str) -> list[Path]:
@@ -111,8 +182,10 @@ def ecrire_csv(pack: PackMACF, dossier: Path | str) -> list[Path]:
     d = Path(dossier)
     d.mkdir(parents=True, exist_ok=True)
     sorties = []
-    for nom, colonnes, rangs in (("lignes", COLONNES_LIGNES, [_ligne(li) for li in pack.lignes]),
-                                 ("agregats", COLONNES_AGREGATS, [_agregat(a) for a in pack.agregats])):
+    for nom, colonnes, rangs in (
+        ("lignes", COLONNES_LIGNES, [_ligne(li) for li in pack.lignes]),
+        ("agregats", COLONNES_AGREGATS, [_agregat(a) for a in pack.agregats]),
+    ):
         p = d / f"macf_{nom}_{pack.annee}.csv"
         with open(p, "w", encoding="utf-8-sig", newline="") as f:
             w = csv.writer(f, delimiter=";")
@@ -143,8 +216,10 @@ def ecrire_xlsx(pack: PackMACF, chemin: Path | str) -> Path:
     ws.append(["Données à demander aux fournisseurs"])
     for dd in DONNEES_A_DEMANDER:
         ws.append([dd.libelle, dd.precision])
-    for titre, colonnes, rangs in (("Lignes", COLONNES_LIGNES, [_ligne(li) for li in pack.lignes]),
-                                   ("Agrégats", COLONNES_AGREGATS, [_agregat(a) for a in pack.agregats])):
+    for titre, colonnes, rangs in (
+        ("Lignes", COLONNES_LIGNES, [_ligne(li) for li in pack.lignes]),
+        ("Agrégats", COLONNES_AGREGATS, [_agregat(a) for a in pack.agregats]),
+    ):
         f = wb.create_sheet(titre)
         f.append([MENTION_PREPARATION.upper()])
         f.append(colonnes)
@@ -170,8 +245,9 @@ def ecrire_pdf(pack: PackMACF, chemin: Path | str) -> Path:
 
     base = ParagraphStyle("b", fontName="Helvetica", fontSize=8.5, leading=11.5)
     h1 = ParagraphStyle("h1", parent=base, fontName="Helvetica-Bold", fontSize=15, leading=19, spaceAfter=6)
-    h2 = ParagraphStyle("h2", parent=base, fontName="Helvetica-Bold", fontSize=11, leading=14, spaceBefore=8,
-                        spaceAfter=4)
+    h2 = ParagraphStyle(
+        "h2", parent=base, fontName="Helvetica-Bold", fontSize=11, leading=14, spaceBefore=8, spaceAfter=4
+    )
     petit = ParagraphStyle("p", parent=base, fontSize=7, leading=9)
 
     def p(t: Any, s: ParagraphStyle = base) -> Paragraph:
@@ -190,38 +266,70 @@ def ecrire_pdf(pack: PackMACF, chemin: Path | str) -> Path:
     elems: list[Any] = [
         p(f"Préparation des données MACF (CBAM) — année {pack.annee}", h1),
         p(f"Client : {pack.client} — préparé le {pack.date_preparation.isoformat()}"),
-        Spacer(1, 4), p(NE_FAIT_PAS), Spacer(1, 4),
+        Spacer(1, 4),
+        p(NE_FAIT_PAS),
+        Spacer(1, 4),
         p("Cumul annuel et seuil de 50 t (arithmétique)", h2),
         *[p(t) for t in pack.seuil.textes],
         p("Masses nettes par code, origine, fournisseur et période", h2),
     ]
     entete = ["Période", "Code imprimé", "Origine", "Fournisseur", "Lignes", "Masse (kg)"]
-    donnees = [entete] + [[a.periode, a.code_imprime, a.pays_origine, p(a.fournisseur, petit), a.nombre_lignes,
-                           format_nombre(a.masse_nette_kg, 3)] for a in pack.agregats]
+    donnees = [entete] + [
+        [
+            a.periode,
+            a.code_imprime,
+            a.pays_origine,
+            p(a.fournisseur, petit),
+            a.nombre_lignes,
+            format_nombre(a.masse_nette_kg, 3),
+        ]
+        for a in pack.agregats
+    ]
     if len(donnees) == 1:
         donnees.append(["—", "aucune ligne retenue", "", "", "", ""])
     t = Table(donnees, colWidths=[18 * mm, 30 * mm, 16 * mm, 66 * mm, 14 * mm, 26 * mm], repeatRows=1)
-    t.setStyle(TableStyle([
-        ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8), ("FONT", (0, 1), (-1, -1), "Helvetica", 8),
-        ("GRID", (0, 0), (-1, -1), 0.3, colors.grey), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF4")),
-        ("ALIGN", (4, 1), (-1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-    ]))
+    t.setStyle(
+        TableStyle(
+            [
+                ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8),
+                ("FONT", (0, 1), (-1, -1), "Helvetica", 8),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8EEF4")),
+                ("ALIGN", (4, 1), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
     elems += [t, p("Données à demander aux fournisseurs", h2)]
     elems += [p(f"• {dd.libelle} : {dd.precision}") for dd in DONNEES_A_DEMANDER]
     elems += [
         p("Sources et hypothèses", h2),
-        p(f"Liste des codes NC : {pack.liste.source_texte} — version {pack.liste.version}, statut "
-          f"« {_statut_liste(pack)} », consultée le {pack.liste.consulte_le} ({pack.liste.source_url})."),
+        p(
+            f"Liste des codes NC : {pack.liste.source_texte} — version {pack.liste.version}, statut "
+            f"« {_statut_liste(pack)} », consultée le {pack.liste.consulte_le} ({pack.liste.source_url})."
+        ),
         p(f"Seuil de 50 t : {pack.liste.seuil_source_url}."),
-        p("Correspondance faite sur le code imprimé de la déclaration, sans avis de classement ; chaque ligne est "
-          "à faire vérifier."),
-        Spacer(1, 6), p(PHRASE_RENVOI), Spacer(1, 4), p(AVERTISSEMENT, petit),
+        p(
+            "Correspondance faite sur le code imprimé de la déclaration, sans avis de classement ; chaque ligne est "
+            "à faire vérifier."
+        ),
+        Spacer(1, 6),
+        p(PHRASE_RENVOI),
+        Spacer(1, 4),
+        p(AVERTISSEMENT, petit),
     ]
     out = Path(chemin)
     out.parent.mkdir(parents=True, exist_ok=True)
-    doc = SimpleDocTemplate(str(out), pagesize=A4, topMargin=20 * mm, bottomMargin=16 * mm, leftMargin=15 * mm,
-                            rightMargin=15 * mm, title=f"Pack MACF {pack.annee} — {MENTION_PREPARATION}",
-                            author="ControlDOne")
+    doc = SimpleDocTemplate(
+        str(out),
+        pagesize=A4,
+        topMargin=20 * mm,
+        bottomMargin=16 * mm,
+        leftMargin=15 * mm,
+        rightMargin=15 * mm,
+        title=f"Pack MACF {pack.annee} — {MENTION_PREPARATION}",
+        author="ControlDOne",
+    )
     doc.build(elems, onFirstPage=bandeau, onLaterPages=bandeau)
     return out
 

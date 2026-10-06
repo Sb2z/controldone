@@ -22,7 +22,9 @@ __all__ = [
 class TypeAction(StrEnum):
     email_client = "email_client"
     rapport_publication = "rapport_publication"
-    reclamation_dossier = "reclamation_dossier"  # mise à disposition du client (§17.3), jamais envoyé au transitaire
+    reclamation_dossier = (
+        "reclamation_dossier"  # mise à disposition du client (§17.3), jamais envoyé au transitaire
+    )
     relance = "relance"
     facture_emise = "facture_emise"
     post_linkedin = "post_linkedin"

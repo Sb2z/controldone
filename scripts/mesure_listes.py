@@ -66,26 +66,59 @@ def _grossir(pf, tenant: str, cible: int) -> int:
             n += 1
             did = "dos_" + uuid.uuid4().hex[:20]
             contenu = dict(modele.contenu or {})
-            contenu["cles"] = {"num_facture_transitaire": [f"FICTIF-{n:04d}"], "mrn": [f"26FR{n:014d}"],
-                               "ref_transport": [f"TR-FICTIF-{n}"], "num_facture_commerciale": [f"FC-{n:05d}"]}
-            s.add(Dossier(id=did, tenant_id=tenant, lot_id=modele.lot_id, reference=f"GZ{n:05d}",
-                          version=modele.version, statut_global=modele.statut_global, contenu=contenu))
+            contenu["cles"] = {
+                "num_facture_transitaire": [f"FICTIF-{n:04d}"],
+                "mrn": [f"26FR{n:014d}"],
+                "ref_transport": [f"TR-FICTIF-{n}"],
+                "num_facture_commerciale": [f"FC-{n:05d}"],
+            }
+            s.add(
+                Dossier(
+                    id=did,
+                    tenant_id=tenant,
+                    lot_id=modele.lot_id,
+                    reference=f"GZ{n:05d}",
+                    version=modele.version,
+                    statut_global=modele.statut_global,
+                    contenu=contenu,
+                )
+            )
             for c in par_dossier.get(modele.id, []):
                 cid = "con_" + uuid.uuid4().hex[:20]
                 m = c.montant_en_jeu
                 if m is not None:
                     m = (m + Decimal(n % 97)).quantize(Decimal("0.01"))
-                s.add(Constat(id=cid, tenant_id=tenant, resultat_id=None, dossier_id=did,
-                              dossier_version=modele.version, controle_id=c.controle_id, niveau=c.niveau,
-                              montant_en_jeu=m, nature_montant=c.nature_montant,
-                              statut_validation=c.statut_validation, contenu=dict(c.contenu or {})))
+                s.add(
+                    Constat(
+                        id=cid,
+                        tenant_id=tenant,
+                        resultat_id=None,
+                        dossier_id=did,
+                        dossier_version=modele.version,
+                        controle_id=c.controle_id,
+                        niveau=c.niveau,
+                        montant_en_jeu=m,
+                        nature_montant=c.nature_montant,
+                        statut_validation=c.statut_validation,
+                        contenu=dict(c.contenu or {}),
+                    )
+                )
                 e = ecart_de.get(c.id)
                 if e is not None:
                     j = dict(e.contenu or {})
                     j["dossier_id"] = did
-                    s.add(Ecart(id="eca_" + uuid.uuid4().hex[:20], tenant_id=tenant, constat_id=cid,
-                                transitaire_id=e.transitaire_id, statut=e.statut, montant_initial=m or e.montant_initial,
-                                reste=m or e.reste, contenu=j))
+                    s.add(
+                        Ecart(
+                            id="eca_" + uuid.uuid4().hex[:20],
+                            tenant_id=tenant,
+                            constat_id=cid,
+                            transitaire_id=e.transitaire_id,
+                            statut=e.statut,
+                            montant_initial=m or e.montant_initial,
+                            reste=m or e.reste,
+                            contenu=j,
+                        )
+                    )
             if n % 500 == 0:
                 s.flush()
     return n
@@ -101,9 +134,12 @@ def main() -> int:
 
     racine = Path(tempfile.mkdtemp(prefix="mesure_listes_"))
     cle = Fernet.generate_key()
-    os.environ.update(CONTROLDONE_ENV="test", CONTROLDONE_MASTER_KEY=cle.decode(),
-                      CONTROLDONE_SECRET_KEY="secret-de-mesure-FICTIF-0123456789abcdef",
-                      CONTROLDONE_DATA_DIR=str(racine / "var"))
+    os.environ.update(
+        CONTROLDONE_ENV="test",
+        CONTROLDONE_MASTER_KEY=cle.decode(),
+        CONTROLDONE_SECRET_KEY="secret-de-mesure-FICTIF-0123456789abcdef",
+        CONTROLDONE_DATA_DIR=str(racine / "var"),
+    )
     try:
         from fastapi.testclient import TestClient
 
@@ -114,27 +150,47 @@ def main() -> int:
         from controldone.storage import Database, FileVault
         from controldone.web import ParametresWeb, create_app
 
-        pf = Plateforme(db=Database(f"sqlite:///{racine}/plateforme.db"), vault=FileVault(racine / "coffre", [cle]),
-                        cles_maitresses=[cle], limites=Limites(), dossier_sorties=racine / "sorties")
+        pf = Plateforme(
+            db=Database(f"sqlite:///{racine}/plateforme.db"),
+            vault=FileVault(racine / "coffre", [cle]),
+            cles_maitresses=[cle],
+            limites=Limites(),
+            dossier_sorties=racine / "sorties",
+        )
         res = initialiser_demo(pf, mot_de_passe_fondateur="phrase-de-passe-FICTIVE-mesure")
         t0 = time.perf_counter()
         n = _grossir(pf, "demo_ateliers", args.dossiers)
         print(f"client fictif demo_ateliers : {n} dossiers ({time.perf_counter() - t0:.1f} s de préparation)")
-        app = create_app(ParametresWeb(plateforme=pf, secrets_session=["secret-de-mesure-FICTIF-0123456789abcdef"],
-                                       prod=False, etat_partage=False))
+        app = create_app(
+            ParametresWeb(
+                plateforme=pf,
+                secrets_session=["secret-de-mesure-FICTIF-0123456789abcdef"],
+                prod=False,
+                etat_partage=False,
+            )
+        )
         comptes = {c.email: c.mot_de_passe for c in res.comptes}
         clients = {}
         c = TestClient(app, base_url="http://testserver")
         email = "admin@ateliers-demo.test"
-        c.post("/connexion", data={"csrf": _jeton(c.get("/connexion").text), "email": email,
-                                   "mot_de_passe": comptes[email]})
+        c.post(
+            "/connexion",
+            data={"csrf": _jeton(c.get("/connexion").text), "email": email, "mot_de_passe": comptes[email]},
+        )
         clients["client"] = c
         f = TestClient(app, base_url="http://testserver")
-        f.post("/connexion", data={"csrf": _jeton(f.get("/connexion").text),
-                                   "email": "fondateur@controldone-demo.test",
-                                   "mot_de_passe": "phrase-de-passe-FICTIVE-mesure"})
-        f.post("/connexion/totp", data={"csrf": _jeton(f.get("/connexion/totp").text),
-                                        "code": code_totp(res.totp_secret)})
+        f.post(
+            "/connexion",
+            data={
+                "csrf": _jeton(f.get("/connexion").text),
+                "email": "fondateur@controldone-demo.test",
+                "mot_de_passe": "phrase-de-passe-FICTIVE-mesure",
+            },
+        )
+        f.post(
+            "/connexion/totp",
+            data={"csrf": _jeton(f.get("/connexion/totp").text), "code": code_totp(res.totp_secret)},
+        )
         clients["fondateur"] = f
         print(f"{'page':70} {'médiane':>9} {'statut':>6}")
         for qui, url in PAGES:

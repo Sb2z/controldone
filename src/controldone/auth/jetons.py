@@ -60,6 +60,7 @@ class Registre(Protocol):
     def revoquer(self, sid: str, *, expire: float) -> None: ...
     def revoquer_utilisateur(self, user_id: str, *, apres: float, expire: float) -> None: ...
     def est_revoquee(self, sid: str, user_id: str, debut: float) -> bool: ...
+
     # Facultatives (sessions actives, D-3603) : ``ouvrir``, ``toucher``, ``sessions`` (voir ``RegistreRevocations``).
 
 
@@ -93,10 +94,17 @@ def secrets_session_depuis_env(mode: str | None = None) -> list[str]:
 
 
 class GestionnaireSessions:
-    def __init__(self, secrets_: str | Sequence[str], *, inactivite_s: int = INACTIVITE_S,
-                 duree_absolue_s: int = DUREE_ABSOLUE_S, rotation_s: int = 15 * 60,
-                 horloge: Callable[[], float] = time.time, registre: Registre | None = None,
-                 max_revocations_locales: int = MAX_REVOCATIONS_LOCALES) -> None:
+    def __init__(
+        self,
+        secrets_: str | Sequence[str],
+        *,
+        inactivite_s: int = INACTIVITE_S,
+        duree_absolue_s: int = DUREE_ABSOLUE_S,
+        rotation_s: int = 15 * 60,
+        horloge: Callable[[], float] = time.time,
+        registre: Registre | None = None,
+        max_revocations_locales: int = MAX_REVOCATIONS_LOCALES,
+    ) -> None:
         cles = [secrets_] if isinstance(secrets_, str) else list(secrets_)
         if not cles or any(len(c) < 32 for c in cles):
             raise ValueError("secret de session trop court (32 caractères minimum)")
@@ -133,8 +141,16 @@ class GestionnaireSessions:
         # une coupure ne vise que des sessions commencées avant elle : sans objet après la durée absolue
         self._borner(self._revoquees_avant, lambda v: v + self.duree_absolue_s)
 
-    def emettre(self, acteur: Acteur, *, deux_facteurs: bool = False, sid: str | None = None,
-                debut: float | None = None, appareil: str = "", reseau: str = "") -> str:
+    def emettre(
+        self,
+        acteur: Acteur,
+        *,
+        deux_facteurs: bool = False,
+        sid: str | None = None,
+        debut: float | None = None,
+        appareil: str = "",
+        reseau: str = "",
+    ) -> str:
         """Jeton de session. Sans ``sid`` : nouvelle session (connexion), enregistrée dans le registre avec
         ``appareil`` et ``reseau`` déjà réduits (``storage.securite.reduire_appareil`` / ``reduire_reseau``)."""
         if acteur.role is Role.systeme:
@@ -143,14 +159,28 @@ class GestionnaireSessions:
         nouvelle = sid is None
         sid = sid or secrets.token_urlsafe(18)
         debut = debut if debut is not None else maintenant
-        jeton = self._ser.dumps({
-            "sid": sid, "u": acteur.id, "r": acteur.role.value, "t": acteur.tenant_id, "d": debut,
-            "e": maintenant, "2f": bool(deux_facteurs),
-        })
+        jeton = self._ser.dumps(
+            {
+                "sid": sid,
+                "u": acteur.id,
+                "r": acteur.role.value,
+                "t": acteur.tenant_id,
+                "d": debut,
+                "e": maintenant,
+                "2f": bool(deux_facteurs),
+            }
+        )
         ouvrir = getattr(self.registre, "ouvrir", None)
         if nouvelle and ouvrir is not None:
-            ouvrir(sid, acteur.id, debut=debut, vu=maintenant, expire=self._expiration(debut, maintenant),
-                   appareil=appareil, reseau=reseau)
+            ouvrir(
+                sid,
+                acteur.id,
+                debut=debut,
+                vu=maintenant,
+                expire=self._expiration(debut, maintenant),
+                appareil=appareil,
+                reseau=reseau,
+            )
         return jeton
 
     def _expiration(self, debut: float, vu: float) -> float:
@@ -159,8 +189,15 @@ class GestionnaireSessions:
     def lire(self, jeton: str) -> DonneesSession:
         try:
             p: dict[str, Any] = self._ser.loads(jeton)
-            d = DonneesSession(sid=p["sid"], user_id=p["u"], role=Role(p["r"]), tenant_id=p.get("t"),
-                               debut=float(p["d"]), emis=float(p["e"]), deux_facteurs=bool(p.get("2f")))
+            d = DonneesSession(
+                sid=p["sid"],
+                user_id=p["u"],
+                role=Role(p["r"]),
+                tenant_id=p.get("t"),
+                debut=float(p["d"]),
+                emis=float(p["e"]),
+                deux_facteurs=bool(p.get("2f")),
+            )
         except (BadSignature, KeyError, ValueError, TypeError) as exc:
             raise SessionInvalide("jeton de session invalide") from exc
         maintenant = self.horloge()
@@ -182,8 +219,9 @@ class GestionnaireSessions:
         d = self.lire(jeton)
         if self.horloge() - d.emis < self.rotation_s:
             return d, None
-        nouveau = self.emettre(Acteur(d.user_id, d.role, d.tenant_id), deux_facteurs=d.deux_facteurs,
-                               sid=d.sid, debut=d.debut)
+        nouveau = self.emettre(
+            Acteur(d.user_id, d.role, d.tenant_id), deux_facteurs=d.deux_facteurs, sid=d.sid, debut=d.debut
+        )
         toucher = getattr(self.registre, "toucher", None)
         if toucher is not None:
             vu = self.horloge()
@@ -214,10 +252,14 @@ class GestionnaireSessions:
         if lister is None:
             return []
         maintenant = self.horloge()
-        return [x for x in lister(user_id, maintenant=maintenant, sid_courant=sid_courant)
-                if x.sid not in self._revoquees
-                and x.debut >= self._revoquees_avant.get(user_id, float("-inf"))
-                and maintenant - x.vu <= self.inactivite_s and maintenant - x.debut <= self.duree_absolue_s]
+        return [
+            x
+            for x in lister(user_id, maintenant=maintenant, sid_courant=sid_courant)
+            if x.sid not in self._revoquees
+            and x.debut >= self._revoquees_avant.get(user_id, float("-inf"))
+            and maintenant - x.vu <= self.inactivite_s
+            and maintenant - x.debut <= self.duree_absolue_s
+        ]
 
     def fermer_session(self, user_id: str, sid: str) -> bool:
         """Ferme **une** session de ``user_id`` (``False`` si ce ``sid`` n'est pas une de ses sessions ouvertes :

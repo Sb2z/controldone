@@ -52,11 +52,25 @@ class JournalAgents:
     def chemin(self, quand: datetime) -> Path:
         return self.racine / f"{quand.astimezone(UTC).strftime('%Y-%m-%d')}.jsonl"
 
-    def ecrire(self, *, agent: str, execution_id: str, tenant_id: str | None, evenement: str,
-               quand: datetime | None = None, **champs: Any) -> None:
+    def ecrire(
+        self,
+        *,
+        agent: str,
+        execution_id: str,
+        tenant_id: str | None,
+        evenement: str,
+        quand: datetime | None = None,
+        **champs: Any,
+    ) -> None:
         quand = quand or datetime.now(UTC)
-        entree = {"ts": quand.astimezone(UTC).isoformat(), "execution_id": execution_id, "agent": agent,
-                  "tenant_id": tenant_id, "evenement": evenement, **champs}
+        entree = {
+            "ts": quand.astimezone(UTC).isoformat(),
+            "execution_id": execution_id,
+            "agent": agent,
+            "tenant_id": tenant_id,
+            "evenement": evenement,
+            **champs,
+        }
         ligne = json.dumps(entree, ensure_ascii=False, sort_keys=True, default=str)
         chemin = self.chemin(quand)
         with _VERROU:

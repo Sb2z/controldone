@@ -66,7 +66,9 @@ __all__ = [
 ]
 
 #: Version de l'algorithme de pages (entre dans la clé d'idempotence §7 étape 2 avec Tesseract).
-VERSION_PAGES = "1.1.1"  # 1.1.0 : prétraitement OCR, deux pages par feuille, réessai d'orientation (D-2601 à D-2606)
+VERSION_PAGES = (
+    "1.1.1"  # 1.1.0 : prétraitement OCR, deux pages par feuille, réessai d'orientation (D-2601 à D-2606)
+)
 # 1.1.1 : feuille « deux pages » écartée quand une ligne de texte touche la coupure (D-2902)
 
 SEUIL_NATIF = 0.85
@@ -152,8 +154,10 @@ class CachePagesDisque:
         idx = self._chemin(sha, version, "index")
         try:
             n = json.loads(idx.read_text("utf-8"))["pages"]
-            return [PageText.from_dict(json.loads(self._chemin(sha, version, f"p{i}").read_text("utf-8")))
-                    for i in range(1, n + 1)]
+            return [
+                PageText.from_dict(json.loads(self._chemin(sha, version, f"p{i}").read_text("utf-8")))
+                for i in range(1, n + 1)
+            ]
         except (OSError, ValueError, KeyError, TypeError):
             return None
 
@@ -251,7 +255,9 @@ def textes_pages(
     return textes
 
 
-def _extraire_isole(contenu: bytes, mime: str, opts: OptionsPages, n_pages: int | None = None) -> list[PageText]:
+def _extraire_isole(
+    contenu: bytes, mime: str, opts: OptionsPages, n_pages: int | None = None
+) -> list[PageText]:
     """Exécute ``extraire_pages_local`` dans un processus séparé (temps et mémoire bornés).
 
     Un processus **neuf par fichier**, issu d'un forkserver préchargé (D-1402) : mêmes limites (RLIMIT_AS, délai,
@@ -275,8 +281,9 @@ def _extraire_isole(contenu: bytes, mime: str, opts: OptionsPages, n_pages: int 
     return [_page_illisible(i, motif) for i in range(1, max(1, n_estime) + 1)]
 
 
-def _executer_sous_processus(contenu: bytes, mime: str, options: dict, memoire_mo: int,
-                             timeout: float) -> tuple[str | None, str | None]:
+def _executer_sous_processus(
+    contenu: bytes, mime: str, options: dict, memoire_mo: int, timeout: float
+) -> tuple[str | None, str | None]:
     """Processus isolé par un nouvel interpréteur (``python -m controldone.ingest._worker``)."""
     with tempfile.TemporaryDirectory(prefix="cdo_pages_") as tmp:
         entree = Path(tmp) / "entree.bin"
@@ -305,11 +312,23 @@ def _executer_sous_processus(contenu: bytes, mime: str, options: dict, memoire_m
 #: Variables fixées dans le processus de pages : un fil par OCR (Tesseract multi-fils se dégrade sous charge).
 _ENV_PROCESSUS_PAGES = {"OMP_THREAD_LIMIT": "1", "OPENBLAS_NUM_THREADS": "1"}
 #: Modules chargés une fois dans le forkserver (code et bibliothèques seulement : aucune donnée de document).
-_PRECHARGES = ["controldone.ingest.pages", "controldone.ingest.sniff", "pdfplumber", "pypdfium2", "pytesseract",
-               "PIL.Image", "PIL.ImageStat", "openpyxl", "lxml.etree", "controldone.services.vignettes"]
+_PRECHARGES = [
+    "controldone.ingest.pages",
+    "controldone.ingest.sniff",
+    "pdfplumber",
+    "pypdfium2",
+    "pytesseract",
+    "PIL.Image",
+    "PIL.ImageStat",
+    "openpyxl",
+    "lxml.etree",
+    "controldone.services.vignettes",
+]
 _FORKSERVER_DISPONIBLE = os.name == "posix" and "forkserver" in multiprocessing.get_all_start_methods()
 _VERROU_FS = threading.Lock()
-_PID_FS: list[int | None] = [None]  # processus qui a configuré le forkserver (un fork en hérite sans pouvoir l'utiliser)
+_PID_FS: list[int | None] = [
+    None
+]  # processus qui a configuré le forkserver (un fork en hérite sans pouvoir l'utiliser)
 
 
 class _EnvironnementSansSecrets:
@@ -371,8 +390,11 @@ if _FORKSERVER_DISPONIBLE:
         préparation. Reprend ``popen_forkserver.Popen._launch`` (CPython 3.11 à 3.13)."""
 
         def _launch(self, process_obj):
-            prep = {k: v for k, v in _mp_spawn.get_preparation_data(process_obj._name).items()
-                    if k not in ("init_main_from_path", "init_main_from_name")}
+            prep = {
+                k: v
+                for k, v in _mp_spawn.get_preparation_data(process_obj._name).items()
+                if k not in ("init_main_from_path", "init_main_from_name")
+            }
             buf = io.BytesIO()
             _mp_context.set_spawning_popen(self)
             try:
@@ -393,7 +415,9 @@ if _FORKSERVER_DISPONIBLE:
             return _PopenSansMain(process_obj)
 
 
-def _processus_pages(envoi, contenu: bytes, mime: str, options: dict, memoire_mo: int, delai_s: float) -> None:
+def _processus_pages(
+    envoi, contenu: bytes, mime: str, options: dict, memoire_mo: int, delai_s: float
+) -> None:
     """Corps du processus isolé (enfant du forkserver)."""
     import signal
 
@@ -407,14 +431,17 @@ def _processus_pages(envoi, contenu: bytes, mime: str, options: dict, memoire_mo
         champs = set(OptionsPages.__dataclass_fields__)
         opts = OptionsPages(**{k: v for k, v in options.items() if k in champs})
         pages = extraire_pages_local(contenu, mime, opts)
-        envoi.send_bytes(json.dumps({"pages": [p.to_dict() for p in pages]}, ensure_ascii=False).encode("utf-8"))
+        envoi.send_bytes(
+            json.dumps({"pages": [p.to_dict() for p in pages]}, ensure_ascii=False).encode("utf-8")
+        )
         envoi.close()
     except BaseException:
         os._exit(1)
 
 
-def _executer_forkserver(contenu: bytes, mime: str, options: dict, memoire_mo: int,
-                         timeout: float) -> tuple[str | None, str | None]:
+def _executer_forkserver(
+    contenu: bytes, mime: str, options: dict, memoire_mo: int, timeout: float
+) -> tuple[str | None, str | None]:
     brut, motif = _lancer_forkserver(_processus_pages, (contenu, mime, options, memoire_mo, timeout), timeout)
     return (brut.decode("utf-8") if brut is not None else None), motif
 
@@ -444,8 +471,9 @@ def _processus_cible(envoi, cible: str, kwargs: dict, memoire_mo: int, delai_s: 
         os._exit(1)
 
 
-def executer_isole(cible: str, kwargs: dict, *, memoire_mo: int = 1536,
-                   delai_s: float = 30.0) -> tuple[bytes | None, str | None]:
+def executer_isole(
+    cible: str, kwargs: dict, *, memoire_mo: int = 1536, delai_s: float = 30.0
+) -> tuple[bytes | None, str | None]:
     """Exécute la fonction ``CIBLES_ISOLEES[cible](**kwargs)`` dans un processus isolé (même forkserver que
     l'extraction des pages : environnement sans secrets, ``RLIMIT_AS``, délai, arrêt forcé). Renvoie
     ``(octets, None)``, ``(None, None)`` si la fonction a renvoyé ``None``, ou ``(None, motif)`` en cas d'échec
@@ -504,8 +532,11 @@ def _lancer_forkserver(cible_fn, args: tuple, timeout: float) -> tuple[bytes | N
 
 #: Variables jamais transmises au processus qui analyse les fichiers déposés (contenu hostile) : clés, secrets,
 #: URL de base (mot de passe éventuel). Le processus n'en a aucun besoin (revue de sécurité RS-14).
-_SECRETS_ENV = re.compile(r"(CONTROLDONE_(MASTER_KEY|SECRET_KEY|DATABASE_URL|MCP_API_KEY|REFERENTIEL_SEL|IMAP_.*)|"
-                          r"ANTHROPIC_.*|STRIPE_.*|.*(SECRET|PASSWORD|PASSWD|TOKEN|API_KEY).*)", re.I)
+_SECRETS_ENV = re.compile(
+    r"(CONTROLDONE_(MASTER_KEY|SECRET_KEY|DATABASE_URL|MCP_API_KEY|REFERENTIEL_SEL|IMAP_.*)|"
+    r"ANTHROPIC_.*|STRIPE_.*|.*(SECRET|PASSWORD|PASSWD|TOKEN|API_KEY).*)",
+    re.I,
+)
 
 
 def _environnement_sans_secrets() -> dict[str, str]:
@@ -540,8 +571,9 @@ def _estimer_pages(contenu: bytes, mime: str) -> int:
 
 
 def _page_illisible(numero: int, motif: str, **kw) -> PageText:
-    return PageText(numero=numero, texte="", qualite=QualiteTexte.illisible, source="aucune",
-                    avertissements=[motif], **kw)
+    return PageText(
+        numero=numero, texte="", qualite=QualiteTexte.illisible, source="aucune", avertissements=[motif], **kw
+    )
 
 
 def extraire_pages_local(contenu: bytes, mime: str, options: OptionsPages | None = None) -> list[PageText]:
@@ -589,8 +621,12 @@ def _fond_sombre(char: dict, rects: list[dict], images: list[dict]) -> bool:
     cx = (char["x0"] + char["x1"]) / 2
     cy = (char["top"] + char["bottom"]) / 2
     for r in rects:
-        if r.get("fill") and not _couleur_blanche(r.get("non_stroking_color")) and \
-                r["x0"] <= cx <= r["x1"] and r["top"] <= cy <= r["bottom"]:
+        if (
+            r.get("fill")
+            and not _couleur_blanche(r.get("non_stroking_color"))
+            and r["x0"] <= cx <= r["x1"]
+            and r["top"] <= cy <= r["bottom"]
+        ):
             return True
     return any(im["x0"] <= cx <= im["x1"] and im["top"] <= cy <= im["bottom"] for im in images)
 
@@ -657,8 +693,9 @@ def _texte_natif(page, pdfium_page) -> tuple[list[Ligne], str, float, float]:
         texte_masque = masque.extract_text() or ""
     except Exception:
         texte_masque = ""
-    mots_bruts = visible.extract_words(x_tolerance=1.5, y_tolerance=2.5, keep_blank_chars=False,
-                                       use_text_flow=False, extra_attrs=["size"])
+    mots_bruts = visible.extract_words(
+        x_tolerance=1.5, y_tolerance=2.5, keep_blank_chars=False, use_text_flow=False, extra_attrs=["size"]
+    )
     mots = []
     for w in mots_bruts:
         # Glyphe d'espace fine sans correspondance Unicode (police sous-ensemble) lu « \x00 » entre deux
@@ -666,8 +703,17 @@ def _texte_natif(page, pdfium_page) -> tuple[list[Ligne], str, float, float]:
         t = re.sub(r"(?<=\d)\x00(?=\d)", "\u202f", w["text"])
         if not t.strip():
             continue
-        mots.append(Mot(texte=t, x0=w["x0"] / largeur, y0=w["top"] / hauteur, x1=w["x1"] / largeur,
-                        y1=w["bottom"] / hauteur, confiance=None, taille=round(float(w.get("size") or 0), 2)))
+        mots.append(
+            Mot(
+                texte=t,
+                x0=w["x0"] / largeur,
+                y0=w["top"] / hauteur,
+                x1=w["x1"] / largeur,
+                y1=w["bottom"] / hauteur,
+                confiance=None,
+                taille=round(float(w.get("size") or 0), 2),
+            )
+        )
     return construire_lignes(mots), texte_masque, largeur, hauteur
 
 
@@ -707,9 +753,18 @@ def _pages_pdf(contenu: bytes, opts: OptionsPages) -> list[PageText]:
             texte = "\n".join(li.texte for li in lignes)
             nb = sum(1 for c in texte if not c.isspace())
             score = score_texte(texte) if nb else 0.0
-            natif = PageText(numero=numero, texte=texte, lignes=lignes, qualite=QualiteTexte.natif,
-                             source="natif", score_natif=round(score, 4), largeur=largeur, hauteur=hauteur,
-                             texte_masque=texte_masque, avertissements=avert)
+            natif = PageText(
+                numero=numero,
+                texte=texte,
+                lignes=lignes,
+                qualite=QualiteTexte.natif,
+                source="natif",
+                score_natif=round(score, 4),
+                largeur=largeur,
+                hauteur=hauteur,
+                texte_masque=texte_masque,
+                avertissements=avert,
+            )
             if nb >= MIN_CARACTERES_NATIF and score >= SEUIL_NATIF and not opts.forcer_ocr:
                 sortie.append(natif)
                 continue
@@ -749,8 +804,9 @@ def _pages_pdf(contenu: bytes, opts: OptionsPages) -> list[PageText]:
 MAX_PIXELS_RENDU_OCR = 40_000_000
 
 
-def echelle_rendu_ocr(largeur_pt: float, hauteur_pt: float, dpi: int,
-                      max_pixels: int = MAX_PIXELS_RENDU_OCR) -> tuple[float, bool]:
+def echelle_rendu_ocr(
+    largeur_pt: float, hauteur_pt: float, dpi: int, max_pixels: int = MAX_PIXELS_RENDU_OCR
+) -> tuple[float, bool]:
     """``(échelle pdfium, réduite)`` : ``dpi / 72``, abaissée si la page dépasserait ``max_pixels``."""
     w, h = max(1.0, float(largeur_pt)), max(1.0, float(hauteur_pt))
     echelle = dpi / 72
@@ -767,8 +823,13 @@ def _meilleure(natif: PageText, ocr: PageText, nb_natif: int) -> PageText:
         natif.qualite = QualiteTexte.natif_faible
         natif.score_ocr = ocr.score_ocr
         return natif
-    if q_natif > 0 and nb_natif > 0 and natif.score_natif and natif.score_natif >= SEUIL_NATIF \
-            and ocr.qualite is QualiteTexte.illisible:
+    if (
+        q_natif > 0
+        and nb_natif > 0
+        and natif.score_natif
+        and natif.score_natif >= SEUIL_NATIF
+        and ocr.qualite is QualiteTexte.illisible
+    ):
         natif.qualite = QualiteTexte.natif_faible
         return natif
     return ocr
@@ -797,7 +858,9 @@ def _osd_rotation(image) -> int | None:
     paysage = image.size[0] > image.size[1]
     for config in ("--psm 0", "--psm 0 -c min_characters_to_try=10"):
         try:
-            osd = pytesseract.image_to_osd(_pour_tesseract(image), config=config, output_type=pytesseract.Output.DICT, timeout=60)
+            osd = pytesseract.image_to_osd(
+                _pour_tesseract(image), config=config, output_type=pytesseract.Output.DICT, timeout=60
+            )
         except Exception:
             continue
         rot = int(osd.get("rotate", 0)) % 360
@@ -841,8 +904,13 @@ def _angle_inclinaison(image) -> float:
 def _ocr_brut(image, opts: OptionsPages) -> tuple[list[Mot], float]:
     import pytesseract
 
-    data = pytesseract.image_to_data(_pour_tesseract(image), lang=opts.langues, config="--psm 3",
-                                     output_type=pytesseract.Output.DICT, timeout=max(30, int(opts.timeout_par_page_s)))
+    data = pytesseract.image_to_data(
+        _pour_tesseract(image),
+        lang=opts.langues,
+        config="--psm 3",
+        output_type=pytesseract.Output.DICT,
+        timeout=max(30, int(opts.timeout_par_page_s)),
+    )
     w, h = image.size
     mots: list[Mot] = []
     poids = 0
@@ -856,8 +924,17 @@ def _ocr_brut(image, opts: OptionsPages) -> tuple[list[Mot], float]:
         if not t or conf < 0:
             continue
         x, y, ww, hh = data["left"][i], data["top"][i], data["width"][i], data["height"][i]
-        mots.append(Mot(texte=t, x0=x / w, y0=y / h, x1=(x + ww) / w, y1=(y + hh) / h,
-                        confiance=round(conf / 100, 4), taille=round(hh / h, 5)))
+        mots.append(
+            Mot(
+                texte=t,
+                x0=x / w,
+                y0=y / h,
+                x1=(x + ww) / w,
+                y1=(y + hh) / h,
+                confiance=round(conf / 100, 4),
+                taille=round(hh / h, 5),
+            )
+        )
         somme += conf / 100 * len(t)
         poids += len(t)
     return mots, (somme / poids if poids else 0.0)
@@ -901,7 +978,9 @@ def _pretraiter(image) -> tuple[object, list[str]]:
     return gris, notes
 
 
-def _ocr_oriente(image, opts: OptionsPages, rotation: int | None) -> tuple[list[Mot], float, int, float, object]:
+def _ocr_oriente(
+    image, opts: OptionsPages, rotation: int | None
+) -> tuple[list[Mot], float, int, float, object]:
     """Désinclinaison, OCR, puis essai des autres orientations si la lecture est mauvaise.
 
     ``rotation`` : verdict OSD déjà appliqué (``None`` : pas de verdict). Autres orientations essayées quand l'OSD
@@ -968,15 +1047,31 @@ def _ocr_image(image, opts: OptionsPages, numero: int) -> PageText:
     return _page_ocr(numero, mots, score, rot_finale, angle, notes)
 
 
-def _page_ocr(numero: int, mots: list[Mot], score: float, rotation: int, angle: float, notes: list[str],
-              lignes: list[Ligne] | None = None) -> PageText:
+def _page_ocr(
+    numero: int,
+    mots: list[Mot],
+    score: float,
+    rotation: int,
+    angle: float,
+    notes: list[str],
+    lignes: list[Ligne] | None = None,
+) -> PageText:
     lignes = construire_lignes(mots) if lignes is None else lignes
     texte = "\n".join(li.texte for li in lignes)
     qualite = QualiteTexte.ocr
     if not texte.strip() or score < SEUIL_ILLISIBLE_OCR or score_texte(texte) < 0.4:
         qualite = QualiteTexte.illisible
-    return PageText(numero=numero, texte=texte, lignes=lignes, qualite=qualite, source="ocr",
-                    score_ocr=round(score, 4), rotation=rotation, desinclinaison=angle, avertissements=notes)
+    return PageText(
+        numero=numero,
+        texte=texte,
+        lignes=lignes,
+        qualite=qualite,
+        source="ocr",
+        score_ocr=round(score, 4),
+        rotation=rotation,
+        desinclinaison=angle,
+        avertissements=notes,
+    )
 
 
 #: Distance minimale (fraction de la largeur) entre le texte de chaque moitié et la coupure d'une vraie feuille
@@ -1000,7 +1095,9 @@ def moities_separees(lignes: Sequence[Ligne], coupe: float) -> bool:
     return True
 
 
-def _ocr_deux_pages(image, coupe: int, opts: OptionsPages, numero: int, rotation: int, notes: list[str]) -> PageText:
+def _ocr_deux_pages(
+    image, coupe: int, opts: OptionsPages, numero: int, rotation: int, notes: list[str]
+) -> PageText:
     """Feuille « deux pages par feuille » (D-2604) : chaque moitié est lue seule (désinclinaison, OCR, orientation),
     puis les lignes de la moitié gauche précèdent celles de la moitié droite.
 
@@ -1058,13 +1155,21 @@ def _pages_image(contenu: bytes, opts: OptionsPages) -> list[PageText]:
             fond.paste(cadre, mask=cadre.split()[-1])
             cadre = fond
         if not opts.ocr or not ocr_disponible():
-            sortie.append(_page_illisible(i, "ocr_indisponible" if opts.ocr else "ocr_desactive",
-                                          largeur=float(cadre.size[0]), hauteur=float(cadre.size[1])))
+            sortie.append(
+                _page_illisible(
+                    i,
+                    "ocr_indisponible" if opts.ocr else "ocr_desactive",
+                    largeur=float(cadre.size[0]),
+                    hauteur=float(cadre.size[1]),
+                )
+            )
             continue
         dpi = cadre.info.get("dpi", (0, 0))[0] or 0
         if dpi and dpi < 150:  # agrandir une image basse résolution avant l'OCR
             # sans dépasser MAX_PIXELS_AGRANDISSEMENT (REV2-03 : une image de 80 Mpx à 72 dpi en demandait 720)
-            f = min(3.0, 300 / dpi, (MAX_PIXELS_AGRANDISSEMENT / max(1, cadre.size[0] * cadre.size[1])) ** 0.5)
+            f = min(
+                3.0, 300 / dpi, (MAX_PIXELS_AGRANDISSEMENT / max(1, cadre.size[0] * cadre.size[1])) ** 0.5
+            )
             if f > 1:
                 cadre = cadre.resize((int(cadre.size[0] * f), int(cadre.size[1] * f)))
         try:
@@ -1114,8 +1219,14 @@ def _cellule_texte(v, fmt: str | None = None) -> str:
     return str(v).replace("\r", " ").replace("\n", " ").strip()
 
 
-def _page_grille(numero: int, lignes_cellules: list[list[str]], *, source: str, feuille: str | None,
-                 texte_brut: str | None = None) -> PageText:
+def _page_grille(
+    numero: int,
+    lignes_cellules: list[list[str]],
+    *,
+    source: str,
+    feuille: str | None,
+    texte_brut: str | None = None,
+) -> PageText:
     """Page à partir d'une grille de cellules : texte stable (cellules non vides jointes par `` | ``),
     mots positionnés sur une grille régulière."""
     lignes_cellules = [r for r in lignes_cellules]
@@ -1133,14 +1244,24 @@ def _page_grille(numero: int, lignes_cellules: list[list[str]], *, source: str, 
         texte_ligne = " | ".join(v for _c, v in valeurs)
         textes.append(texte_ligne)
         if len(lignes) < MAX_LIGNES_POSITIONNEES and n_mots < MAX_MOTS_POSITIONNES:
-            mots = tuple(Mot(texte=val, x0=c / ncols, y0=r / nrows, x1=(c + 1) / ncols, y1=(r + 1) / nrows)
-                         for c, val in valeurs)
+            mots = tuple(
+                Mot(texte=val, x0=c / ncols, y0=r / nrows, x1=(c + 1) / ncols, y1=(r + 1) / nrows)
+                for c, val in valeurs
+            )
             n_mots += len(mots)
             lignes.append(Ligne(texte=texte_ligne, mots=mots))
     texte = texte_brut if texte_brut is not None else "\n".join(textes)
     avert = ["texte_positionne_tronque"] if len(lignes) < len(textes) else []
-    return PageText(numero=numero, texte=texte, lignes=lignes, qualite=QualiteTexte.natif, source=source,
-                    score_natif=1.0, feuille=feuille, avertissements=avert)
+    return PageText(
+        numero=numero,
+        texte=texte,
+        lignes=lignes,
+        qualite=QualiteTexte.natif,
+        source=source,
+        score_natif=1.0,
+        feuille=feuille,
+        avertissements=avert,
+    )
 
 
 def _pages_xlsx(contenu: bytes) -> list[PageText]:
@@ -1158,8 +1279,12 @@ def _pages_xlsx(contenu: bytes) -> list[PageText]:
             tronque = False
             # dimensions annoncées non fiables (« A1:XFD1048576 ») : colonnes et cellules lues bornées (D-1604)
             for row in ws.iter_rows(max_col=MAX_COLONNES_TABLEUR):
-                grille.append([_cellule_texte(getattr(c, "value", None), getattr(c, "number_format", None))
-                               for c in row])
+                grille.append(
+                    [
+                        _cellule_texte(getattr(c, "value", None), getattr(c, "number_format", None))
+                        for c in row
+                    ]
+                )
                 cellules += max(1, len(row))
                 if len(grille) > 100_000 or cellules > MAX_CELLULES_FEUILLE:
                     tronque = True
@@ -1206,7 +1331,9 @@ def _pages_ods(contenu: bytes) -> list[PageText]:
                 elif vt == "date":
                     val = (cell.get(f"{o}date-value") or "")[:10]
                 else:
-                    val = " ".join("".join(p.itertext()) for p in cell.iter("{{{}}}p".format(_NS_ODS["text"]))).strip()
+                    val = " ".join(
+                        "".join(p.itertext()) for p in cell.iter("{{{}}}p".format(_NS_ODS["text"]))
+                    ).strip()
                 cellules.extend([val] * (rep if val else min(rep, 50)))
             while cellules and not cellules[-1]:
                 cellules.pop()
@@ -1253,16 +1380,30 @@ def _page_texte_brut(contenu: bytes, source: str) -> PageText:
             break
         mots = []
         for m in re.finditer(r"\S+", li):
-            mots.append(Mot(texte=m.group(), x0=m.start() / largeur_max, y0=r / n,
-                            x1=min(1.0, m.end() / largeur_max), y1=(r + 1) / n))
+            mots.append(
+                Mot(
+                    texte=m.group(),
+                    x0=m.start() / largeur_max,
+                    y0=r / n,
+                    x1=min(1.0, m.end() / largeur_max),
+                    y1=(r + 1) / n,
+                )
+            )
             if n_mots + len(mots) >= MAX_MOTS_POSITIONNES:
                 tronque = True
                 break
         n_mots += len(mots)
         if mots:
             lignes.append(Ligne(texte=li.strip(), mots=tuple(mots)))
-    return PageText(numero=1, texte=texte, lignes=lignes, qualite=QualiteTexte.natif, source=source,
-                    score_natif=1.0, avertissements=["texte_positionne_tronque"] if tronque else [])
+    return PageText(
+        numero=1,
+        texte=texte,
+        lignes=lignes,
+        qualite=QualiteTexte.natif,
+        source=source,
+        score_natif=1.0,
+        avertissements=["texte_positionne_tronque"] if tronque else [],
+    )
 
 
 __all__ += ["Ligne", "Mot", "PageText"]

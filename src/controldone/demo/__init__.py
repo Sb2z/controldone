@@ -44,8 +44,9 @@ def composants_demo(moteur: str = "auto") -> Composants:
     extracteurs = list(reels.extracteurs)
     if not any(e.type == "deterministe" for e in extracteurs):
         extracteurs.append(ExtracteurDemo())
-    return Composants(decoupeur=reels.decoupeur or DecoupeurDemo(), extracteurs=extracteurs,
-                      normaliseur=reels.normaliseur)
+    return Composants(
+        decoupeur=reels.decoupeur or DecoupeurDemo(), extracteurs=extracteurs, normaliseur=reels.normaliseur
+    )
 
 
 def executer_demo(
@@ -73,4 +74,6 @@ def executer_demo(
     for p, opts in prepares:
         autres = autres_dossiers_de([q for q, _o in prepares if q is not p])
         resultats.extend(controler_lot(p, autres_dossiers=autres, options=opts))
-    return generer_rapport(resultats, profil, sortie, titre="Rapport de diagnostic", date_rapport=date_rapport)
+    return generer_rapport(
+        resultats, profil, sortie, titre="Rapport de diagnostic", date_rapport=date_rapport
+    )

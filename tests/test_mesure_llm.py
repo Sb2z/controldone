@@ -30,19 +30,34 @@ class _Messages:
 
     def parse(self, **kw):
         self.appels.append(kw)
-        sortie = {"valeurs": [{"champ": "total_facture", "index": None, "valeur_brute": "EUR 1 250,00", "page": 1},
-                              {"champ": "incoterm", "index": None, "valeur_brute": "CIF", "page": 1}]}
-        return SimpleNamespace(parsed_output=kw["output_format"].model_validate(sortie), stop_reason="end_turn",
-                               model=kw["model"], usage=SimpleNamespace(input_tokens=2000, output_tokens=300,
-                                                                        cache_read_input_tokens=1000,
-                                                                        cache_creation_input_tokens=0))
+        sortie = {
+            "valeurs": [
+                {"champ": "total_facture", "index": None, "valeur_brute": "EUR 1 250,00", "page": 1},
+                {"champ": "incoterm", "index": None, "valeur_brute": "CIF", "page": 1},
+            ]
+        }
+        return SimpleNamespace(
+            parsed_output=kw["output_format"].model_validate(sortie),
+            stop_reason="end_turn",
+            model=kw["model"],
+            usage=SimpleNamespace(
+                input_tokens=2000,
+                output_tokens=300,
+                cache_read_input_tokens=1000,
+                cache_creation_input_tokens=0,
+            ),
+        )
 
 
 def _metrics(precision, fp, details, exactitude):
-    return {"global": {"precision_certain": precision, "rappel": 0.5, "fp_certain": fp, "vp_certain": 10},
-            "extraction_par_champ": {"global": {"exactitude": exactitude, "n": 100},
-                                     "champs": {"facture_commerciale.total_facture": {"exactitude": exactitude}}},
-            "details": details}
+    return {
+        "global": {"precision_certain": precision, "rappel": 0.5, "fp_certain": fp, "vp_certain": 10},
+        "extraction_par_champ": {
+            "global": {"exactitude": exactitude, "n": 100},
+            "champs": {"facture_commerciale.total_facture": {"exactitude": exactitude}},
+        },
+        "details": details,
+    }
 
 
 def _corpus(tmp_path):
@@ -58,16 +73,21 @@ def _executeur(appels):
         appels.append({"out": out.name, "dossiers": list(dossiers), "llm": bool(llm), "workers": workers})
         out.mkdir(parents=True, exist_ok=True)
         if llm:
-            doc = Document(id="doc_1", type=TypeDocument.facture_commerciale,
-                           pages=[PageRef(fichier_id="f", numero=1)])
+            doc = Document(
+                id="doc_1", type=TypeDocument.facture_commerciale, pages=[PageRef(fichier_id="f", numero=1)]
+            )
             pages = [Page(fichier_id="f", numero=1, texte="FACTURE FICTIVE\nTOTAL EUR 1 250,00")]
             for d in dossiers:
                 n = len(journal)
-                llm[0].extract(doc, pages, ExtractionContext(ids=IdGenerator.deterministe(1), client_id="c",
-                                                             dossier_id=d))
+                llm[0].extract(
+                    doc,
+                    pages,
+                    ExtractionContext(ids=IdGenerator.deterministe(1), client_id="c", dossier_id=d),
+                )
                 for e in journal[n:]:
                     e.setdefault("dossier", d)
         return {}
+
     return executeur
 
 
@@ -78,15 +98,23 @@ def test_mesure_avec_faux_client(tmp_path):
     appels = []
     base = _metrics(1.0, 0, [], 0.90)
     avec = _metrics(1.0, 0, [], 0.92)
-    r = m.mesurer(corpus, tmp_path / "out", limit=2, budget_eur=D("1"), client=client,
-                  settings=Settings(_env_file=None, anthropic_api_key="sk-test-fictif"),
-                  scorer=lambda c, run: base if run.name == "deterministe" else avec,
-                  executeur=_executeur(appels))
+    r = m.mesurer(
+        corpus,
+        tmp_path / "out",
+        limit=2,
+        budget_eur=D("1"),
+        client=client,
+        settings=Settings(_env_file=None, anthropic_api_key="sk-test-fictif"),
+        scorer=lambda c, run: base if run.name == "deterministe" else avec,
+        executeur=_executeur(appels),
+    )
     assert [a["llm"] for a in appels] == [False, True] and appels[1]["workers"] == 1
     assert appels[0]["dossiers"] == ["BX0001", "BX0002"]  # dev seulement, échantillon limité
     assert len(client.messages.appels) == 2
     assert r["cout"]["appels"] == 2 and D(r["cout"]["total_eur"]) > 0
-    assert r["valeurs"]["proposees"] == 4 and r["valeurs"]["rejetees"] == 2 and r["valeurs"]["completees"] == 2
+    assert (
+        r["valeurs"]["proposees"] == 4 and r["valeurs"]["rejetees"] == 2 and r["valeurs"]["completees"] == 2
+    )
     assert r["extraction"]["deterministe"] == 0.90 and r["extraction"]["llm"] == 0.92
     assert r["verdict"]["passe"] and r["banc"]["nouveaux_faux_certains"] == []
     rapport = (tmp_path / "out" / "rapport.md").read_text(encoding="utf-8")
@@ -105,10 +133,13 @@ def test_verdict_echoue_sur_nouveau_faux_certain():
     assert r["verdict"]["passe"]  # faux certain déjà présent sans le modèle : pas nouveau
 
 
-@pytest.mark.parametrize("argv, attendu", [
-    (["--corpus", "bench/corpus_g4/holdout"], "split dev"),
-    (["--corpus", "bench/corpus_g4"], "clé Anthropic absente"),
-])
+@pytest.mark.parametrize(
+    "argv, attendu",
+    [
+        (["--corpus", "bench/corpus_g4/holdout"], "split dev"),
+        (["--corpus", "bench/corpus_g4"], "clé Anthropic absente"),
+    ],
+)
 def test_main_refuse_sans_cle_ou_holdout(monkeypatch, capsys, argv, attendu):
     from controldone.config import reset_settings
 

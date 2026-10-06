@@ -178,14 +178,25 @@ class CatalogueOffres:
             raise CouponRefuse("coupon inconnu")
         return c
 
-    def verifier_coupon(self, code: str, *, offre: str, consentement: Consentement | None,
-                        utilisations: int, deja_utilise_par_client: bool) -> Coupon:
+    def verifier_coupon(
+        self,
+        code: str,
+        *,
+        offre: str,
+        consentement: Consentement | None,
+        utilisations: int,
+        deja_utilise_par_client: bool,
+    ) -> Coupon:
         """Règles du coupon (pures) : offre visée, quota global, une fois par client, consentement signé."""
         c = self.coupon(code)
         if c.offre != offre:
             raise CouponRefuse(f"coupon réservé à l'offre « {c.offre} »")
-        if c.consentement_requis and not (consentement and consentement.signe and consentement.signe_par.strip()
-                                          and consentement.signe_le.strip()):
+        if c.consentement_requis and not (
+            consentement
+            and consentement.signe
+            and consentement.signe_par.strip()
+            and consentement.signe_le.strip()
+        ):
             raise CouponRefuse("accord de publication des résultats anonymisés non signé")
         if utilisations >= c.utilisations_max:
             raise CouponRefuse("coupon épuisé")
@@ -219,38 +230,63 @@ def charger_offres(chemin: Path | str | None = None, *, env: dict[str, str] | No
     env = dict(os.environ) if env is None else env
     o = brut.get("offres", {})
     diag, com, cont = o.get("diagnostic", {}), o.get("commission", {}), o.get("continu", {})
-    paliers = tuple(Palier(code=str(p["code"]), libelle=str(p.get("libelle", p["code"])),
-                           prix_mensuel_ht=_dec(p["prix_mensuel_ht"], "0"), dossiers_par_mois=int(p["dossiers_par_mois"]))
-                    for p in cont.get("paliers", []))
+    paliers = tuple(
+        Palier(
+            code=str(p["code"]),
+            libelle=str(p.get("libelle", p["code"])),
+            prix_mensuel_ht=_dec(p["prix_mensuel_ht"], "0"),
+            dossiers_par_mois=int(p["dossiers_par_mois"]),
+        )
+        for p in cont.get("paliers", [])
+    )
     if not paliers:
         raise ValueError("offre « continu » : au moins un palier attendu")
     coupons = {}
     for code, c in (brut.get("coupons") or {}).items():
         coupons[str(code).upper()] = Coupon(
-            code=str(code).upper(), libelle=str(c.get("libelle", code)), offre=str(c.get("offre", "diagnostic")),
+            code=str(code).upper(),
+            libelle=str(c.get("libelle", code)),
+            offre=str(c.get("offre", "diagnostic")),
             remise_pourcentage=_dec(c.get("remise_pourcentage"), "0"),
             utilisations_max=int(c.get("utilisations_max", 0)),
             une_fois_par_client=bool(c.get("une_fois_par_client", True)),
-            consentement_requis=bool(c.get("consentement_requis", True)))
+            consentement_requis=bool(c.get("consentement_requis", True)),
+        )
     t = brut.get("tva", {})
     tva_env = env.get("CONTROLDONE_TVA_APPLICABLE")
     tva = ParametresTVA(
-        tva_applicable=(tva_env.strip().lower() in ("1", "true", "oui")) if tva_env else bool(t.get("tva_applicable", True)),
+        tva_applicable=(tva_env.strip().lower() in ("1", "true", "oui"))
+        if tva_env
+        else bool(t.get("tva_applicable", True)),
         taux=_dec(t.get("taux"), "20.00"),
         mention_franchise=str(t.get("mention_franchise", "TVA non applicable, art. 293 B du CGI")),
-        option_debits=bool(t.get("option_debits", False)))
+        option_debits=bool(t.get("option_debits", False)),
+    )
     p = brut.get("paiement", {})
-    paiement = ParametresPaiement(delai_jours=int(p.get("delai_jours", 30)), moyen=str(p.get("moyen", "")),
-                                  penalites=str(p.get("penalites", "")), indemnite=str(p.get("indemnite", "")),
-                                  escompte=str(p.get("escompte", "")))
+    paiement = ParametresPaiement(
+        delai_jours=int(p.get("delai_jours", 30)),
+        moyen=str(p.get("moyen", "")),
+        penalites=str(p.get("penalites", "")),
+        indemnite=str(p.get("indemnite", "")),
+        escompte=str(p.get("escompte", "")),
+    )
     taux = _dec(com.get("taux"), "0.20")
     if not Decimal(0) <= taux <= Decimal(1):
         raise ValueError("taux de commission hors de [0, 1]")
     n = brut.get("numerotation", {})
     return CatalogueOffres(
-        prix_diagnostic_ht=_dec(diag.get("prix_ht"), "390.00"), libelle_diagnostic=str(diag.get("libelle", "Diagnostic")),
-        taux_commission=taux, libelle_commission=str(com.get("libelle", "Commission")),
-        libelle_continu=str(cont.get("libelle", "Contrôle continu")), paliers=paliers, coupons=coupons, tva=tva,
-        paiement=paiement, vendeur=_vendeur(brut.get("vendeur", {}), env),
-        prefixe_facture=str(n.get("facture", "F")), prefixe_avoir=str(n.get("avoir", "AV")),
-        chiffres=int(n.get("chiffres", 4)), brut=brut)
+        prix_diagnostic_ht=_dec(diag.get("prix_ht"), "390.00"),
+        libelle_diagnostic=str(diag.get("libelle", "Diagnostic")),
+        taux_commission=taux,
+        libelle_commission=str(com.get("libelle", "Commission")),
+        libelle_continu=str(cont.get("libelle", "Contrôle continu")),
+        paliers=paliers,
+        coupons=coupons,
+        tva=tva,
+        paiement=paiement,
+        vendeur=_vendeur(brut.get("vendeur", {}), env),
+        prefixe_facture=str(n.get("facture", "F")),
+        prefixe_avoir=str(n.get("avoir", "AV")),
+        chiffres=int(n.get("chiffres", 4)),
+        brut=brut,
+    )

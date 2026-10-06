@@ -42,7 +42,14 @@ from controldone.pipeline import (
 )
 from controldone.referentiel_io import ProfilClient, charger_grilles, charger_profil_client
 
-__all__ = ["DossierBanc", "assigner_clients", "executer_banc", "fusionner_findings", "lister_dossiers", "main"]
+__all__ = [
+    "DossierBanc",
+    "assigner_clients",
+    "executer_banc",
+    "fusionner_findings",
+    "lister_dossiers",
+    "main",
+]
 
 log = logging.getLogger("controldone.bench_run")
 
@@ -187,8 +194,9 @@ def _passe_preparation(d: DossierBanc) -> tuple[str, LotPrepare | None, str | No
     logging.disable(logging.WARNING)
     try:
         profil, grilles = _profil(d.client_id)
-        prep = preparer_lot(d.chemin / "docs", profil, grilles, options=_options(d.dossier_id),
-                            composants=_COMPOSANTS)
+        prep = preparer_lot(
+            d.chemin / "docs", profil, grilles, options=_options(d.dossier_id), composants=_COMPOSANTS
+        )
         return d.dossier_id, prep, None
     except Exception as e:  # un dossier en échec n'arrête pas le banc
         return d.dossier_id, None, f"{type(e).__name__}: {e}"[:300]
@@ -250,21 +258,33 @@ def fusionner_findings(liste: Sequence[Findings], dossier_id: str) -> Findings:
         resultats.extend(f.resultats)
         valeurs.update(f.valeurs)
     statut = min((f.statut_global for f in liste), key=_PRIORITE.index)
-    return base.model_copy(update={
-        "dossier_id": dossier_id, "dossier_version": max(f.dossier_version for f in liste),
-        "documents": documents, "liens": liens, "valeurs": valeurs, "resultats": resultats,
-        "constats": constats, "statut_global": statut,
-    })
+    return base.model_copy(
+        update={
+            "dossier_id": dossier_id,
+            "dossier_version": max(f.dossier_version for f in liste),
+            "documents": documents,
+            "liens": liens,
+            "valeurs": valeurs,
+            "resultats": resultats,
+            "constats": constats,
+            "statut_global": statut,
+        }
+    )
 
 
 def _findings_vide(dossier_id: str, prep: LotPrepare) -> Findings:
     from controldone.findings_io import FindingsExecution
 
     return Findings(
-        dossier_id=dossier_id, dossier_version=1,
-        execution=FindingsExecution(execution_id=f"exe_{prep.lot.id}", version_moteur="?", version_regles="?",
-                                    cout_ia_eur=str(prep.cout.cout_eur.quantize(Decimal("0.01"))),
-                                    duree_s=round(prep.duree_s, 3)),
+        dossier_id=dossier_id,
+        dossier_version=1,
+        execution=FindingsExecution(
+            execution_id=f"exe_{prep.lot.id}",
+            version_moteur="?",
+            version_regles="?",
+            cout_ia_eur=str(prep.cout.cout_eur.quantize(Decimal("0.01"))),
+            duree_s=round(prep.duree_s, 3),
+        ),
         statut_global=StatutGlobal.document_manquant.value,
     )
 
@@ -273,8 +293,14 @@ def _findings_vide(dossier_id: str, prep: LotPrepare) -> Findings:
 
 
 def executer_banc(
-    corpus: Path, split: str, out: Path, *, limit: int | None = None, workers: int = 4,
-    composants: Composants | None = None, only: Sequence[str] | None = None,
+    corpus: Path,
+    split: str,
+    out: Path,
+    *,
+    limit: int | None = None,
+    workers: int = 4,
+    composants: Composants | None = None,
+    only: Sequence[str] | None = None,
 ) -> dict:
     """Passes 1 et 2 sur le split ; écrit les ``findings.json`` et ``run.json``. ``composants`` : doubles
     (tests) ; par défaut, composants publiés par les équipes ingestion et extraction."""
@@ -324,9 +350,14 @@ def executer_banc(
             else:
                 erreurs[did] = err or "?"
     bilan = {
-        "corpus": str(corpus), "split": split, "n_dossiers": len(dossiers), "workers": workers,
-        "duree_preparation_s": round(t1, 2), "duree_totale_s": round(time.perf_counter() - debut, 2),
-        "erreurs": erreurs, "dossiers": resumes,
+        "corpus": str(corpus),
+        "split": split,
+        "n_dossiers": len(dossiers),
+        "workers": workers,
+        "duree_preparation_s": round(t1, 2),
+        "duree_totale_s": round(time.perf_counter() - debut, 2),
+        "erreurs": erreurs,
+        "dossiers": resumes,
         "clients": {d.dossier_id: d.client_id for d in dossiers},
     }
     (out / "run.json").write_text(json.dumps(bilan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -334,14 +365,20 @@ def executer_banc(
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m controldone.bench_run", description="Exécute le système sur le banc.")
+    ap = argparse.ArgumentParser(
+        prog="python -m controldone.bench_run", description="Exécute le système sur le banc."
+    )
     ap.add_argument("--corpus", type=Path, default=Path("bench/corpus"))
     ap.add_argument("--split", default="dev", choices=["dev", "holdout"])
     ap.add_argument("--out", type=Path, default=None, help="bench/out/<run_id> (défaut : horodaté)")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--only", default=None, help="sous-ensemble de dossiers : BX0001,BX0002 (score sur ce seul "
-                    "sous-ensemble non significatif ; utiliser --no-score)")
+    ap.add_argument(
+        "--only",
+        default=None,
+        help="sous-ensemble de dossiers : BX0001,BX0002 (score sur ce seul "
+        "sous-ensemble non significatif ; utiliser --no-score)",
+    )
     ap.add_argument("--no-score", action="store_true", help="ne pas appeler le correcteur")
     args = ap.parse_args(argv)
     out = args.out or Path("bench/out") / time.strftime("run_%Y%m%d_%H%M%S")
@@ -352,14 +389,25 @@ def main(argv: list[str] | None = None) -> int:
         print(str(e), file=sys.stderr)
         return 2
     n_err = len(bilan["erreurs"])
-    print(f"[bench_run] {bilan['n_dossiers']} dossiers traités en {bilan['duree_totale_s']} s "
-          f"({args.workers} processus) ; erreurs : {n_err} ; sortie : {out}")
+    print(
+        f"[bench_run] {bilan['n_dossiers']} dossiers traités en {bilan['duree_totale_s']} s "
+        f"({args.workers} processus) ; erreurs : {n_err} ; sortie : {out}"
+    )
     for did, err in sorted(bilan["erreurs"].items())[:10]:
         print(f"[bench_run] erreur {did} : {err}")
     if args.no_score:
         return 0
-    cmd = [sys.executable, "-m", "bench.score", "--corpus", str(args.corpus), "--split", args.split,
-           "--run", str(out)]
+    cmd = [
+        sys.executable,
+        "-m",
+        "bench.score",
+        "--corpus",
+        str(args.corpus),
+        "--split",
+        args.split,
+        "--run",
+        str(out),
+    ]
     r = subprocess.run(cmd, check=False)
     resume = out / "metrics.md"
     if resume.exists():

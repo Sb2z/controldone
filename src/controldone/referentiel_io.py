@@ -67,8 +67,9 @@ def profil_depuis_dict(data: Mapping[str, Any]) -> ProfilClient:
     client_id = str(data.get("client_id") or "client")
     client = Client(
         id=client_id,
-        raison_sociale=str(data.get("raison_sociale") or (data.get("entites") or [{}])[0].get("raison_sociale")
-                           or client_id),
+        raison_sociale=str(
+            data.get("raison_sociale") or (data.get("entites") or [{}])[0].get("raison_sociale") or client_id
+        ),
         offre=Offre(data.get("offre", "diagnostic")),
     )
     entites = []
@@ -87,11 +88,17 @@ def profil_depuis_dict(data: Mapping[str, Any]) -> ProfilClient:
         )
     transitaires = []
     for t in data.get("transitaires", []) or []:
-        tid = t.get("transitaire_id") or t.get("id") or id_stable(Prefixe.transitaire, client_id, t.get("nom"))
+        tid = (
+            t.get("transitaire_id") or t.get("id") or id_stable(Prefixe.transitaire, client_id, t.get("nom"))
+        )
         transitaires.append(
             Transitaire(
-                id=str(tid), client_id=client_id, nom=t.get("nom") or str(tid), tva=t.get("tva"),
-                alias=list(t.get("alias") or []), adresse=t.get("adresse"),
+                id=str(tid),
+                client_id=client_id,
+                nom=t.get("nom") or str(tid),
+                tva=t.get("tva"),
+                alias=list(t.get("alias") or []),
+                adresse=t.get("adresse"),
                 contact_reclamation=t.get("contact_reclamation"),
             )
         )
@@ -101,9 +108,15 @@ def profil_depuis_dict(data: Mapping[str, Any]) -> ProfilClient:
         tol = tol.appliquer_surcharges(dict(surcharges))
     pe = data.get("parametres_petits_envois")
     return ProfilClient(
-        client=client, entites=entites, transitaires=transitaires, tolerances=tol,
-        parametres_petits_envois=ParametresPetitsEnvois.model_validate(pe) if pe else ParametresPetitsEnvois(),
-        demo=bool(data.get("demo", False)), periode=data.get("periode"),
+        client=client,
+        entites=entites,
+        transitaires=transitaires,
+        tolerances=tol,
+        parametres_petits_envois=ParametresPetitsEnvois.model_validate(pe)
+        if pe
+        else ParametresPetitsEnvois(),
+        demo=bool(data.get("demo", False)),
+        periode=data.get("periode"),
     )
 
 
@@ -118,7 +131,9 @@ def charger_profil_client(source: Path | str | Mapping[str, Any] | ProfilClient 
     return profil_depuis_dict(json.loads(Path(source).read_text(encoding="utf-8")))
 
 
-def _grille_depuis_dict(data: Mapping[str, Any], client_id: str | None, defaut_validee: bool) -> GrilleTarifaire:
+def _grille_depuis_dict(
+    data: Mapping[str, Any], client_id: str | None, defaut_validee: bool
+) -> GrilleTarifaire:
     d = dict(data)
     d.setdefault("id", d.get("grille_id") or id_stable(Prefixe.grille, client_id, d.get("reference")))
     d.setdefault("reference", d.get("grille_id") or d["id"])
@@ -158,7 +173,13 @@ def charger_grilles(
     for f in fichiers:
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
-            items = data if isinstance(data, list) else data.get("grilles", [data]) if isinstance(data, dict) else []
+            items = (
+                data
+                if isinstance(data, list)
+                else data.get("grilles", [data])
+                if isinstance(data, dict)
+                else []
+            )
             for item in items:
                 grilles.append(_grille_depuis_dict(item, client_id, defaut_validee))
         except Exception as e:  # une grille illisible ne bloque pas le lot

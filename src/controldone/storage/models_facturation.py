@@ -41,7 +41,10 @@ _ID = String(64)
 
 class FactureEmise(AppendOnly, Base):
     __tablename__ = "factures"
-    __table_args__ = (UniqueConstraint("emetteur", "numero"), UniqueConstraint("emetteur", "serie", "annee", "sequence"))
+    __table_args__ = (
+        UniqueConstraint("emetteur", "numero"),
+        UniqueConstraint("emetteur", "serie", "annee", "sequence"),
+    )
 
     id: Mapped[str] = mapped_column(_ID, primary_key=True)
     emetteur: Mapped[str] = mapped_column(String(64))
@@ -133,13 +136,17 @@ class StatutFacturePA(AppendOnly, Base):
 
 
 # Immuabilité des factures émises, aussi au niveau SQL (comme ``audit_log``).
-for _sql in ("CREATE TRIGGER IF NOT EXISTS factures_sans_update BEFORE UPDATE ON factures "
-             "BEGIN SELECT RAISE(ABORT, 'facture émise immuable'); END;",
-             "CREATE TRIGGER IF NOT EXISTS factures_sans_delete BEFORE DELETE ON factures "
-             "BEGIN SELECT RAISE(ABORT, 'facture émise immuable'); END;"):
+for _sql in (
+    "CREATE TRIGGER IF NOT EXISTS factures_sans_update BEFORE UPDATE ON factures "
+    "BEGIN SELECT RAISE(ABORT, 'facture émise immuable'); END;",
+    "CREATE TRIGGER IF NOT EXISTS factures_sans_delete BEFORE DELETE ON factures "
+    "BEGIN SELECT RAISE(ABORT, 'facture émise immuable'); END;",
+):
     event.listen(FactureEmise.__table__, "after_create", DDL(_sql).execute_if(dialect="sqlite"))
-for _sql in ("CREATE OR REPLACE FUNCTION factures_immuables() RETURNS trigger AS $$ "
-             "BEGIN RAISE EXCEPTION 'facture émise immuable'; END; $$ LANGUAGE plpgsql;",
-             "CREATE TRIGGER factures_sans_modif BEFORE UPDATE OR DELETE ON factures "
-             "FOR EACH ROW EXECUTE FUNCTION factures_immuables();"):
+for _sql in (
+    "CREATE OR REPLACE FUNCTION factures_immuables() RETURNS trigger AS $$ "
+    "BEGIN RAISE EXCEPTION 'facture émise immuable'; END; $$ LANGUAGE plpgsql;",
+    "CREATE TRIGGER factures_sans_modif BEFORE UPDATE OR DELETE ON factures "
+    "FOR EACH ROW EXECUTE FUNCTION factures_immuables();",
+):
     event.listen(FactureEmise.__table__, "after_create", DDL(_sql).execute_if(dialect="postgresql"))

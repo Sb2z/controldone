@@ -19,7 +19,13 @@ from typing import Any
 
 from controldone.normalize.text import sans_accents
 
-__all__ = ["ancre_article", "date_en_lettres", "date_prose_acceptation", "ligne_taxe_prose", "segments_libelles"]
+__all__ = [
+    "ancre_article",
+    "date_en_lettres",
+    "date_prose_acceptation",
+    "ligne_taxe_prose",
+    "segments_libelles",
+]
 
 
 def _cle(s: str) -> str:
@@ -29,7 +35,8 @@ def _cle(s: str) -> str:
 # --- dates en toutes lettres -----------------------------------------------------------------------------------
 
 _MOIS: dict[str, int] = {}
-for _n, _noms in enumerate((
+for _n, _noms in enumerate(
+    (
         ("janvier", "january", "januar", "jan", "gennaio", "gen", "enero", "ene", "janv"),
         ("fevrier", "february", "februar", "feb", "fev", "fevr", "febbraio", "febrero"),
         ("mars", "march", "marz", "mar", "marzo"),
@@ -42,13 +49,16 @@ for _n, _noms in enumerate((
         ("octobre", "october", "oktober", "oct", "okt", "ottobre", "ott", "octubre"),
         ("novembre", "november", "nov", "noviembre"),
         ("decembre", "december", "dezember", "dec", "dez", "dicembre", "dic", "diciembre"),
-), start=1):
+    ),
+    start=1,
+):
     for _m in _noms:
         _MOIS.setdefault(_m, _n)
 
 #: « 18 août 2026 », « 11 Mar 2026 », « 1er juillet 2026 », « 7. September 2026 », « 3 de mayo de 2026 »
 _DATE_LETTRES_RE = re.compile(
-    r"(?<![\w])(\d{1,2})(?:er|st|nd|rd|th|\.|º)?\s+(?:de\s+)?([^\W\d_]{3,10})\.?\s+(?:de\s+)?(\d{4})(?!\d)")
+    r"(?<![\w])(\d{1,2})(?:er|st|nd|rd|th|\.|º)?\s+(?:de\s+)?([^\W\d_]{3,10})\.?\s+(?:de\s+)?(\d{4})(?!\d)"
+)
 #: « March 11, 2026 », « Mar 11 2026 »
 _DATE_LETTRES_EN_RE = re.compile(r"(?<![\w])([^\W\d_]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})(?!\d)")
 
@@ -83,7 +93,9 @@ def _iso(annee: int, mois: int | None, jour: int) -> str | None:
 #: Verbe ou nom d'acceptation / mainlevée suivi, dans la même phrase, de la date (fr / en / de / it / es).
 _ACCEPTATION_RE = re.compile(
     r"accept\w*|mainlev\w*|releas\w*|cleared|clearance granted|freigegeben|angenommen|uberlassen\w*"
-    r"|accettat\w*|svincolat\w*|aceptad\w*|levante|despachad\w*", re.I)
+    r"|accettat\w*|svincolat\w*|aceptad\w*|levante|despachad\w*",
+    re.I,
+)
 
 
 _DATE_NUM_RE = re.compile(r"(?<!\d)\d{1,2}[/.\-]\d{1,2}[/.\-]\d{4}(?!\d)|(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)")
@@ -108,13 +120,13 @@ def date_prose_acceptation(texte: str) -> tuple[int, int] | None:
     mot ; à défaut (verbe en fin de phrase), la seule date de la phrase **avant** le mot."""
     norm = sans_accents(texte)
     for m in _ACCEPTATION_RE.finditer(norm):
-        reste = texte[m.end():]
+        reste = texte[m.end() :]
         fin_phrase = re.search(r"(?<!\d)[.!?](?:\s|$)", reste)
-        apres = _dates(reste[:fin_phrase.start() + 1] if fin_phrase else reste)
+        apres = _dates(reste[: fin_phrase.start() + 1] if fin_phrase else reste)
         if apres:
             return m.end() + apres[0][0], m.end() + apres[0][1]
-        debut_phrase = max((x.end() for x in re.finditer(r"(?<!\d)[.!?]\s", texte[:m.start()])), default=0)
-        avant = _dates(texte[debut_phrase:m.start()])
+        debut_phrase = max((x.end() for x in re.finditer(r"(?<!\d)[.!?]\s", texte[: m.start()])), default=0)
+        avant = _dates(texte[debut_phrase : m.start()])
         if len(avant) == 1:
             return debut_phrase + avant[0][0], debut_phrase + avant[0][1]
     return None
@@ -123,7 +135,9 @@ def date_prose_acceptation(texte: str) -> tuple[int, int] | None:
 # --- articles en liste -----------------------------------------------------------------------------------------
 
 _NUMERO_RE = re.compile(r"^[\[(#]?(\d{1,3})[\]).:]?$")
-_PREFIXES_ARTICLE = frozenset({"art", "article", "item", "pos", "position", "posizione", "partida", "artikel"})
+_PREFIXES_ARTICLE = frozenset(
+    {"art", "article", "item", "pos", "position", "posizione", "partida", "artikel"}
+)
 
 
 def _est_code(toks: Sequence[Any], i: int) -> int:
@@ -135,8 +149,8 @@ def _est_code(toks: Sequence[Any], i: int) -> int:
         return 1
     if re.fullmatch(r"\d{4}", toks[i].t):
         for n in (4, 3):
-            txt = " ".join(t.t for t in toks[i:i + n])
-            if len(toks[i:i + n]) == n and re.fullmatch(r"\d{4}(?: \d{2}){2,3}", txt.rstrip(".,:;")):
+            txt = " ".join(t.t for t in toks[i : i + n])
+            if len(toks[i : i + n]) == n and re.fullmatch(r"\d{4}(?: \d{2}){2,3}", txt.rstrip(".,:;")):
                 return n
     return 0
 
@@ -168,19 +182,74 @@ def ancre_article(toks: Sequence[Any]) -> tuple[int, int, int] | None:
 #: Libellés des couples « libellé valeur » d'un article (clé normalisée -> champ de l'article).
 LIBELLES_ARTICLE: dict[str, str] = {}
 for _champ, _libs in {
-    "pays_origine": ("origine", "pays d'origine", "origin", "country of origin", "ursprung", "ursprungsland",
-                     "origen", "pais de origen", "paese di origine"),
-    "montant_facture_article": ("montant facturé", "montant", "invoiced amount", "invoice amount", "amount invoiced",
-                                "rechnungsbetrag", "importo fatturato", "importe facturado", "valeur facturée"),
-    "valeur_statistique": ("valeur statistique", "val. stat.", "statistical value", "statistischer wert",
-                           "valore statistico", "valor estadístico"),
-    "masse_nette": ("net", "masse nette", "poids net", "net mass", "net weight", "netto", "eigenmasse",
-                    "massa netta", "peso netto", "masa neta", "peso neto"),
-    "masse_brute": ("brut", "masse brute", "poids brut", "gross", "gross mass", "gross weight", "brutto", "rohmasse",
-                    "massa lorda", "peso lordo", "masa bruta", "peso bruto"),
+    "pays_origine": (
+        "origine",
+        "pays d'origine",
+        "origin",
+        "country of origin",
+        "ursprung",
+        "ursprungsland",
+        "origen",
+        "pais de origen",
+        "paese di origine",
+    ),
+    "montant_facture_article": (
+        "montant facturé",
+        "montant",
+        "invoiced amount",
+        "invoice amount",
+        "amount invoiced",
+        "rechnungsbetrag",
+        "importo fatturato",
+        "importe facturado",
+        "valeur facturée",
+    ),
+    "valeur_statistique": (
+        "valeur statistique",
+        "val. stat.",
+        "statistical value",
+        "statistischer wert",
+        "valore statistico",
+        "valor estadístico",
+    ),
+    "masse_nette": (
+        "net",
+        "masse nette",
+        "poids net",
+        "net mass",
+        "net weight",
+        "netto",
+        "eigenmasse",
+        "massa netta",
+        "peso netto",
+        "masa neta",
+        "peso neto",
+    ),
+    "masse_brute": (
+        "brut",
+        "masse brute",
+        "poids brut",
+        "gross",
+        "gross mass",
+        "gross weight",
+        "brutto",
+        "rohmasse",
+        "massa lorda",
+        "peso lordo",
+        "masa bruta",
+        "peso bruto",
+    ),
     "nombre_colis": ("colis", "packages", "pkgs", "packstücke", "colli", "bultos"),
-    "quantite": ("quantité", "qté sup.", "unités supplémentaires", "quantity", "supplementary units", "menge",
-                 "quantità", "cantidad"),
+    "quantite": (
+        "quantité",
+        "qté sup.",
+        "unités supplémentaires",
+        "quantity",
+        "supplementary units",
+        "menge",
+        "quantità",
+        "cantidad",
+    ),
     "code_preference": ("préférence", "preference", "präferenz", "preferenza", "preferencia"),
     "regime": ("régime", "procedure", "procédure", "verfahren", "regime", "régimen"),
 }.items():
@@ -205,7 +274,7 @@ def segments_libelles(toks: Sequence[Any]) -> list[tuple[str, int, int]]:
         for n in (3, 2, 1):
             if a + n >= b:
                 continue
-            champ = LIBELLES_ARTICLE.get(_cle(" ".join(t.t for t in toks[a:a + n])))
+            champ = LIBELLES_ARTICLE.get(_cle(" ".join(t.t for t in toks[a : a + n])))
             if champ:
                 v = a + n
                 while v < b and toks[v].t in (":", "=", "-", "–"):

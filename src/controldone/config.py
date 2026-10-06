@@ -151,7 +151,9 @@ class Settings(BaseSettings):
         return Path(self.tmp_dir) if self.tmp_dir else Path(self.data_dir) / "tmp"
 
     def plafond_mensuel_defaut(self, offre: str) -> Decimal:
-        return self.llm_plafond_diagnostic_eur if offre == "diagnostic" else self.llm_plafond_client_mensuel_eur
+        return (
+            self.llm_plafond_diagnostic_eur if offre == "diagnostic" else self.llm_plafond_client_mensuel_eur
+        )
 
     def appliquer_repertoire_temporaire(self) -> Path:
         """Crée ``repertoire_temporaire`` (0700) et en fait le répertoire de ``tempfile`` du processus

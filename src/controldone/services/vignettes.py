@@ -116,9 +116,16 @@ def _rendre(**kwargs) -> bytes | None:
     return png
 
 
-def rendu_local(*, contenu: bytes, mime: str, numero: int, largeur: int = _LARGEURS["mini"],
-                zone: tuple[float, float, float, float] | None = None, valeur: str | None = None,
-                extrait: bool = False) -> bytes | None:
+def rendu_local(
+    *,
+    contenu: bytes,
+    mime: str,
+    numero: int,
+    largeur: int = _LARGEURS["mini"],
+    zone: tuple[float, float, float, float] | None = None,
+    valeur: str | None = None,
+    extrait: bool = False,
+) -> bytes | None:
     """PNG d'une page (``extrait=False``) ou extrait de preuve autour d'une valeur (``extrait=True``). Exécuté
     dans le processus isolé (``ingest.pages.CIBLES_ISOLEES``)."""
     if extrait:
@@ -153,14 +160,23 @@ def _zone_par_recherche(contenu: bytes, numero: int, valeur: str) -> tuple[float
     return None
 
 
-def extrait_png(cle_contenu: str, contenu_fn, mime: str, numero: int, *,
-                zone: tuple[float, float, float, float] | None = None, valeur: str | None = None) -> bytes | None:
+def extrait_png(
+    cle_contenu: str,
+    contenu_fn,
+    mime: str,
+    numero: int,
+    *,
+    zone: tuple[float, float, float, float] | None = None,
+    valeur: str | None = None,
+) -> bytes | None:
     """Rognage autour de la valeur lue (zone de la valeur sourcée, sinon recherche littérale dans la couche
     texte du PDF), valeur encadrée. ``None`` si la zone est introuvable."""
 
     def fabriquer() -> bytes | None:
         try:
-            return _rendre(contenu=contenu_fn(), mime=mime, numero=numero, zone=zone, valeur=valeur, extrait=True)
+            return _rendre(
+                contenu=contenu_fn(), mime=mime, numero=numero, zone=zone, valeur=valeur, extrait=True
+            )
         except Exception as e:
             log.debug("extrait_en_erreur exception=%s", type(e).__name__)
             return None
@@ -168,8 +184,9 @@ def extrait_png(cle_contenu: str, contenu_fn, mime: str, numero: int, *,
     return _cache(("extrait", cle_contenu, numero, zone, valeur), fabriquer)
 
 
-def _extrait_local(contenu: bytes, mime: str, numero: int, zone: tuple[float, float, float, float] | None,
-                   valeur: str | None) -> bytes | None:
+def _extrait_local(
+    contenu: bytes, mime: str, numero: int, zone: tuple[float, float, float, float] | None, valeur: str | None
+) -> bytes | None:
     z = zone
     if z is None and valeur and mime == "application/pdf":
         z = _zone_par_recherche(contenu, numero, valeur)
@@ -191,6 +208,13 @@ def _extrait_local(contenu: bytes, mime: str, numero: int, zone: tuple[float, fl
         return None
     rogne = img.crop(boite).copy()
     ImageDraw.Draw(rogne).rectangle(
-        (int(x0 * w) - boite[0] - 4, int(y0 * h) - boite[1] - 4,
-         int(x1 * w) - boite[0] + 4, int(y1 * h) - boite[1] + 4), outline=(176, 96, 0), width=3)
+        (
+            int(x0 * w) - boite[0] - 4,
+            int(y0 * h) - boite[1] - 4,
+            int(x1 * w) - boite[0] + 4,
+            int(y1 * h) - boite[1] + 4,
+        ),
+        outline=(176, 96, 0),
+        width=3,
+    )
     return _png(rogne)

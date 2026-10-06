@@ -115,8 +115,15 @@ def texte_positionne(page: Page) -> PageText:
         if li.strip():
             mots = tuple(Mot(texte=m, x0=0.0, y0=0.0, x1=0.0, y1=0.0) for m in li.split())
             lignes.append(Ligne(texte=li.strip(), mots=mots))
-    return PageText(numero=page.numero, texte=page.texte, lignes=lignes, qualite=page.qualite_texte,
-                    source="inconnue", score_ocr=page.score_ocr, feuille=page.feuille)
+    return PageText(
+        numero=page.numero,
+        texte=page.texte,
+        lignes=lignes,
+        qualite=page.qualite_texte,
+        source="inconnue",
+        score_ocr=page.score_ocr,
+        feuille=page.feuille,
+    )
 
 
 # --- découpage -----------------------------------------------------------------------------------------------
@@ -171,8 +178,14 @@ def _suite_de_declaration(cur: _EnCours, c: ClassementPage) -> bool:
     """Page qui annonce une suite (« Suite », « page 2/2 ») d'une déclaration dont l'OCR a abîmé le MRN au-delà
     de deux confusions : même déclaration (D-2113)."""
     r = c.refs
-    return (cur.type is TypeDocument.declaration and c.suite and bool(r.mrn_prefixes) and bool(cur.mrn_prefixes)
-            and r.page_n != 1 and any(_mrn_voisin(r.mrn_prefixes[0], q) for q in cur.mrn_prefixes))
+    return (
+        cur.type is TypeDocument.declaration
+        and c.suite
+        and bool(r.mrn_prefixes)
+        and bool(cur.mrn_prefixes)
+        and r.page_n != 1
+        and any(_mrn_voisin(r.mrn_prefixes[0], q) for q in cur.mrn_prefixes)
+    )
 
 
 def _suite_annoncee_numero_voisin(cur: _EnCours, c: ClassementPage) -> bool:
@@ -180,15 +193,22 @@ def _suite_annoncee_numero_voisin(cur: _EnCours, c: ClassementPage) -> bool:
     caractère (OCR : « …1860 » / « …1869 ») : même document (D-2901)."""
     r = c.refs
     a, b = r.numero_facture or "", cur.numero_facture or ""
-    return (bool(r.page_n and r.page_n > 1 and r.page_total and cur.page_total == r.page_total)
-            and len(a) == len(b) >= 6 and sum(1 for x, y in zip(a, b, strict=True) if x != y) <= 1)
+    return (
+        bool(r.page_n and r.page_n > 1 and r.page_total and cur.page_total == r.page_total)
+        and len(a) == len(b) >= 6
+        and sum(1 for x, y in zip(a, b, strict=True) if x != y) <= 1
+    )
 
 
 def _changement_ref(cur: _EnCours, c: ClassementPage) -> bool:
     r = c.refs
-    if r.numero_facture and cur.numero_facture and not _proches(r.numero_facture, cur.numero_facture) \
-            and cur.type in (*_FACTURES, TypeDocument.document_non_exploitable) \
-            and not _suite_annoncee_numero_voisin(cur, c):
+    if (
+        r.numero_facture
+        and cur.numero_facture
+        and not _proches(r.numero_facture, cur.numero_facture)
+        and cur.type in (*_FACTURES, TypeDocument.document_non_exploitable)
+        and not _suite_annoncee_numero_voisin(cur, c)
+    ):
         return True
     if cur.type is TypeDocument.declaration and r.mrn_prefixes and cur.mrn_prefixes:
         return not (_mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes) or _suite_de_declaration(cur, c))
@@ -206,9 +226,16 @@ def _meme_numero_autre_type(cur: _EnCours, c: ClassementPage) -> bool:
     numéro de la facture en cours et n'en est pas la première page : suite de cette facture (D-2901)."""
     types = (TypeDocument.facture_commerciale, TypeDocument.facture_transitaire)
     r = c.refs
-    return (c.type in types and cur.type in types and c.type != cur.type and c.confiance < 0.9
-            and r.page_n != 1 and bool(r.numero_facture) and bool(cur.numero_facture)
-            and _proches(r.numero_facture or "", cur.numero_facture or ""))
+    return (
+        c.type in types
+        and cur.type in types
+        and c.type != cur.type
+        and c.confiance < 0.9
+        and r.page_n != 1
+        and bool(r.numero_facture)
+        and bool(cur.numero_facture)
+        and _proches(r.numero_facture or "", cur.numero_facture or "")
+    )
 
 
 def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
@@ -225,17 +252,38 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
     r = c.refs
     if r.page_n == 1:
         return False
-    if r.page_n and r.page_n > 1 and (not cur.page_total or not r.page_total or r.page_total == cur.page_total):
+    if (
+        r.page_n
+        and r.page_n > 1
+        and (not cur.page_total or not r.page_total or r.page_total == cur.page_total)
+    ):
         return True
     if cur.type is TypeDocument.declaration:
-        if c.intitulee and not c.suite and r.page_n is None and c.titre and c.titre == cur.titre_tete \
-                and len(cur.pages) > 1:
+        if (
+            c.intitulee
+            and not c.suite
+            and r.page_n is None
+            and c.titre
+            and c.titre == cur.titre_tete
+            and len(cur.pages) > 1
+        ):
             return False  # nouvelle page de tête au même titre après des pages de suite : autre déclaration
-        if c.intitulee and r.mrns and cur.mrns and not any(_proches(r.mrns[0], m) for m in cur.mrns) \
-                and not _suite_de_declaration(cur, c):
-            return False  # nouvelle page de tête d'un autre MRN complet (version rectificative du même préfixe)
-        return (not r.mrn_prefixes) or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes)) \
-            or _suite_de_declaration(cur, c) or (c.suite and not cur.mrn_prefixes and r.page_n != 1)
+        if (
+            c.intitulee
+            and r.mrns
+            and cur.mrns
+            and not any(_proches(r.mrns[0], m) for m in cur.mrns)
+            and not _suite_de_declaration(cur, c)
+        ):
+            return (
+                False  # nouvelle page de tête d'un autre MRN complet (version rectificative du même préfixe)
+            )
+        return (
+            (not r.mrn_prefixes)
+            or (bool(cur.mrn_prefixes) and _mrn_connu(r.mrn_prefixes[0], cur.mrn_prefixes))
+            or _suite_de_declaration(cur, c)
+            or (c.suite and not cur.mrn_prefixes and r.page_n != 1)
+        )
     if cur.type in _FACTURES:
         if r.numero_facture and cur.numero_facture:
             return _proches(r.numero_facture, cur.numero_facture)
@@ -251,9 +299,12 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
 
 def _nouveau(c: ClassementPage, *, type_=None, conf=None) -> _EnCours:
     t = type_ if type_ is not None else c.type
-    e = _EnCours(type=t, sous_type=c.sous_type if type_ is None else None,
-                 motif=c.motif_non_exploitable if type_ is None else None,
-                 confiance=c.confiance if conf is None else conf)
+    e = _EnCours(
+        type=t,
+        sous_type=c.sous_type if type_ is None else None,
+        motif=c.motif_non_exploitable if type_ is None else None,
+        confiance=c.confiance if conf is None else conf,
+    )
     _absorber(e, c)
     return e
 
@@ -320,19 +371,33 @@ def decouper_pages(
             type_, sous_type, motif = TypeDocument.inconnu, None, None
         if type_ is not TypeDocument.document_non_exploitable:
             motif = None
-        refs = [PageRef(fichier_id=fichier.id, numero=n,
-                        qualite_texte=par_numero[n].qualite_texte if n in par_numero else None) for n in g.pages]
+        refs = [
+            PageRef(
+                fichier_id=fichier.id,
+                numero=n,
+                qualite_texte=par_numero[n].qualite_texte if n in par_numero else None,
+            )
+            for n in g.pages
+        ]
         if len(groupes) == 1:
             identite = fichier.sha256
         else:
             identite = hashlib.sha256(f"{fichier.sha256}:{','.join(map(str, g.pages))}".encode()).hexdigest()
         langue = Counter(g.langues).most_common(1)[0][0] if g.langues else None
-        docs.append(Document(
-            id=ids.nouveau(Prefixe.document) if ids is not None else nouvel_id(Prefixe.document),
-            client_id=fichier.client_id, type=type_, sous_type=sous_type, pages=refs,
-            confiance_classement=round(min(1.0, max(0.0, g.confiance)), 3), motif_non_exploitable=motif,
-            identite=identite, champs=None, langue=langue,
-        ))
+        docs.append(
+            Document(
+                id=ids.nouveau(Prefixe.document) if ids is not None else nouvel_id(Prefixe.document),
+                client_id=fichier.client_id,
+                type=type_,
+                sous_type=sous_type,
+                pages=refs,
+                confiance_classement=round(min(1.0, max(0.0, g.confiance)), 3),
+                motif_non_exploitable=motif,
+                identite=identite,
+                champs=None,
+                langue=langue,
+            )
+        )
     return docs
 
 
@@ -385,13 +450,24 @@ def decouper_fichier(
         langue = detecter_langue(" ".join(t.texte for t in textes.values())[:20000])
         doc = Document(
             id=ids.nouveau(Prefixe.document) if ids is not None else nouvel_id(Prefixe.document),
-            client_id=fichier.client_id, type=info.type, sous_type=info.sous_type,
-            pages=[PageRef(fichier_id=fichier.id, numero=p.numero, qualite_texte=p.qualite_texte) for p in pages],
-            confiance_classement=info.confiance, identite=fichier.sha256, langue=langue,
+            client_id=fichier.client_id,
+            type=info.type,
+            sous_type=info.sous_type,
+            pages=[
+                PageRef(fichier_id=fichier.id, numero=p.numero, qualite_texte=p.qualite_texte) for p in pages
+            ],
+            confiance_classement=info.confiance,
+            identite=fichier.sha256,
+            langue=langue,
             motif_non_exploitable=info.motif,
         )
-        return ResultatIngestion(pages=pages, documents=[doc], avertissements=[*avert, f"structure:{info.format}"],
-                                 textes=textes, structure=info)
+        return ResultatIngestion(
+            pages=pages,
+            documents=[doc],
+            avertissements=[*avert, f"structure:{info.format}"],
+            textes=textes,
+            structure=info,
+        )
     classements = []
     for p in extraites:
         c = classer_page(_pour_classement(p.texte), numero_dans_fichier=p.page.numero, corps_courriel=corps)
@@ -400,21 +476,31 @@ def decouper_fichier(
             c.indices.append("xml_format_inconnu")
         classements.append(c)
     docs = decouper_pages(classements, pages, fichier=fichier, ids=ids)
-    return ResultatIngestion(pages=pages, documents=docs, avertissements=avert, textes=textes,
-                             classements=classements)
+    return ResultatIngestion(
+        pages=pages, documents=docs, avertissements=avert, textes=textes, classements=classements
+    )
 
 
 def _pour_classement(texte: PageText) -> PageText:
     """Page bornée à ``MAX_CARACTERES_CLASSEMENT`` pour le classement (D-1607) ; le texte complet reste celui de
     la page (extraction, preuves). Sans effet sur une page ordinaire."""
     lmax = MAX_CARACTERES_LIGNE_CLASSEMENT
-    if (len(texte.texte) <= MAX_CARACTERES_CLASSEMENT and len(texte.lignes) <= MAX_LIGNES_CLASSEMENT
-            and all(len(li.texte) <= lmax for li in texte.lignes)):
+    if (
+        len(texte.texte) <= MAX_CARACTERES_CLASSEMENT
+        and len(texte.lignes) <= MAX_LIGNES_CLASSEMENT
+        and all(len(li.texte) <= lmax for li in texte.lignes)
+    ):
         return texte
-    lignes = [li if len(li.texte) <= lmax else Ligne(texte=li.texte[:lmax], mots=li.mots[: lmax // 2])
-              for li in texte.lignes[:MAX_LIGNES_CLASSEMENT]]
-    return replace(texte, texte=texte.texte[:MAX_CARACTERES_CLASSEMENT], lignes=lignes,
-                   avertissements=[*texte.avertissements, "classement_sur_extrait"])
+    lignes = [
+        li if len(li.texte) <= lmax else Ligne(texte=li.texte[:lmax], mots=li.mots[: lmax // 2])
+        for li in texte.lignes[:MAX_LIGNES_CLASSEMENT]
+    ]
+    return replace(
+        texte,
+        texte=texte.texte[:MAX_CARACTERES_CLASSEMENT],
+        lignes=lignes,
+        avertissements=[*texte.avertissements, "classement_sur_extrait"],
+    )
 
 
 class Decoupeur:
@@ -422,8 +508,9 @@ class Decoupeur:
 
     version = VERSION_DECOUPAGE
 
-    def __init__(self, options: OptionsPages | None = None,
-                 fiches: Iterable[FicheCorrespondance] | None = None) -> None:
+    def __init__(
+        self, options: OptionsPages | None = None, fiches: Iterable[FicheCorrespondance] | None = None
+    ) -> None:
         if options is None:
             import os
 
@@ -437,16 +524,23 @@ class Decoupeur:
         self.options = options
         self.fiches = tuple(fiches) if fiches is not None else None
 
-    def decouper(self, source: Any, *, ids: IdGenerator | None = None, client_id: str | None = None
-                 ) -> ResultatIngestion:
+    def decouper(
+        self, source: Any, *, ids: IdGenerator | None = None, client_id: str | None = None
+    ) -> ResultatIngestion:
         fichier: Fichier = source.fichier
         contenu = _contenu(source)
         textes = getattr(source, "textes_pages", None)
         if textes is not None:
             source.textes_pages = None  # consommé : libéré avec le résultat du fichier
-        return decouper_fichier(fichier, contenu, ids=ids, options=self.options,
-                                corps_courriel=bool(getattr(source, "corps_courriel", False)), fiches=self.fiches,
-                                textes=textes)
+        return decouper_fichier(
+            fichier,
+            contenu,
+            ids=ids,
+            options=self.options,
+            corps_courriel=bool(getattr(source, "corps_courriel", False)),
+            fiches=self.fiches,
+            textes=textes,
+        )
 
     def precharger(self, sources: Sequence[Any], paralleles: int) -> None:
         """Étape 2 des fichiers d'un lot en parallèle (D-1405) : ``paralleles`` processus isolés à la fois, les plus

@@ -38,8 +38,11 @@ def test_constats_attendus_du_jeu_fictif(demo):
 
 def test_totaux_par_nature_jamais_additionnes(demo):
     v = demo.vue
-    recouvrables = [c.montant_valeur for c in v.constats() if c.nature_code == "recouvrable"
-                    and c.niveau_code == "ecart_certain"]
+    recouvrables = [
+        c.montant_valeur
+        for c in v.constats()
+        if c.nature_code == "recouvrable" and c.niveau_code == "ecart_certain"
+    ]
     assert sum(recouvrables, Decimal(0)) == Decimal("2386.28")
     assert v.recouvrable_certain.replace(" ", " ") == "2 386,28 EUR"
     assert v.ecarts_calcul_nb == 1 and v.ecarts_calcul.replace(" ", " ") == "20,00 EUR"
@@ -62,9 +65,17 @@ def test_html_sobre_sans_ressource_externe(demo):
     assert _normaliser(PHRASE_RENVOI) in _normaliser(texte)
     # preuves côte à côte avec rognage de page
     assert html.count("data:image/png;base64,") >= 4
-    for titre in ("Synthèse", "Prochaines actions", "Constats par nature", "Tableau des dossiers", "Fiches dossiers",
-                  "Points à faire vérifier par un professionnel", "Documents non lus ou non reconnus",
-                  "Méthode et tolérances", "Avertissement"):
+    for titre in (
+        "Synthèse",
+        "Prochaines actions",
+        "Constats par nature",
+        "Tableau des dossiers",
+        "Fiches dossiers",
+        "Points à faire vérifier par un professionnel",
+        "Documents non lus ou non reconnus",
+        "Méthode et tolérances",
+        "Avertissement",
+    ):
         assert titre in texte
 
 
@@ -90,8 +101,14 @@ def test_pdf_avertissement_et_bandeau_sur_chaque_page(demo):
 
 def test_tous_les_textes_de_la_vue_passent_les_garde_fous(demo):
     v = demo.vue
-    textes = [v.titre, v.mention_validation, *v.limites, *(a.titre for a in v.actions),
-              *(x for a in v.actions for x in a.details), *(n.libelle + n.note for n in v.table_nature)]
+    textes = [
+        v.titre,
+        v.mention_validation,
+        *v.limites,
+        *(a.titre for a in v.actions),
+        *(x for a in v.actions for x in a.details),
+        *(n.libelle + n.note for n in v.table_nature),
+    ]
     for c in [*v.constats(), *v.renvois]:
         textes += [c.libelle, c.prochaine_action, *c.raisons, c.nature, c.controle_libelle]
     for t in textes:
@@ -108,7 +125,15 @@ def test_exports_json_et_xlsx(demo):
     from openpyxl import load_workbook
 
     wb = load_workbook(demo.xlsx)
-    assert wb.sheetnames == ["Synthèse", "Dossiers", "Constats", "Contrôles", "Documents", "Non lus", "Méthode"]
+    assert wb.sheetnames == [
+        "Synthèse",
+        "Dossiers",
+        "Constats",
+        "Contrôles",
+        "Documents",
+        "Non lus",
+        "Méthode",
+    ]
     entetes = [c.value for c in wb["Constats"][1]]
     assert "Décision (valider / rejeter / à vérifier)" in entetes and "Montant en jeu (EUR)" in entetes
     assert wb["Constats"].max_row == 1 + 4
@@ -120,9 +145,14 @@ def test_libelle_bloque_remplace_par_mention_neutre(demo):
 
     rd_vue = demo.vue
     assert rd_vue.constats_bloques == 0
-    c = Constat(controle_id="B1", niveau=Niveau.a_verifier, raisons=[RaisonCode.ecart_sous_seuil],
-                libelle="texte avec une fraude", nature_montant=NatureMontant.arithmetique_declaration,
-                motif_blocage="formulation_interdite")
+    c = Constat(
+        controle_id="B1",
+        niveau=Niveau.a_verifier,
+        raisons=[RaisonCode.ecart_sous_seuil],
+        libelle="texte avec une fraude",
+        nature_montant=NatureMontant.arithmetique_declaration,
+        motif_blocage="formulation_interdite",
+    )
 
     class R:
         tolerance_appliquee = None

@@ -304,21 +304,44 @@ def _faux_pipeline(appels: list):
 
     def traiter(source, profil, grilles, *, options):
         fichiers = sorted(p for p in source.rglob("*") if p.is_file())
-        appels.append({"source": source, "fichiers": [p.relative_to(source).as_posix() for p in fichiers],
-                       "contenus": [p.read_bytes() for p in fichiers], "client": profil.client_id,
-                       "llm": options.llm, "grilles": len(grilles)})
+        appels.append(
+            {
+                "source": source,
+                "fichiers": [p.relative_to(source).as_posix() for p in fichiers],
+                "contenus": [p.read_bytes() for p in fichiers],
+                "client": profil.client_id,
+                "llm": options.llm,
+                "grilles": len(grilles),
+            }
+        )
         import hashlib
 
-        f = FichierM(id="fic_pipeline", nom_original="facture.pdf", chemin_relatif="envoi_a/facture.pdf",
-                     sha256=hashlib.sha256(fichiers[0].read_bytes()).hexdigest(), taille=1,
-                     type_mime="application/pdf")
+        f = FichierM(
+            id="fic_pipeline",
+            nom_original="facture.pdf",
+            chemin_relatif="envoi_a/facture.pdf",
+            sha256=hashlib.sha256(fichiers[0].read_bytes()).hexdigest(),
+            taille=1,
+            type_mime="application/pdf",
+        )
         d = DossierM(id="dos_pipeline", reference="D-2026-00042")
-        ex = Execution.nouvelle(id="exe_1", cout_ia_eur=Decimal("0.12"), jetons_entree=100, jetons_sortie=10,
-                                modele_llm="m")
-        r = ResultatControle(id="res_p", controle_id="B1", dossier_id=d.id, dossier_version=1,
-                             execution_id=ex.id, outcome=Outcome.conforme)
+        ex = Execution.nouvelle(
+            id="exe_1", cout_ia_eur=Decimal("0.12"), jetons_entree=100, jetons_sortie=10, modele_llm="m"
+        )
+        r = ResultatControle(
+            id="res_p",
+            controle_id="B1",
+            dossier_id=d.id,
+            dossier_version=1,
+            execution_id=ex.id,
+            outcome=Outcome.conforme,
+        )
         page = Page(fichier_id=f.id, numero=1, texte="TEXTE DE PAGE FICTIF", sha256_texte="d" * 64)
-        return [_Rd(dossier=d, documents={}, fichiers={f.id: f}, pages={f.id: [page]}, resultats=[r], execution=ex)]
+        return [
+            _Rd(
+                dossier=d, documents={}, fichiers={f.id: f}, pages={f.id: [page]}, resultats=[r], execution=ex
+            )
+        ]
 
     return traiter
 
@@ -357,7 +380,9 @@ def test_handler_llm_coupe_au_plafond(monde, horloge, monkeypatch):
     with monde.db.tenant("cli_a", SYSTEME) as sc:
         enregistrer_cout(sc, cout_eur=Decimal("8.00"))
     enqueue("traiter_lot", {"lot_id": "lot_a"}, "k", "cli_a", db=monde.db)
-    _worker(monde, horloge, {"traiter_lot": handlers_mod.traiter_lot}, services={"vault": monde.vault}).executer_un()
+    _worker(
+        monde, horloge, {"traiter_lot": handlers_mod.traiter_lot}, services={"vault": monde.vault}
+    ).executer_un()
     assert appels[0]["llm"] is False
 
 
@@ -390,14 +415,17 @@ def test_handler_lot_d_un_autre_client_refuse(monde, horloge, monkeypatch):
         assert sc.obtenir(Lot, "lot_b").statut == "recu"
 
 
-@pytest.mark.parametrize("chemin,attendu", [
-    ("envoi/facture.pdf", "envoi/facture.pdf"),
-    ("../../etc/passwd", "etc/passwd"),
-    ("/etc/passwd", "etc/passwd"),
-    ("a\\..\\..\\b.pdf", "a/b.pdf"),
-    ("", "defaut"),
-    ("..", "defaut"),
-])
+@pytest.mark.parametrize(
+    "chemin,attendu",
+    [
+        ("envoi/facture.pdf", "envoi/facture.pdf"),
+        ("../../etc/passwd", "etc/passwd"),
+        ("/etc/passwd", "etc/passwd"),
+        ("a\\..\\..\\b.pdf", "a/b.pdf"),
+        ("", "defaut"),
+        ("..", "defaut"),
+    ],
+)
 def test_chemin_sur(tmp_path, chemin, attendu):
     cible = handlers_mod.chemin_sur(tmp_path, chemin, "defaut")
     assert cible == (tmp_path / attendu).resolve()
@@ -405,7 +433,9 @@ def test_chemin_sur(tmp_path, chemin, attendu):
 
 def test_handler_purge(monde, horloge):
     enqueue("purger_retention", {}, "purge:2026-10-01", db=monde.db)
-    w = _worker(monde, horloge, {"purger_retention": handlers_mod.purger_retention}, services={"vault": monde.vault})
+    w = _worker(
+        monde, horloge, {"purger_retention": handlers_mod.purger_retention}, services={"vault": monde.vault}
+    )
     assert w.executer_un() == "done"
 
 

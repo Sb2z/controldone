@@ -30,13 +30,38 @@ from .llm import texte_acceptable
 __all__ = ["AgentQuestionsClients", "contient_consigne", "est_question_reglementaire", "rechercher"]
 
 _MOTIFS_RENVOI = [
-    r"\btarif", r"\bclassement", r"\bclasse[rz]?\b", r"\bcode (?:marchandise|douanier|nc|sh|taric)",
-    r"\bnomenclature", r"\borigine", r"\bpreferen", r"\bvaleur en douane", r"\bvaleur (?:declaree|transactionnelle)",
-    r"\btaux (?:applicable|de droit|correct|normal)", r"\blegal", r"\bjuridique", r"\bavocat", r"\bcontentieux",
-    r"\brecours", r"\bremboursement", r"\brectifi", r"\bregime", r"\bautoliquidation (?:est|etait)? ?applicable",
-    r"\bredevable", r"\bdoit[- ]on (?:payer|declarer)", r"\bobliges?\b", r"\bobligation", r"\bamende",
-    r"\bsanction", r"\bdroits? (?:du|dus|applicables?)\b", r"\bmacf\b", r"\bcbam\b", r"\billegal",
-    r"\breglementation", r"\breglementaire", r"\bdouane nous",
+    r"\btarif",
+    r"\bclassement",
+    r"\bclasse[rz]?\b",
+    r"\bcode (?:marchandise|douanier|nc|sh|taric)",
+    r"\bnomenclature",
+    r"\borigine",
+    r"\bpreferen",
+    r"\bvaleur en douane",
+    r"\bvaleur (?:declaree|transactionnelle)",
+    r"\btaux (?:applicable|de droit|correct|normal)",
+    r"\blegal",
+    r"\bjuridique",
+    r"\bavocat",
+    r"\bcontentieux",
+    r"\brecours",
+    r"\bremboursement",
+    r"\brectifi",
+    r"\bregime",
+    r"\bautoliquidation (?:est|etait)? ?applicable",
+    r"\bredevable",
+    r"\bdoit[- ]on (?:payer|declarer)",
+    r"\bobliges?\b",
+    r"\bobligation",
+    r"\bamende",
+    r"\bsanction",
+    r"\bdroits? (?:du|dus|applicables?)\b",
+    r"\bmacf\b",
+    r"\bcbam\b",
+    r"\billegal",
+    r"\breglementation",
+    r"\breglementaire",
+    r"\bdouane nous",
 ]
 _RENVOI_RE = re.compile("|".join(_MOTIFS_RENVOI))
 _CONSIGNE_RE = re.compile(
@@ -81,12 +106,22 @@ def _jetons(texte: str) -> set[str]:
 
 def _texte_constat(c: dict[str, Any]) -> str:
     cles = " ".join(" ".join(v) for v in (c.get("cles") or {}).values() if isinstance(v, list))
-    return " ".join(str(x) for x in (c.get("dossier_reference"), cles, c.get("controle_id"), c.get("composante"),
-                                     c.get("libelle")) if x)
+    return " ".join(
+        str(x)
+        for x in (
+            c.get("dossier_reference"),
+            cles,
+            c.get("controle_id"),
+            c.get("composante"),
+            c.get("libelle"),
+        )
+        if x
+    )
 
 
-def rechercher(question: str, constats: list[dict[str, Any]], *, dossier_ref: str | None = None,
-               limite: int = 5) -> list[dict[str, Any]]:
+def rechercher(
+    question: str, constats: list[dict[str, Any]], *, dossier_ref: str | None = None, limite: int = 5
+) -> list[dict[str, Any]]:
     """Constats les plus proches de la question (recouvrement de mots et de références), déterministe."""
     q = _jetons(question)
     candidats = [c for c in constats if not dossier_ref or c.get("dossier_reference") == dossier_ref]
@@ -102,32 +137,45 @@ def rechercher(question: str, constats: list[dict[str, Any]], *, dossier_ref: st
 
 
 def _ligne_constat(c: dict[str, Any]) -> str:
-    texte = f"- Dossier {c.get('dossier_reference') or c['dossier_id']} — contrôle {c['controle_id']} " \
-            f"({_NIVEAUX.get(c['niveau'], c['niveau'])}) : {c['libelle'].strip()}"
+    texte = (
+        f"- Dossier {c.get('dossier_reference') or c['dossier_id']} — contrôle {c['controle_id']} "
+        f"({_NIVEAUX.get(c['niveau'], c['niveau'])}) : {c['libelle'].strip()}"
+    )
     if c.get("montant_en_jeu") and c.get("nature_montant") in _NATURES_CHIFFREES and not c.get("renvoi"):
         texte += f" Écart constaté entre documents : {format_montant(Decimal(c['montant_en_jeu']), 'EUR')}."
     return texte
 
 
 def _synthese(constats: list[dict[str, Any]]) -> str:
-    certains = [c for c in constats if c["niveau"] == "ecart_certain" and c.get("nature_montant") == "recouvrable"
-                and c.get("montant_en_jeu")]
+    certains = [
+        c
+        for c in constats
+        if c["niveau"] == "ecart_certain"
+        and c.get("nature_montant") == "recouvrable"
+        and c.get("montant_en_jeu")
+    ]
     total = sum((Decimal(c["montant_en_jeu"]) for c in certains), Decimal("0.00"))
-    return (f"Votre rapport publié compte {len(constats)} constat(s), dont {len(certains)} écart(s) certain(s) "
-            f"recouvrable(s) pour un total d'écarts constatés entre documents de {format_montant(total, 'EUR')}.")
+    return (
+        f"Votre rapport publié compte {len(constats)} constat(s), dont {len(certains)} écart(s) certain(s) "
+        f"recouvrable(s) pour un total d'écarts constatés entre documents de {format_montant(total, 'EUR')}."
+    )
 
 
-def faits_et_gabarit(question: str, constats: list[dict[str, Any]], *, dossier_ref: str | None = None
-                     ) -> tuple[str, str, list[str], bool]:
+def faits_et_gabarit(
+    question: str, constats: list[dict[str, Any]], *, dossier_ref: str | None = None
+) -> tuple[str, str, list[str], bool]:
     """``(faits, réponse gabarit, constats cités, renvoi)``."""
     trouves = rechercher(question, constats, dossier_ref=dossier_ref)
     renvoi = est_question_reglementaire(question)
     if trouves:
         faits = "Éléments de votre rapport qui se rapportent à votre question :\n" + "\n".join(
-            _ligne_constat(c) for c in trouves)
+            _ligne_constat(c) for c in trouves
+        )
     else:
-        faits = (_synthese(constats) + " Nous n'avons pas trouvé de constat publié correspondant précisément à "
-                 "votre question : pouvez-vous nous préciser la référence du dossier, de la facture ou le MRN ?")
+        faits = (
+            _synthese(constats) + " Nous n'avons pas trouvé de constat publié correspondant précisément à "
+            "votre question : pouvez-vous nous préciser la référence du dossier, de la facture ou le MRN ?"
+        )
     morceaux = ["Bonjour,", "", "Merci pour votre question. " + faits]
     if renvoi:
         morceaux += ["", "Votre question porte en partie sur un sujet réglementaire. " + PHRASE_RENVOI]
@@ -138,22 +186,31 @@ def faits_et_gabarit(question: str, constats: list[dict[str, Any]], *, dossier_r
 
 class AgentQuestionsClients(Agent):
     nom = "questions_clients"
-    role = ("Répond à la question d'un client sur son rapport, à partir de ses seuls constats publiés, avec les "
-            "garde-fous juridiques ; la réponse est un brouillon que le fondateur relit.")
+    role = (
+        "Répond à la question d'un client sur son rapport, à partir de ses seuls constats publiés, avec les "
+        "garde-fous juridiques ; la réponse est un brouillon que le fondateur relit."
+    )
     outils = ("lister_constats_publies", "proposer_courriel_client", "signaler_alerte")
     periode = None  # sur événement seulement (question reçue)
 
-    def _executer(self, ctx: ContexteAgent, rapport: RapportAgent, question: str = "",
-                  dossier_ref: str | None = None) -> None:
+    def _executer(
+        self, ctx: ContexteAgent, rapport: RapportAgent, question: str = "", dossier_ref: str | None = None
+    ) -> None:
         question = (question or "")[:4000]
         empreinte = hashlib.sha256(f"{question}\x1f{dossier_ref or ''}".encode()).hexdigest()
         constats = self.appeler(ctx, "lister_constats_publies")
         faits, reponse, cites, renvoi = faits_et_gabarit(question, constats, dossier_ref=dossier_ref)
         if ctx.llm is not None:
             texte = ctx.llm.rediger(
-                consigne=("Rédige une réponse courtoise au client, en français, à partir des seuls FAITS. Si les "
-                          "FAITS contiennent la phrase de renvoi, reproduis-la mot pour mot."),
-                faits=faits, donnees_non_fiables=question, tenant_id=ctx.tenant_id, db=ctx.db)
+                consigne=(
+                    "Rédige une réponse courtoise au client, en français, à partir des seuls FAITS. Si les "
+                    "FAITS contiennent la phrase de renvoi, reproduis-la mot pour mot."
+                ),
+                faits=faits,
+                donnees_non_fiables=question,
+                tenant_id=ctx.tenant_id,
+                db=ctx.db,
+            )
             ok, motif = texte_acceptable(texte, faits)
             if ok and texte:
                 if renvoi and PHRASE_RENVOI not in texte:
@@ -167,13 +224,28 @@ class AgentQuestionsClients(Agent):
         if contient_consigne(question):
             rapport.notes.append("consigne_ignoree")
             cle = f"question_consigne:{empreinte[:16]}"
-            if self.appeler(ctx, "signaler_alerte", cle=cle, kind="question_client_instruction",
-                            message="Une question client contient une tentative de consigne (ignorée). "
-                                    "La réponse proposée ne porte que sur le rapport du client.",
-                            details={"question_sha256": empreinte[:16]}):
+            if self.appeler(
+                ctx,
+                "signaler_alerte",
+                cle=cle,
+                kind="question_client_instruction",
+                message="Une question client contient une tentative de consigne (ignorée). "
+                "La réponse proposée ne porte que sur le rapport du client.",
+                details={"question_sha256": empreinte[:16]},
+            ):
                 rapport.alertes.append(cle)
-        out = self.appeler(ctx, "proposer_courriel_client", objet="Réponse à votre question sur votre rapport",
-                           corps=reponse, cle=f"question:{empreinte[:24]}",
-                           donnees={"question": question, "question_sha256": empreinte, "constats_cites": cites,
-                                    "renvoi": renvoi, "redaction": rapport.redaction})
+        out = self.appeler(
+            ctx,
+            "proposer_courriel_client",
+            objet="Réponse à votre question sur votre rapport",
+            corps=reponse,
+            cle=f"question:{empreinte[:24]}",
+            donnees={
+                "question": question,
+                "question_sha256": empreinte,
+                "constats_cites": cites,
+                "renvoi": renvoi,
+                "redaction": rapport.redaction,
+            },
+        )
         rapport.propositions.append(out)

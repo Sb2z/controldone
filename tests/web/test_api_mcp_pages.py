@@ -78,11 +78,15 @@ def test_api_litiges_evenements(monde):
     ouvert = next(x for x in litiges if x["statut"] == "ouvert")
     r = c.post(f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "reclamation_envoyee"})
     assert r.status_code == 200 and r.json()["statut"] == "reclame"
-    r = c.post(f"/api/v1/litiges/{ouvert['litige_id']}/evenements",
-               json={"type": "avoir_recu", "montant": "10.00", "reference": "AV-FICTIF-1"})
+    r = c.post(
+        f"/api/v1/litiges/{ouvert['litige_id']}/evenements",
+        json={"type": "avoir_recu", "montant": "10.00", "reference": "AV-FICTIF-1"},
+    )
     assert r.json()["statut"] == "partiellement_credite"
     assert r.json()["montant_credite_eur"] == "10.00"
-    r = c.post(f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "avoir_recu", "montant": "abc"})
+    r = c.post(
+        f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "avoir_recu", "montant": "abc"}
+    )
     assert r.status_code == 400
 
 
@@ -113,9 +117,13 @@ def test_api_cle_revoquee(monde):
 
 def test_api_einvoice(monde):
     c = _api(monde, A)
-    ubl = (b'<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">'
-           b"<ID>FICTIF-1</ID></Invoice>")
-    r = c.post("/api/v1/einvoices", content=ubl, headers={"content-type": "application/xml", "x-filename": "f.xml"})
+    ubl = (
+        b'<?xml version="1.0"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">'
+        b"<ID>FICTIF-1</ID></Invoice>"
+    )
+    r = c.post(
+        "/api/v1/einvoices", content=ubl, headers={"content-type": "application/xml", "x-filename": "f.xml"}
+    )
     assert r.status_code == 202, r.text
     lot = c.get(f"/api/v1/lots/{r.json()['lot_id']}").json()
     assert lot["resume"]["avant_paiement"] is True and lot["resume"]["format"] == "ubl"
@@ -126,8 +134,15 @@ def test_api_einvoice(monde):
 def test_api_openapi_et_docs(monde):
     c = monde.client()
     schema = c.get("/api/v1/openapi.json").json()
-    for chemin in ("/lots", "/lots/{lot_id}", "/dossiers", "/dossiers/{dossier_id}/constats", "/rapports",
-                   "/litiges/{litige_id}/evenements", "/einvoices"):
+    for chemin in (
+        "/lots",
+        "/lots/{lot_id}",
+        "/dossiers",
+        "/dossiers/{dossier_id}/constats",
+        "/rapports",
+        "/litiges/{litige_id}/evenements",
+        "/einvoices",
+    ):
         assert chemin in schema["paths"]
     page = c.get("/api/v1/docs")
     assert page.status_code == 200 and "/api/v1/einvoices" in page.text and "cdn" not in page.text.lower()
@@ -182,15 +197,23 @@ def test_mcp_litiges(monde):
     assert "erreur" in o.enregistrer_evenement_litige(ouvert["litige_id"], "autre")
     ob = _outils(monde, B)
     assert ob.suivre_litige(ouvert["litige_id"]) == {"erreur": "introuvable"}
-    assert ob.enregistrer_evenement_litige(ouvert["litige_id"], "reclamation_envoyee") == {"erreur": "introuvable"}
+    assert ob.enregistrer_evenement_litige(ouvert["litige_id"], "reclamation_envoyee") == {
+        "erreur": "introuvable"
+    }
 
 
 def test_mcp_serveur_declare_les_outils(monde):
     serveur = construire_serveur(_outils(monde, A))
     outils = anyio.run(serveur.list_tools)
     noms = {t.name for t in outils}
-    assert noms == {"deposer_dossier", "lire_lot", "lire_dossier", "lire_ecarts", "suivre_litige",
-                    "enregistrer_evenement_litige"}
+    assert noms == {
+        "deposer_dossier",
+        "lire_lot",
+        "lire_dossier",
+        "lire_ecarts",
+        "suivre_litige",
+        "enregistrer_evenement_litige",
+    }
     for t in outils:
         assert "pas un avis juridique" in t.description and "données" in t.description
         assert check_text(t.description) == []
@@ -216,8 +239,18 @@ def _verifier(page) -> None:
 def test_garde_fous_pages_fondateur(monde):
     f = monde.client()
     connecter_fondateur(f, monde)
-    urls = ["/admin", "/admin/clients", f"/admin/clients/{A}", f"/admin/clients/{B}", "/admin/validation",
-            "/admin/jobs", "/admin/journal", "/admin/alertes", "/admin/autonomie", "/compte/mot-de-passe"]
+    urls = [
+        "/admin",
+        "/admin/clients",
+        f"/admin/clients/{A}",
+        f"/admin/clients/{B}",
+        "/admin/validation",
+        "/admin/jobs",
+        "/admin/journal",
+        "/admin/alertes",
+        "/admin/autonomie",
+        "/compte/mot-de-passe",
+    ]
     urls += [f"/admin/clients/{t}/dossiers/{d}" for t in (A, B) for d in monde.ids[t]["dossier"]]
     for url in urls:
         _verifier(f.get(url))
@@ -228,8 +261,14 @@ def test_garde_fous_pages_client(monde):
     for email, tenant in ((ADMIN_A, A), (ADMIN_B, B)):
         c = monde.client()
         connecter_client(c, monde, email)
-        urls = ["/espace", "/espace/depot", "/espace/dossiers", "/espace/rapports", "/espace/recouvrement",
-                f"/espace/lots/{monde.ids[tenant]['lot'][0]}"]
+        urls = [
+            "/espace",
+            "/espace/depot",
+            "/espace/dossiers",
+            "/espace/rapports",
+            "/espace/recouvrement",
+            f"/espace/lots/{monde.ids[tenant]['lot'][0]}",
+        ]
         urls += [f"/espace/dossiers/{d}" for d in monde.ids[tenant]["dossier"]]
         for url in urls:
             page = c.get(url)

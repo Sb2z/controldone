@@ -22,7 +22,11 @@ def test_constats_du_moteur_reel(demo_reel):
     assert constats["D-2026-00001"] == {("C3", "ecart_certain"), ("D3", "ecart_certain")}
     assert constats["D-2026-00002"] == {("B1", "ecart_certain"), ("A12", "a_verifier")}
     assert constats["D-2026-00003"] == set()
-    assert [findings[k]["statut_global"] for k in sorted(findings)] == ["ecart_certain", "ecart_certain", "conforme"]
+    assert [findings[k]["statut_global"] for k in sorted(findings)] == [
+        "ecart_certain",
+        "ecart_certain",
+        "conforme",
+    ]
     a12 = next(c for c in findings["D-2026-00002"]["constats"] if c["controle_id"] == "A12")
     assert a12["montant_en_jeu"] is None
 
@@ -30,6 +34,9 @@ def test_constats_du_moteur_reel(demo_reel):
 def test_famille_a_evaluee(demo_reel):
     """Seul A9 (quantités, non imprimées sur les déclarations du jeu) reste non vérifiable."""
     for d in json.loads(demo_reel.findings.read_text(encoding="utf-8")):
-        non_verifiables = {r["controle_id"] for r in d["resultats"]
-                           if r["controle_id"].startswith("A") and r["outcome"] == "non_verifiable"}
+        non_verifiables = {
+            r["controle_id"]
+            for r in d["resultats"]
+            if r["controle_id"].startswith("A") and r["outcome"] == "non_verifiable"
+        }
         assert non_verifiables <= {"A9"}, (d["dossier_id"], non_verifiables)

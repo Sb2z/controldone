@@ -102,8 +102,9 @@ def norm_alnum(x: str | None) -> str:
 
 
 #: Classes de confusion OCR (caractères souvent pris l'un pour l'autre) : 0/O/Q/D, 1/I/L, 4/A, 5/S, 8/B, 2/Z, 6/G.
-CONFUSION_OCR = str.maketrans({"0": "O", "Q": "O", "D": "O", "1": "I", "L": "I", "4": "A", "5": "S", "8": "B",
-                               "2": "Z", "6": "G"})
+CONFUSION_OCR = str.maketrans(
+    {"0": "O", "Q": "O", "D": "O", "1": "I", "L": "I", "4": "A", "5": "S", "8": "B", "2": "Z", "6": "G"}
+)
 
 
 def cle_confusion_ocr(x: str | None) -> str:
@@ -201,8 +202,11 @@ def ref_compatibles_ocr(x: str | None, y: str | None) -> bool:
     if a == b:
         return True
     court, long_ = (a, b) if len(a) <= len(b) else (b, a)
-    return len(court) >= LONGUEUR_MIN_CONTAINMENT and any(c.isdigit() for c in norm_ref(x) + norm_ref(y)) \
+    return (
+        len(court) >= LONGUEUR_MIN_CONTAINMENT
+        and any(c.isdigit() for c in norm_ref(x) + norm_ref(y))
         and court in long_
+    )
 
 
 def ref_facture_proches(x: str | None, y: str | None) -> bool:

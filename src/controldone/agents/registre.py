@@ -12,9 +12,17 @@ from .veille import AgentVeille
 
 __all__ = ["AGENTS", "obtenir_agent"]
 
-AGENTS: dict[str, type[Agent]] = {a.nom: a for a in (
-    AgentAccueil, AgentControle, AgentLitiges, AgentFacturation, AgentQuestionsClients, AgentVeille,
-)}
+AGENTS: dict[str, type[Agent]] = {
+    a.nom: a
+    for a in (
+        AgentAccueil,
+        AgentControle,
+        AgentLitiges,
+        AgentFacturation,
+        AgentQuestionsClients,
+        AgentVeille,
+    )
+}
 
 
 def obtenir_agent(nom: str) -> Agent:

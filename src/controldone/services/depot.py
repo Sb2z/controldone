@@ -31,8 +31,17 @@ from controldone.storage.file_jobs import JobStore
 from controldone.storage.models import Lot
 from controldone.storage.scope import TenantScope
 
-__all__ = ["DepotPrepare", "FichierTransmis", "ResultatDepot", "deja_recus", "deposer", "enregistrer_prepare",
-           "lire_borne", "mettre_en_file", "preparer_depot"]
+__all__ = [
+    "DepotPrepare",
+    "FichierTransmis",
+    "ResultatDepot",
+    "deja_recus",
+    "deposer",
+    "enregistrer_prepare",
+    "lire_borne",
+    "mettre_en_file",
+    "preparer_depot",
+]
 
 _ACTEUR_NETTOYAGE = Acteur.systeme("depot")
 
@@ -87,9 +96,13 @@ class ResultatDepot:
     refuses: list[tuple[str, str]] = field(default_factory=list)  # (chemin, motif lisible)
 
     def en_dict(self) -> dict[str, Any]:
-        return {"lot_id": self.lot_id, "job_id": self.job_id, "fichiers_acceptes": self.acceptes,
-                "doublons": self.doublons,
-                "fichiers_refuses": [{"fichier": c, "motif": m} for c, m in self.refuses]}
+        return {
+            "lot_id": self.lot_id,
+            "job_id": self.job_id,
+            "fichiers_acceptes": self.acceptes,
+            "doublons": self.doublons,
+            "fichiers_refuses": [{"fichier": c, "motif": m} for c, m in self.refuses],
+        }
 
 
 def lire_borne(flux: BinaryIO, limite: int, *, bloc: int = 1024 * 1024) -> tuple[bytes | None, int]:
@@ -145,8 +158,14 @@ def _limites_restantes(limites: Any, consomme: int) -> Any:
     return replace(limites, taille_lot=max(0, limites.taille_lot - consomme))
 
 
-def preparer_depot(plateforme: Plateforme, tenant_id: str, fichiers: Iterable[FichierTransmis | tuple[str, bytes]],
-                   deja: dict[str, str], *, canal: CanalLot = CanalLot.depot) -> DepotPrepare:
+def preparer_depot(
+    plateforme: Plateforme,
+    tenant_id: str,
+    fichiers: Iterable[FichierTransmis | tuple[str, bytes]],
+    deja: dict[str, str],
+    *,
+    canal: CanalLot = CanalLot.depot,
+) -> DepotPrepare:
     """Réception **un fichier à la fois** (la mémoire ne contient jamais tout le lot) et dépôt chiffré dans
     le coffre, sans transaction ouverte. Les doublons (déjà reçus ou dans ce même dépôt) ne sont pas
     redéposés."""
@@ -166,9 +185,14 @@ def preparer_depot(plateforme: Plateforme, tenant_id: str, fichiers: Iterable[Fi
                 if contenu is None:
                     prep.refuses.append((_nom_sur(f.nom), LIBELLES_REFUS["trop_gros"]))
                     continue
-            reception = recevoir_octets([(_nom_sur(nom), contenu)], client_id=tenant_id, canal=canal,
-                                        deja_recus=vus, limites=_limites_restantes(plateforme.limites, consomme),
-                                        lot=lot)
+            reception = recevoir_octets(
+                [(_nom_sur(nom), contenu)],
+                client_id=tenant_id,
+                canal=canal,
+                deja_recus=vus,
+                limites=_limites_restantes(plateforme.limites, consomme),
+                lot=lot,
+            )
             del contenu
             consomme_fichier = reception.taille_totale
             consomme += consomme_fichier
@@ -186,8 +210,12 @@ def preparer_depot(plateforme: Plateforme, tenant_id: str, fichiers: Iterable[Fi
                     else:
                         prep.doublons += 1
                 elif fm.statut is StatutFichier.refuse:
-                    prep.refuses.append((fm.chemin_relatif,
-                                         LIBELLES_REFUS.get(fm.motif_refus or "", fm.motif_refus or "refusé")))
+                    prep.refuses.append(
+                        (
+                            fm.chemin_relatif,
+                            LIBELLES_REFUS.get(fm.motif_refus or "", fm.motif_refus or "refusé"),
+                        )
+                    )
                 recu.contenu = None
                 prep.fichiers.append((fm, ref))
             del reception
@@ -216,9 +244,15 @@ def annuler_blobs(plateforme: Plateforme, tenant_id: str, prep: DepotPrepare) ->
         return
 
 
-def enregistrer_prepare(scope: TenantScope, prep: DepotPrepare, *, canal: CanalLot = CanalLot.depot,
-                        resume: dict[str, Any] | None = None, mettre_en_file_job: bool = False,
-                        vault: Any = None) -> ResultatDepot:
+def enregistrer_prepare(
+    scope: TenantScope,
+    prep: DepotPrepare,
+    *,
+    canal: CanalLot = CanalLot.depot,
+    resume: dict[str, Any] | None = None,
+    mettre_en_file_job: bool = False,
+    vault: Any = None,
+) -> ResultatDepot:
     """Courte transaction d'écriture : lot, métadonnées des fichiers et (``mettre_en_file_job``) job
     ``traiter_lot`` dans **la même** transaction (D-1306). Avec ``vault`` : chaque contenu référencé est
     revérifié dans la transaction (une purge concurrente l'a peut-être retiré, D-1324) ; sinon le dépôt est
@@ -232,22 +266,48 @@ def enregistrer_prepare(scope: TenantScope, prep: DepotPrepare, *, canal: CanalL
     scope.creer_lot(lot_id, canal=canal.value)
     for fm, ref in prep.fichiers:
         scope.enregistrer_fichier(fm, lot_id=lot_id, coffre_ref=ref)
-    prealables = [(c, m) for c, m in prep.refuses if m == LIBELLES_REFUS["trop_gros"]
-                  and not any(fm.chemin_relatif == c for fm, _r in prep.fichiers)]
+    prealables = [
+        (c, m)
+        for c, m in prep.refuses
+        if m == LIBELLES_REFUS["trop_gros"] and not any(fm.chemin_relatif == c for fm, _r in prep.fichiers)
+    ]
     for chemin, _motif in prealables:
         # fichier au-delà de la limite : métadonnées seulement (aucun contenu conservé)
         sha = hashlib.sha256(f"refuse:{lot_id}:{chemin}".encode()).hexdigest()
-        scope.enregistrer_fichier(FichierModele(client_id=tenant_id, lot_id=lot_id, nom_original=chemin.split("/")[-1],
-                                                chemin_relatif=chemin, sha256=sha, taille=0,
-                                                type_mime="application/octet-stream", statut=StatutFichier.refuse,
-                                                motif_refus="trop_gros"), lot_id=lot_id, coffre_ref=None)
+        scope.enregistrer_fichier(
+            FichierModele(
+                client_id=tenant_id,
+                lot_id=lot_id,
+                nom_original=chemin.split("/")[-1],
+                chemin_relatif=chemin,
+                sha256=sha,
+                taille=0,
+                type_mime="application/octet-stream",
+                statut=StatutFichier.refuse,
+                motif_refus="trop_gros",
+            ),
+            lot_id=lot_id,
+            coffre_ref=None,
+        )
     statut = "recu" if prep.acceptes else "en_erreur"
-    scope.modifier(Lot, lot_id, statut=statut, resume={**(resume or {}), "fichiers": prep.acceptes,
-                                                       "doublons": prep.doublons, "refuses": len(prep.refuses)})
-    resultat = ResultatDepot(lot_id=lot_id, job_id=None, acceptes=prep.acceptes, doublons=prep.doublons,
-                             refuses=list(prep.refuses))
+    scope.modifier(
+        Lot,
+        lot_id,
+        statut=statut,
+        resume={
+            **(resume or {}),
+            "fichiers": prep.acceptes,
+            "doublons": prep.doublons,
+            "refuses": len(prep.refuses),
+        },
+    )
+    resultat = ResultatDepot(
+        lot_id=lot_id, job_id=None, acceptes=prep.acceptes, doublons=prep.doublons, refuses=list(prep.refuses)
+    )
     if mettre_en_file_job and prep.acceptes:
-        resultat.job_id = scope.mettre_en_file("traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant_id}:{lot_id}")
+        resultat.job_id = scope.mettre_en_file(
+            "traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant_id}:{lot_id}"
+        )
     return resultat
 
 
@@ -265,8 +325,14 @@ def _semaphore() -> threading.BoundedSemaphore:
         return _SEMAPHORE
 
 
-def deposer(plateforme: Plateforme, acteur: Acteur, fichiers: list[FichierTransmis], *,
-            canal: CanalLot = CanalLot.depot, resume: dict[str, Any] | None = None) -> ResultatDepot:
+def deposer(
+    plateforme: Plateforme,
+    acteur: Acteur,
+    fichiers: list[FichierTransmis],
+    *,
+    canal: CanalLot = CanalLot.depot,
+    resume: dict[str, Any] | None = None,
+) -> ResultatDepot:
     """Dépose des fichiers pour le client **de l'acteur** (rôle client ``client_admin``) et met le lot en
     file. Le fondateur ne dépose pas pour un client par cette voie.
 
@@ -290,16 +356,23 @@ def deposer(plateforme: Plateforme, acteur: Acteur, fichiers: list[FichierTransm
         prep = preparer_depot(plateforme, tenant_id, fichiers, deja, canal=canal)
         try:
             with plateforme.db.tenant(tenant_id, acteur) as scope:
-                return enregistrer_prepare(scope, prep, canal=canal, resume=resume, mettre_en_file_job=True,
-                                           vault=plateforme.vault)
+                return enregistrer_prepare(
+                    scope, prep, canal=canal, resume=resume, mettre_en_file_job=True, vault=plateforme.vault
+                )
         except BaseException:
             annuler_blobs(plateforme, tenant_id, prep)
             raise
 
 
-def enregistrer_depot(plateforme: Plateforme, scope: TenantScope, elements: list[tuple[str, bytes]], *,
-                      canal: CanalLot = CanalLot.depot, resume: dict[str, Any] | None = None,
-                      refuses_prealables: list[tuple[str, str]] | None = None) -> ResultatDepot:
+def enregistrer_depot(
+    plateforme: Plateforme,
+    scope: TenantScope,
+    elements: list[tuple[str, bytes]],
+    *,
+    canal: CanalLot = CanalLot.depot,
+    resume: dict[str, Any] | None = None,
+    refuses_prealables: list[tuple[str, str]] | None = None,
+) -> ResultatDepot:
     """Réception + enregistrement dans ``scope`` (compatibilité : tout se fait dans la transaction de
     l'appelant). Ne met rien en file. Préférer ``deposer`` (transaction courte)."""
     prep = preparer_depot(plateforme, scope.tenant_id, elements, deja_recus(scope), canal=canal)
@@ -308,6 +381,7 @@ def enregistrer_depot(plateforme: Plateforme, scope: TenantScope, elements: list
 
 
 def mettre_en_file(plateforme: Plateforme, tenant_id: str, lot_id: str) -> str:
-    job, _cree = JobStore(plateforme.db).enqueue("traiter_lot", {"lot_id": lot_id},
-                                                 f"traiter_lot:{tenant_id}:{lot_id}", tenant_id)
+    job, _cree = JobStore(plateforme.db).enqueue(
+        "traiter_lot", {"lot_id": lot_id}, f"traiter_lot:{tenant_id}:{lot_id}", tenant_id
+    )
     return job.id

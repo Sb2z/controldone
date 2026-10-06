@@ -13,7 +13,16 @@ from sqlalchemy.orm import Session
 from controldone.storage.coltypes import maintenant
 from controldone.storage.models import AutonomieSortie, Outbox, Tenant
 
-__all__ = ["autonomie", "client_existe", "definir_autonomie", "inserer", "inserer_ou_lire", "lire", "lire_par_cle", "lister"]
+__all__ = [
+    "autonomie",
+    "client_existe",
+    "definir_autonomie",
+    "inserer",
+    "inserer_ou_lire",
+    "lire",
+    "lire_par_cle",
+    "lister",
+]
 
 
 def inserer(s: Session, **champs: Any) -> Outbox:
@@ -54,8 +63,15 @@ def lire_par_cle(s: Session, cle: str) -> Outbox | None:
     return s.execute(select(Outbox).where(Outbox.idempotency_key == cle)).scalar_one_or_none()
 
 
-def lister(s: Session, *, statuts: list[str] | None = None, kind: str | None = None,
-           tenant_id: str | None = None, plateforme: bool | None = None, limite: int = 500) -> list[Outbox]:
+def lister(
+    s: Session,
+    *,
+    statuts: list[str] | None = None,
+    kind: str | None = None,
+    tenant_id: str | None = None,
+    plateforme: bool | None = None,
+    limite: int = 500,
+) -> list[Outbox]:
     """Les ``limite`` actions **les plus récentes** (tri SQL décroissant avant la limite, D-1309), renvoyées
     en ordre chronologique."""
     q = select(Outbox).order_by(Outbox.cree_le.desc(), Outbox.id.desc()).limit(limite)

@@ -23,8 +23,9 @@ log = logging.getLogger("controldone.auth.revocation")
 
 
 class RegistreRevocations:
-    def __init__(self, db: Database, *, horloge: Callable[[], float] = time.time,
-                 purge_toutes_s: float = 3600.0) -> None:
+    def __init__(
+        self, db: Database, *, horloge: Callable[[], float] = time.time, purge_toutes_s: float = 3600.0
+    ) -> None:
         self.db = db
         self.horloge = horloge
         self.purge_toutes_s = purge_toutes_s
@@ -64,13 +65,30 @@ class RegistreRevocations:
         except Exception as exc:
             self._panne("revoquer_utilisateur", exc)
 
-    def ouvrir(self, sid: str, user_id: str, *, debut: float, vu: float, expire: float, appareil: str = "",
-               reseau: str = "") -> None:
+    def ouvrir(
+        self,
+        sid: str,
+        user_id: str,
+        *,
+        debut: float,
+        vu: float,
+        expire: float,
+        appareil: str = "",
+        reseau: str = "",
+    ) -> None:
         from controldone.storage.securite import enregistrer_session
 
         try:
-            enregistrer_session(self.db, sid=sid, user_id=user_id, debut=debut, vu=vu, expire=expire,
-                                appareil=appareil, reseau=reseau)
+            enregistrer_session(
+                self.db,
+                sid=sid,
+                user_id=user_id,
+                debut=debut,
+                vu=vu,
+                expire=expire,
+                appareil=appareil,
+                reseau=reseau,
+            )
         except Exception as exc:
             self._panne("ouvrir", exc)
 

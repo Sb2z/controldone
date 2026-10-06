@@ -34,7 +34,9 @@ def _routes(app):
 
 
 def test_f03_routes_synchrones(monde):
-    asynchrones = [f"{sorted(r.methods)} {r.path}" for r in _routes(monde.app) if asyncio.iscoroutinefunction(r.endpoint)]
+    asynchrones = [
+        f"{sorted(r.methods)} {r.path}" for r in _routes(monde.app) if asyncio.iscoroutinefunction(r.endpoint)
+    ]
     assert asynchrones == []  # avant : dépôts, connexion (Argon2), finances, fondateur… en « async def »
 
 
@@ -48,7 +50,9 @@ def _ecart_releve(monde):
 
     with monde.pf.db.tenant(A, Acteur.systeme("tests"), lecture=True) as sc:
         existants = sc.lister(Reclamation)  # la démonstration prépare déjà un relevé validé
-        transitaires = sorted({e.transitaire_id for e in sc.lister(Ecart) if e.transitaire_id and e.statut == "ouvert"})
+        transitaires = sorted(
+            {e.transitaire_id for e in sc.lister(Ecart) if e.transitaire_id and e.statut == "ouvert"}
+        )
     if not existants:
         reclamations.preparer_dossier(monde.pf, FONDATEUR, A, transitaires[0])
     with monde.pf.db.tenant(A, Acteur.systeme("tests"), lecture=True) as sc:
@@ -72,14 +76,19 @@ def test_p0_1_suivi_par_l_api_passe_par_le_service_des_litiges(monde):
     # avant : simple transition de l'écart, aucun rappel planifié (agent litiges sans objet)
     assert d.statut.value == "envoyee" and [x.jours for x in d.relances] == [15, 30, 45]
     montant = min(rec.lignes[0].ecart, Decimal("10.00"))
-    r = c.post(f"/api/v1/litiges/{eid}/evenements",
-               json={"type": "avoir_recu", "montant": f"{montant}".replace(".", ","), "reference": "AV-FICTIF-77"})
+    r = c.post(
+        f"/api/v1/litiges/{eid}/evenements",
+        json={"type": "avoir_recu", "montant": f"{montant}".replace(".", ","), "reference": "AV-FICTIF-77"},
+    )
     assert r.status_code == 200 and r.json()["montant_credite_eur"] == f"{montant}"
     with monde.pf.db.tenant(A, Acteur.systeme("tests"), lecture=True) as sc:
         d = DossierReclamation.model_validate(sc.obtenir(Reclamation, rec.id).contenu)
     assert d.avoirs and d.commissions and d.commissions[0].base == montant  # avant : jamais de commission
-    factures = [a for a in FileSortante(monde.pf.db).lister(FONDATEUR, kind="facture_emise")
-                if a.tenant_id == A and (a.payload.get("references") or {}).get("avoir_id") == d.avoirs[0].avoir_id]
+    factures = [
+        a
+        for a in FileSortante(monde.pf.db).lister(FONDATEUR, kind="facture_emise")
+        if a.tenant_id == A and (a.payload.get("references") or {}).get("avoir_id") == d.avoirs[0].avoir_id
+    ]
     assert len(factures) == 1
 
 
@@ -94,8 +103,12 @@ def test_p0_1_suivi_par_l_espace_client_jusqu_a_la_commission(monde):
     w = monde.client()
     connecter_client(w, monde)
     assert poster(w, "/espace/recouvrement", f"/espace/recouvrement/{eid}/reclame", {}).status_code == 303
-    r = poster(w, "/espace/recouvrement", f"/espace/recouvrement/{eid}/avoir",
-               {"montant": "1,00", "reference": "AV-FICTIF-WEB"})
+    r = poster(
+        w,
+        "/espace/recouvrement",
+        f"/espace/recouvrement/{eid}/avoir",
+        {"montant": "1,00", "reference": "AV-FICTIF-WEB"},
+    )
     assert r.status_code == 303 and "Avoir enregistré" in w.get(r.headers["location"]).text
     with monde.pf.db.tenant(A, Acteur.systeme("tests"), lecture=True) as sc:
         d = DossierReclamation.model_validate(sc.obtenir(Reclamation, rec.id).contenu)
@@ -110,9 +123,15 @@ def test_remboursement_d_une_administration_sans_commission(monde):
     eid = rec.lignes[0].ecart_id
     c = _api(monde)
     c.post(f"/api/v1/litiges/{eid}/evenements", json={"type": "reclamation_envoyee"})
-    r = c.post(f"/api/v1/litiges/{eid}/evenements",
-               json={"type": "avoir_recu", "montant": "1.00", "reference": "REMB-DOUANE-FICTIF",
-                     "origine": "administration"})
+    r = c.post(
+        f"/api/v1/litiges/{eid}/evenements",
+        json={
+            "type": "avoir_recu",
+            "montant": "1.00",
+            "reference": "REMB-DOUANE-FICTIF",
+            "origine": "administration",
+        },
+    )
     assert r.status_code == 200
     with monde.pf.db.tenant(A, Acteur.systeme("tests"), lecture=True) as sc:
         d = DossierReclamation.model_validate(sc.obtenir(Reclamation, rec.id).contenu)
@@ -136,11 +155,16 @@ def test_p0_2_rappels_lus_dans_les_reglages_du_client(monde):
         e = sc.obtenir(Ecart, ouvert["litige_id"])
         e.contenu = {**e.contenu, "reclame_le": il_y_a_20_jours}
     ligne = c.get(f"/api/v1/litiges/{ouvert['litige_id']}").json()
-    assert ligne["relance_suggeree"] == "rappel suggéré (15 jours)" == ligne["rappel_suggere"]  # avant : aucune (30)
+    assert (
+        ligne["relance_suggeree"] == "rappel suggéré (15 jours)" == ligne["rappel_suggere"]
+    )  # avant : aucune (30)
     with monde.pf.db.operateur(FONDATEUR) as op:
         reglages = next(dict(t.reglages or {}) for t in op.lister_clients() if t.id == A)
         op.modifier_client(A, reglages={**reglages, "relances_jours": [7, 14]})
-    assert c.get(f"/api/v1/litiges/{ouvert['litige_id']}").json()["relance_suggeree"] == "rappel suggéré (14 jours)"
+    assert (
+        c.get(f"/api/v1/litiges/{ouvert['litige_id']}").json()["relance_suggeree"]
+        == "rappel suggéré (14 jours)"
+    )
     assert reclamations.jours_relance({}) == (15, 30, 45)
 
 
@@ -151,16 +175,25 @@ def test_p0_2_rappels_lus_dans_les_reglages_du_client(monde):
 def test_montants_invalides_refuses_par_l_api(monde, brut):
     c = _api(monde)
     ouvert = next(x for x in c.get("/api/v1/litiges").json() if x["statut"] == "ouvert")
-    r = c.post(f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "avoir_recu", "montant": brut})
+    r = c.post(
+        f"/api/v1/litiges/{ouvert['litige_id']}/evenements", json={"type": "avoir_recu", "montant": brut}
+    )
     assert r.status_code == 400  # avant : NaN / Infinity / 1e9 acceptés par Decimal() dans plusieurs routes
 
 
 def test_montant_saisi_formats_admis():
     from controldone.services.saisie import montant_saisi
 
-    for brut, attendu in (("1 234,56", "1234.56"), ("1 234,56", "1234.56"), ("1 234,56", "1234.56"),
-                          ("1.234,56", "1234.56"), ("1,234.56", "1234.56"), ("12.5", "12.50"), ("40 €", "40.00"),
-                          ("EUR 7", "7.00")):
+    for brut, attendu in (
+        ("1 234,56", "1234.56"),
+        ("1 234,56", "1234.56"),
+        ("1 234,56", "1234.56"),
+        ("1.234,56", "1234.56"),
+        ("1,234.56", "1234.56"),
+        ("12.5", "12.50"),
+        ("40 €", "40.00"),
+        ("EUR 7", "7.00"),
+    ):
         assert montant_saisi(brut) == Decimal(attendu)
     for brut in ("nan", "inf", "1E3", "+5", "12,345", "1 23,4", "0"):
         with pytest.raises(RequeteInvalide):
@@ -198,7 +231,9 @@ def test_vocabulaire_et_alias_api(monde):
     c = _api(monde)
     assert c.get("/api/v1/suivi-avoirs").json() == c.get("/api/v1/litiges").json()
     ligne = c.get("/api/v1/litiges").json()[0]
-    assert ligne["ecart_id"] == ligne["litige_id"] and "relance_suggeree" in ligne  # champs historiques conservés
+    assert (
+        ligne["ecart_id"] == ligne["litige_id"] and "relance_suggeree" in ligne
+    )  # champs historiques conservés
     w = monde.client()
     connecter_client(w, monde)
     page = w.get("/espace/recouvrement").text
@@ -252,14 +287,31 @@ def test_totaux_excluent_le_constat_remplace_par_e6(monde):
         dossier_id, version = d.id, d.version
 
     def resultat(cid, controle, montant, **details):
-        c = ConstatModele(id=cid, controle_id=controle, niveau=Niveau.ecart_certain, montant_en_jeu=Decimal(montant),
-                          nature_montant=NatureMontant.recouvrable, statut_validation="valide")
-        return ResultatControle(id=f"res_{cid}", controle_id=controle, dossier_id=dossier_id, dossier_version=version,
-                                outcome=Outcome.ecart_certain, constat=c, details=details)
+        c = ConstatModele(
+            id=cid,
+            controle_id=controle,
+            niveau=Niveau.ecart_certain,
+            montant_en_jeu=Decimal(montant),
+            nature_montant=NatureMontant.recouvrable,
+            statut_validation="valide",
+        )
+        return ResultatControle(
+            id=f"res_{cid}",
+            controle_id=controle,
+            dossier_id=dossier_id,
+            dossier_version=version,
+            outcome=Outcome.ecart_certain,
+            constat=c,
+            details=details,
+        )
 
     with monde.pf.db.tenant(A, systeme) as sc:
-        sc.enregistrer_resultats([resultat("f_orig", "C3", "100.00"),
-                                  resultat("f_e6", "E6", "60.00", remplace_constat_id="f_orig")])
+        sc.enregistrer_resultats(
+            [
+                resultat("f_orig", "C3", "100.00"),
+                resultat("f_e6", "E6", "60.00", remplace_constat_id="f_orig"),
+            ]
+        )
     with monde.pf.db.operateur(FONDATEUR) as op:
         sc = op.client(A, "test des totaux", lecture=True)
         ligne = next(x for x in lister_dossiers(sc) if x.id == dossier_id)
@@ -269,9 +321,19 @@ def test_totaux_excluent_le_constat_remplace_par_e6(monde):
     with monde.pf.db.tenant(A, systeme, lecture=True) as sc:
         assert sc.obtenir(Constat, "f_orig").contenu["hors_totaux"] == "remplace_par_e6"
         assert sc.obtenir(Constat, "f_e6").contenu["hors_totaux"] is None
-        autres = sum((c.montant_en_jeu for c in sc.lister(Constat, dossier_id=dossier_id)
-                      if c.dossier_version == version and c.niveau == "ecart_certain" and c.statut_validation == "valide"
-                      and c.nature_montant == "recouvrable" and c.id not in ("f_orig", "f_e6")
-                      and not (c.contenu or {}).get("hors_totaux") and (c.montant_en_jeu or 0) > 0), Decimal(0))
+        autres = sum(
+            (
+                c.montant_en_jeu
+                for c in sc.lister(Constat, dossier_id=dossier_id)
+                if c.dossier_version == version
+                and c.niveau == "ecart_certain"
+                and c.statut_validation == "valide"
+                and c.nature_montant == "recouvrable"
+                and c.id not in ("f_orig", "f_e6")
+                and not (c.contenu or {}).get("hors_totaux")
+                and (c.montant_en_jeu or 0) > 0
+            ),
+            Decimal(0),
+        )
     assert ligne.recouvrable_certain == autres + Decimal("60.00")  # 100 remplacé par 60, pas 160
     assert stats["recouvrable_certain"] >= Decimal("60.00")

@@ -68,23 +68,48 @@ _RAPPORT = f"report-uri {CHEMIN_RAPPORT_CSP}; report-to csp"
 #: script calculée — le JavaScript de l'interface n'écrit que du ``textContent`` et le filtrage en direct reçoit un
 #: document déjà analysé (``XMLHttpRequest``, ``responseType = "document"``). Test permanent :
 #: ``tests/security/test_revue_securite_2.py``.
-CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; "
-       "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; "
-       "require-trusted-types-for 'script'; trusted-types 'none'; " + _RAPPORT)
+CSP = (
+    "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; "
+    "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; "
+    "require-trusted-types-for 'script'; trusted-types 'none'; " + _RAPPORT
+)
 #: Rapport HTML affiché tel quel (gabarit maison, styles intégrés, aucun script) : CSP fermée.
-CSP_RAPPORT = ("default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'; "
-               + _RAPPORT)
+CSP_RAPPORT = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'; "
+    + _RAPPORT
+)
 #: Fonctions du navigateur toutes refusées (noms reconnus par les navigateurs actuels : un nom inconnu produit un
 #: avertissement dans la console).
-PERMISSIONS_POLICY = ", ".join(f"{f}=()" for f in (
-    "accelerometer", "autoplay", "browsing-topics", "camera", "display-capture", "encrypted-media", "geolocation",
-    "gyroscope", "hid", "idle-detection", "magnetometer", "microphone", "midi", "payment", "screen-wake-lock",
-    "serial", "usb", "xr-spatial-tracking"))
+PERMISSIONS_POLICY = ", ".join(
+    f"{f}=()"
+    for f in (
+        "accelerometer",
+        "autoplay",
+        "browsing-topics",
+        "camera",
+        "display-capture",
+        "encrypted-media",
+        "geolocation",
+        "gyroscope",
+        "hid",
+        "idle-detection",
+        "magnetometer",
+        "microphone",
+        "midi",
+        "payment",
+        "screen-wake-lock",
+        "serial",
+        "usb",
+        "xr-spatial-tracking",
+    )
+)
 
 
 # --- URL publique et hôtes admis (RS-18, D-3602) -------------------------------------------------------------------
 
-_HOTE_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
+_HOTE_RE = re.compile(
+    r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
 
 
 def _domaine_configure() -> str | None:
@@ -105,8 +130,16 @@ def url_publique(request: Request | None = None) -> str:
     brut = env("CONTROLDONE_URL_PUBLIQUE", "").strip().rstrip("/")
     if brut:
         u = urlsplit(brut)
-        if (u.scheme not in ("https", "http") or not u.hostname or not _HOTE_RE.match(u.hostname)
-                or u.path or u.query or u.fragment or u.username or u.password):
+        if (
+            u.scheme not in ("https", "http")
+            or not u.hostname
+            or not _HOTE_RE.match(u.hostname)
+            or u.path
+            or u.query
+            or u.fragment
+            or u.username
+            or u.password
+        ):
             raise ValueError("CONTROLDONE_URL_PUBLIQUE invalide (attendu : https://hôte[:port])")
         if u.scheme != "https" and mode_execution() == "prod":
             raise ValueError("CONTROLDONE_URL_PUBLIQUE doit être en https en production")
@@ -115,7 +148,9 @@ def url_publique(request: Request | None = None) -> str:
     if domaine:
         return f"https://{domaine}"
     if mode_execution() == "prod" or request is None:
-        raise ValueError("URL publique non configurée : définir CONTROLDONE_DOMAIN (ou CONTROLDONE_URL_PUBLIQUE)")
+        raise ValueError(
+            "URL publique non configurée : définir CONTROLDONE_DOMAIN (ou CONTROLDONE_URL_PUBLIQUE)"
+        )
     return f"{request.url.scheme}://{request.url.netloc}"
 
 
@@ -157,7 +192,9 @@ def _boucle_locale(hote: str) -> bool:
         return False
 
 
-def verifier_mode_service(*, hote: str, https: bool = False, proxy: bool = False, mode: str | None = None) -> None:
+def verifier_mode_service(
+    *, hote: str, https: bool = False, proxy: bool = False, mode: str | None = None
+) -> None:
     """Refuse (``ModeIncoherent``) de servir en mode ``dev``/``test`` — clé maîtresse générée sur le disque, cookies
     sans ``Secure`` ni ``__Host-``, pas de HSTS — sur une interface autre que la boucle locale, ou derrière un
     mandataire TLS (``--https`` / ``--proxy``) : c'est le signe d'un ``CONTROLDONE_ENV=prod`` oublié (RS-16).
@@ -178,10 +215,12 @@ def verifier_mode_service(*, hote: str, https: bool = False, proxy: bool = False
         motifs.append("--proxy (derrière un mandataire)")
     if not motifs:
         return
-    message = (f"mode {mode} ({'CONTROLDONE_ENV absent' if not env('CONTROLDONE_ENV', '').strip() else 'CONTROLDONE_ENV=' + mode}) "
-               f"avec une configuration de production : {', '.join(motifs)}. Définir CONTROLDONE_ENV=prod "
-               "(clé maîtresse et secret de session obligatoires), ou CONTROLDONE_DEV_RESEAU=1 pour une "
-               "démonstration volontaire sur un réseau de confiance.")
+    message = (
+        f"mode {mode} ({'CONTROLDONE_ENV absent' if not env('CONTROLDONE_ENV', '').strip() else 'CONTROLDONE_ENV=' + mode}) "
+        f"avec une configuration de production : {', '.join(motifs)}. Définir CONTROLDONE_ENV=prod "
+        "(clé maîtresse et secret de session obligatoires), ou CONTROLDONE_DEV_RESEAU=1 pour une "
+        "démonstration volontaire sur un réseau de confiance."
+    )
     if env("CONTROLDONE_DEV_RESEAU", "").strip() == "1":
         log.warning("mode_dev_expose %s", message)
         return
@@ -214,16 +253,21 @@ class EtatSecurite:
     https: bool
     cookie: dict[str, Any]
     limiteur_connexion_ip: Limiteur = field(default_factory=lambda: LimiteurDebit(*SEUILS["connexion_ip"]))
-    limiteur_connexion_compte: Limiteur = field(default_factory=lambda: LimiteurDebit(*SEUILS["connexion_compte"]))
+    limiteur_connexion_compte: Limiteur = field(
+        default_factory=lambda: LimiteurDebit(*SEUILS["connexion_compte"])
+    )
     limiteur_api: Limiteur = field(default_factory=lambda: LimiteurDebit(*SEUILS["api"]))
     #: Rapports de violation CSP : par adresse, en mémoire du processus (aucune valeur à partager).
     limiteur_csp: Limiteur = field(default_factory=lambda: LimiteurDebit(20, 20 / 60))
 
     def partager_debit(self, db: Any, sel: bytes) -> None:
         """Seaux en base, partagés par les processus et conservés au redémarrage (D-3201). Seuils inchangés."""
-        self.limiteur_connexion_ip = LimiteurDebitPartage("connexion_ip", *SEUILS["connexion_ip"], db=db, sel=sel)
-        self.limiteur_connexion_compte = LimiteurDebitPartage("connexion_compte", *SEUILS["connexion_compte"],
-                                                              db=db, sel=sel)
+        self.limiteur_connexion_ip = LimiteurDebitPartage(
+            "connexion_ip", *SEUILS["connexion_ip"], db=db, sel=sel
+        )
+        self.limiteur_connexion_compte = LimiteurDebitPartage(
+            "connexion_compte", *SEUILS["connexion_compte"], db=db, sel=sel
+        )
         self.limiteur_api = LimiteurDebitPartage("api", *SEUILS["api"], db=db, sel=sel)
 
     @property
@@ -248,16 +292,20 @@ class EtatSecurite:
         # un cookie ``__Host-`` n'est effacé que par un Set-Cookie ``Secure`` ``Path=/`` (sinon refusé)
         reponse.delete_cookie(nom, path="/", secure=self.cookie["secure"], httponly=True, samesite=samesite)
 
-    def ouvrir_session(self, request: Request, reponse: Response, acteur: Acteur, *,
-                       deux_facteurs: bool = False) -> str:
+    def ouvrir_session(
+        self, request: Request, reponse: Response, acteur: Acteur, *, deux_facteurs: bool = False
+    ) -> str:
         """Nouvelle session (connexion, changement de mot de passe) : jeton posé sur ``reponse``, session
         enregistrée pour la liste « mes sessions actives » (appareil et réseau réduits, D-3603). Renvoie le
         ``sid``."""
         from controldone.storage.securite import reduire_appareil, reduire_reseau
 
         jeton = self.sessions.emettre(
-            acteur, deux_facteurs=deux_facteurs, appareil=reduire_appareil(request.headers.get("user-agent")),
-            reseau=reduire_reseau(request.client.host if request.client else None))
+            acteur,
+            deux_facteurs=deux_facteurs,
+            appareil=reduire_appareil(request.headers.get("user-agent")),
+            reseau=reduire_reseau(request.client.host if request.client else None),
+        )
         self.poser_session(reponse, jeton)
         return self.sessions.lire(jeton).sid
 
@@ -269,13 +317,25 @@ class EtatSecurite:
         reponse.set_cookie(**{**self.cookie, "value": jeton})
 
     def effacer_session(self, reponse: Response) -> None:
-        reponse.delete_cookie(self.nom_cookie, path="/", secure=self.cookie["secure"], httponly=True,
-                              samesite=self.cookie["samesite"])
+        reponse.delete_cookie(
+            self.nom_cookie,
+            path="/",
+            secure=self.cookie["secure"],
+            httponly=True,
+            samesite=self.cookie["samesite"],
+        )
 
     # --- second facteur en attente (5 minutes) ---
     def poser_2fa(self, reponse: Response, user_id: str) -> None:
-        reponse.set_cookie(self.nom_2fa, self.jeton_2fa(user_id), max_age=300, httponly=True,
-                           secure=self.cookie["secure"], samesite="strict" if self.prod else "lax", path="/")
+        reponse.set_cookie(
+            self.nom_2fa,
+            self.jeton_2fa(user_id),
+            max_age=300,
+            httponly=True,
+            secure=self.cookie["secure"],
+            samesite="strict" if self.prod else "lax",
+            path="/",
+        )
 
     def lire_2fa_requete(self, request: Request) -> str | None:
         return self.lire_2fa(request.cookies.get(self.nom_2fa))
@@ -296,8 +356,15 @@ class EtatSecurite:
 
     # --- messages flash ---
     def flash(self, reponse: Response, message: str, *, erreur: bool = False) -> None:
-        reponse.set_cookie(self.nom_flash, self._ser("controldone.flash").dumps({"m": message[:500], "e": erreur}),
-                           max_age=60, httponly=True, secure=self.cookie["secure"], samesite="lax", path="/")
+        reponse.set_cookie(
+            self.nom_flash,
+            self._ser("controldone.flash").dumps({"m": message[:500], "e": erreur}),
+            max_age=60,
+            httponly=True,
+            secure=self.cookie["secure"],
+            samesite="lax",
+            path="/",
+        )
 
     def effacer_flash(self, reponse: Response) -> None:
         self._effacer(reponse, self.nom_flash, "lax")
@@ -328,8 +395,15 @@ class EtatSecurite:
     def poser_presession(self, request: Request, reponse: Response) -> None:
         sid = getattr(request.state, "presession", None)
         if sid and request.cookies.get(self.nom_presession) != sid:
-            reponse.set_cookie(self.nom_presession, sid, httponly=True, secure=self.cookie["secure"],
-                               samesite="strict" if self.prod else "lax", path="/", max_age=3600)
+            reponse.set_cookie(
+                self.nom_presession,
+                sid,
+                httponly=True,
+                secure=self.cookie["secure"],
+                samesite="strict" if self.prod else "lax",
+                path="/",
+                max_age=3600,
+            )
 
     def verifier(self, request: Request, jeton: str | None) -> None:
         sid = self.sid_csrf(request)
@@ -374,8 +448,11 @@ def acteur_de(request: Request) -> Acteur:
         from controldone.storage.comptes import utilisateur
 
         compte = utilisateur(plateforme.db, s.user_id)
-        if (compte is None or not compte.actif
-                or (s.role is Role.fondateur) != (compte.role == Role.fondateur.value)):
+        if (
+            compte is None
+            or not compte.actif
+            or (s.role is Role.fondateur) != (compte.role == Role.fondateur.value)
+        ):
             request.app.state.securite.sessions.revoquer(s.sid)
             raise NonConnecte()
     return s.acteur(ip=request.client.host if request.client else None)
@@ -430,7 +507,9 @@ class LimiteCorps:
     """Middleware ASGI : refuse (413) un corps de requête au-delà de la limite, en flux (``Content-Length``
     absent ou mensonger compris). Dépôts : ``limite_depot`` ; toute autre requête : ``limite``."""
 
-    def __init__(self, app: ASGIApp, *, limite: int, limite_depot: int, chemins_depot: tuple[str, ...]) -> None:
+    def __init__(
+        self, app: ASGIApp, *, limite: int, limite_depot: int, chemins_depot: tuple[str, ...]
+    ) -> None:
         self.app = app
         self.limite = limite
         self.limite_depot = limite_depot
@@ -476,9 +555,16 @@ class LimiteCorps:
 
 async def _repondre_413(send: Send) -> None:
     corps = "Requête trop volumineuse.".encode()
-    await send({"type": "http.response.start", "status": 413,
-                "headers": [(b"content-type", b"text/plain; charset=utf-8"),
-                            (b"content-length", str(len(corps)).encode())]})
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [
+                (b"content-type", b"text/plain; charset=utf-8"),
+                (b"content-length", str(len(corps)).encode()),
+            ],
+        }
+    )
     await send({"type": "http.response.body", "body": corps})
 
 
@@ -489,8 +575,9 @@ TAILLE_MAX_RAPPORT_CSP = 8 * 1024
 #: Rapports journalisés par envoi au plus (``application/reports+json`` peut en grouper plusieurs).
 RAPPORTS_MAX_PAR_ENVOI = 5
 _TYPES_RAPPORT = ("application/csp-report", "application/reports+json", "application/json")
-_SOURCES_MOTS = frozenset({"inline", "eval", "wasm-eval", "data", "blob", "self", "trusted-types-policy",
-                           "trusted-types-sink"})
+_SOURCES_MOTS = frozenset(
+    {"inline", "eval", "wasm-eval", "data", "blob", "self", "trusted-types-policy", "trusted-types-sink"}
+)
 
 
 def _jeton_sur(valeur: Any, longueur: int = 48) -> str:
@@ -531,18 +618,31 @@ def _chemin(valeur: Any) -> str:
 
 
 def _rapports(donnees: Any) -> list[dict[str, Any]]:
-    if isinstance(donnees, dict) and isinstance(donnees.get("csp-report"), dict):  # report-uri (ancien format)
+    if isinstance(donnees, dict) and isinstance(
+        donnees.get("csp-report"), dict
+    ):  # report-uri (ancien format)
         r = donnees["csp-report"]
-        return [{"directive": r.get("effective-directive") or r.get("violated-directive"),
-                 "bloque": r.get("blocked-uri"), "document": r.get("document-uri"),
-                 "disposition": r.get("disposition")}]
+        return [
+            {
+                "directive": r.get("effective-directive") or r.get("violated-directive"),
+                "bloque": r.get("blocked-uri"),
+                "document": r.get("document-uri"),
+                "disposition": r.get("disposition"),
+            }
+        ]
     sortie = []
     if isinstance(donnees, list):  # report-to (API Reporting)
         for x in donnees[:RAPPORTS_MAX_PAR_ENVOI]:
             corps = x.get("body") if isinstance(x, dict) else None
             if isinstance(x, dict) and x.get("type") == "csp-violation" and isinstance(corps, dict):
-                sortie.append({"directive": corps.get("effectiveDirective"), "bloque": corps.get("blockedURL"),
-                               "document": corps.get("documentURL"), "disposition": corps.get("disposition")})
+                sortie.append(
+                    {
+                        "directive": corps.get("effectiveDirective"),
+                        "bloque": corps.get("blockedURL"),
+                        "document": corps.get("documentURL"),
+                        "disposition": corps.get("disposition"),
+                    }
+                )
     return sortie
 
 
@@ -576,7 +676,11 @@ def recevoir_rapport_csp(request: Request) -> Response:
         return Response(status_code=400)
     hote = (request.url.hostname or "").lower()
     for r in _rapports(donnees)[:RAPPORTS_MAX_PAR_ENVOI]:
-        log.warning("csp_violation directive=%s bloque=%s document=%s disposition=%s",
-                    _jeton_sur(r["directive"]), _origine(r["bloque"], hote), _chemin(r["document"]),
-                    _jeton_sur(r["disposition"], 16))
+        log.warning(
+            "csp_violation directive=%s bloque=%s document=%s disposition=%s",
+            _jeton_sur(r["directive"]),
+            _origine(r["bloque"], hote),
+            _chemin(r["document"]),
+            _jeton_sur(r["disposition"], 16),
+        )
     return Response(status_code=204)

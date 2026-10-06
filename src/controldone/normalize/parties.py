@@ -21,7 +21,9 @@ __all__ = ["identifier_transitaire"]
 LONGUEUR_MIN_INCLUSION = 4
 
 
-def identifier_transitaire(tva: str | None, nom: str | None, transitaires: Iterable[Transitaire]) -> str | None:
+def identifier_transitaire(
+    tva: str | None, nom: str | None, transitaires: Iterable[Transitaire]
+) -> str | None:
     """Identifiant du transitaire désigné par un numéro de TVA ou un nom lus.
 
     1. TVA normalisée égale à celle d'un transitaire ;
@@ -43,7 +45,8 @@ def identifier_transitaire(tva: str | None, nom: str | None, transitaires: Itera
     if egaux:
         return next(iter(egaux)) if len(egaux) == 1 else None
     inclus = {
-        tid for tid, xs in noms.items()
+        tid
+        for tid, xs in noms.items()
         if any(len(x) >= LONGUEUR_MIN_INCLUSION and f" {x} " in f" {n_lu} " for x in xs)
     }
     return next(iter(inclus)) if len(inclus) == 1 else None

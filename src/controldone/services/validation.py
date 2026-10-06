@@ -85,9 +85,16 @@ def ouvrir_ecart(scope: TenantScope, c: Constat) -> Ecart | None:
         composante = Composante.prestation
     montant = Decimal(c.montant_en_jeu)
     ecart = EcartARecouvrer(
-        id=id_ecart(scope.tenant_id, c.id), client_id=scope.tenant_id, constat_id=c.id,
-        dossier_id=c.dossier_id, transitaire_id=dossier.transitaire_id, facture_transitaire_id=ft,
-        mrn=(dossier.cles.mrn or [None])[0], composante=composante, montant_initial=montant, reste=montant,
+        id=id_ecart(scope.tenant_id, c.id),
+        client_id=scope.tenant_id,
+        constat_id=c.id,
+        dossier_id=c.dossier_id,
+        transitaire_id=dossier.transitaire_id,
+        facture_transitaire_id=ft,
+        mrn=(dossier.cles.mrn or [None])[0],
+        composante=composante,
+        montant_initial=montant,
+        reste=montant,
     )
     e = scope.enregistrer_ecart(ecart)
     e.contenu = {**e.contenu, "niveau": c.niveau, "dossier_reference": dossier.reference}
@@ -95,8 +102,9 @@ def ouvrir_ecart(scope: TenantScope, c: Constat) -> Ecart | None:
     return e
 
 
-def corriger_valeur(scope: TenantScope, dossier_id: str, document_id: str, valeur_id: str, nouvelle: str,
-                    motif: str) -> int:
+def corriger_valeur(
+    scope: TenantScope, dossier_id: str, document_id: str, valeur_id: str, nouvelle: str, motif: str
+) -> int:
     """Corrige (ou confirme, même valeur) une valeur extraite ; renvoie la nouvelle version du dossier.
     Le job ``recontroler_dossier`` est mis en file **dans la même transaction** (D-1306) : la nouvelle
     version et son recontrôle sont validés ensemble, ou annulés ensemble (plus de version sans recontrôle)."""
@@ -114,23 +122,48 @@ def corriger_valeur(scope: TenantScope, dossier_id: str, document_id: str, valeu
         raise AccesRefuse("introuvable ou hors périmètre")
     rel = chemin_relatif(ancienne.chemin)
     nv = valeur_sourcee(
-        type_document=doc.type, chemin=rel, brut=nouvelle, document_id=doc.id, page=ancienne.page,
-        extracteur=EXTRACTEUR_SAISIE, methode=Methode.saisie_humaine, confiance=1.0, type_valeur=ancienne.type,
+        type_document=doc.type,
+        chemin=rel,
+        brut=nouvelle,
+        document_id=doc.id,
+        page=ancienne.page,
+        extracteur=EXTRACTEUR_SAISIE,
+        methode=Methode.saisie_humaine,
+        confiance=1.0,
+        type_valeur=ancienne.type,
         devise=ancienne.unite if ancienne.type is TypeValeur.montant else None,
     )
     if nv.valeur is None:
         raise RequeteInvalide("valeur illisible pour ce type de champ")
-    nv = nv.model_copy(update={"remplace": ancienne.id, "zone": ancienne.zone, "valeur_brute": nouvelle,
-                               "texte_contexte": ancienne.texte_contexte, "confiance": 1.0, "ancree": True})
+    nv = nv.model_copy(
+        update={
+            "remplace": ancienne.id,
+            "zone": ancienne.zone,
+            "valeur_brute": nouvelle,
+            "texte_contexte": ancienne.texte_contexte,
+            "confiance": 1.0,
+            "ancree": True,
+        }
+    )
     doc.champs.definir(rel, nv)
     role = "fondateur" if scope.actor.role is Role.fondateur else "utilisateur_client"
     ligne = scope.appliquer_correction(
-        correction_id=nouvel_id(Prefixe.correction), dossier_id=dossier_id, document_id=document_id,
-        cible=ancienne.id, chemin=ancienne.chemin, ancienne=ancienne.model_dump(mode="json"),
-        nouvelle=nv.model_dump(mode="json"), contenu_document=doc.model_dump(mode="json"), motif=motif,
-        role_auteur=role)
-    scope.mettre_en_file("recontroler_dossier", {"dossier_id": dossier_id, "version": ligne.version},
-                         cle_recontrole(scope.tenant_id, dossier_id, ligne.version))
+        correction_id=nouvel_id(Prefixe.correction),
+        dossier_id=dossier_id,
+        document_id=document_id,
+        cible=ancienne.id,
+        chemin=ancienne.chemin,
+        ancienne=ancienne.model_dump(mode="json"),
+        nouvelle=nv.model_dump(mode="json"),
+        contenu_document=doc.model_dump(mode="json"),
+        motif=motif,
+        role_auteur=role,
+    )
+    scope.mettre_en_file(
+        "recontroler_dossier",
+        {"dossier_id": dossier_id, "version": ligne.version},
+        cle_recontrole(scope.tenant_id, dossier_id, ligne.version),
+    )
     return ligne.version
 
 
@@ -141,6 +174,9 @@ def cle_recontrole(tenant_id: str, dossier_id: str, version: int) -> str:
 def mettre_en_file_recontrole(plateforme: Plateforme, tenant_id: str, dossier_id: str, version: int) -> str:
     """Compatibilité : le recontrôle est déjà en file depuis ``corriger_valeur`` (même clé, idempotent)."""
     job, _ = JobStore(plateforme.db).enqueue(
-        "recontroler_dossier", {"dossier_id": dossier_id, "version": version},
-        cle_recontrole(tenant_id, dossier_id, version), tenant_id)
+        "recontroler_dossier",
+        {"dossier_id": dossier_id, "version": version},
+        cle_recontrole(tenant_id, dossier_id, version),
+        tenant_id,
+    )
     return job.id

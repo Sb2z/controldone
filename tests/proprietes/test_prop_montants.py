@@ -59,8 +59,9 @@ def ecrire(valeur: Decimal, decimales: int, style: str) -> str:
     return corps + (dec + frac if frac else "")
 
 
-montants = st.decimals(min_value=0, max_value=Decimal("999999999999"), places=2, allow_nan=False,
-                       allow_infinity=False)
+montants = st.decimals(
+    min_value=0, max_value=Decimal("999999999999"), places=2, allow_nan=False, allow_infinity=False
+)
 styles = st.sampled_from([*STYLES, "in"])
 
 
@@ -81,10 +82,14 @@ def test_ecriture_relue_a_l_identique(v, decimales, style):
     assert isinstance(lu.valeur, Decimal)
 
 
-@given(v=montants, decimales=st.sampled_from([0, 2]), style=styles,
-       devise=st.sampled_from(["EUR", "USD", "CHF", "GBP", "INR", "CNY"]),
-       place=st.sampled_from(["avant", "apres", "sans"]),
-       signe=st.sampled_from(["aucun", "moins", "moins_unicode", "moins_apres", "parentheses", "moins_devise"]))
+@given(
+    v=montants,
+    decimales=st.sampled_from([0, 2]),
+    style=styles,
+    devise=st.sampled_from(["EUR", "USD", "CHF", "GBP", "INR", "CNY"]),
+    place=st.sampled_from(["avant", "apres", "sans"]),
+    signe=st.sampled_from(["aucun", "moins", "moins_unicode", "moins_apres", "parentheses", "moins_devise"]),
+)
 def test_montant_avec_devise_et_signe(v, decimales, style, devise, place, signe):
     nombre = ecrire(v, decimales, style)
     if place == "avant":
@@ -113,9 +118,16 @@ def test_montant_avec_devise_et_signe(v, decimales, style, devise, place, signe)
     assert lu.valeur_signee == (-lu.valeur if signe != "aucun" else lu.valeur)
 
 
-@given(v=st.decimals(min_value=Decimal("-999999999"), max_value=Decimal("999999999"), places=2, allow_nan=False,
-                     allow_infinity=False),
-       devise=st.sampled_from(["EUR", "USD", "CHF", "JPY", "KRW", "GBP"]))
+@given(
+    v=st.decimals(
+        min_value=Decimal("-999999999"),
+        max_value=Decimal("999999999"),
+        places=2,
+        allow_nan=False,
+        allow_infinity=False,
+    ),
+    devise=st.sampled_from(["EUR", "USD", "CHF", "JPY", "KRW", "GBP"]),
+)
 def test_format_montant_puis_lecture(v, devise):
     """``format_montant`` (français, devise après) est relu à la valeur arrondie à l'unité de la devise."""
     texte = format_montant(v, devise)
@@ -126,8 +138,11 @@ def test_format_montant_puis_lecture(v, devise):
     assert lu.valeur_signee == attendu or (attendu == 0 and lu.valeur == 0), texte
 
 
-@given(v=st.decimals(min_value=Decimal("-1e12"), max_value=Decimal("1e12"), places=6, allow_nan=False,
-                     allow_infinity=False))
+@given(
+    v=st.decimals(
+        min_value=Decimal("-1e12"), max_value=Decimal("1e12"), places=6, allow_nan=False, allow_infinity=False
+    )
+)
 def test_format_nombre_aller_retour_avec_separateur_connu(v):
     """Avec le séparateur décimal connu (« , »), ``format_nombre`` est relu exactement, même avec 3 décimales."""
     texte = format_nombre(v)
@@ -135,7 +150,10 @@ def test_format_nombre_aller_retour_avec_separateur_connu(v):
     assert relu == v or (v == 0 and relu == 0), texte
 
 
-@given(n=st.integers(min_value=-(10**12), max_value=10**12), style=st.sampled_from(["fr", "fr_fine", "en", "de", "ch"]))
+@given(
+    n=st.integers(min_value=-(10**12), max_value=10**12),
+    style=st.sampled_from(["fr", "fr_fine", "en", "de", "ch"]),
+)
 def test_entiers(n, style):
     texte = ("-" if n < 0 else "") + ecrire(Decimal(n), 0, style)
     assert parse_int(texte) == n
@@ -161,11 +179,16 @@ def test_lecture_robuste_sur_chiffres_et_separateurs(texte):
 
 # --- saisie d'un montant dans l'interface (Decimal exact ou erreur lisible) ---------------------------------------
 
-@given(v=st.decimals(min_value=Decimal("0.01"), max_value=MONTANT_MAX, places=2, allow_nan=False,
-                     allow_infinity=False),
-       style=st.sampled_from(["fr", "fr_espace", "fr_fine", "en", "de", "ch", "sans_groupe_point",
-                              "sans_groupe_virgule"]),
-       euro=st.sampled_from(["", " €", " EUR", "€ "]))
+
+@given(
+    v=st.decimals(
+        min_value=Decimal("0.01"), max_value=MONTANT_MAX, places=2, allow_nan=False, allow_infinity=False
+    ),
+    style=st.sampled_from(
+        ["fr", "fr_espace", "fr_fine", "en", "de", "ch", "sans_groupe_point", "sans_groupe_virgule"]
+    ),
+    euro=st.sampled_from(["", " €", " EUR", "€ "]),
+)
 def test_saisie_aller_retour(v, style, euro):
     nombre = ecrire(v, 2, style)
     texte = (euro + nombre) if euro.endswith(" ") else (nombre + euro)

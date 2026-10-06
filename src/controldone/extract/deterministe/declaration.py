@@ -113,109 +113,329 @@ CONF_CONFIRMEE = 0.93
 
 LIBELLES: dict[str, tuple[str, ...]] = {
     "mrn": ("MRN", "Bureau de destination / MRN", "Master reference number", "N° MRN"),
-    "lrn": ("LRN", "LRN (référence déclarant)", "Référence locale", "Réf. int", "Ref. interne",
-            "Numéro de référence", "Local reference number", "LRN (declarant reference)", "Local reference",
-            "Your reference", "Lokale Referenz", "Riferimento locale", "Referencia local"),
-    "date_acceptation": ("Date d'acceptation", "Accepté le", "Acceptation", "Date of acceptance",
-                         "Acceptance date", "Accepted on", "Date de mainlevée", "Mainlevée le",
-                        "Annahmedatum", "Datum der Annahme", "Data di accettazione", "Fecha de aceptación", "Fecha de admisión"),
+    "lrn": (
+        "LRN",
+        "LRN (référence déclarant)",
+        "Référence locale",
+        "Réf. int",
+        "Ref. interne",
+        "Numéro de référence",
+        "Local reference number",
+        "LRN (declarant reference)",
+        "Local reference",
+        "Your reference",
+        "Lokale Referenz",
+        "Riferimento locale",
+        "Referencia local",
+    ),
+    "date_acceptation": (
+        "Date d'acceptation",
+        "Accepté le",
+        "Acceptation",
+        "Date of acceptance",
+        "Acceptance date",
+        "Accepted on",
+        "Date de mainlevée",
+        "Mainlevée le",
+        "Annahmedatum",
+        "Datum der Annahme",
+        "Data di accettazione",
+        "Fecha de aceptación",
+        "Fecha de admisión",
+    ),
     "version": ("Version", "Rang"),
     "type_declaration": ("Type de déclaration", "Declaration type"),
-    "importateur": ("Importateur", "Destinataire / Importateur", "Destinataire / importateur", "Importat",
-                    "Importer", "Consignee / Importer", "Importer / Consignee",
-                   "Einführer", "Importatore", "Importador"),
-    "declarant": ("Déclarant / représentant", "Déclarant / représentant (indirect)",
-                  "Déclarant / représentant (direct)", "Déclarant", "Declarant", "Declarant / representative",
-                  "Déclarant / Représentant",
-                 "Anmelder", "Dichiarante", "Declarante"),
+    "importateur": (
+        "Importateur",
+        "Destinataire / Importateur",
+        "Destinataire / importateur",
+        "Importat",
+        "Importer",
+        "Consignee / Importer",
+        "Importer / Consignee",
+        "Einführer",
+        "Importatore",
+        "Importador",
+    ),
+    "declarant": (
+        "Déclarant / représentant",
+        "Déclarant / représentant (indirect)",
+        "Déclarant / représentant (direct)",
+        "Déclarant",
+        "Declarant",
+        "Declarant / representative",
+        "Déclarant / Représentant",
+        "Anmelder",
+        "Dichiarante",
+        "Declarante",
+    ),
     "expediteur": ("Expéditeur / Exportateur", "Exportateur", "Consignor / Exporter", "Exporter"),
-    "tva_importateur": ("TVA imp", "TVA importateur", "Importer VAT", "N° TVA importateur", "N° de TVA importateur",
-                        "Numéro de TVA importateur", "Importer VAT number", "Importer VAT No"),
+    "tva_importateur": (
+        "TVA imp",
+        "TVA importateur",
+        "Importer VAT",
+        "N° TVA importateur",
+        "N° de TVA importateur",
+        "Numéro de TVA importateur",
+        "Importer VAT number",
+        "Importer VAT No",
+    ),
     "tva": ("N° TVA", "TVA", "VAT", "VAT No", "N° de TVA", "TVA intracom"),
     "eori": ("EORI", "N° EORI", "EORI No"),
-    "pays_expedition": ("Pays d'expédition", "Pays exp", "Country of dispatch", "Country of export",
-                        "Pays de provenance",
-                       "Versendungsland", "Paese di spedizione", "País de expedición"),
-    "incoterm": ("Conditions de livraison", "Incoterm", "Delivery terms", "Terms of delivery", "Livraison",
-                "Lieferbedingungen", "Condizioni di consegna", "Condiciones de entrega"),
-    "devise_facture": ("Monnaie de facturation", "Invoice currency", "Devise de facturation",
-                      "Rechnungswährung", "Valuta di fatturazione", "Moneda de facturación"),
-    "devise_et_montant": ("Monnaie et montant total facturé", "Currency and total amount invoiced",
-                          "Invoice currency / total", "Invoice currency and total", "Monnaie / montant facturé",
-                          "Monnaie et montant facturé", "Devise / montant facturé", "Currency / invoice total",
-                          "Facturation", "Invoicing"),
-    "montant_total_facture": ("Montant total facturé", "Valeur fac", "Valeur intrinsèque totale",
-                              "Total amount invoiced", "Total invoice amount", "Valeur facturée totale",
-                              "Montant facturé total", "Montant total de la facture", "Total invoiced amount",
-                              "Total facturé", "Invoice total amount",
-                             "Gesamtrechnungsbetrag", "Importo totale fatturato", "Importe total facturado"),
-    "taux_change": ("Taux de change", "Taux", "Exchange rate", "Rate of exchange",
-                   "Wechselkurs", "Tasso di cambio", "Tipo de cambio"),
-    "masse_brute_totale": ("Masse brute totale", "Masse brute totale (kg)", "Poids brut", "Poids brut total",
-                           "Total gross mass", "Gross mass total", "Total gross weight",
-                          "Gesamtrohmasse", "Massa lorda totale", "Masa bruta total"),
+    "pays_expedition": (
+        "Pays d'expédition",
+        "Pays exp",
+        "Country of dispatch",
+        "Country of export",
+        "Pays de provenance",
+        "Versendungsland",
+        "Paese di spedizione",
+        "País de expedición",
+    ),
+    "incoterm": (
+        "Conditions de livraison",
+        "Incoterm",
+        "Delivery terms",
+        "Terms of delivery",
+        "Livraison",
+        "Lieferbedingungen",
+        "Condizioni di consegna",
+        "Condiciones de entrega",
+    ),
+    "devise_facture": (
+        "Monnaie de facturation",
+        "Invoice currency",
+        "Devise de facturation",
+        "Rechnungswährung",
+        "Valuta di fatturazione",
+        "Moneda de facturación",
+    ),
+    "devise_et_montant": (
+        "Monnaie et montant total facturé",
+        "Currency and total amount invoiced",
+        "Invoice currency / total",
+        "Invoice currency and total",
+        "Monnaie / montant facturé",
+        "Monnaie et montant facturé",
+        "Devise / montant facturé",
+        "Currency / invoice total",
+        "Facturation",
+        "Invoicing",
+    ),
+    "montant_total_facture": (
+        "Montant total facturé",
+        "Valeur fac",
+        "Valeur intrinsèque totale",
+        "Total amount invoiced",
+        "Total invoice amount",
+        "Valeur facturée totale",
+        "Montant facturé total",
+        "Montant total de la facture",
+        "Total invoiced amount",
+        "Total facturé",
+        "Invoice total amount",
+        "Gesamtrechnungsbetrag",
+        "Importo totale fatturato",
+        "Importe total facturado",
+    ),
+    "taux_change": (
+        "Taux de change",
+        "Taux",
+        "Exchange rate",
+        "Rate of exchange",
+        "Wechselkurs",
+        "Tasso di cambio",
+        "Tipo de cambio",
+    ),
+    "masse_brute_totale": (
+        "Masse brute totale",
+        "Masse brute totale (kg)",
+        "Poids brut",
+        "Poids brut total",
+        "Total gross mass",
+        "Gross mass total",
+        "Total gross weight",
+        "Gesamtrohmasse",
+        "Massa lorda totale",
+        "Masa bruta total",
+    ),
     #: masse brute totale et nombre de colis sous un même libellé (« Gross mass / packages : 3 037 kg / 60 »)
-    "masse_et_colis": ("Masse brute totale / colis", "Masse brute / colis", "Poids brut / colis",
-                       "Gross mass / packages", "Gross weight / packages", "Total gross mass / packages",
-                       "Rohmasse / Packstücke", "Massa lorda / colli", "Masa bruta / bultos"),
-    "nombre_colis_total": ("Nombre total de colis", "Total des colis", "Total packages", "Number of packages",
-                          "Anzahl der Packstücke", "Numero di colli", "Número de bultos"),
+    "masse_et_colis": (
+        "Masse brute totale / colis",
+        "Masse brute / colis",
+        "Poids brut / colis",
+        "Gross mass / packages",
+        "Gross weight / packages",
+        "Total gross mass / packages",
+        "Rohmasse / Packstücke",
+        "Massa lorda / colli",
+        "Masa bruta / bultos",
+    ),
+    "nombre_colis_total": (
+        "Nombre total de colis",
+        "Total des colis",
+        "Total packages",
+        "Number of packages",
+        "Anzahl der Packstücke",
+        "Numero di colli",
+        "Número de bultos",
+    ),
     "colis": ("Colis", "Packages", "Nombre de colis"),
-    "nombre_articles": ("Nombre d'articles", "Nb articles", "Articles", "Nombre d'articles (positions)",
-                        "Number of items", "Total items",
-                       "Anzahl der Positionen", "Numero di articoli", "Número de partidas"),
-    "documents": ("Documents produits", "Documents produits / références", "Docs", "Documents",
-                  "Mentions spéciales / Documents produits", "Documents produced", "Supporting documents"),
+    "nombre_articles": (
+        "Nombre d'articles",
+        "Nb articles",
+        "Articles",
+        "Nombre d'articles (positions)",
+        "Number of items",
+        "Total items",
+        "Anzahl der Positionen",
+        "Numero di articoli",
+        "Número de partidas",
+    ),
+    "documents": (
+        "Documents produits",
+        "Documents produits / références",
+        "Docs",
+        "Documents",
+        "Mentions spéciales / Documents produits",
+        "Documents produced",
+        "Supporting documents",
+    ),
     "ref_fiscale": ("Référence fiscale complémentaire", "Additional fiscal reference"),
-    "total_droits_taxes": ("Total des droits et taxes", "Total droits et taxes", "Total duties and taxes",
-                           "TOTAL DROITS ET TAXES",
-                          "Summe der Abgaben", "Totale dazi e imposte", "Total derechos e impuestos"),
-    "total_a_payer": ("Total à payer ou à garantir", "Total à payer", "TOTAL A PAYER", "Total to be paid",
-                      "Total payable", "Amount payable",
-                     "Zu zahlender Betrag", "Totale da pagare", "Total a pagar"),
-    "recapitulatif": ("Récapitulatif des droits et taxes", "Données comptables", "Summary of duties and taxes"),
+    "total_droits_taxes": (
+        "Total des droits et taxes",
+        "Total droits et taxes",
+        "Total duties and taxes",
+        "TOTAL DROITS ET TAXES",
+        "Summe der Abgaben",
+        "Totale dazi e imposte",
+        "Total derechos e impuestos",
+    ),
+    "total_a_payer": (
+        "Total à payer ou à garantir",
+        "Total à payer",
+        "TOTAL A PAYER",
+        "Total to be paid",
+        "Total payable",
+        "Amount payable",
+        "Zu zahlender Betrag",
+        "Totale da pagare",
+        "Total a pagar",
+    ),
+    "recapitulatif": (
+        "Récapitulatif des droits et taxes",
+        "Données comptables",
+        "Summary of duties and taxes",
+    ),
     "calcul_impositions": ("Calcul des impositions", "Calculation of taxes"),
     "lieu_date": ("Lieu et date", "Place and date"),
-    "taxes_declaration": ("Impositions au niveau de la déclaration", "Taxes au niveau de la déclaration",
-                          "Impositions globales", "Declaration-level taxes", "Taxes at declaration level",
-                          "Duties and taxes at declaration level"),
+    "taxes_declaration": (
+        "Impositions au niveau de la déclaration",
+        "Taxes au niveau de la déclaration",
+        "Impositions globales",
+        "Declaration-level taxes",
+        "Taxes at declaration level",
+        "Duties and taxes at declaration level",
+    ),
     # articles
     "article": ("Article", "Article n°", "Colis et désignation - article", "Item", "Item No"),
-    "code_marchandise": ("Code marchandise", "Code des marchandises", "Commodity code", "Code NC",
-                        "Warennummer", "Codice merce", "Código de mercancía"),
-    "pays_origine": ("Origine", "Pays origine", "Pays d'origine", "Country of origin", "Origin",
-                    "Ursprungsland", "Paese di origine", "País de origen"),
+    "code_marchandise": (
+        "Code marchandise",
+        "Code des marchandises",
+        "Commodity code",
+        "Code NC",
+        "Warennummer",
+        "Codice merce",
+        "Código de mercancía",
+    ),
+    "pays_origine": (
+        "Origine",
+        "Pays origine",
+        "Pays d'origine",
+        "Country of origin",
+        "Origin",
+        "Ursprungsland",
+        "Paese di origine",
+        "País de origen",
+    ),
     "regime": ("Régime", "Procedure", "Procédure"),
     "preference": ("Préférence", "Preference", "Préf.", "Pref."),
-    "designation": ("Désignation", "Description", "Designation",
-                   "Warenbezeichnung", "Descrizione", "Descripción"),
-    "montant_facture_article": ("Montant facturé", "Prix de l'article", "Item price", "Invoiced amount",
-                                "Invoice amount", "Amount invoiced", "Montant de la facture"),
-    "valeur_statistique": ("Valeur statistique", "Statistical value",
-                          "Statistischer Wert", "Valore statistico", "Valor estadístico"),
-    "masse_nette": ("Masse nette", "Masse nette (kg)", "Net mass", "Poids net",
-                   "Eigenmasse", "Massa netta", "Masa neta"),
-    "masse_brute": ("Masse brute", "Masse brute (kg)", "Gross mass",
-                   "Rohmasse", "Massa lorda", "Masa bruta"),
-    "unites_supplementaires": ("Unités supplémentaires", "Supplementary units", "Quantité supplémentaire",
-                               "Quantité", "Quantity"),
+    "designation": (
+        "Désignation",
+        "Description",
+        "Designation",
+        "Warenbezeichnung",
+        "Descrizione",
+        "Descripción",
+    ),
+    "montant_facture_article": (
+        "Montant facturé",
+        "Prix de l'article",
+        "Item price",
+        "Invoiced amount",
+        "Invoice amount",
+        "Amount invoiced",
+        "Montant de la facture",
+    ),
+    "valeur_statistique": (
+        "Valeur statistique",
+        "Statistical value",
+        "Statistischer Wert",
+        "Valore statistico",
+        "Valor estadístico",
+    ),
+    "masse_nette": (
+        "Masse nette",
+        "Masse nette (kg)",
+        "Net mass",
+        "Poids net",
+        "Eigenmasse",
+        "Massa netta",
+        "Masa neta",
+    ),
+    "masse_brute": ("Masse brute", "Masse brute (kg)", "Gross mass", "Rohmasse", "Massa lorda", "Masa bruta"),
+    "unites_supplementaires": (
+        "Unités supplémentaires",
+        "Supplementary units",
+        "Quantité supplémentaire",
+        "Quantité",
+        "Quantity",
+    ),
 }
 
 #: Composantes d'un libellé dans une rubrique composée (« Colis / articles », « LRN / rang ») et lecture de chacune.
 _COMPOSANTS: dict[str, tuple[str, ...]] = {
-    "masse_brute_totale": ("masse",), "masse_brute": ("masse",), "masse_et_colis": ("masse", "colis"),
-    "nombre_colis_total": ("colis",), "colis": ("colis",), "nombre_articles": ("articles",), "lrn": ("lrn",),
-    "version": ("version",), "mrn": ("mrn",),
+    "masse_brute_totale": ("masse",),
+    "masse_brute": ("masse",),
+    "masse_et_colis": ("masse", "colis"),
+    "nombre_colis_total": ("colis",),
+    "colis": ("colis",),
+    "nombre_articles": ("articles",),
+    "lrn": ("lrn",),
+    "version": ("version",),
+    "mrn": ("mrn",),
 }
 _CHAMPS_COMPOSANTS: dict[str, tuple[str, str]] = {
-    "masse": ("masse_brute_totale", "v_masse"), "colis": ("nombre_colis_total", "v_colis"),
-    "articles": ("nombre_articles", "v_petit_entier"), "lrn": ("lrn", "v_ref"), "version": ("version", "v_petit_entier"),
+    "masse": ("masse_brute_totale", "v_masse"),
+    "colis": ("nombre_colis_total", "v_colis"),
+    "articles": ("nombre_articles", "v_petit_entier"),
+    "lrn": ("lrn", "v_ref"),
+    "version": ("version", "v_petit_entier"),
     "mrn": ("mrn", "v_mrn"),
 }
 
 #: Libellés qui ferment un bloc d'article (zones de niveau déclaration).
-TERMINATEURS = frozenset({"documents", "total_droits_taxes", "total_a_payer", "recapitulatif", "lieu_date",
-                          "ref_fiscale", "taxes_declaration"})
+TERMINATEURS = frozenset(
+    {
+        "documents",
+        "total_droits_taxes",
+        "total_a_payer",
+        "recapitulatif",
+        "lieu_date",
+        "ref_fiscale",
+        "taxes_declaration",
+    }
+)
 #: Libellés qui ferment le pavé d'une partie (importateur, déclarant).
 _STOP_PARTIE = frozenset(LIBELLES) - {"tva", "eori", "tva_importateur"}
 
@@ -223,24 +443,103 @@ _STOP_PARTIE = frozenset(LIBELLES) - {"tva", "eori", "tva_importateur"}
 
 COLONNES: dict[str, tuple[str, ...]] = {
     "numero": ("N", "N°", "Pos.", "Pos", "Art.", "No", "Item", "Item No", "Posizione", "Partida"),
-    "code": ("Code", "Code marchandise", "Commodity code", "Code NC", "HS code", "Warennummer", "Codice merce",
-             "Código mercancía", "Code SH"),
-    "designation": ("Désignation", "Description", "Libellé", "Designation", "Warenbezeichnung", "Descrizione",
-                    "Descripción"),
+    "code": (
+        "Code",
+        "Code marchandise",
+        "Commodity code",
+        "Code NC",
+        "HS code",
+        "Warennummer",
+        "Codice merce",
+        "Código mercancía",
+        "Code SH",
+    ),
+    "designation": (
+        "Désignation",
+        "Description",
+        "Libellé",
+        "Designation",
+        "Warenbezeichnung",
+        "Descrizione",
+        "Descripción",
+    ),
     "origine": ("Or", "Origine", "Origin", "Pays origine", "Country of origin", "Ursprung", "Origen"),
-    "preference": ("Pf", "Préf.", "Pref.", "Préférence", "Preference", "Präferenz", "Preferenza", "Preferencia"),
+    "preference": (
+        "Pf",
+        "Préf.",
+        "Pref.",
+        "Préférence",
+        "Preference",
+        "Präferenz",
+        "Preferenza",
+        "Preferencia",
+    ),
     "regime": ("Rég.", "Régime", "Proc.", "Procedure", "Procédure", "Verfahren", "Regime", "Régimen"),
-    "montant_facture": ("Mt facturé", "Montant facturé", "Invoice amount", "Mt fact", "Invoiced amount",
-                        "Rechnungsbetrag", "Importo fatturato", "Importe facturado"),
+    "montant_facture": (
+        "Mt facturé",
+        "Montant facturé",
+        "Invoice amount",
+        "Mt fact",
+        "Invoiced amount",
+        "Rechnungsbetrag",
+        "Importo fatturato",
+        "Importe facturado",
+    ),
     "valeur": ("Valeur (EUR)", "Valeur", "Value (EUR)", "Value"),
-    "valeur_statistique": ("Val. stat.", "Valeur stat.", "Valeur statistique", "Stat. value", "Statistical value",
-                           "Statistischer Wert", "Valore statistico", "Valor estadístico"),
-    "quantite": ("Qté", "Qty", "Quantité", "Quantity", "Qté sup.", "Qty sup.", "Supp. units", "Supplementary units",
-                 "Unités sup.", "Unités supplémentaires", "Besondere Maßeinheit", "Unità supplementari"),
-    "masse_brute": ("Masse brute kg", "Masse brute", "Gross mass kg", "Gross mass", "Poids brut", "Brut kg", "Brut",
-                    "Gross kg", "Gross", "Rohmasse", "Brutto", "Massa lorda", "Masa bruta", "Peso bruto"),
-    "masse_nette": ("Masse nette kg", "Masse nette", "Net mass kg", "Net mass", "Net kg", "Net", "Poids net",
-                    "Eigenmasse", "Netto", "Massa netta", "Masa neta", "Peso neto"),
+    "valeur_statistique": (
+        "Val. stat.",
+        "Valeur stat.",
+        "Valeur statistique",
+        "Stat. value",
+        "Statistical value",
+        "Statistischer Wert",
+        "Valore statistico",
+        "Valor estadístico",
+    ),
+    "quantite": (
+        "Qté",
+        "Qty",
+        "Quantité",
+        "Quantity",
+        "Qté sup.",
+        "Qty sup.",
+        "Supp. units",
+        "Supplementary units",
+        "Unités sup.",
+        "Unités supplémentaires",
+        "Besondere Maßeinheit",
+        "Unità supplementari",
+    ),
+    "masse_brute": (
+        "Masse brute kg",
+        "Masse brute",
+        "Gross mass kg",
+        "Gross mass",
+        "Poids brut",
+        "Brut kg",
+        "Brut",
+        "Gross kg",
+        "Gross",
+        "Rohmasse",
+        "Brutto",
+        "Massa lorda",
+        "Masa bruta",
+        "Peso bruto",
+    ),
+    "masse_nette": (
+        "Masse nette kg",
+        "Masse nette",
+        "Net mass kg",
+        "Net mass",
+        "Net kg",
+        "Net",
+        "Poids net",
+        "Eigenmasse",
+        "Netto",
+        "Massa netta",
+        "Masa neta",
+        "Peso neto",
+    ),
     "colis": ("Colis", "Packages", "Pkgs", "Nombre de colis", "Packstücke", "Colli", "Bultos"),
     "base_droits": ("Base droits", "Duty base"),
     "taux_droits": ("Tx", "Duty rate"),
@@ -249,14 +548,39 @@ COLONNES: dict[str, tuple[str, ...]] = {
     "tva": ("TVA", "VAT"),
     "statut": ("St", "Statut", "Status"),
     "type": ("Type", "Tax", "Taxe", "Code taxe", "Abgabe", "Tributo", "Impuesto"),
-    "base": ("Base d'imposition", "Base", "Tax base", "Basis", "Assiette", "Bemessungsgrundlage", "Base imponibile",
-             "Base imponible"),
+    "base": (
+        "Base d'imposition",
+        "Base",
+        "Tax base",
+        "Basis",
+        "Assiette",
+        "Bemessungsgrundlage",
+        "Base imponibile",
+        "Base imponible",
+    ),
     "taux": ("Quotité", "Taux", "Rate"),
     "montant": ("Montant", "Montant EUR", "Amount", "Amount EUR"),
-    "a_payer": ("À payer", "Payable", "Amount payable", "To pay", "Exigible", "Zu zahlen",
-                "Da pagare", "A pagar"),
-    "mp": ("MP", "Mode de paiement", "MOP", "Payment", "Paiement", "Mode paiement", "Zahlungsart", "Pagamento",
-           "Pago"),
+    "a_payer": (
+        "À payer",
+        "Payable",
+        "Amount payable",
+        "To pay",
+        "Exigible",
+        "Zu zahlen",
+        "Da pagare",
+        "A pagar",
+    ),
+    "mp": (
+        "MP",
+        "Mode de paiement",
+        "MOP",
+        "Payment",
+        "Paiement",
+        "Mode paiement",
+        "Zahlungsart",
+        "Pagamento",
+        "Pago",
+    ),
     "reference": ("Référence", "Reference"),
 }
 
@@ -264,28 +588,29 @@ COLONNES: dict[str, tuple[str, ...]] = {
 
 #: Nombre imprimé : milliers séparés par une espace (normale, insécable, fine) ou sans séparateur ; décimales
 #: après « , » ou « . » (une espace parasite d'OCR après la virgule est tolérée).
-_NUM = (r"(?:\d{1,3}(?:[ \u00a0\u202f\u2009'’]\d{3})+(?:[.,]\d{1,6})?"  # 1 234,56 ; 1'234.56
-        r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,6})?"  # 1,234,567.89 ; 1,250,000
-        r"|\d{1,3}(?:\.\d{3})+(?:,\d{1,6})?"  # 1.234.567,89
-        r"|\d+(?:[.,] ?\d{1,6})?)")  # 1234,56 ; 4,7 ; « 4946, 06 » (OCR)
+_NUM = (
+    r"(?:\d{1,3}(?:[ \u00a0\u202f\u2009'’]\d{3})+(?:[.,]\d{1,6})?"  # 1 234,56 ; 1'234.56
+    r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,6})?"  # 1,234,567.89 ; 1,250,000
+    r"|\d{1,3}(?:\.\d{3})+(?:,\d{1,6})?"  # 1.234.567,89
+    r"|\d+(?:[.,] ?\d{1,6})?)"
+)  # 1234,56 ; 4,7 ; « 4946, 06 » (OCR)
 _NUM_RE = re.compile(rf"(?<![\w.,]){_NUM}(?![\d])")
 _DATE_RE = re.compile(r"(?<!\d)(\d{1,2})\s?[/.\-]\s?(\d{1,2})\s?[/.\-]\s?(\d{4}|\d{2})(?!\d)")
 _DATE_ISO_RE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
-_TAUX_LIB_RE = re.compile(
-    rf"(?<![\d.,])1\s*([A-Z]{{3}})\s*[=:\-–]\s*({_NUM})\s*([A-Z]{{3}})\b"
-)
+_TAUX_LIB_RE = re.compile(rf"(?<![\d.,])1\s*([A-Z]{{3}})\s*[=:\-–]\s*({_NUM})\s*([A-Z]{{3}})\b")
 #: Même expression, codes devant les nombres : « EUR 1 = CHF 0.91106 ».
-_TAUX_LIB_INV_RE = re.compile(
-    rf"\b([A-Z]{{3}})\s*1(?![\d.,])\s*[=:]\s*([A-Z]{{3}})\s*({_NUM})(?![\d])"
-)
+_TAUX_LIB_INV_RE = re.compile(rf"\b([A-Z]{{3}})\s*1(?![\d.,])\s*[=:]\s*([A-Z]{{3}})\s*({_NUM})(?![\d])")
 _CODE_TAXE_RE = re.compile(r"^[A-Z][0-9OoIlSZQ]{2}$|^[A-Z]{3}$")
-_MOTS_NON_TAXE = frozenset({"EUR", "TVA", "VAT", "MRN", "LRN", "USD", "TOT", "DES", "LES", "AND", "THE", "REF",
-                            "TYP", "TAX"})
+_MOTS_NON_TAXE = frozenset(
+    {"EUR", "TVA", "VAT", "MRN", "LRN", "USD", "TOT", "DES", "LES", "AND", "THE", "REF", "TYP", "TAX"}
+)
 _CODE_DOC_RE = re.compile(r"^([NCYU][0-9O]{3})(?::(.*))?$")
 _BOITE_RE = re.compile(r"^(?:\d{1,2}[a-z]?|[A-Z])$")
 _SEPARATEURS = frozenset({"|", "¦", ";"})
 #: Section « Documents produits / références » (clé sans espaces ni accents) et fin de section.
-_SECTION_DOCS_RE = re.compile(r"^(?:documents?produits|documentsreferences|producedocuments|documentsproduced)")
+_SECTION_DOCS_RE = re.compile(
+    r"^(?:documents?produits|documentsreferences|producedocuments|documentsproduced)"
+)
 _FIN_SECTION_DOCS_RE = re.compile(r"^(?:article|art\d|item|designation|recapitulatif|total)")
 #: Ligne de forfait « petits envois » lue hors tableau (D-811).
 _FORFAIT_LIBELLE_RE = re.compile(r"forfait\w*\s+petits?\s+envois?|flat.?rate|low.?value.*dut")
@@ -304,28 +629,61 @@ _LIBELLES_DOCS: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 #: Confusions lettre -> chiffre et chiffre -> lettre (corrections imposées par la forme, §8.5.4).
-_VERS_CHIFFRE = str.maketrans({"O": "0", "D": "0", "Q": "0", "I": "1", "L": "1", "|": "1", "S": "5", "B": "8",
-                               "Z": "2", "G": "6", "T": "7", "A": "4"})
+_VERS_CHIFFRE = str.maketrans(
+    {
+        "O": "0",
+        "D": "0",
+        "Q": "0",
+        "I": "1",
+        "L": "1",
+        "|": "1",
+        "S": "5",
+        "B": "8",
+        "Z": "2",
+        "G": "6",
+        "T": "7",
+        "A": "4",
+    }
+)
 _VERS_LETTRE = str.maketrans({"0": "O", "1": "I", "5": "S", "8": "B", "2": "Z", "6": "G", "4": "A", "7": "T"})
 
 #: Catégorie d'une taxe d'après son libellé imprimé (ordre significatif).
 _CATEGORIES_LIBELLE: tuple[tuple[re.Pattern[str], CategorieTaxe], ...] = (
     (re.compile(r"\b(tva|vat|taxe sur la valeur|iva)\b"), CategorieTaxe.tva),
-    (re.compile(r"forfait|petits? envois?|faible valeur|low.?value|flat.?rate"), CategorieTaxe.forfait_petits_envois),
-    (re.compile(r"dumping|compensat|countervail|specifique|specific|accise|excise|additionnel|additional|autre"),
-     CategorieTaxe.autre_taxe),
-    (re.compile(r"droits?( de douane)?\b|customs dut|\bdut(y|ies)\b|droit tiers|third.country"), CategorieTaxe.droit),
+    (
+        re.compile(r"forfait|petits? envois?|faible valeur|low.?value|flat.?rate"),
+        CategorieTaxe.forfait_petits_envois,
+    ),
+    (
+        re.compile(
+            r"dumping|compensat|countervail|specifique|specific|accise|excise|additionnel|additional|autre"
+        ),
+        CategorieTaxe.autre_taxe,
+    ),
+    (
+        re.compile(r"droits?( de douane)?\b|customs dut|\bdut(y|ies)\b|droit tiers|third.country"),
+        CategorieTaxe.droit,
+    ),
 )
 #: Codes usuels (repli quand aucun libellé n'est imprimé pour le code).
 _CATEGORIES_CODE: dict[str, CategorieTaxe] = {
-    "A00": CategorieTaxe.droit, "A10": CategorieTaxe.droit, "A20": CategorieTaxe.droit,
-    "A30": CategorieTaxe.autre_taxe, "A35": CategorieTaxe.autre_taxe, "A40": CategorieTaxe.autre_taxe,
-    "A45": CategorieTaxe.autre_taxe, "B00": CategorieTaxe.tva,
+    "A00": CategorieTaxe.droit,
+    "A10": CategorieTaxe.droit,
+    "A20": CategorieTaxe.droit,
+    "A30": CategorieTaxe.autre_taxe,
+    "A35": CategorieTaxe.autre_taxe,
+    "A40": CategorieTaxe.autre_taxe,
+    "A45": CategorieTaxe.autre_taxe,
+    "B00": CategorieTaxe.tva,
 }
 #: Modes de paiement usuels (lettres de la nomenclature de l'Union) ; la légende imprimée prime.
 _PAIEMENT_DEFAUT: dict[str, PaiementNormalise] = {
-    "A": PaiementNormalise.comptant, "B": PaiementNormalise.comptant, "C": PaiementNormalise.comptant,
-    "D": PaiementNormalise.comptant, "H": PaiementNormalise.comptant, "E": PaiementNormalise.differe,
+    "A": PaiementNormalise.comptant,
+    "B": PaiementNormalise.comptant,
+    "C": PaiementNormalise.comptant,
+    "D": PaiementNormalise.comptant,
+    "H": PaiementNormalise.comptant,
+    "E": PaiementNormalise.differe,
     "G": PaiementNormalise.autoliquide,
 }
 _SENS_PAIEMENT: tuple[tuple[re.Pattern[str], PaiementNormalise], ...] = (
@@ -437,7 +795,7 @@ class _Hit:
 
     @property
     def toks(self) -> list[_Tok]:
-        return self.ligne.toks[self.i:self.j]
+        return self.ligne.toks[self.i : self.j]
 
     @property
     def x0(self) -> float:
@@ -576,7 +934,9 @@ class ExtracteurDeclaration:
             sel = [p for p in pages if p.numero in numeros]
         return sorted(sel or list(pages), key=lambda p: p.numero)
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         sel = self._pages_du_document(document, pages)
         textes = context.options.get("textes_pages") or {}
         positionnes = []
@@ -589,8 +949,9 @@ class ExtracteurDeclaration:
             positionnes.append(pt)
         lecteur = _Lecteur(document, positionnes, context)
         champs = lecteur.extraire()
-        return ExtractionResult(extracteur=INFO, champs=champs, avertissements=lecteur.avertissements,
-                                partielle=lecteur.partielle)
+        return ExtractionResult(
+            extracteur=INFO, champs=champs, avertissements=lecteur.avertissements, partielle=lecteur.partielle
+        )
 
 
 class _Lecteur:
@@ -726,11 +1087,15 @@ class _Lecteur:
         elif suivants and fin > h.j:
             # Seul mot entre deux libellés de cases : un numéro de case collé au libellé suivant (« 35 Masse
             # brute (kg) 38 Masse nette (kg) » lu par OCR), pas une valeur (D-712).
-            entre = [t for t in toks[h.j:fin] if _cle(t.t) not in ("", "kg", "kgs")]
+            entre = [t for t in toks[h.j : fin] if _cle(t.t) not in ("", "kg", "kgs")]
             nxt = suivants[0].toks[0]
-            if len(entre) == 1 and re.fullmatch(r"\d{1,2}", entre[0].t) and nxt.x0 - entre[0].x1 < 1.5 * nxt.hx:
+            if (
+                len(entre) == 1
+                and re.fullmatch(r"\d{1,2}", entre[0].t)
+                and nxt.x0 - entre[0].x1 < 1.5 * nxt.hx
+            ):
                 fin = toks.index(entre[0])
-        sel = list(toks[h.j:max(h.j, fin)])
+        sel = list(toks[h.j : max(h.j, fin)])
         while sel and not _cle(sel[0].t) and sel[0].t not in _SEPARATEURS:
             sel = sel[1:]  # « : », « … »
         out: list[_Tok] = []
@@ -754,13 +1119,14 @@ class _Lecteur:
             droite = 1.0
         return gauche, droite
 
-    def _dessous(self, h: _Hit, *, max_lignes: int = 1, dy_max: float = 0.035, partie: bool = False
-                 ) -> list[_Span]:
+    def _dessous(
+        self, h: _Hit, *, max_lignes: int = 1, dy_max: float = 0.035, partie: bool = False
+    ) -> list[_Span]:
         """Lignes sous le libellé, dans la colonne de la case (formulaires à cases, pavés)."""
         gauche, droite = self._plage(h)
         out: list[_Span] = []
         bas = h.y1
-        for ligne in self.lignes[h.ligne.idx + 1:]:
+        for ligne in self.lignes[h.ligne.idx + 1 :]:
             if ligne.page != h.ligne.page:
                 break
             if ligne.y0 - bas > dy_max:
@@ -771,8 +1137,11 @@ class _Lecteur:
                 # texte par un grand blanc) ouvre la colonne voisine ; il borne le pavé au lieu de le fermer,
                 # et les lignes de cette colonne qui s'intercalent sont ignorées (D-951).
                 for x in sorted(libs, key=lambda x: x.x0):
-                    if x.cle in _STOP_PARTIE and x.x0 > max(h.x1 + 0.05, gauche + 0.15) and all(
-                            x.x0 - t.x1 > 0.04 for t in ligne.toks if t.x1 <= x.x0):
+                    if (
+                        x.cle in _STOP_PARTIE
+                        and x.x0 > max(h.x1 + 0.05, gauche + 0.15)
+                        and all(x.x0 - t.x1 > 0.04 for t in ligne.toks if t.x1 <= x.x0)
+                    ):
                         droite = min(droite, x.x0 - 0.004)
                         break
                 libs = [x for x in libs if x.x0 <= droite]
@@ -789,8 +1158,14 @@ class _Lecteur:
                 break
         return out
 
-    def _lire(self, cles: Sequence[str], validateur: Callable[[_Span], _Lu | None], *,
-              lignes: set[int] | None = None, dessous: bool = True) -> _Lu | None:
+    def _lire(
+        self,
+        cles: Sequence[str],
+        validateur: Callable[[_Span], _Lu | None],
+        *,
+        lignes: set[int] | None = None,
+        dessous: bool = True,
+    ) -> _Lu | None:
         for h in self._hits(cles, lignes):
             lu = validateur(self._droite(h))
             if lu is None:
@@ -830,22 +1205,43 @@ class _Lecteur:
     def _est_ocr(self, vs: ValeurSourcee | None) -> bool:
         return vs is not None and vs.methode is Methode.ocr
 
-    def _vs(self, chemin: str, lu: _Lu | None, *, type_valeur: TypeValeur | None = None,
-            unite: str | None = None, unite_brute: str | None = None, conf: float | None = None
-            ) -> ValeurSourcee | None:
+    def _vs(
+        self,
+        chemin: str,
+        lu: _Lu | None,
+        *,
+        type_valeur: TypeValeur | None = None,
+        unite: str | None = None,
+        unite_brute: str | None = None,
+        conf: float | None = None,
+    ) -> ValeurSourcee | None:
         if lu is None or lu.span.vide or lu.valeur is None:
             return None
         span = lu.span
         page = span.toks[0].page
-        z = Zone(x0=_b(min(t.x0 for t in span.toks)), y0=_b(min(t.y0 for t in span.toks)),
-                 x1=_b(max(t.x1 for t in span.toks)), y1=_b(max(t.y1 for t in span.toks)))
+        z = Zone(
+            x0=_b(min(t.x0 for t in span.toks)),
+            y0=_b(min(t.y0 for t in span.toks)),
+            x1=_b(max(t.x1 for t in span.toks)),
+            y1=_b(max(t.y1 for t in span.toks)),
+        )
         ligne = self.lignes[span.toks[0].li]
         c = self._confiance(span, lu.penalite) if conf is None else conf
         vs = valeur_sourcee(
-            type_document=TD, chemin=chemin, brut=lu.brut, document_id=self.document.id, page=page,
-            extracteur=INFO, methode=self._methode(span), confiance=c, textes_pages=self.textes,
-            zone=z if self.pages[page].geometrie else None, texte_contexte=ligne.texte[:200],
-            type_valeur=type_valeur, separateur_decimal=self.sep, id_valeur=self.ids.nouveau(Prefixe.valeur),
+            type_document=TD,
+            chemin=chemin,
+            brut=lu.brut,
+            document_id=self.document.id,
+            page=page,
+            extracteur=INFO,
+            methode=self._methode(span),
+            confiance=c,
+            textes_pages=self.textes,
+            zone=z if self.pages[page].geometrie else None,
+            texte_contexte=ligne.texte[:200],
+            type_valeur=type_valeur,
+            separateur_decimal=self.sep,
+            id_valeur=self.ids.nouveau(Prefixe.valeur),
         )
         maj: dict[str, Any] = {"valeur": lu.valeur, "confiance": round(max(0.0, min(1.0, c)), 4)}
         if unite is not None:
@@ -857,7 +1253,9 @@ class _Lecteur:
     def _copie(self, vs: ValeurSourcee | None, chemin: str) -> ValeurSourcee | None:
         if vs is None:
             return None
-        return vs.model_copy(update={"id": self.ids.nouveau(Prefixe.valeur), "chemin": chemin_complet(TD, chemin)})
+        return vs.model_copy(
+            update={"id": self.ids.nouveau(Prefixe.valeur), "chemin": chemin_complet(TD, chemin)}
+        )
 
     def _definir(self, chemin: str, vs: ValeurSourcee | None) -> None:
         if vs is not None:
@@ -869,7 +1267,7 @@ class _Lecteur:
         utiles = [k for k, t in enumerate(span.toks) if t.k]
         if not utiles:
             return None
-        sp = span.depuis(span.toks[utiles[0]:utiles[-1] + 1])
+        sp = span.depuis(span.toks[utiles[0] : utiles[-1] + 1])
         return _Lu(sp, sp.texte, sp.texte)
 
     def _v_motif(self, span: _Span, motif: str) -> _Lu | None:
@@ -884,7 +1282,7 @@ class _Lecteur:
             for n in (1, 2):
                 if i + n > len(toks):
                     break
-                sel = toks[i:i + n]
+                sel = toks[i : i + n]
                 brut = " ".join(x.t for x in sel)
                 net = re.sub(r"[^A-Za-z0-9]", "", brut).upper()
                 if len(net) != 18:
@@ -932,7 +1330,7 @@ class _Lecteur:
             return _Lu(span.sous(m.start(), m.end()), m.group(0), d.isoformat())
         dl = date_en_lettres(s)  # « 18 août 2026 », « 11 Mar 2026 » (D-1804)
         if dl is not None:
-            return _Lu(span.sous(dl[0], dl[1]), s[dl[0]:dl[1]], dl[2])
+            return _Lu(span.sous(dl[0], dl[1]), s[dl[0] : dl[1]], dl[2])
         return None
 
     def v_pays(self, span: _Span) -> _Lu | None:
@@ -953,7 +1351,7 @@ class _Lecteur:
         for k, t in enumerate(span.toks[:3]):
             net = t.t.strip(".,:;()").upper()
             if net in INCOTERMS or net in INCOTERMS_ANCIENS:
-                lieu = span.depuis(span.toks[k + 1:])
+                lieu = span.depuis(span.toks[k + 1 :])
                 lu = _Lu(span.depuis([t]), t.t.strip(".,:;()"), net)
                 if not lieu.vide:
                     lu.extra["lieu"] = _Lu(lieu, lieu.texte, lieu.texte)
@@ -977,7 +1375,7 @@ class _Lecteur:
         signe = re.search(r"[-−–]\s?$", span.texte[:debut])
         if signe and (signe.start() == 0 or span.texte[signe.start() - 1] in " :("):
             debut = signe.start()  # signe imprimé conservé dans la valeur brute (§5.2)
-        return _Lu(span.sous(debut, m.end()), span.texte[debut:m.end()], valeur, pen)
+        return _Lu(span.sous(debut, m.end()), span.texte[debut : m.end()], valeur, pen)
 
     def v_entier(self, span: _Span) -> _Lu | None:
         for m in _nombres(span):
@@ -995,16 +1393,20 @@ class _Lecteur:
         if lu is not None:
             return lu
         lu = self.v_entier(span)
-        if lu is not None and not all(re.fullmatch(r"\W*\d+\W*", t.t) and not re.search(r"\d[-/.]\d", t.t)
-                                      for t in lu.span.toks):
+        if lu is not None and not all(
+            re.fullmatch(r"\W*\d+\W*", t.t) and not re.search(r"\d[-/.]\d", t.t) for t in lu.span.toks
+        ):
             return None  # nombre pris dans une référence (« CMR-FX-554972 », « 999-72400624 »)
         return lu
 
     @staticmethod
     def _nombre_devant_colis(toks: Sequence[_Tok]) -> _Lu | None:
         for n in range(1, len(toks)):
-            if _MOTS_COLIS_RE.fullmatch(toks[n].k) and re.fullmatch(r"\d{1,6}", toks[n - 1].t) and (
-                    n < 2 or not re.fullmatch(r"\d{1,3}", toks[n - 2].t)):
+            if (
+                _MOTS_COLIS_RE.fullmatch(toks[n].k)
+                and re.fullmatch(r"\d{1,6}", toks[n - 1].t)
+                and (n < 2 or not re.fullmatch(r"\d{1,3}", toks[n - 2].t))
+            ):
                 return _Lu(_Span([toks[n - 1]]), toks[n - 1].t, str(int(toks[n - 1].t)))
         return None
 
@@ -1043,7 +1445,7 @@ class _Lecteur:
             lu = self._lu_nombre(span, m)
             if lu is None or lu.valeur is None:
                 continue
-            reste = span.texte[m.end():].strip().lower()
+            reste = span.texte[m.end() :].strip().lower()
             if reste.startswith(("kg", "kgs")):
                 lu.extra["unite"] = "kg"
             lu.valeur = str(Decimal(lu.valeur).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP))
@@ -1061,14 +1463,19 @@ class _Lecteur:
         """Montant accompagné d'un code ISO de devise (avant ou après) ; montant entier admis pour une devise
         sans décimales."""
         toks = span.toks
-        devs = [(k, t.t.strip(".,:;()")) for k, t in enumerate(toks)
-                if re.fullmatch(r"[A-Z]{3}", t.t.strip(".,:;()")) and t.t.strip(".,:;()") in ISO_4217]
+        devs = [
+            (k, t.t.strip(".,:;()"))
+            for k, t in enumerate(toks)
+            if re.fullmatch(r"[A-Z]{3}", t.t.strip(".,:;()")) and t.t.strip(".,:;()") in ISO_4217
+        ]
         for m in _nombres(span):
             sous = span.sous(m.start(), m.end())
             if sous.vide:
                 continue
             a, b = toks.index(sous.toks[0]), toks.index(sous.toks[-1])
-            dev = next((d for k, d in devs if k == b + 1), None) or next((d for k, d in devs if k == a - 1), None)
+            dev = next((d for k, d in devs if k == b + 1), None) or next(
+                (d for k, d in devs if k == a - 1), None
+            )
             dev = dev or devise_connue
             if not _a_decimales(m) and dev not in DEVISES_SANS_DECIMALES:
                 continue
@@ -1094,7 +1501,9 @@ class _Lecteur:
             else:
                 m = None
         if m:
-            g, num, d = (m.group(1), m.group(2), m.group(3)) if gn == 2 else (m.group(1), m.group(3), m.group(2))
+            g, num, d = (
+                (m.group(1), m.group(2), m.group(3)) if gn == 2 else (m.group(1), m.group(3), m.group(2))
+            )
             dval, ambigu = _decimal(num, self.sep)
             if dval is None or dval == 0:
                 return None
@@ -1105,8 +1514,11 @@ class _Lecteur:
             else:
                 sens, devise = None, None
             lu = _Lu(span.sous(m.start(gn), m.end(gn)), num, str(dval), 0.15 if ambigu else 0.0)
-            lu.extra.update(sens=sens, devise=devise, expr=_Lu(span.sous(m.start(), m.end()), m.group(0),
-                                                               sens.value if sens else None))
+            lu.extra.update(
+                sens=sens,
+                devise=devise,
+                expr=_Lu(span.sous(m.start(), m.end()), m.group(0), sens.value if sens else None),
+            )
             return lu
         for mm in _nombres(span):
             frac = re.search(r"[.,] ?(\d+)$", mm.group(0))
@@ -1147,7 +1559,11 @@ class _Lecteur:
             net = t.t.strip(".,:;")
             chiffres = re.sub(r"[ .]", "", net)
             corr = chiffres.upper().translate(_VERS_CHIFFRE)
-            if len(corr) in (8, 10) and corr.isdigit() and sum(c.isdigit() for c in chiffres) >= len(chiffres) - 2:
+            if (
+                len(corr) in (8, 10)
+                and corr.isdigit()
+                and sum(c.isdigit() for c in chiffres) >= len(chiffres) - 2
+            ):
                 pen = 0.0 if corr == chiffres else 0.15
                 return _Lu(span.depuis([t]), net, corr, pen)
         return None
@@ -1160,12 +1576,17 @@ class _Lecteur:
         lu = self._lu_nombre(span, m)
         if lu is None:
             return None
-        reste = span.texte[m.end():].strip().split(" ")[0] if span.texte[m.end():].strip() else ""
+        reste = span.texte[m.end() :].strip().split(" ")[0] if span.texte[m.end() :].strip() else ""
         if reste and not re.match(r"^[\d|]", reste):
             sp = span.sous(m.start(), m.end() + 1 + len(reste))
             u = normalize_unit(reste)
-            lu = _Lu(sp, f"{m.group(0)} {reste}", lu.valeur, lu.penalite,
-                     {"unite": u.code if u.connue else None, "unite_brute": reste})
+            lu = _Lu(
+                sp,
+                f"{m.group(0)} {reste}",
+                lu.valeur,
+                lu.penalite,
+                {"unite": u.code if u.connue else None, "unite_brute": reste},
+            )
         return lu
 
     # --- extraction -------------------------------------------------------------------------------------------
@@ -1200,7 +1621,14 @@ class _Lecteur:
         self._coherence()
         self._recouper_montant_generique()
         for tx in self._lignes_sans_code:
-            for vs in (tx.article, tx.base_montant, tx.base_quantite, tx.taux, tx.montant, tx.montant_a_payer):
+            for vs in (
+                tx.article,
+                tx.base_montant,
+                tx.base_quantite,
+                tx.taux,
+                tx.montant,
+                tx.montant_a_payer,
+            ):
                 if vs is not None and vs.confiance > PLAFOND_LIGNE_SANS_CODE:
                     self._remplacer(vs, PLAFOND_LIGNE_SANS_CODE)
         for tx in self._codes_illisibles:
@@ -1229,16 +1657,23 @@ class _Lecteur:
         if date_lue is None:
             date_lue = self._date_prose(lignes)
         c.date_acceptation = self._vs("date_acceptation", date_lue)
-        c.version = self._vs("version", self._lire(["version"], self.v_petit_entier, lignes=lignes, dessous=False))
-        c.pays_expedition = self._vs("pays_expedition", self._lire(["pays_expedition"], self.v_pays, lignes=lignes))
+        c.version = self._vs(
+            "version", self._lire(["version"], self.v_petit_entier, lignes=lignes, dessous=False)
+        )
+        c.pays_expedition = self._vs(
+            "pays_expedition", self._lire(["pays_expedition"], self.v_pays, lignes=lignes)
+        )
         inc = self._lire(["incoterm"], self.v_incoterm, lignes=lignes)
         c.incoterm = self._vs("incoterm", inc)
         if inc is not None and "lieu" in inc.extra:
             c.incoterm_lieu = self._vs("incoterm_lieu", inc.extra["lieu"], type_valeur=TypeValeur.texte)
         dev = self._lire(["devise_facture"], self.v_devise, lignes=lignes)
         devise = dev.valeur if dev else None
-        mt = self._lire(["montant_total_facture", "devise_et_montant"],
-                        lambda sp: self.v_montant_devise(sp, devise), lignes=lignes)
+        mt = self._lire(
+            ["montant_total_facture", "devise_et_montant"],
+            lambda sp: self.v_montant_devise(sp, devise),
+            lignes=lignes,
+        )
         if mt is None:
             mt = self._montant_facture_entete(lignes, devise)
         if dev is None and mt is not None and "devise_span" in mt.extra:
@@ -1264,13 +1699,17 @@ class _Lecteur:
         c.masse_brute_totale = self._vs("masse_brute_totale", masse)
         colis = self._lire(["nombre_colis_total", "colis"], self.v_colis, lignes=lignes)
         if colis is None:
-            colis = self._lire(["masse_et_colis"], lambda sp: self._nombre_devant_colis(sp.toks)
-                               or self._apres_barre(sp), lignes=lignes)
+            colis = self._lire(
+                ["masse_et_colis"],
+                lambda sp: self._nombre_devant_colis(sp.toks) or self._apres_barre(sp),
+                lignes=lignes,
+            )
         if colis is None:
             colis = self._colis_en_clair(lignes)
         c.nombre_colis_total = self._vs("nombre_colis_total", colis)
-        c.nombre_articles = self._vs("nombre_articles",
-                                     self._lire(["nombre_articles"], self.v_petit_entier, lignes=lignes))
+        c.nombre_articles = self._vs(
+            "nombre_articles", self._lire(["nombre_articles"], self.v_petit_entier, lignes=lignes)
+        )
         # Rubriques composées (« Colis / articles … 7 / 12 », « LRN / rang … LRN… / 1 », « Masse brute / colis /
         # articles 3 649,3 kg — 60 colis — 4 article(s) ») : valeurs lues dans l'ordre des libellés (D-2402).
         for champ, lu in self._composites(lignes).items():
@@ -1390,8 +1829,13 @@ class _Lecteur:
                 net = re.sub(r"[^A-Za-z0-9]", "", t.t).upper()
                 if len(net) == 18 and re.fullmatch(r"\d{2}[A-Z]{2}[A-Z0-9]{14}", net):
                     lectures.add(net)
-        autres = {x for x in lectures if x != valeur and x[:4] == valeur[:4]
-                  and sum(a != b for a, b in zip(x, valeur, strict=True)) <= 3}
+        autres = {
+            x
+            for x in lectures
+            if x != valeur
+            and x[:4] == valeur[:4]
+            and sum(a != b for a, b in zip(x, valeur, strict=True)) <= 3
+        }
         return 0.3 if autres else 0.0
 
     # --- parties ------------------------------------------------------------------------------------------------
@@ -1498,15 +1942,22 @@ class _Lecteur:
                     # « FAC/2026/0060-0   Facture commerciale » (colonne des codes perdue) : code déduit du
                     # libellé imprimé du type de document, dans la section « Documents produits » (D-804).
                     code, ref_toks, pen = libelle_lu[0], [t], 0.10
-                elif net in ("1008", "FR7") and (j := _apres_separateurs(toks, i + 1)) is not None \
-                        and _tva(_reference_apres_nature(toks, j)[-1]) is not None:
+                elif (
+                    net in ("1008", "FR7")
+                    and (j := _apres_separateurs(toks, i + 1)) is not None
+                    and _tva(_reference_apres_nature(toks, j)[-1]) is not None
+                ):
                     code, ref_toks = net, _reference_apres_nature(toks, j)[-1:]
-                elif re.match(r"^(1008|FR7):", net) and _tva(_Tok(net.split(":", 1)[1], "", 0, 0, 0, 0, None, 0)):
+                elif re.match(r"^(1008|FR7):", net) and _tva(
+                    _Tok(net.split(":", 1)[1], "", 0, 0, 0, 0, None, 0)
+                ):
                     code, ref_toks = net.split(":", 1)[0], [t]
                 if not code or not ref_toks:
                     continue
                 rt = ref_toks[0]
-                ref_brut = rt.t.split(":", 1)[1] if rt is t and ":" in rt.t else " ".join(x.t for x in ref_toks)
+                ref_brut = (
+                    rt.t.split(":", 1)[1] if rt is t and ":" in rt.t else " ".join(x.t for x in ref_toks)
+                )
                 ref_brut = ref_brut.strip(";,")
                 if not re.search(r"[A-Za-z0-9]{2}", ref_brut) or _CODE_DOC_RE.match(ref_brut):
                     continue
@@ -1527,10 +1978,14 @@ class _Lecteur:
                         ref_lu = _Lu(ref_lu.span, tv[0], tv[1], tv[2])
                 if libelle_lu is not None and not m and code == libelle_lu[0]:
                     code_lu = _Lu(libelle_lu[1], libelle_lu[1].texte, code, pen)
-                self._definir(f"documents_references[{k}].type_code",
-                              self._vs(f"documents_references[{k}].type_code", code_lu))
-                self._definir(f"documents_references[{k}].reference",
-                              self._vs(f"documents_references[{k}].reference", ref_lu))
+                self._definir(
+                    f"documents_references[{k}].type_code",
+                    self._vs(f"documents_references[{k}].type_code", code_lu),
+                )
+                self._definir(
+                    f"documents_references[{k}].reference",
+                    self._vs(f"documents_references[{k}].reference", ref_lu),
+                )
                 k += 1
 
     @staticmethod
@@ -1564,10 +2019,14 @@ class _Lecteur:
                     continue
                 code = sans_accents({"©": "0", "®": "0"}.get(m.group(1), m.group(1)))
                 sens = sans_accents(m.group(2)).lower()
-                touches = sorted((mm.start(), pn) for motif, pn in _SENS_PAIEMENT if (mm := motif.search(sens)))
+                touches = sorted(
+                    (mm.start(), pn) for motif, pn in _SENS_PAIEMENT if (mm := motif.search(sens))
+                )
                 if touches:
                     pn = touches[0][1]  # premier sens cité dans l'élément de légende
-                    tva_seule = pn is PaiementNormalise.autoliquide or bool(re.search(r"\btva\b|\bvat\b", sens))
+                    tva_seule = pn is PaiementNormalise.autoliquide or bool(
+                        re.search(r"\btva\b|\bvat\b", sens)
+                    )
                     trouves.setdefault(code, (pn, tva_seule))
             if len(trouves) >= 2:
                 for code, v in trouves.items():
@@ -1591,8 +2050,13 @@ class _Lecteur:
         for ligne in self.lignes:
             # tableau récapitulatif « Type | Libellé | Montant » : « FPE Droit forfaitaire petits envois 6,00 »
             toks = ligne.toks
-            if len(toks) >= 3 and (code0 := _code_taxe(_Span(toks[:1]))) is not None and code0.penalite == 0 \
-                    and re.fullmatch(r"[^\W\d_]{3,}", toks[1].t) and _NUM_RE.fullmatch(toks[-1].t):
+            if (
+                len(toks) >= 3
+                and (code0 := _code_taxe(_Span(toks[:1]))) is not None
+                and code0.penalite == 0
+                and re.fullmatch(r"[^\W\d_]{3,}", toks[1].t)
+                and _NUM_RE.fullmatch(toks[-1].t)
+            ):
                 mots = [t.t for t in toks[1:-1] if re.fullmatch(r"[^\W\d_][\w'’().-]*", t.t)]
                 if len(mots) == len(toks) - 2:
                     self.libelles_codes.setdefault(code0.valeur or "", " ".join(mots))
@@ -1602,10 +2066,10 @@ class _Lecteur:
                 code = m.group(1).replace("O", "0") if m.group(1)[0] != "O" else m.group(1)
                 if code in _MOTS_NON_TAXE or not re.fullmatch(r"[A-Z]\d{2}|FPE|[A-Z]{3}", code):
                     continue
-                avant = texte[:m.start()]
+                avant = texte[: m.start()]
                 # « Total A00 : 54,62 Total B00 : 513,53 TOTAL DROITS ET TAXES … » : le libellé d'un code s'arrête au
                 # « total » suivant et ne commence pas par son montant
-                apres = re.split(r"(?i)\btotal\b", texte[m.end():])[0]
+                apres = re.split(r"(?i)\btotal\b", texte[m.end() :])[0]
                 if re.match(r"\s*:?\s*[\d.,\s]+(?:[A-Z]{3})?\s*$", apres):
                     apres = ""
                 if not re.search(r"total", avant, re.I):
@@ -1677,9 +2141,11 @@ class _Lecteur:
 
     def _en_tete_tableau(self, ligne: _Ligne) -> bool:
         cles = {c.cle for c in self._colonnes(ligne)}
-        return ("code" in cles and "origine" in cles and bool(
-            {"montant_facture", "valeur", "base_droits", "masse_nette", "masse_brute"} & cles)) or \
-            self._entete_taxes(ligne) is not None
+        return (
+            "code" in cles
+            and "origine" in cles
+            and bool({"montant_facture", "valeur", "base_droits", "masse_nette", "masse_brute"} & cles)
+        ) or self._entete_taxes(ligne) is not None
 
     def _code_ancre(self, h: _Hit, numero: _Lu) -> _Lu | None:
         """Code marchandise sans libellé sur la ligne d'ancrage d'un bloc : premier mot qui suit le numéro
@@ -1695,9 +2161,9 @@ class _Lecteur:
         net = toks[k].t.strip(".,:;")
         if re.fullmatch(r"\d{8}(?:\d{2})?", net):
             return _Lu(_Span([toks[k]], h.score), net, net)
-        cg = _code_groupes(toks[k:k + 4])
+        cg = _code_groupes(toks[k : k + 4])
         if cg is not None and cg[0] == 0:
-            sel = toks[k:k + cg[1]]
+            sel = toks[k : k + cg[1]]
             return _Lu(_Span(sel, h.score), " ".join(t.t for t in sel), cg[2])
         return None
 
@@ -1731,15 +2197,23 @@ class _Lecteur:
             k = toks_a.index(code.span.toks[-1]) + 1
             while k < len(toks_a) and toks_a[k].t in ("—", "–", "-"):
                 k += 1
-            if k < len(toks_a) and toks_a[k].t.strip(".,;") in ISO2 and re.fullmatch(r"[A-Z]{2}", toks_a[k].t.strip(".,;")):
+            if (
+                k < len(toks_a)
+                and toks_a[k].t.strip(".,;") in ISO2
+                and re.fullmatch(r"[A-Z]{2}", toks_a[k].t.strip(".,;"))
+            ):
                 origine = _Lu(_Span([toks_a[k]]), toks_a[k].t.strip(".,;"), toks_a[k].t.strip(".,;"), 0.1)
         art.pays_origine = self._vs(f"{base}.pays_origine", origine)
-        art.regime = self._vs(f"{base}.regime",
-                              self._lire(["regime"], lambda sp: self._v_motif(sp, r"\d{4}(?: \d{3})?"),
-                                         lignes=lignes), type_valeur=TypeValeur.texte)
-        art.code_preference = self._vs(f"{base}.code_preference",
-                                       self._lire(["preference"], lambda sp: self._v_motif(sp, r"\d{3}"),
-                                                  lignes=lignes), type_valeur=TypeValeur.texte)
+        art.regime = self._vs(
+            f"{base}.regime",
+            self._lire(["regime"], lambda sp: self._v_motif(sp, r"\d{4}(?: \d{3})?"), lignes=lignes),
+            type_valeur=TypeValeur.texte,
+        )
+        art.code_preference = self._vs(
+            f"{base}.code_preference",
+            self._lire(["preference"], lambda sp: self._v_motif(sp, r"\d{3}"), lignes=lignes),
+            type_valeur=TypeValeur.texte,
+        )
         des = self._lire(["designation"], self.v_texte, lignes=lignes)
         if des is None:
             h = next((x for x in self._hits(["article"], lignes)), None)
@@ -1749,29 +2223,43 @@ class _Lecteur:
                     break
         art.description = self._vs(f"{base}.description", des, type_valeur=TypeValeur.texte)
         devise = self.champs.devise_facture.valeur if self.champs.devise_facture else None
-        mt = self._lire(["montant_facture_article"], lambda sp: self.v_montant_devise(sp, devise), lignes=lignes)
-        art.montant_facture_article = self._vs(f"{base}.montant_facture_article", mt,
-                                               unite=(mt.extra.get("devise") if mt else None) or devise)
+        mt = self._lire(
+            ["montant_facture_article"], lambda sp: self.v_montant_devise(sp, devise), lignes=lignes
+        )
+        art.montant_facture_article = self._vs(
+            f"{base}.montant_facture_article", mt, unite=(mt.extra.get("devise") if mt else None) or devise
+        )
         vst = self._lire(["valeur_statistique"], lambda sp: self.v_montant_devise(sp, "EUR"), lignes=lignes)
         art.valeur_statistique = self._vs(f"{base}.valeur_statistique", vst, unite="EUR")
-        art.masse_nette = self._vs(f"{base}.masse_nette", self._lire(["masse_nette"], self.v_masse, lignes=lignes),
-                                   unite="KGM")
-        art.masse_brute = self._vs(f"{base}.masse_brute", self._lire(["masse_brute"], self.v_masse, lignes=lignes),
-                                   unite="KGM")
+        art.masse_nette = self._vs(
+            f"{base}.masse_nette", self._lire(["masse_nette"], self.v_masse, lignes=lignes), unite="KGM"
+        )
+        art.masse_brute = self._vs(
+            f"{base}.masse_brute", self._lire(["masse_brute"], self.v_masse, lignes=lignes), unite="KGM"
+        )
         q = self._lire(["unites_supplementaires"], self.v_quantite, lignes=lignes)
         if q is not None:
-            art.quantite_unite_supplementaire = self._vs(f"{base}.quantite_unite_supplementaire", q,
-                                                         unite=q.extra.get("unite"),
-                                                         unite_brute=q.extra.get("unite_brute"))
+            art.quantite_unite_supplementaire = self._vs(
+                f"{base}.quantite_unite_supplementaire",
+                q,
+                unite=q.extra.get("unite"),
+                unite_brute=q.extra.get("unite_brute"),
+            )
         colis = self._lire(["colis"], self.v_entier, lignes=lignes, dessous=False)
         if colis is None:  # « 22 colis » : nombre imprimé devant le mot
-            dans_libelle = {id(t) for h in self.hits if h.ligne.idx in lignes and h.cle != "colis" for t in h.toks}
+            dans_libelle = {
+                id(t) for h in self.hits if h.ligne.idx in lignes and h.cle != "colis" for t in h.toks
+            }
             for idx in range(debut, fin):
                 toks = self.lignes[idx].toks
                 for n in range(1, len(toks)):
                     seul = n + 1 == len(toks) or toks[n + 1].x0 - toks[n].x1 > 3 * toks[n].hx
-                    if toks[n].k in ("colis", "packages") and id(toks[n]) not in dans_libelle and seul \
-                            and re.fullmatch(r"\d{1,6}", toks[n - 1].t):
+                    if (
+                        toks[n].k in ("colis", "packages")
+                        and id(toks[n]) not in dans_libelle
+                        and seul
+                        and re.fullmatch(r"\d{1,6}", toks[n - 1].t)
+                    ):
                         colis = _Lu(_Span([toks[n - 1]]), toks[n - 1].t, str(int(toks[n - 1].t)))
                         break
                 if colis is not None:
@@ -1790,8 +2278,11 @@ class _Lecteur:
         toks_l = ligne.toks
         # un intitulé de colonne en plusieurs mots est d'un seul tenant : « Taxe   Base » séparés par un blanc de
         # colonne sont deux colonnes, pas « Tax base » (D-2404)
-        cands = [c for c in _candidats(toks_l, _INDEX_COL, _LMAX_COL)
-                 if all(b.x0 - a.x1 <= max(0.02, 2.5 * a.hx) for a, b in pairwise(toks_l[c[3]:c[4]]))]
+        cands = [
+            c
+            for c in _candidats(toks_l, _INDEX_COL, _LMAX_COL)
+            if all(b.x0 - a.x1 <= max(0.02, 2.5 * a.hx) for a, b in pairwise(toks_l[c[3] : c[4]]))
+        ]
         choix = _resoudre(cands)
         cols: list[_Colonne] = []
         for _score, cle, i, j in sorted(choix, key=lambda c: c[2]):
@@ -1846,8 +2337,11 @@ class _Lecteur:
                 continue
             precedent: _Colonne | None = None
             for t in g:  # mot par mot
-                if precedent is not None and types.get(precedent.cle, "texte") == "texte" and not any(
-                        min(t.x1, c.x1) - max(t.x0, c.x0) > 0 for c in cols):
+                if (
+                    precedent is not None
+                    and types.get(precedent.cle, "texte") == "texte"
+                    and not any(min(t.x1, c.x1) - max(t.x0, c.x0) > 0 for c in cols)
+                ):
                     cells.setdefault(precedent.cle, []).append(t)  # suite d'un texte (désignation)
                     continue
                 meilleur, cout_min = None, 9.0
@@ -1862,9 +2356,19 @@ class _Lecteur:
                     precedent = meilleur
         return {k: _Span(sorted(v, key=lambda t: t.x0)) for k, v in cells.items()}
 
-    def _lignes_taxes(self, cols: list[_Colonne], debut: int, fin: int, article: ValeurSourcee | None) -> None:
-        types = {"type": "code_taxe", "base": "nombre", "taux": "nombre", "montant": "nombre", "mp": "mp",
-                 "designation": "texte", "a_payer": "nombre", "numero": "entier"}
+    def _lignes_taxes(
+        self, cols: list[_Colonne], debut: int, fin: int, article: ValeurSourcee | None
+    ) -> None:
+        types = {
+            "type": "code_taxe",
+            "base": "nombre",
+            "taux": "nombre",
+            "montant": "nombre",
+            "mp": "mp",
+            "designation": "texte",
+            "a_payer": "nombre",
+            "numero": "entier",
+        }
         # Deux tableaux côte à côte sous un même en-tête répété (« Taxe Base Taux Montant MP | Taxe Base … ») :
         # chaque moitié de ligne est lue avec ses propres colonnes, de gauche à droite (D-2404).
         blocs = _blocs_colonnes(cols)
@@ -1888,7 +2392,11 @@ class _Lecteur:
                     continue
                 manquees += 1
                 mots = any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne_entiere.toks)
-                if manquees > 1 or self.hits_par_ligne.get(idx) or (mots and not re.search(r"\d", ligne_entiere.texte)):
+                if (
+                    manquees > 1
+                    or self.hits_par_ligne.get(idx)
+                    or (mots and not re.search(r"\d", ligne_entiere.texte))
+                ):
                     break
                 continue
             r = self._ligne_taxe(ligne_entiere, cols, types, article, manquees)
@@ -1896,8 +2404,14 @@ class _Lecteur:
                 break
             manquees = r
 
-    def _ligne_taxe(self, ligne: _Ligne, cols: list[_Colonne], types: dict[str, str], article: ValeurSourcee | None,
-                    manquees: int) -> int:
+    def _ligne_taxe(
+        self,
+        ligne: _Ligne,
+        cols: list[_Colonne],
+        types: dict[str, str],
+        article: ValeurSourcee | None,
+        manquees: int,
+    ) -> int:
         """Une ligne d'un tableau de taxes : 0 si une taxation est lue, ``manquees`` (inchangé) pour une ligne
         parasite ignorée, ``manquees + 1`` pour une ligne manquée tolérée, -1 pour la fin du tableau."""
         idx = ligne.idx
@@ -1912,8 +2426,9 @@ class _Lecteur:
                 return manquees
             # seulement dans un tableau de liquidation à colonne « article » : chaque ligne y porte son
             # rattachement, une ligne sans code ne décale pas les autres
-            illisible = (article is not None or any(c.cle == "numero" for c in cols)) \
-                and _ligne_taxe_chiffree(cells)
+            illisible = (
+                article is not None or any(c.cle == "numero" for c in cols)
+            ) and _ligne_taxe_chiffree(cells)
         if code_lu is None and not illisible:
             manquees += 1
             mots = any(len(re.sub(r"[^A-Za-z0-9]", "", t.t)) >= 3 for t in ligne.toks)
@@ -1923,7 +2438,9 @@ class _Lecteur:
         self.lignes_tableaux.add(idx)
         libelle = cells.get("designation")
         if libelle is None and code_sp is not None and len(code_sp.toks) > 1:
-            libelle = code_sp.depuis(code_sp.toks[1:])  # « A00 Customs duty » : code et libellé dans la cellule
+            libelle = code_sp.depuis(
+                code_sp.toks[1:]
+            )  # « A00 Customs duty » : code et libellé dans la cellule
         rattache = article
         if article is None and any(c.cle == "numero" for c in cols):  # liquidation à colonne « article »
             num = self.v_petit_entier(cells["numero"]) if "numero" in cells else None
@@ -1931,8 +2448,16 @@ class _Lecteur:
                 num = self._numero_un_ocr(ligne, cols)
             if num is not None:
                 rattache = self._vs(f"taxations[{len(self.champs.taxations)}].article", num)
-        self._taxation(rattache, code_lu, libelle.texte if libelle else None, cells.get("base"),
-                       cells.get("taux"), cells.get("montant"), cells.get("mp"), a_payer=cells.get("a_payer"))
+        self._taxation(
+            rattache,
+            code_lu,
+            libelle.texte if libelle else None,
+            cells.get("base"),
+            cells.get("taux"),
+            cells.get("montant"),
+            cells.get("mp"),
+            a_payer=cells.get("a_payer"),
+        )
         if illisible:
             # Ligne du tableau dont le code est illisible (OCR : « ae », « 00 ») mais dont base, taux et
             # montant sont imprimés : gardée (une somme des lignes lues incomplète fausserait C5 sans le dire),
@@ -1952,10 +2477,20 @@ class _Lecteur:
             return _Lu(_Span([t]), t.t, "1", 0.25)
         return None
 
-    def _taxation(self, article: ValeurSourcee | None, code: _Lu | None, libelle: str | None,
-                  base: _Span | None, taux: _Span | None, montant: _Span | None, mp: _Span | None,
-                  *, categorie: CategorieTaxe | None = None, taux_nature: TauxNature | None = None,
-                  a_payer: _Span | None = None) -> None:
+    def _taxation(
+        self,
+        article: ValeurSourcee | None,
+        code: _Lu | None,
+        libelle: str | None,
+        base: _Span | None,
+        taux: _Span | None,
+        montant: _Span | None,
+        mp: _Span | None,
+        *,
+        categorie: CategorieTaxe | None = None,
+        taux_nature: TauxNature | None = None,
+        a_payer: _Span | None = None,
+    ) -> None:
         k = len(self.champs.taxations)
         p = f"taxations[{k}]"
         tx = TaxationDeclaration()
@@ -1968,30 +2503,45 @@ class _Lecteur:
             ms = _nombres(base)
             if ms:
                 m = ms[0]
-                reste = base.texte[m.end():].strip()
+                reste = base.texte[m.end() :].strip()
                 lu = self._lu_nombre(base, m)
                 monnaie = re.match(r"([A-Z]{3})\b", reste)
-                if lu is not None and reste and re.match(r"[A-Za-z]", reste) and not (
-                        monnaie and monnaie.group(1) in ISO_4217):  # « 357,52 EUR » : base en montant
+                if (
+                    lu is not None
+                    and reste
+                    and re.match(r"[A-Za-z]", reste)
+                    and not (monnaie and monnaie.group(1) in ISO_4217)
+                ):  # « 357,52 EUR » : base en montant
                     unite_brute = reste.split(" ")[0]
                     tx.base_quantite = self._vs(f"{p}.base_quantite", lu, type_valeur=TypeValeur.decimal)
                     u = normalize_unit(unite_brute.replace("(s)", ""))
-                    tx.base_unite = self._vs(f"{p}.base_unite", _Lu(base.sous(m.end() + 1, len(base.texte)),
-                                                                    unite_brute, u.code if u.connue
-                                                                    else unite_brute),
-                                             type_valeur=TypeValeur.unite)
+                    tx.base_unite = self._vs(
+                        f"{p}.base_unite",
+                        _Lu(
+                            base.sous(m.end() + 1, len(base.texte)),
+                            unite_brute,
+                            u.code if u.connue else unite_brute,
+                        ),
+                        type_valeur=TypeValeur.unite,
+                    )
                 elif lu is not None:
-                    tx.base_montant = self._vs(f"{p}.base_montant", lu, unite="EUR", type_valeur=TypeValeur.montant)
+                    tx.base_montant = self._vs(
+                        f"{p}.base_montant", lu, unite="EUR", type_valeur=TypeValeur.montant
+                    )
         if taux is not None and not taux.vide:
             ms = _nombres(taux)
             if ms and not taux.texte.endswith("…"):
                 m = ms[0]
                 lu = self._lu_nombre(taux, m)
-                reste = taux.texte[m.end():].strip()
+                reste = taux.texte[m.end() :].strip()
                 if lu is not None:
                     if reste.startswith("%"):
-                        lu = _Lu(taux.sous(m.start(), m.end() + 2), taux.texte[m.start():m.end() + 2].strip(),
-                                 lu.valeur, lu.penalite)
+                        lu = _Lu(
+                            taux.sous(m.start(), m.end() + 2),
+                            taux.texte[m.start() : m.end() + 2].strip(),
+                            lu.valeur,
+                            lu.penalite,
+                        )
                         tx.taux_nature = TauxNature.ad_valorem
                     elif re.match(r"[A-Z]{3}\s*/", reste):
                         tx.taux_nature = TauxNature.specifique
@@ -2001,14 +2551,23 @@ class _Lecteur:
                         tx.taux_nature = TauxNature.specifique
                     else:
                         tx.taux_nature = TauxNature.ad_valorem
-                    tx.taux = self._vs(f"{p}.taux", lu, type_valeur=TypeValeur.taux,
-                                       unite="%" if tx.taux_nature is TauxNature.ad_valorem else None)
+                    tx.taux = self._vs(
+                        f"{p}.taux",
+                        lu,
+                        type_valeur=TypeValeur.taux,
+                        unite="%" if tx.taux_nature is TauxNature.ad_valorem else None,
+                    )
             elif ms and taux.texte.endswith("…"):
                 tx.taux_nature = TauxNature.specifique if tx.base_quantite is not None else taux_nature
                 self.avertissements.append("taux_tronque")
         if tx.taux is None and tx.base_quantite is not None and tx.taux_nature is None:
             tx.taux_nature = TauxNature.specifique
-        if tx.taux is None and tx.taux_nature is None and cat is CategorieTaxe.tva and tx.base_montant is not None:
+        if (
+            tx.taux is None
+            and tx.taux_nature is None
+            and cat is CategorieTaxe.tva
+            and tx.base_montant is not None
+        ):
             tx.taux_nature = TauxNature.ad_valorem  # colonne TVA sans taux imprimé : la TVA est ad valorem
         repare = None
         m_pts = None
@@ -2020,7 +2579,9 @@ class _Lecteur:
             # « 3:46: », « 12:591;51 » : séparateurs lus « : » ou « ; » (D-2903) ; relecture plafonnée
             m_pts = None if m_rep else re.fullmatch(r"(\d{1,3}(?:[ .:;]?\d{3})*)[:;](\d{2})[:;.|]?", txt)
             m_rep = m_rep or m_pts
-            m_col = re.fullmatch(r"(\d{1,3}(?:[ .]?\d{3})*),(\d{2})\d", txt) if mp is None or mp.vide else None
+            m_col = (
+                re.fullmatch(r"(\d{1,3}(?:[ .]?\d{3})*),(\d{2})\d", txt) if mp is None or mp.vide else None
+            )
             m_ok = m_rep or m_col
             if m_ok:
                 valeur = Decimal(re.sub(r"[ .:;]", "", m_ok.group(1)) + "." + m_ok.group(2))
@@ -2032,16 +2593,28 @@ class _Lecteur:
         elif montant is not None and not montant.vide:
             ms = [m for m in _nombres(montant) if _a_decimales(m)] or _nombres(montant)
             if ms:
-                tx.montant = self._vs(f"{p}.montant", self._lu_nombre(montant, ms[-1]), unite="EUR",
-                                      type_valeur=TypeValeur.montant)
-        if a_payer is not None and not a_payer.vide:  # colonne « À payer » (DE 14 03 042), distincte du montant
+                tx.montant = self._vs(
+                    f"{p}.montant",
+                    self._lu_nombre(montant, ms[-1]),
+                    unite="EUR",
+                    type_valeur=TypeValeur.montant,
+                )
+        if (
+            a_payer is not None and not a_payer.vide
+        ):  # colonne « À payer » (DE 14 03 042), distincte du montant
             ms = [m for m in _nombres(a_payer) if _a_decimales(m)] or _nombres(a_payer)
             if ms:
-                tx.montant_a_payer = self._vs(f"{p}.montant_a_payer", self._lu_nombre(a_payer, ms[-1]), unite="EUR",
-                                              type_valeur=TypeValeur.montant)
+                tx.montant_a_payer = self._vs(
+                    f"{p}.montant_a_payer",
+                    self._lu_nombre(a_payer, ms[-1]),
+                    unite="EUR",
+                    type_valeur=TypeValeur.montant,
+                )
         if mp is not None and not mp.vide:
             # « É » / « À » : lettre du mode lue avec un accent par l'OCR
-            tok = next((t for t in mp.toks if re.fullmatch(r"[A-Z0-9©]", sans_accents(t.t.strip(".,")))), None)
+            tok = next(
+                (t for t in mp.toks if re.fullmatch(r"[A-Z0-9©]", sans_accents(t.t.strip(".,")))), None
+            )
             if tok is None:
                 # mode de paiement imprimé en toutes lettres (« Comptant », « Autoliquidation », « Deferred ») :
                 # sens d'après le libellé, sans code (D-950)
@@ -2055,11 +2628,16 @@ class _Lecteur:
                     if sens is not None:
                         mot = t
                         break
-                if mot is not None and sens is not None and not (
-                        sens is PaiementNormalise.autoliquide and cat is not CategorieTaxe.tva):
-                    tx.mode_paiement = self._vs(f"{p}.mode_paiement", _Lu(mp.depuis([mot]), mot.t.strip(".,()[]"),
-                                                                          mot.t.strip(".,()[]")),
-                                                type_valeur=TypeValeur.code)
+                if (
+                    mot is not None
+                    and sens is not None
+                    and not (sens is PaiementNormalise.autoliquide and cat is not CategorieTaxe.tva)
+                ):
+                    tx.mode_paiement = self._vs(
+                        f"{p}.mode_paiement",
+                        _Lu(mp.depuis([mot]), mot.t.strip(".,()[]"), mot.t.strip(".,()[]")),
+                        type_valeur=TypeValeur.code,
+                    )
                     tx.paiement_normalise = sens
             if tok is not None:
                 code_mp = {"©": "0"}.get(tok.t.strip(".,"), sans_accents(tok.t.strip(".,")))
@@ -2067,8 +2645,11 @@ class _Lecteur:
                 leg = self.legende.get(code_mp)
                 hors_portee = leg is not None and leg[1] and cat is not CategorieTaxe.tva
                 if not hors_portee:  # « 7 = TVA autoliquidée » ne dit rien du paiement des droits
-                    tx.mode_paiement = self._vs(f"{p}.mode_paiement", _Lu(mp.depuis([tok]), tok.t.strip(".,"),
-                                                                          code_mp, pen_mp), type_valeur=TypeValeur.code)
+                    tx.mode_paiement = self._vs(
+                        f"{p}.mode_paiement",
+                        _Lu(mp.depuis([tok]), tok.t.strip(".,"), code_mp, pen_mp),
+                        type_valeur=TypeValeur.code,
+                    )
                     tx.paiement_normalise = self._paiement(code_mp, cat)
 
     # --- articles en liste, taxations en prose (récapitulatif texte : courriel, certificat) -------------------
@@ -2088,10 +2669,15 @@ class _Lecteur:
             fin = debut + 1
             for idx in range(debut + 1, limite):
                 ligne = self.lignes[idx]
-                if ligne.page != self.lignes[debut].page and idx > debut + 1 and not segments_libelles(ligne.toks):
+                if (
+                    ligne.page != self.lignes[debut].page
+                    and idx > debut + 1
+                    and not segments_libelles(ligne.toks)
+                ):
                     break
-                if any(x.cle in TERMINATEURS for x in self.hits_par_ligne.get(idx, [])) or \
-                        re.match(r"(?i)\s*(?:total|totaux|summe|totale)\b", ligne.texte):
+                if any(x.cle in TERMINATEURS for x in self.hits_par_ligne.get(idx, [])) or re.match(
+                    r"(?i)\s*(?:total|totaux|summe|totale)\b", ligne.texte
+                ):
                     break
                 if not segments_libelles(ligne.toks) and ligne_taxe_prose(ligne.toks) is None:
                     break
@@ -2114,7 +2700,9 @@ class _Lecteur:
         if numero is not None:
             self.vs_articles[k] = numero
         art = self.champs.articles[k]
-        art.code_marchandise = self._vs(f"{base}.code_marchandise", self.v_code_marchandise(_Span(toks[i_code:j_code])))
+        art.code_marchandise = self._vs(
+            f"{base}.code_marchandise", self.v_code_marchandise(_Span(toks[i_code:j_code]))
+        )
         des = self.v_texte(_Span(toks[j_code:]))
         art.description = self._vs(f"{base}.description", des, type_valeur=TypeValeur.texte)
         devise = self.champs.devise_facture.valeur if self.champs.devise_facture else None
@@ -2130,11 +2718,15 @@ class _Lecteur:
                     art.pays_origine = self._vs(f"{base}.pays_origine", self.v_pays(sp))
                 elif champ == "montant_facture_article" and art.montant_facture_article is None:
                     mt = self.v_montant_devise(sp, devise)
-                    art.montant_facture_article = self._vs(f"{base}.montant_facture_article", mt,
-                                                           unite=(mt.extra.get("devise") if mt else None) or devise)
+                    art.montant_facture_article = self._vs(
+                        f"{base}.montant_facture_article",
+                        mt,
+                        unite=(mt.extra.get("devise") if mt else None) or devise,
+                    )
                 elif champ == "valeur_statistique" and art.valeur_statistique is None:
-                    art.valeur_statistique = self._vs(f"{base}.valeur_statistique", self.v_montant_devise(sp, "EUR"),
-                                                      unite="EUR")
+                    art.valeur_statistique = self._vs(
+                        f"{base}.valeur_statistique", self.v_montant_devise(sp, "EUR"), unite="EUR"
+                    )
                 elif champ in ("masse_nette", "masse_brute") and getattr(art, champ) is None:
                     setattr(art, champ, self._vs(f"{base}.{champ}", self.v_masse(sp), unite="KGM"))
                 elif champ == "nombre_colis" and art.nombre_colis is None:
@@ -2142,14 +2734,19 @@ class _Lecteur:
                 elif champ == "quantite" and art.quantite_unite_supplementaire is None:
                     q = self.v_quantite(sp)
                     art.quantite_unite_supplementaire = self._vs(
-                        f"{base}.quantite_unite_supplementaire", q, unite=q.extra.get("unite") if q else None,
-                        unite_brute=q.extra.get("unite_brute") if q else None)
+                        f"{base}.quantite_unite_supplementaire",
+                        q,
+                        unite=q.extra.get("unite") if q else None,
+                        unite_brute=q.extra.get("unite_brute") if q else None,
+                    )
                 elif champ == "code_preference" and art.code_preference is None:
-                    art.code_preference = self._vs(f"{base}.code_preference", self._v_motif(sp, r"\d{3}"),
-                                                   type_valeur=TypeValeur.texte)
+                    art.code_preference = self._vs(
+                        f"{base}.code_preference", self._v_motif(sp, r"\d{3}"), type_valeur=TypeValeur.texte
+                    )
                 elif champ == "regime" and art.regime is None:
-                    art.regime = self._vs(f"{base}.regime", self._v_motif(sp, r"\d{4}(?: \d{3})?"),
-                                          type_valeur=TypeValeur.texte)
+                    art.regime = self._vs(
+                        f"{base}.regime", self._v_motif(sp, r"\d{4}(?: \d{3})?"), type_valeur=TypeValeur.texte
+                    )
 
     def _taxes_prose_hors_articles(self) -> list[tuple[int, dict[str, tuple[int, int]]]]:
         """Taxations en prose hors des articles (« FPE Droit forfaitaire petits envois : 2 articles x 3,00 EUR =
@@ -2164,15 +2761,19 @@ class _Lecteur:
                 self.lignes_tableaux.add(ligne.idx)
         return out
 
-    def _taxe_prose(self, ligne: _Ligne, plages: dict[str, tuple[int, int]], article: ValeurSourcee | None) -> None:
+    def _taxe_prose(
+        self, ligne: _Ligne, plages: dict[str, tuple[int, int]], article: ValeurSourcee | None
+    ) -> None:
         toks = ligne.toks
 
         def sp(nom: str) -> _Span | None:
-            return _Span(toks[plages[nom][0]:plages[nom][1]]) if nom in plages else None
+            return _Span(toks[plages[nom][0] : plages[nom][1]]) if nom in plages else None
 
         code = _code_taxe(_Span(toks[:1]), ligne)
         lib = sp("libelle")
-        self._taxation(article, code, lib.texte if lib else None, sp("base"), sp("taux"), sp("montant"), sp("mp"))
+        self._taxation(
+            article, code, lib.texte if lib else None, sp("base"), sp("taux"), sp("montant"), sp("mp")
+        )
 
     def _taxes_niveau_declaration(self) -> None:
         for ligne in self.lignes:
@@ -2193,21 +2794,42 @@ class _Lecteur:
             toks = ligne.toks
             if not _FORFAIT_LIBELLE_RE.search(sans_accents(" ".join(t.t for t in toks)).lower()):
                 continue
-            i = next((k for k in range(1, len(toks) - 1) if re.fullmatch(r"\d{1,4}", toks[k].t)
-                      and _ARTICLES_RE.match(toks[k + 1].t)), None)
+            i = next(
+                (
+                    k
+                    for k in range(1, len(toks) - 1)
+                    if re.fullmatch(r"\d{1,4}", toks[k].t) and _ARTICLES_RE.match(toks[k + 1].t)
+                ),
+                None,
+            )
             # taux : nombre décimal suivi de « EUR/art. » (obligatoire : c'est lui qui fait la ligne de forfait)
-            j = next((k for k in range((i + 2) if i is not None else 1, len(toks) - 1)
-                      if _DECIMAL_RE.fullmatch(toks[k].t) and re.match(r"[A-Z]{3}\s*/", toks[k + 1].t)), None)
+            j = next(
+                (
+                    k
+                    for k in range((i + 2) if i is not None else 1, len(toks) - 1)
+                    if _DECIMAL_RE.fullmatch(toks[k].t) and re.match(r"[A-Z]{3}\s*/", toks[k + 1].t)
+                ),
+                None,
+            )
             if j is None:
                 continue
             fin_taux = min(j + (3 if toks[j + 1].t.endswith("/") else 2), len(toks))  # « EUR/ art. » coupé
             libelle = " ".join(t.t for t in toks[: i if i is not None else j])
-            base = _Span(toks[i:i + 2]) if i is not None else None
+            base = _Span(toks[i : i + 2]) if i is not None else None
             # Le montant n'est pas repris : le tableau des taxes n'a pas été lu (en-tête illisible), d'autres
             # lignes ont pu échapper à la lecture ; un montant isolé fausserait les sommes (B2) et les
             # comparaisons de débours (G4). La ligne sert à sa présence, sa base et son taux (G2, G3, G6).
-            self._taxation(None, None, libelle, base, _Span(toks[j:fin_taux]), None, None,
-                           categorie=CategorieTaxe.forfait_petits_envois, taux_nature=TauxNature.specifique)
+            self._taxation(
+                None,
+                None,
+                libelle,
+                base,
+                _Span(toks[j:fin_taux]),
+                None,
+                None,
+                categorie=CategorieTaxe.forfait_petits_envois,
+                taux_nature=TauxNature.specifique,
+            )
             self.avertissements.append("forfait_lu_hors_tableau")
             return
 
@@ -2220,8 +2842,12 @@ class _Lecteur:
             cles = {c.cle for c in cols}
             # « type » : colonnes de taxation sur la ligne de l'article (tableau mixte, sous-lignes de taxe sous la
             # ligne de l'article, D-2405) ; exige alors la colonne du montant de la taxe
-            if "code" in cles and "origine" in cles and ({"montant_facture", "valeur", "base_droits"} & cles) \
-                    and ("type" not in cles or {"montant", "base"} <= cles):
+            if (
+                "code" in cles
+                and "origine" in cles
+                and ({"montant_facture", "valeur", "base_droits"} & cles)
+                and ("type" not in cles or {"montant", "base"} <= cles)
+            ):
                 fin = self._fin_tableau(ligne.idx, cols)
                 out.append((cols, ligne.idx, fin))
                 self.lignes_tableaux.update(range(ligne.idx, fin))
@@ -2235,12 +2861,17 @@ class _Lecteur:
             ligne = self.lignes[idx]
             if ligne.page != self.lignes[debut].page:
                 break
-            if any(h.cle in TERMINATEURS for h in self.hits_par_ligne.get(idx, [])) or \
-                    re.match(r"(?i)\s*total\b", ligne.texte):
+            if any(h.cle in TERMINATEURS for h in self.hits_par_ligne.get(idx, [])) or re.match(
+                r"(?i)\s*total\b", ligne.texte
+            ):
                 break
             cells = self._cellules(ligne, cols, types)
-            if _ligne_article(cells) or (cells.get("code") and _code_taxe(cells["code"], ligne)) \
-                    or (cells.get("type") and _code_taxe(cells["type"], ligne)) or _sous_ligne_taxe_sans_code(cells):
+            if (
+                _ligne_article(cells)
+                or (cells.get("code") and _code_taxe(cells["code"], ligne))
+                or (cells.get("type") and _code_taxe(cells["type"], ligne))
+                or _sous_ligne_taxe_sans_code(cells)
+            ):
                 manquees = 0
                 derniere = idx + 1
                 continue
@@ -2274,41 +2905,64 @@ class _Lecteur:
                 else:
                     self.champs.definir(f"{base}.numero_article", None)
                 art = self.champs.articles[k]
-                art.code_marchandise = self._vs(f"{base}.code_marchandise", self.v_code_marchandise(cells["code"]))
+                art.code_marchandise = self._vs(
+                    f"{base}.code_marchandise", self.v_code_marchandise(cells["code"])
+                )
                 if "designation" in cells:
-                    art.description = self._vs(f"{base}.description", self.v_texte(cells["designation"]),
-                                               type_valeur=TypeValeur.texte)
+                    art.description = self._vs(
+                        f"{base}.description",
+                        self.v_texte(cells["designation"]),
+                        type_valeur=TypeValeur.texte,
+                    )
                 if "origine" in cells:
                     art.pays_origine = self._vs(f"{base}.pays_origine", self.v_pays(cells["origine"]))
                 if "montant_facture" in cells:
                     mt = self.v_montant_devise(cells["montant_facture"], devise)
-                    art.montant_facture_article = self._vs(f"{base}.montant_facture_article", mt, unite=devise)
+                    art.montant_facture_article = self._vs(
+                        f"{base}.montant_facture_article", mt, unite=devise
+                    )
                 elif "valeur" in cells:
                     dev_col = _devise_colonne(ligne, cols, "valeur", self.lignes[debut]) or devise
                     mt = self.v_montant_devise(cells["valeur"], dev_col)
-                    art.montant_facture_article = self._vs(f"{base}.montant_facture_article", mt, unite=dev_col)
+                    art.montant_facture_article = self._vs(
+                        f"{base}.montant_facture_article", mt, unite=dev_col
+                    )
                 if "valeur_statistique" in cells:
-                    art.valeur_statistique = self._vs(f"{base}.valeur_statistique",
-                                                      self.v_montant_devise(cells["valeur_statistique"], "EUR"),
-                                                      unite="EUR")
+                    art.valeur_statistique = self._vs(
+                        f"{base}.valeur_statistique",
+                        self.v_montant_devise(cells["valeur_statistique"], "EUR"),
+                        unite="EUR",
+                    )
                 if "colis" in cells:
                     art.nombre_colis = self._vs(f"{base}.nombre_colis", self.v_entier(cells["colis"]))
                 if "preference" in cells:
-                    art.code_preference = self._vs(f"{base}.code_preference",
-                                                   self._v_motif(cells["preference"], r"\d{3}"),
-                                                   type_valeur=TypeValeur.texte)
+                    art.code_preference = self._vs(
+                        f"{base}.code_preference",
+                        self._v_motif(cells["preference"], r"\d{3}"),
+                        type_valeur=TypeValeur.texte,
+                    )
                 if "regime" in cells:
-                    art.regime = self._vs(f"{base}.regime", self._v_motif(cells["regime"], r"\d{4}(?: \d{3})?"),
-                                          type_valeur=TypeValeur.texte)
+                    art.regime = self._vs(
+                        f"{base}.regime",
+                        self._v_motif(cells["regime"], r"\d{4}(?: \d{3})?"),
+                        type_valeur=TypeValeur.texte,
+                    )
                 if "quantite" in cells:
                     q = self.v_quantite(cells["quantite"])
                     art.quantite_unite_supplementaire = self._vs(
-                        f"{base}.quantite_unite_supplementaire", q, unite=q.extra.get("unite") if q else None,
-                        unite_brute=q.extra.get("unite_brute") if q else None)
+                        f"{base}.quantite_unite_supplementaire",
+                        q,
+                        unite=q.extra.get("unite") if q else None,
+                        unite_brute=q.extra.get("unite_brute") if q else None,
+                    )
                 if "masse_brute" in cells:
-                    art.masse_brute = self._vs(f"{base}.masse_brute", self.v_masse(cells["masse_brute"]), unite="KGM")
+                    art.masse_brute = self._vs(
+                        f"{base}.masse_brute", self.v_masse(cells["masse_brute"]), unite="KGM"
+                    )
                 if "masse_nette" in cells:
-                    art.masse_nette = self._vs(f"{base}.masse_nette", self.v_masse(cells["masse_nette"]), unite="KGM")
+                    art.masse_nette = self._vs(
+                        f"{base}.masse_nette", self.v_masse(cells["masse_nette"]), unite="KGM"
+                    )
                 self._taxes_condensees(courant, cells)
                 if cells.get("type") and (code_lu := _code_taxe(cells["type"], ligne)) is not None:
                     self._taxe_mixte(courant, code_lu, cells)
@@ -2319,48 +2973,92 @@ class _Lecteur:
                 # sous-ligne de taxe (« A30 Droit antidumping … ») rattachée à l'article courant
                 code_lu = _code_taxe(cells["code"], ligne)
                 lib = cells.get("designation")
-                self._taxation(courant, code_lu, lib.texte if lib else None, cells.get("base_droits"),
-                               cells.get("taux_droits"), cells.get("droits"), cells.get("statut"))
+                self._taxation(
+                    courant,
+                    code_lu,
+                    lib.texte if lib else None,
+                    cells.get("base_droits"),
+                    cells.get("taux_droits"),
+                    cells.get("droits"),
+                    cells.get("statut"),
+                )
             elif courant is not None and _sous_ligne_taxe_sans_code(cells):
                 # Sous-ligne de taxe dont le code est illisible (« x1 Droit spécifique … 623 LTR 0,12 74,76 ») :
                 # la ligne existe et son montant est imprimé ; l'ignorer rendrait la somme des lignes lues
                 # incomplète sans le signaler. Catégorie d'après le libellé seulement (sinon ``inconnue``),
                 # confiance plafonnée (jamais une valeur clé d'un écart certain).
                 lib = cells.get("designation")
-                self._taxation(courant, None, lib.texte if lib else None, cells.get("base_droits"),
-                               cells.get("taux_droits"), cells.get("droits"), cells.get("statut"))
+                self._taxation(
+                    courant,
+                    None,
+                    lib.texte if lib else None,
+                    cells.get("base_droits"),
+                    cells.get("taux_droits"),
+                    cells.get("droits"),
+                    cells.get("statut"),
+                )
                 self._codes_illisibles.append(self.champs.taxations[-1])
                 self.avertissements.append("code_taxe_illisible")
 
     def _taxe_mixte(self, article: ValeurSourcee | None, code: _Lu, cells: dict[str, _Span]) -> None:
         """Taxation lue dans les colonnes de taxation d'un tableau mixte (type, base, taux, montant, à payer, MP)."""
         self.lignes_tableaux.add(code.span.toks[0].li)
-        self._taxation(article, code, None, cells.get("base"), cells.get("taux"), cells.get("montant"),
-                       cells.get("mp"), a_payer=cells.get("a_payer"))
+        self._taxation(
+            article,
+            code,
+            None,
+            cells.get("base"),
+            cells.get("taux"),
+            cells.get("montant"),
+            cells.get("mp"),
+            a_payer=cells.get("a_payer"),
+        )
 
     def _taxes_condensees(self, article: ValeurSourcee | None, cells: dict[str, _Span]) -> None:
         """Colonnes droits / TVA d'un tableau condensé : une taxation par groupe de colonnes imprimé."""
         if any(k in cells for k in ("base_droits", "droits")):
             code = self.codes_colonnes.get("droits")
             code_lu = _Lu(code[1], code[1].toks[0].t.strip("()"), code[0]) if code else None
-            self._taxation(article, code_lu, None, cells.get("base_droits"), cells.get("taux_droits"),
-                           cells.get("droits"), cells.get("statut"), categorie=CategorieTaxe.droit,
-                           taux_nature=TauxNature.ad_valorem)
+            self._taxation(
+                article,
+                code_lu,
+                None,
+                cells.get("base_droits"),
+                cells.get("taux_droits"),
+                cells.get("droits"),
+                cells.get("statut"),
+                categorie=CategorieTaxe.droit,
+                taux_nature=TauxNature.ad_valorem,
+            )
         if any(k in cells for k in ("base_tva", "tva")):
             code = self.codes_colonnes.get("tva")
             code_lu = _Lu(code[1], code[1].toks[0].t.strip("()"), code[0]) if code else None
-            self._taxation(article, code_lu, None, cells.get("base_tva"), None, cells.get("tva"),
-                           cells.get("statut"), categorie=CategorieTaxe.tva, taux_nature=TauxNature.ad_valorem)
+            self._taxation(
+                article,
+                code_lu,
+                None,
+                cells.get("base_tva"),
+                None,
+                cells.get("tva"),
+                cells.get("statut"),
+                categorie=CategorieTaxe.tva,
+                taux_nature=TauxNature.ad_valorem,
+            )
 
     # --- totaux, indices ---------------------------------------------------------------------------------------------
 
     def _totaux(self) -> None:
         tout = {li.idx for li in self.lignes} - self.lignes_tableaux
         self.champs.total_droits_taxes = self._vs(
-            "total_droits_taxes", self._lire(["total_droits_taxes"], self.v_montant, lignes=tout, dessous=False),
-            unite="EUR")
+            "total_droits_taxes",
+            self._lire(["total_droits_taxes"], self.v_montant, lignes=tout, dessous=False),
+            unite="EUR",
+        )
         self.champs.total_a_payer = self._vs(
-            "total_a_payer", self._lire(["total_a_payer"], self.v_montant, lignes=tout, dessous=False), unite="EUR")
+            "total_a_payer",
+            self._lire(["total_a_payer"], self.v_montant, lignes=tout, dessous=False),
+            unite="EUR",
+        )
 
     def _totaux_categories(self) -> None:
         """Totaux imprimés par code de taxe (D-2903) : « Total A00 : 323,00 Total B00 : 2 553,90 », « Total AO0
@@ -2383,8 +3081,9 @@ class _Lecteur:
                 return
             lus.setdefault(code, []).append(d)
             premiers.setdefault(code, (code_lu, lu))
-            sur = lu.penalite == 0 and (self._methode(lu.span) is Methode.texte_natif
-                                        or self._confiance(lu.span) >= 0.5)
+            sur = lu.penalite == 0 and (
+                self._methode(lu.span) is Methode.texte_natif or self._confiance(lu.span) >= 0.5
+            )
             surs[code] = surs.get(code, True) and sur
 
         for ligne in self.lignes:
@@ -2393,14 +3092,14 @@ class _Lecteur:
             debuts = [k for k, t in enumerate(toks[:-1]) if re.fullmatch(r"(?i)total[e]?:?", t.t.strip())]
             for n, k in enumerate(debuts):
                 fin = debuts[n + 1] if n + 1 < len(debuts) else len(toks)
-                code = _code_taxe(_Span(toks[k + 1:k + 2]), ligne)
+                code = _code_taxe(_Span(toks[k + 1 : k + 2]), ligne)
                 apres = k + 2
                 if code is None:
                     # « Total droits (A00) 1009,66 » : code entre parenthèses après un libellé court (D-3101)
                     for j in range(k + 2, min(k + 6, fin)):
                         brut = toks[j].t.strip()
                         if brut.startswith("(") and brut.rstrip(":").endswith(")"):
-                            code = _code_taxe(_Span(toks[j:j + 1]), ligne)
+                            code = _code_taxe(_Span(toks[j : j + 1]), ligne)
                             apres = j + 1
                             break
                 if code is None:
@@ -2427,12 +3126,21 @@ class _Lecteur:
                 continue
             sp = _Span(toks[1:])
             ms = _nombres(sp)
-            if len(ms) != 1 or not _a_decimales(ms[0]) or ms[0].end() < len(sp.texte.rstrip(" |€")) \
-                    or "%" in sp.texte or not re.search(r"[^\W\d_]{4,}", sp.texte[:ms[0].start()]):
+            if (
+                len(ms) != 1
+                or not _a_decimales(ms[0])
+                or ms[0].end() < len(sp.texte.rstrip(" |€"))
+                or "%" in sp.texte
+                or not re.search(r"[^\W\d_]{4,}", sp.texte[: ms[0].start()])
+            ):
                 continue
             ajouter(code, self._lu_nombre(sp, ms[0]))
         # seuls les codes des lignes de taxation lues (« total TRY 616 558,35 » est un montant en devise)
-        codes = {t.type_taxe.valeur for t in self.champs.taxations if t.type_taxe is not None and t.type_taxe.valeur}
+        codes = {
+            t.type_taxe.valeur
+            for t in self.champs.taxations
+            if t.type_taxe is not None and t.type_taxe.valeur
+        }
         uniques = {code: vals[0] for code, vals in lus.items() if len(set(vals)) == 1}
         for code, (code_lu, lu) in self._totaux_sans_code(sans_code, uniques).items():
             # D-3706 : le seul code lu de la catégorie ; confiance plafonnée (rattachement déduit), jamais certaine
@@ -2452,13 +3160,14 @@ class _Lecteur:
                 self._lus_totaux[code] = premiers[code]
         self._porter_totaux_par_code()
 
-    def _total_categorie(self, toks: Sequence[_Tok], debut: int, fin: int,
-                         sortie: list[tuple[CategorieTaxe, _Span, _Lu]]) -> None:
+    def _total_categorie(
+        self, toks: Sequence[_Tok], debut: int, fin: int, sortie: list[tuple[CategorieTaxe, _Span, _Lu]]
+    ) -> None:
         """« Total autres taxes 1332,32 » / « Total TVA 6268,36 » : libellé de catégorie seul (sans code) suivi d'un
         seul montant à décimales (D-3706)."""
         for j in range(debut, min(debut + 5, fin)):
-            libelle = _Span(list(toks[debut:j + 1]))
-            reste = _Span(list(toks[j + 1:fin]))
+            libelle = _Span(list(toks[debut : j + 1]))
+            reste = _Span(list(toks[j + 1 : fin]))
             cat = _categorie_total(libelle.texte)
             if cat is None or reste.vide:
                 continue
@@ -2471,8 +3180,9 @@ class _Lecteur:
                     sortie.append((cat, libelle, lu))
             return
 
-    def _totaux_sans_code(self, sans_code: list[tuple[CategorieTaxe, _Span, _Lu]],
-                          uniques: dict[str, Decimal]) -> dict[str, tuple[_Lu, _Lu]]:
+    def _totaux_sans_code(
+        self, sans_code: list[tuple[CategorieTaxe, _Span, _Lu]], uniques: dict[str, Decimal]
+    ) -> dict[str, tuple[_Lu, _Lu]]:
         """Total de catégorie sans code rattaché au **seul** code des lignes de taxation lues de cette catégorie,
         quand ce code n'a pas de total lu et que la catégorie n'a qu'un total imprimé (D-3706). ``uniques`` est
         complété ; retourne ``code -> (libellé lu comme code, montant lu)``."""
@@ -2481,8 +3191,11 @@ class _Lecteur:
         for cat, libelle, lu in sans_code:
             par_cat.setdefault(cat, []).append((libelle, lu))
         for cat, lectures in par_cat.items():
-            codes = {t.type_taxe.valeur for t in self.champs.taxations
-                     if t.categorie is cat and t.type_taxe is not None and t.type_taxe.valeur}
+            codes = {
+                t.type_taxe.valeur
+                for t in self.champs.taxations
+                if t.categorie is cat and t.type_taxe is not None and t.type_taxe.valeur
+            }
             if len(lectures) != 1 or len(codes) != 1:
                 continue
             code = next(iter(codes))
@@ -2493,7 +3206,10 @@ class _Lecteur:
                 uniques[code] = Decimal(str(lu.valeur))
             except ArithmeticError:
                 continue
-            out[code] = (_Lu(libelle, libelle.texte, code, penalite=0.15), _Lu(lu.span, lu.brut, lu.valeur, 0.15))
+            out[code] = (
+                _Lu(libelle, libelle.texte, code, penalite=0.15),
+                _Lu(lu.span, lu.brut, lu.valeur, 0.15),
+            )
         return out
 
     def _totaux_codes_complets(self, uniques: dict[str, Decimal]) -> bool:
@@ -2530,7 +3246,7 @@ class _Lecteur:
             j = self._code_deux_points(toks, k)
             if j is None:
                 continue
-            code = _code_taxe(_Span(toks[k:k + 1]), ligne)
+            code = _code_taxe(_Span(toks[k : k + 1]), ligne)
             if code is not None and code.valeur is not None and code.penalite <= 0.12:
                 debuts.append((k, j, code))
         lu = False
@@ -2561,9 +3277,12 @@ class _Lecteur:
             total.montant = self._vs(f"totaux_par_code[{k}].montant", montant_lu, unite="EUR")
             if total.montant is not None and code in self._totaux_deduits:
                 # D-3710 : total déduit, jamais une preuve suffisante d'un écart certain ; confiance plafonnée
-                total.montant = total.montant.model_copy(update={
-                    "regle_derivation": self._totaux_deduits[code],
-                    "confiance": min(total.montant.confiance, PLAFOND_TOTAL_CODE_DEDUIT)})
+                total.montant = total.montant.model_copy(
+                    update={
+                        "regle_derivation": self._totaux_deduits[code],
+                        "confiance": min(total.montant.confiance, PLAFOND_TOTAL_CODE_DEDUIT),
+                    }
+                )
             if total.montant is not None:
                 self.champs.totaux_par_code.append(total)
 
@@ -2572,16 +3291,22 @@ class _Lecteur:
         for d in c.documents_references:
             if d.type_code is None or d.type_code.valeur not in ("1008", "FR7"):
                 continue
-            typ = TypeIndiceAutoliquidation.code_1008 if d.type_code.valeur == "1008" \
+            typ = (
+                TypeIndiceAutoliquidation.code_1008
+                if d.type_code.valeur == "1008"
                 else TypeIndiceAutoliquidation.reference_fr7
+            )
             k = len(c.indices_autoliquidation)
             ind = IndiceAutoliquidation(type=typ)
             c.indices_autoliquidation.append(ind)
             ind.valeur = self._copie(d.type_code, f"indices_autoliquidation[{k}].valeur")
             ind.tva = self._copie(d.reference, f"indices_autoliquidation[{k}].tva")
         for tx in c.taxations:
-            if tx.categorie is CategorieTaxe.tva and tx.paiement_normalise is PaiementNormalise.autoliquide \
-                    and tx.mode_paiement is not None:
+            if (
+                tx.categorie is CategorieTaxe.tva
+                and tx.paiement_normalise is PaiementNormalise.autoliquide
+                and tx.mode_paiement is not None
+            ):
                 k = len(c.indices_autoliquidation)
                 ind = IndiceAutoliquidation(type=TypeIndiceAutoliquidation.mode_paiement_tva)
                 c.indices_autoliquidation.append(ind)
@@ -2609,9 +3334,13 @@ class _Lecteur:
             for a in c.articles:
                 mf = a.montant_facture_article
                 bases = [a.valeur_statistique] + [
-                    t.base_montant for t in c.taxations if t.categorie is CategorieTaxe.droit
-                    and t.article is not None and a.numero_article is not None
-                    and t.article.valeur == a.numero_article.valeur]
+                    t.base_montant
+                    for t in c.taxations
+                    if t.categorie is CategorieTaxe.droit
+                    and t.article is not None
+                    and a.numero_article is not None
+                    and t.article.valeur == a.numero_article.valeur
+                ]
                 eur = next((v for v in bases if v is not None and v.est_lisible and v.decimal() > 0), None)
                 if mf and eur and mf.est_lisible and mf.unite and mf.unite != "EUR":
                     reference = mf.decimal() / eur.decimal()  # unités de devise pour 1 EUR
@@ -2625,10 +3354,17 @@ class _Lecteur:
             return
         sens = TauxChangeSens.devise_par_eur if ecart_dpe < ecart_epd else TauxChangeSens.eur_par_devise
         c.taux_change_sens = ValeurSourcee(
-            id=self.ids.nouveau(Prefixe.valeur), chemin="declaration.taux_change_sens", valeur=sens.value,
-            type=TypeValeur.enumeration, document_id=self.document.id, page=c.taux_change.page,
-            extracteur=INFO, methode=Methode.derive, confiance=min(CONF_SENS_DERIVE, c.taux_change.confiance),
-            derivee_de=[s.id for s in sources], regle_derivation="sens_taux_plus_proche_reference",
+            id=self.ids.nouveau(Prefixe.valeur),
+            chemin="declaration.taux_change_sens",
+            valeur=sens.value,
+            type=TypeValeur.enumeration,
+            document_id=self.document.id,
+            page=c.taux_change.page,
+            extracteur=INFO,
+            methode=Methode.derive,
+            confiance=min(CONF_SENS_DERIVE, c.taux_change.confiance),
+            derivee_de=[s.id for s in sources],
+            regle_derivation="sens_taux_plus_proche_reference",
         )
 
     # --- recoupements (lectures OCR) -----------------------------------------------------------------------------
@@ -2651,8 +3387,12 @@ class _Lecteur:
             return out
 
         for tx in self.champs.taxations:
-            if tx.taux_nature is not TauxNature.ad_valorem or tx.base_montant is None or tx.taux is None \
-                    or tx.montant is None:
+            if (
+                tx.taux_nature is not TauxNature.ad_valorem
+                or tx.base_montant is None
+                or tx.taux is None
+                or tx.montant is None
+            ):
                 continue
             solutions = []
             for b, rb in variantes(tx.base_montant, (100,)):
@@ -2660,8 +3400,10 @@ class _Lecteur:
                     for m, rm in variantes(tx.montant, (100,)):
                         if (rb or rt or rm) and t != 0 and abs(b * t / 100 - m) <= demi:
                             solutions.append(((b, rb), (t, rt), (m, rm)))
-            if len(solutions) != 1 or abs(tx.base_montant.decimal() * tx.taux.decimal() / 100
-                                          - tx.montant.decimal()) <= demi:
+            if (
+                len(solutions) != 1
+                or abs(tx.base_montant.decimal() * tx.taux.decimal() / 100 - tx.montant.decimal()) <= demi
+            ):
                 continue
             for vs, (val, repare) in zip((tx.base_montant, tx.taux, tx.montant), solutions[0], strict=True):
                 if repare:
@@ -2721,15 +3463,21 @@ class _Lecteur:
                 m = tx.montant.decimal()  # type: ignore[union-attr]
                 if abs(calc - m) <= demi:
                     return True
-                if m == m.to_integral_value() and any(abs(x - m) < cent for x in (
+                if m == m.to_integral_value() and any(
+                    abs(x - m) < cent
+                    for x in (
                         calc.quantize(Decimal(1), rounding="ROUND_HALF_UP"),
                         calc.quantize(Decimal(1), rounding="ROUND_FLOOR"),
-                        calc.quantize(Decimal(1), rounding="ROUND_CEILING"))):
+                        calc.quantize(Decimal(1), rounding="ROUND_CEILING"),
+                    )
+                ):
                     return True  # droits arrondis à l'euro
                 return False if abs(calc - m) > cent else None
             if tx.base_quantite is not None and lisibles(tx.base_quantite, tx.taux, tx.montant):
-                ecart = abs(tx.base_quantite.decimal() * tx.taux.decimal()  # type: ignore[union-attr]
-                            - tx.montant.decimal())  # type: ignore[union-attr]
+                ecart = abs(
+                    tx.base_quantite.decimal() * tx.taux.decimal()  # type: ignore[union-attr]
+                    - tx.montant.decimal()
+                )  # type: ignore[union-attr]
                 return True if ecart <= demi else (False if ecart > cent else None)
             return None
 
@@ -2749,20 +3497,29 @@ class _Lecteur:
         # montant et « à payer » d'une même ligne : égaux sauf paiement autoliquidé (à payer 0) ; un désaccord
         # (décimales perdues par l'OCR : « 12 » / « 12,12 ») rend les deux lectures douteuses (D-1805)
         for tx in c.taxations:
-            if lisibles(tx.montant, tx.montant_a_payer) and tx.montant_a_payer.decimal() != 0 \
-                    and tx.montant_a_payer.decimal() != tx.montant.decimal():  # type: ignore[union-attr]
+            if (
+                lisibles(tx.montant, tx.montant_a_payer)
+                and tx.montant_a_payer.decimal() != 0
+                and tx.montant_a_payer.decimal() != tx.montant.decimal()
+            ):  # type: ignore[union-attr]
                 self._infirmer(tx.montant, tx.montant_a_payer)
                 self._douteuses.update(v.id for v in (tx.montant, tx.montant_a_payer) if v is not None)
         # base TVA = base des droits + droits et taxes de l'article
         par_article: dict[str, list[TaxationDeclaration]] = {}
         for tx in c.taxations:
-            par_article.setdefault(tx.article.valeur if tx.article and tx.article.valeur else "-", []).append(tx)
+            par_article.setdefault(tx.article.valeur if tx.article and tx.article.valeur else "-", []).append(
+                tx
+            )
         for groupe in par_article.values():
             tvas = [t for t in groupe if t.categorie is CategorieTaxe.tva]
             autres = [t for t in groupe if t.categorie is not CategorieTaxe.tva]
             droit = next((t for t in autres if t.base_montant is not None), None)
-            if len(tvas) != 1 or droit is None or not lisibles(tvas[0].base_montant, droit.base_montant) \
-                    or not all(lisibles(t.montant) for t in autres):
+            if (
+                len(tvas) != 1
+                or droit is None
+                or not lisibles(tvas[0].base_montant, droit.base_montant)
+                or not all(lisibles(t.montant) for t in autres)
+            ):
                 continue
             ajouts = [t.montant.decimal() for t in autres]  # type: ignore[union-attr]
             attendu = droit.base_montant.decimal() + sum(ajouts)  # type: ignore[union-attr]
@@ -2775,18 +3532,31 @@ class _Lecteur:
         if complet and _plusieurs(montants) and lisibles(c.total_droits_taxes, *montants):
             ok = abs(sum(m.decimal() for m in montants) - c.total_droits_taxes.decimal()) <= demi  # type: ignore
             (self._confirmer if ok else self._infirmer)(c.total_droits_taxes, *montants)
-        if complet and _plusieurs(montants) and lisibles(c.total_a_payer, *montants) and all(
-                tx.paiement_normalise is not PaiementNormalise.inconnu for tx in c.taxations
-                if tx.categorie is CategorieTaxe.tva):
-            dus = sum(tx.montant.decimal() for tx in c.taxations  # type: ignore[union-attr]
-                      if tx.paiement_normalise is not PaiementNormalise.autoliquide)
+        if (
+            complet
+            and _plusieurs(montants)
+            and lisibles(c.total_a_payer, *montants)
+            and all(
+                tx.paiement_normalise is not PaiementNormalise.inconnu
+                for tx in c.taxations
+                if tx.categorie is CategorieTaxe.tva
+            )
+        ):
+            dus = sum(
+                tx.montant.decimal()
+                for tx in c.taxations  # type: ignore[union-attr]
+                if tx.paiement_normalise is not PaiementNormalise.autoliquide
+            )
             ok = abs(dus - c.total_a_payer.decimal()) <= demi  # type: ignore[union-attr]
             (self._confirmer if ok else self._infirmer)(c.total_a_payer)
         self._recouper_totaux_categories(demi, complet)
         # montant total facturé = somme des articles (même devise)
         mts = [a.montant_facture_article for a in c.articles]
-        if _plusieurs(mts) and lisibles(c.montant_total_facture, *mts) and all(
-                m.unite == c.montant_total_facture.unite for m in mts):  # type: ignore[union-attr]
+        if (
+            _plusieurs(mts)
+            and lisibles(c.montant_total_facture, *mts)
+            and all(m.unite == c.montant_total_facture.unite for m in mts)
+        ):  # type: ignore[union-attr]
             ok = abs(sum(m.decimal() for m in mts) - c.montant_total_facture.decimal()) <= demi  # type: ignore
             (self._confirmer if ok else self._infirmer)(c.montant_total_facture, *mts)
         # taux de change : montant facturé converti = valeur statistique (ou base des droits) d'un article
@@ -2794,8 +3564,7 @@ class _Lecteur:
         # masses, colis, nombre d'articles
         mbs = [a.masse_brute for a in c.articles]
         if _plusieurs(mbs) and lisibles(c.masse_brute_totale, *mbs):
-            ok = abs(sum(m.decimal() for m in mbs) - c.masse_brute_totale.decimal()) \
-                <= Decimal("0.0005")  # type: ignore[union-attr]
+            ok = abs(sum(m.decimal() for m in mbs) - c.masse_brute_totale.decimal()) <= Decimal("0.0005")  # type: ignore[union-attr]
             (self._confirmer if ok else self._infirmer)(c.masse_brute_totale, *mbs)
         cls = [a.nombre_colis for a in c.articles]
         if _plusieurs(cls) and lisibles(c.nombre_colis_total, *cls):
@@ -2813,8 +3582,11 @@ class _Lecteur:
         # double lecture : seulement sans caractère d'une classe de confusion (O/0, I/1…), car deux lectures
         # du même glyphe dans la même police se trompent de la même façon
         for vs in (c.mrn, c.devise_facture):
-            if lisibles(vs) and not re.search(r"[0O1IL5S8B2Z6G]", (vs.valeur or "")[4:] if vs is c.mrn
-                                              else "") and self._lectures(vs) >= 2:  # type: ignore[arg-type]
+            if (
+                lisibles(vs)
+                and not re.search(r"[0O1IL5S8B2Z6G]", (vs.valeur or "")[4:] if vs is c.mrn else "")
+                and self._lectures(vs) >= 2
+            ):  # type: ignore[arg-type]
                 self._confirmer(vs)
         # application
         for vs in self.champs.iter_valeurs():
@@ -2823,8 +3595,9 @@ class _Lecteur:
             plafond_page = self.pages[vs.page].plafond if vs.page in self.pages else 0.5
             if vs.id in self._reparees:
                 continue  # relecture : jamais au-dessus de PLAFOND_REPARE
-            if vs.id in self._douteuses or (vs.type is TypeValeur.montant
-                                              and _ZERO_TETE_RE.match((vs.valeur_brute or "").strip())):
+            if vs.id in self._douteuses or (
+                vs.type is TypeValeur.montant and _ZERO_TETE_RE.match((vs.valeur_brute or "").strip())
+            ):
                 self._remplacer(vs, min(vs.confiance, PLAFOND_INCOHERENT))
             elif vs.id in self._confirmees and vs.confiance >= 0.5:
                 cible = CONF_CONFIRMEE if plafond_page >= 0.75 else min(PLAFOND_OCR_SEUL, vs.confiance + 0.1)
@@ -2839,14 +3612,19 @@ class _Lecteur:
         c = self.champs
         if any(t.type_taxe is None or not t.type_taxe.valeur for t in c.taxations):
             return False
-        if any((t.montant or t.montant_a_payer) is None or not (t.montant or t.montant_a_payer).est_lisible
-               for t in c.taxations):
+        if any(
+            (t.montant or t.montant_a_payer) is None or not (t.montant or t.montant_a_payer).est_lisible
+            for t in c.taxations
+        ):
             return False
         par_article = [t for t in c.taxations if t.article is not None and t.article.valeur]
         if not par_article:
             return True
-        attendus = {str(a.numero_article.valeur).lstrip("0") for a in c.articles
-                    if a.numero_article is not None and a.numero_article.valeur}
+        attendus = {
+            str(a.numero_article.valeur).lstrip("0")
+            for a in c.articles
+            if a.numero_article is not None and a.numero_article.valeur
+        }
         if c.nombre_articles is not None and c.nombre_articles.est_lisible:
             try:
                 n = int(c.nombre_articles.decimal())
@@ -2872,15 +3650,27 @@ class _Lecteur:
         c = self.champs
         # D-3710 : un total déduit (D-3706) ne confirme rien ; un code sans ligne a été admis parce que la somme des
         # totaux redonne le total imprimé : confirmer ce total par cette même somme serait circulaire.
-        tot = {code: lus[0][0] for code, lus in self.totaux_categories.items()
-               if lus[0][1] and code not in self._totaux_deduits}
+        tot = {
+            code: lus[0][0]
+            for code, lus in self.totaux_categories.items()
+            if lus[0][1] and code not in self._totaux_deduits
+        }
         if not tot:
             return
         td = c.total_droits_taxes
         somme = sum(tot.values(), Decimal(0))
-        par_code = {t.type_taxe.valeur: t.montant for t in c.totaux_par_code
-                    if t.type_taxe is not None and t.type_taxe.valeur and t.montant is not None}
-        if complet and len(tot) >= 2 and td is not None and td.est_lisible and abs(td.decimal() - somme) <= demi:
+        par_code = {
+            t.type_taxe.valeur: t.montant
+            for t in c.totaux_par_code
+            if t.type_taxe is not None and t.type_taxe.valeur and t.montant is not None
+        }
+        if (
+            complet
+            and len(tot) >= 2
+            and td is not None
+            and td.est_lisible
+            and abs(td.decimal() - somme) <= demi
+        ):
             self._confirmer(td)
             # D-3101 : les totaux par code dont la somme redonne le total imprimé sont confirmés avec lui.
             self._confirmer(*(par_code.get(code) for code in tot))
@@ -2888,15 +3678,22 @@ class _Lecteur:
             if ap is not None and ap.est_lisible:
                 auto = set()
                 for code in tot:
-                    du_code = [t for t in c.taxations if t.type_taxe is not None and t.type_taxe.valeur == code]
-                    if du_code and all(t.paiement_normalise is PaiementNormalise.autoliquide for t in du_code):
+                    du_code = [
+                        t for t in c.taxations if t.type_taxe is not None and t.type_taxe.valeur == code
+                    ]
+                    if du_code and all(
+                        t.paiement_normalise is PaiementNormalise.autoliquide for t in du_code
+                    ):
                         auto.add(code)
                 cibles = {somme, somme - sum((tot[k] for k in auto), Decimal(0))}
                 if any(abs(ap.decimal() - x) <= demi for x in cibles):
                     self._confirmer(ap)
         for code, total in tot.items():
-            lignes = [t for t in c.taxations if t.type_taxe is not None and t.type_taxe.valeur == code
-                      and t.article is not None]
+            lignes = [
+                t
+                for t in c.taxations
+                if t.type_taxe is not None and t.type_taxe.valeur == code and t.article is not None
+            ]
             montants = [t.montant if t.montant is not None else t.montant_a_payer for t in lignes]
             if not montants or any(m is None or not m.est_lisible for m in montants):
                 continue
@@ -2913,14 +3710,21 @@ class _Lecteur:
             return
         for a in c.articles:
             mf = a.montant_facture_article
-            refs = [a.valeur_statistique] + [t.base_montant for t in c.taxations
-                                             if t.categorie is CategorieTaxe.droit and t.article is not None
-                                             and a.numero_article is not None
-                                             and t.article.valeur == a.numero_article.valeur]
+            refs = [a.valeur_statistique] + [
+                t.base_montant
+                for t in c.taxations
+                if t.categorie is CategorieTaxe.droit
+                and t.article is not None
+                and a.numero_article is not None
+                and t.article.valeur == a.numero_article.valeur
+            ]
             if mf is None or not mf.est_lisible or mf.unite in (None, "EUR"):
                 continue
-            eur = mf.decimal() / tx.decimal() if sens.valeur == TauxChangeSens.devise_par_eur.value \
+            eur = (
+                mf.decimal() / tx.decimal()
+                if sens.valeur == TauxChangeSens.devise_par_eur.value
                 else mf.decimal() * tx.decimal()
+            )
             for r in refs:
                 if r is not None and r.est_lisible and abs(eur - r.decimal()) <= Decimal("0.0051"):
                     self._confirmer(tx, sens, mf, r)
@@ -2946,14 +3750,34 @@ class _Lecteur:
 
 # --- aides de module -----------------------------------------------------------------------------------------
 
-_TYPES_ARTICLES = {"numero": "entier", "code": "code", "designation": "texte", "origine": "pays",
-                   "preference": "texte", "regime": "texte", "valeur_statistique": "nombre", "colis": "entier",
-                   "montant_facture": "nombre", "valeur": "nombre", "quantite": "nombre", "masse_brute": "nombre",
-                   "masse_nette": "nombre", "base_droits": "nombre", "taux_droits": "nombre", "droits": "nombre",
-                   "base_tva": "nombre", "tva": "nombre", "statut": "mp",
-                   # colonnes de taxation d'un tableau mixte (D-2405)
-                   "type": "code_taxe", "base": "nombre", "taux": "nombre", "montant": "nombre", "a_payer": "nombre",
-                   "mp": "mp"}
+_TYPES_ARTICLES = {
+    "numero": "entier",
+    "code": "code",
+    "designation": "texte",
+    "origine": "pays",
+    "preference": "texte",
+    "regime": "texte",
+    "valeur_statistique": "nombre",
+    "colis": "entier",
+    "montant_facture": "nombre",
+    "valeur": "nombre",
+    "quantite": "nombre",
+    "masse_brute": "nombre",
+    "masse_nette": "nombre",
+    "base_droits": "nombre",
+    "taux_droits": "nombre",
+    "droits": "nombre",
+    "base_tva": "nombre",
+    "tva": "nombre",
+    "statut": "mp",
+    # colonnes de taxation d'un tableau mixte (D-2405)
+    "type": "code_taxe",
+    "base": "nombre",
+    "taux": "nombre",
+    "montant": "nombre",
+    "a_payer": "nombre",
+    "mp": "mp",
+}
 
 
 _LIBELLE_TAXE_RE = re.compile(r"\b(droits?|tax\w*|dut(y|ies)|accises?|excise|dumping|specifique|specific)\b")
@@ -3012,9 +3836,13 @@ def _reference_apres_nature(toks: Sequence[_Tok], j: int) -> list[_Tok]:
     « Autoliquidation TVA — n° TVA ») sépare le code de la référence, la référence est le premier mot suivant
     qui porte un chiffre, avant tout autre code de document. Un court préfixe en capitales collé au numéro
     (« FT 4800/2026 ») en fait partie. À défaut, le mot ``j`` seul (comportement d'origine)."""
+
     def avec_prefixe(k: int) -> list[_Tok]:
-        if k > j and re.fullmatch(r"[A-Z]{1,4}", toks[k - 1].t) and \
-                toks[k].x0 - toks[k - 1].x1 <= 1.5 * max(toks[k].hx, 1e-3):
+        if (
+            k > j
+            and re.fullmatch(r"[A-Z]{1,4}", toks[k - 1].t)
+            and toks[k].x0 - toks[k - 1].x1 <= 1.5 * max(toks[k].hx, 1e-3)
+        ):
             return [toks[k - 1], toks[k]]
         return [toks[k]]
 
@@ -3033,8 +3861,14 @@ def _ligne_taxe_chiffree(cells: dict[str, _Span]) -> bool:
     """Ligne d'un tableau de taxes sans code lisible mais chiffrée : montant décimal, taux (« % » ou décimal) et
     base imprimés dans leurs colonnes."""
     montant, taux, base = cells.get("montant"), cells.get("taux"), cells.get("base")
-    if not (montant is not None and _DECIMAL_RE.search(montant.texte) and taux is not None and "%" in taux.texte
-            and base is not None and re.search(r"\d", base.texte)):
+    if not (
+        montant is not None
+        and _DECIMAL_RE.search(montant.texte)
+        and taux is not None
+        and "%" in taux.texte
+        and base is not None
+        and re.search(r"\d", base.texte)
+    ):
         return False
     # cohérence imprimée exigée : base × taux = montant (au centime, ou droits arrondis à l'euro)
     lus = []
@@ -3048,7 +3882,9 @@ def _ligne_taxe_chiffree(cells: dict[str, _Span]) -> bool:
     if b is None or t is None or m is None or m == 0:
         return False
     calc = b * t / 100
-    return abs(calc - m) <= Decimal("0.011") or abs(calc.quantize(Decimal(1), rounding=ROUND_HALF_UP) - m) < Decimal("0.011")
+    return abs(calc - m) <= Decimal("0.011") or abs(
+        calc.quantize(Decimal(1), rounding=ROUND_HALF_UP) - m
+    ) < Decimal("0.011")
 
 
 def _parasite(ligne: _Ligne) -> bool:
@@ -3072,8 +3908,9 @@ def _b(v: float) -> float:
     return min(1.0, max(0.0, round(float(v), 5)))
 
 
-def _candidats(toks: Sequence[_Tok], index: dict[str, list[tuple[str, str]]], lmax: int
-               ) -> list[tuple[float, float, str, int, int]]:
+def _candidats(
+    toks: Sequence[_Tok], index: dict[str, list[tuple[str, str]]], lmax: int
+) -> list[tuple[float, float, str, int, int]]:
     cands = []
     for i, t in enumerate(toks):
         if not t.k:
@@ -3093,7 +3930,7 @@ def _candidats(toks: Sequence[_Tok], index: dict[str, list[tuple[str, str]]], lm
                 else:
                     s = _ratio(vk, acc)
                 if s == 1.0 or s >= _seuil(len(vk)):
-                    cands.append((s ** 3 * len(vk), s, cle, i, j + 1))
+                    cands.append((s**3 * len(vk), s, cle, i, j + 1))
     return cands
 
 
@@ -3138,7 +3975,9 @@ def _compatible(t: _Tok, genre: str) -> bool:
     if genre == "pays":
         return bool(re.fullmatch(r"[A-Z]{2}", s))
     if genre == "code":
-        return bool(re.fullmatch(r"[0-9OIlSB .]{6,12}", s)) or bool(_CODE_TAXE_RE.match(s)) or _code_minuscule(s)
+        return (
+            bool(re.fullmatch(r"[0-9OIlSB .]{6,12}", s)) or bool(_CODE_TAXE_RE.match(s)) or _code_minuscule(s)
+        )
     if genre == "code_taxe":
         return bool(_CODE_TAXE_RE.match(s)) or _code_minuscule(s)
     if genre == "mp":
@@ -3205,7 +4044,7 @@ def _code_groupes(toks: Sequence[_Tok]) -> tuple[int, int, str] | None:
         if not re.fullmatch(r"\d{4}", t.t.strip(".,:;")):
             continue
         for n in (4, 3):
-            sel = toks[i:i + n]
+            sel = toks[i : i + n]
             if len(sel) < n:
                 continue
             if any(b.x0 - a.x1 > 1.2 * max(a.hx, 1e-3) for a, b in pairwise(sel)):
@@ -3214,7 +4053,11 @@ def _code_groupes(toks: Sequence[_Tok]) -> tuple[int, int, str] | None:
             if not _GROUPE_CODE_RE.fullmatch(txt.rstrip(".")):
                 continue
             suivant = toks[i + n] if i + n < len(toks) else None
-            if suivant is not None and re.fullmatch(r"\d{1,2}", suivant.t) and suivant.x0 - sel[-1].x1 < sel[-1].hx:
+            if (
+                suivant is not None
+                and re.fullmatch(r"\d{1,2}", suivant.t)
+                and suivant.x0 - sel[-1].x1 < sel[-1].hx
+            ):
                 continue  # groupe de chiffres qui continue : pas un code
             return i, i + n, re.sub(r"\D", "", txt)
     return None
@@ -3262,7 +4105,10 @@ def _tva(t: _Tok) -> tuple[str, str, float] | None:
         if ok is False:
             pen += 0.4
         return brut, val, pen
-    if re.fullmatch(r"(?!FR)[A-Z]{2}[0-9A-Z]{8,12}", net) and sum(c.isdigit() for c in net) >= 7 \
-            and net[:2] in ISO2:
+    if (
+        re.fullmatch(r"(?!FR)[A-Z]{2}[0-9A-Z]{8,12}", net)
+        and sum(c.isdigit() for c in net) >= 7
+        and net[:2] in ISO2
+    ):
         return brut, net, 0.05
     return None

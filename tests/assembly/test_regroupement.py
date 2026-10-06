@@ -53,8 +53,12 @@ class Lot:
         fid = "fic_" + hashlib.sha256(chemin.encode()).hexdigest()[:32]
         if fid not in self.fichiers:
             self.fichiers[fid] = Fichier(
-                id=fid, nom_original=chemin.rsplit("/", 1)[-1], chemin_relatif=chemin,
-                sha256=hashlib.sha256(chemin.encode()).hexdigest(), taille=1, type_mime="application/pdf",
+                id=fid,
+                nom_original=chemin.rsplit("/", 1)[-1],
+                chemin_relatif=chemin,
+                sha256=hashlib.sha256(chemin.encode()).hexdigest(),
+                taille=1,
+                type_mime="application/pdf",
             )
         return fid
 
@@ -63,73 +67,138 @@ class Lot:
         self.docs.append(d)
         return d
 
-    def fc(self, id, chemin, *, numero="INV-10001", total="1000.00", devise="USD", tva=TVA, transport=None,
-           codes=("847130",)):
+    def fc(
+        self,
+        id,
+        chemin,
+        *,
+        numero="INV-10001",
+        total="1000.00",
+        devise="USD",
+        tva=TVA,
+        transport=None,
+        codes=("847130",),
+    ):
         c = ChampsFactureCommerciale(
             numero=vs("facture_commerciale.numero", numero, document_id=id),
             devise=vs("facture_commerciale.devise", devise, document_id=id),
             total_facture=vs("facture_commerciale.total_facture", total, document_id=id),
             acheteur=Partie(tva=vs("facture_commerciale.acheteur.tva", tva, document_id=id)),
-            ref_transport=vs("facture_commerciale.ref_transport", transport, document_id=id) if transport else None,
-            lignes=[LigneFactureCommerciale(code_marchandise_imprime=vs(
-                "facture_commerciale.lignes[].code_marchandise_imprime", c, document_id=id)) for c in codes],
+            ref_transport=vs("facture_commerciale.ref_transport", transport, document_id=id)
+            if transport
+            else None,
+            lignes=[
+                LigneFactureCommerciale(
+                    code_marchandise_imprime=vs(
+                        "facture_commerciale.lignes[].code_marchandise_imprime", c, document_id=id
+                    )
+                )
+                for c in codes
+            ],
         )
         return self.ajouter(TypeDocument.facture_commerciale, c, chemin, id=id)
 
-    def dec(self, id, chemin, *, mrn=MRN1, refs=(), montant="1000.00", devise="USD", tva=TVA, version=None,
-            codes=("8471300000",), taxes=("50.00",), date_acc="2026-08-01", articles_refs=None):
+    def dec(
+        self,
+        id,
+        chemin,
+        *,
+        mrn=MRN1,
+        refs=(),
+        montant="1000.00",
+        devise="USD",
+        tva=TVA,
+        version=None,
+        codes=("8471300000",),
+        taxes=("50.00",),
+        date_acc="2026-08-01",
+        articles_refs=None,
+    ):
         c = ChampsDeclaration(
             mrn=vs("declaration.mrn", mrn, document_id=id),
             version=vs("declaration.version", version, document_id=id) if version else None,
             date_acceptation=vs("declaration.date_acceptation", date_acc, document_id=id),
             devise_facture=vs("declaration.devise_facture", devise, document_id=id),
-            montant_total_facture=vs("declaration.montant_total_facture", montant, document_id=id) if montant else None,
+            montant_total_facture=vs("declaration.montant_total_facture", montant, document_id=id)
+            if montant
+            else None,
             importateur=Partie(tva=vs("declaration.importateur.tva", tva, document_id=id)),
             documents_references=[
-                DocumentReference(type_code=vs("declaration.documents_references[].type_code", code, document_id=id),
-                                  reference=vs("declaration.documents_references[].reference", ref, document_id=id))
+                DocumentReference(
+                    type_code=vs("declaration.documents_references[].type_code", code, document_id=id),
+                    reference=vs("declaration.documents_references[].reference", ref, document_id=id),
+                )
                 for code, ref in refs
             ],
             articles=[
                 ArticleDeclaration(
                     code_marchandise=vs("declaration.articles[].code_marchandise", c, document_id=id),
-                    references_facture=[vs("declaration.articles[].references_facture[]", r, document_id=id)
-                                        for r, _m in (articles_refs or {}).get(i, [])],
+                    references_facture=[
+                        vs("declaration.articles[].references_facture[]", r, document_id=id)
+                        for r, _m in (articles_refs or {}).get(i, [])
+                    ],
                     montant_facture_article=(
-                        vs("declaration.articles[].montant_facture_article", (articles_refs or {})[i][0][1],
-                           document_id=id) if articles_refs and i in articles_refs else None),
+                        vs(
+                            "declaration.articles[].montant_facture_article",
+                            (articles_refs or {})[i][0][1],
+                            document_id=id,
+                        )
+                        if articles_refs and i in articles_refs
+                        else None
+                    ),
                 )
                 for i, c in enumerate(codes)
             ],
-            taxations=[TaxationDeclaration(montant=vs("declaration.taxations[].montant", t, document_id=id))
-                       for t in taxes],
+            taxations=[
+                TaxationDeclaration(montant=vs("declaration.taxations[].montant", t, document_id=id))
+                for t in taxes
+            ],
         )
         return self.ajouter(TypeDocument.declaration, c, chemin, id=id)
 
-    def ft(self, id, chemin, *, numero="FT-500", mrns=(MRN1,), lignes=(("debours_droits", "50.00", None),),
-           transports=(), emetteur_tva=None, total_debours=None):
+    def ft(
+        self,
+        id,
+        chemin,
+        *,
+        numero="FT-500",
+        mrns=(MRN1,),
+        lignes=(("debours_droits", "50.00", None),),
+        transports=(),
+        emetteur_tva=None,
+        total_debours=None,
+    ):
         c = ChampsFactureTransitaire(
             numero=vs("facture_transitaire.numero", numero, document_id=id),
             refs_mrn=[vs("facture_transitaire.refs_mrn[]", m, document_id=id) for m in mrns],
-            refs_transport=[vs("facture_transitaire.refs_transport[]", t, document_id=id) for t in transports],
-            emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", emetteur_tva, document_id=id)
-                            if emetteur_tva else None),
+            refs_transport=[
+                vs("facture_transitaire.refs_transport[]", t, document_id=id) for t in transports
+            ],
+            emetteur=Partie(
+                tva=vs("facture_transitaire.emetteur.tva", emetteur_tva, document_id=id)
+                if emetteur_tva
+                else None
+            ),
             lignes=[
                 LigneFactureTransitaire(
-                    nature=NatureLigne(n), montant_ht=vs("facture_transitaire.lignes[].montant_ht", m, document_id=id),
+                    nature=NatureLigne(n),
+                    montant_ht=vs("facture_transitaire.lignes[].montant_ht", m, document_id=id),
                     mrn=vs("facture_transitaire.lignes[].mrn", mrn, document_id=id) if mrn else None,
                 )
                 for n, m, mrn in lignes
             ],
             total_debours=vs("facture_transitaire.total_debours", total_debours, document_id=id)
-            if total_debours else None,
+            if total_debours
+            else None,
         )
         return self.ajouter(TypeDocument.facture_transitaire, c, chemin, id=id)
 
     def avoir(self, id, chemin, *, origine="FT-500", mrns=()):
         c = ChampsAvoir(
             numero=vs("avoir.numero", "AV-1", document_id=id),
-            refs_facture_origine=[vs("avoir.refs_facture_origine[]", origine, document_id=id)] if origine else [],
+            refs_facture_origine=[vs("avoir.refs_facture_origine[]", origine, document_id=id)]
+            if origine
+            else [],
             refs_mrn=[vs("avoir.refs_mrn[]", m, document_id=id) for m in mrns],
         )
         return self.ajouter(TypeDocument.avoir, c, chemin, id=id)
@@ -137,7 +206,8 @@ class Lot:
     def support(self, id, chemin, *, transport=None, refs_facture=()):
         c = ChampsSupport(
             ref_transport_maitre=vs("document_support.ref_transport_maitre", transport, document_id=id)
-            if transport else None,
+            if transport
+            else None,
             refs_facture=[vs("document_support.refs_facture[]", r, document_id=id) for r in refs_facture],
         )
         return self.ajouter(TypeDocument.document_support, c, chemin, id=id)
@@ -286,8 +356,12 @@ def test_document_a_la_racine_peut_rejoindre_un_sous_dossier():
     lot.fc("fc2", "docs/exp2/fc.pdf", numero="INV-20002")
     lot.dec("dec2", "docs/exp2/dec.pdf", refs=[("N380", "INV-20002")], mrn=MRN2)
     # facture mensuelle du transitaire à la racine, qui cite les deux MRN
-    lot.ft("ft1", "docs/releve.pdf", mrns=(MRN1, MRN2),
-           lignes=(("debours_droits", "50.00", MRN1), ("debours_droits", "50.00", MRN2)))
+    lot.ft(
+        "ft1",
+        "docs/releve.pdf",
+        mrns=(MRN1, MRN2),
+        lignes=(("debours_droits", "50.00", MRN1), ("debours_droits", "50.00", MRN2)),
+    )
     res = lot.regrouper()
     assert len(res.dossiers) == 2
     for dossier, dec_id in ((_dossier_de(res, "fc1"), "dec1"), (_dossier_de(res, "fc2"), "dec2")):
@@ -304,8 +378,10 @@ def test_courriels_sont_des_frontieres_sauf_reference_explicite():
     lot.ft("ft_sans_ref", "mail2/ft.pdf", mrns=(), lignes=(("debours_droits", "50.00", None),))
     lot.ft("ft_ref", "mail3/ft.pdf", numero="FT-501", mrns=(MRN1,))
     courriels = {
-        lot.fichier("mail1/fc.pdf"): "<m1@fictif>", lot.fichier("mail1/dec.pdf"): "<m1@fictif>",
-        lot.fichier("mail2/ft.pdf"): "<m2@fictif>", lot.fichier("mail3/ft.pdf"): "<m3@fictif>",
+        lot.fichier("mail1/fc.pdf"): "<m1@fictif>",
+        lot.fichier("mail1/dec.pdf"): "<m1@fictif>",
+        lot.fichier("mail2/ft.pdf"): "<m2@fictif>",
+        lot.fichier("mail3/ft.pdf"): "<m3@fictif>",
     }
     res = lot.regrouper(options=OptionsRegroupement(annee=2026, courriels=courriels))
     d = _dossier_de(res, "fc1")
@@ -322,9 +398,14 @@ def test_plusieurs_factures_pour_une_declaration():
     lot = Lot()
     lot.fc("fc1", "docs/fc1.pdf", numero="INV-10001", total="600.00")
     lot.fc("fc2", "docs/fc2.pdf", numero="INV-10002", total="400.00")
-    lot.dec("dec1", "docs/dec.pdf", refs=[("N380", "INV-10001"), ("N380", "INV-10002")], montant="1000.00",
-            codes=("8471300000", "8471300000"),
-            articles_refs={0: [("INV-10001", "600.00")], 1: [("INV-10002", "400.00")]})
+    lot.dec(
+        "dec1",
+        "docs/dec.pdf",
+        refs=[("N380", "INV-10001"), ("N380", "INV-10002")],
+        montant="1000.00",
+        codes=("8471300000", "8471300000"),
+        articles_refs={0: [("INV-10001", "600.00")], 1: [("INV-10002", "400.00")]},
+    )
     res = lot.regrouper()
     assert len(res.dossiers) == 1
     d = res.dossiers[0]
@@ -362,13 +443,21 @@ def test_lignes_sans_mrn_sur_facture_multi_mrn_au_prorata():
     lot = Lot()
     lot.fc("fc1", "docs/fc.pdf", total="1000.00")
     lot.dec("dec1", "docs/dec1.pdf", refs=[("N380", "INV-10001")], montant="500.00", taxes=("10.00",))
-    lot.dec("dec2", "docs/dec2.pdf", refs=[("N380", "INV-10001")], montant="500.00", mrn=MRN2, taxes=("30.00",))
-    lot.ft("ft1", "docs/ft.pdf", mrns=(MRN1, MRN2), lignes=(("debours_droits", "40.00", None),
-                                                           ("frais_dedouanement", "60.00", None)))
+    lot.dec(
+        "dec2", "docs/dec2.pdf", refs=[("N380", "INV-10001")], montant="500.00", mrn=MRN2, taxes=("30.00",)
+    )
+    lot.ft(
+        "ft1",
+        "docs/ft.pdf",
+        mrns=(MRN1, MRN2),
+        lignes=(("debours_droits", "40.00", None), ("frais_dedouanement", "60.00", None)),
+    )
     d = lot.regrouper().dossiers[0]
     allocs = {a.cible_document_id: a for a in d.allocations if a.source_document_id == "ft1"}
     assert allocs["dec1"].methode is MethodeAllocation.prorata and allocs["dec1"].source_ligne == 0
-    assert allocs["dec1"].montant_alloue == Decimal("10.00") and allocs["dec2"].montant_alloue == Decimal("30.00")
+    assert allocs["dec1"].montant_alloue == Decimal("10.00") and allocs["dec2"].montant_alloue == Decimal(
+        "30.00"
+    )
 
 
 # --- versions rectificatives ---------------------------------------------------------------------------
@@ -379,8 +468,16 @@ def test_versions_rectificatives_rattachees_derniere_retenue():
     lot.fc("fc1", "docs/fc.pdf")
     lot.dec("dec_v1", "docs/dec_v1.pdf", refs=[("N380", "INV-10001")], version="1")
     # version rectifiée : MRN au préfixe stable identique, ne cite plus la facture
-    lot.dec("dec_v2", "docs/dec_v2.pdf", mrn=MRN1[:15] + "ZZZ", refs=[], version="2", montant=None,
-            date_acc="2026-08-05", tva="FR00000000000")
+    lot.dec(
+        "dec_v2",
+        "docs/dec_v2.pdf",
+        mrn=MRN1[:15] + "ZZZ",
+        refs=[],
+        version="2",
+        montant=None,
+        date_acc="2026-08-05",
+        tva="FR00000000000",
+    )
     res = lot.regrouper(options=OptionsRegroupement(annee=2026, meme_source=False))
     assert len(res.dossiers) == 1
     d = res.dossiers[0]
@@ -588,7 +685,9 @@ def test_pdf_fusionne_sans_reference_ne_reunit_pas_les_dossiers():
 
     def page(n):
         d = lot.docs[-1]
-        lot.docs[-1] = document(d.type, d.champs, id=d.id, pages=(n,), fichier_id=lot.fichier("docs/scan.pdf"))
+        lot.docs[-1] = document(
+            d.type, d.champs, id=d.id, pages=(n,), fichier_id=lot.fichier("docs/scan.pdf")
+        )
 
     lot.fc("fc1", "docs/scan.pdf", numero="INV-10001", tva=None)
     page(1)
@@ -671,8 +770,14 @@ def test_facture_d_un_autre_envoi_reste_faible():
     lot.fc("fc1", "docs/fc.pdf", transport="DEMO609137653")
     lot.dec("dec1", "docs/dec.pdf", mrn=MRN_A, refs=[("N380", "INV-10001")])
     lot.ft("ft1", "docs/ft1.pdf", mrns=(MRN_A,), transports=("DEMO609137653",))
-    lot.ft("ft9", "docs/ft9.pdf", numero="FT-900", mrns=(MRN_B,), transports=("DEMO087829269",),
-           lignes=(("debours_droits", "999.00", None),))
+    lot.ft(
+        "ft9",
+        "docs/ft9.pdf",
+        numero="FT-900",
+        mrns=(MRN_B,),
+        transports=("DEMO087829269",),
+        lignes=(("debours_droits", "999.00", None),),
+    )
     res = lot.regrouper()
     d = _dossier_de(res, "ft1")
     assert _lien(d, "ft1").force is ForceLien.forte
@@ -685,8 +790,9 @@ def test_document_sans_reference_dans_le_fichier_d_un_document_solide():
     lot = Lot()
     lot.fc("fc1", "docs/fc.pdf")
     lot.dec("dec1", "docs/envoi.pdf", refs=[("N380", "INV-10001")])
-    lot.ajouter(TypeDocument.facture_transitaire, ChampsFactureTransitaire(), "docs/envoi.pdf", id="ft1",
-                pages=(3,))
+    lot.ajouter(
+        TypeDocument.facture_transitaire, ChampsFactureTransitaire(), "docs/envoi.pdf", id="ft1", pages=(3,)
+    )
     res = lot.regrouper()
     lien = _lien(_dossier_de(res, "ft1"), "ft1")
     assert lien.force is ForceLien.moyenne and SignalLien.reference_proche in lien.signaux

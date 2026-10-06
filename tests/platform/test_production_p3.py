@@ -22,7 +22,9 @@ SECRET = "Rapport FICTIF du CLIENT A — 1 234,56 EUR"
 
 
 def _trace_json(traces: TracesEnvoi, tenant: str, ident: str) -> None:
-    traces.ecrire_json("rapport_publication", ident, {"id": ident, "tenant_id": tenant, "payload": {"corps": SECRET}})
+    traces.ecrire_json(
+        "rapport_publication", ident, {"id": ident, "tenant_id": tenant, "payload": {"corps": SECRET}}
+    )
 
 
 # --- traces chiffrées -------------------------------------------------------------------------------------
@@ -108,8 +110,9 @@ def test_sauvegarde_restauration_et_controle_des_traces(monde, tmp_path, cles):
     traces = TracesEnvoi(sorties, cles)
     _trace_json(traces, "cli_a", "out_1")
     traces.ecrire("facture_emise", "F-2026-0001.pdf", b"%PDF FICTIF")
-    archive = sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles, now=NOW,
-                          sorties=sorties)
+    archive = sauvegarder(
+        monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sauv", cles, now=NOW, sorties=sorties
+    )
     cible = tmp_path / "restauree"
     restaurer(archive, cible, cles)
     rapport = controler(cible, cles)
@@ -118,7 +121,9 @@ def test_sauvegarde_restauration_et_controle_des_traces(monde, tmp_path, cles):
     assert any("traces d'envoi      : 2 déchiffrées" in ligne for ligne in rapport.lignes())
     # une trace restaurée qui ne se déchiffre plus (autre clé) est un problème du contrôle
     autre = cible / "outbox_envoyee" / "rapport_publication" / "out_2.json.enc"
-    TracesEnvoi(cible / "outbox_envoyee", [Fernet.generate_key()]).ecrire_json("rapport_publication", "out_2", {})
+    TracesEnvoi(cible / "outbox_envoyee", [Fernet.generate_key()]).ecrire_json(
+        "rapport_publication", "out_2", {}
+    )
     assert autre.exists()
     rapport = controler(cible, cles)
     assert not rapport.ok and any("out_2.json.enc" in p for p in rapport.problemes)
@@ -130,11 +135,19 @@ def test_sauvegarde_restauration_et_controle_des_traces(monde, tmp_path, cles):
 def test_effacement_client_refuse_pendant_une_sauvegarde(monde, tmp_path):
     data_dir = monde.vault.racine.parent
     with verrou_maintenance(data_dir, "sauvegarde"), pytest.raises(VerrouOccupe, match="sauvegarde en cours"):
-        supprimer_client(monde.db, monde.vault, "cli_a", FONDATEUR, "demande RGPD (FICTIF)",
-                         dossier_sorties=tmp_path / "o", attente_verrou_s=0.2)
+        supprimer_client(
+            monde.db,
+            monde.vault,
+            "cli_a",
+            FONDATEUR,
+            "demande RGPD (FICTIF)",
+            dossier_sorties=tmp_path / "o",
+            attente_verrou_s=0.2,
+        )
     assert "cli_a" in monde.vault.clients()  # rien n'a été effacé
-    comptes = supprimer_client(monde.db, monde.vault, "cli_a", FONDATEUR, "demande RGPD (FICTIF)",
-                               dossier_sorties=tmp_path / "o")
+    comptes = supprimer_client(
+        monde.db, monde.vault, "cli_a", FONDATEUR, "demande RGPD (FICTIF)", dossier_sorties=tmp_path / "o"
+    )
     assert comptes["lots"] == 1 and "cli_a" not in monde.vault.clients()
 
 
@@ -145,8 +158,9 @@ def test_effacement_client_supprime_ses_traces_chiffrees_seulement(monde, tmp_pa
     _trace_json(traces, "cli_b", "out_b")
     traces.ecrire("facture_emise", "F-2026-0001.pdf", b"%PDF FICTIF")  # obligation de conservation
     (sorties / "rapport_publication" / "ancien.json").write_text('{"tenant_id": "cli_a"}', encoding="utf-8")
-    comptes = supprimer_client(monde.db, monde.vault, "cli_a", FONDATEUR, "demande RGPD (FICTIF)",
-                               dossier_sorties=sorties)
+    comptes = supprimer_client(
+        monde.db, monde.vault, "cli_a", FONDATEUR, "demande RGPD (FICTIF)", dossier_sorties=sorties
+    )
     assert comptes["traces_envoi"] == 2
     restants = sorted(p.name for p in sorties.rglob("*") if p.is_file())
     assert restants == ["F-2026-0001.pdf.enc", "out_b.json.enc"]

@@ -40,9 +40,24 @@ from controldone.normalize import (
 @pytest.mark.parametrize(
     "texte",
     [
-        "2026-08-14", "14/08/2026", "14.08.2026", "14-08-2026", "14/08/26", "14 août 2026", "14 aout 2026",
-        "14 Août 2026", "August 14, 2026", "Aug. 14, 2026", "14 Aug 2026", "14-Aug-26", "14th August 2026",
-        "14 de agosto de 2026", "14 agosto 2026", "Date : 14/08/2026", "20260814", "2026/08/14",
+        "2026-08-14",
+        "14/08/2026",
+        "14.08.2026",
+        "14-08-2026",
+        "14/08/26",
+        "14 août 2026",
+        "14 aout 2026",
+        "14 Août 2026",
+        "August 14, 2026",
+        "Aug. 14, 2026",
+        "14 Aug 2026",
+        "14-Aug-26",
+        "14th August 2026",
+        "14 de agosto de 2026",
+        "14 agosto 2026",
+        "Date : 14/08/2026",
+        "20260814",
+        "2026/08/14",
     ],
 )
 def test_dates(texte):
@@ -76,9 +91,15 @@ def test_dates_invalides(texte):
 @pytest.mark.parametrize(
     ("texte", "kg"),
     [
-        ("1 234,5 kg", "1234.500"), ("12.5 KGS", "12.500"), ("500 g", "0.500"), ("2 t", "2000.000"),
-        ("10 lbs", "4.536"), ("1234", "1234.000"), ("Gross weight: 1,250.75 kg", "1250.750"),
-        ("0,3333 kg", "0.333"), ("12 kilos", "12.000"),
+        ("1 234,5 kg", "1234.500"),
+        ("12.5 KGS", "12.500"),
+        ("500 g", "0.500"),
+        ("2 t", "2000.000"),
+        ("10 lbs", "4.536"),
+        ("1234", "1234.000"),
+        ("Gross weight: 1,250.75 kg", "1250.750"),
+        ("0,3333 kg", "0.333"),
+        ("12 kilos", "12.000"),
     ],
 )
 def test_masses(texte, kg):
@@ -92,9 +113,21 @@ def test_masse_illisible():
 
 @pytest.mark.parametrize(
     ("texte", "code"),
-    [("pcs", "C62"), ("PCE", "C62"), ("pièces", "C62"), ("units", "C62"), ("kg", "KGM"), ("litres", "LTR"),
-     ("m2", "MTK"), ("m²", "MTK"), ("paires", "PR"), ("pairs", "PR"), ("m", "MTR"), ("sets", "SET"),
-     ("zorglub", "inconnue")],
+    [
+        ("pcs", "C62"),
+        ("PCE", "C62"),
+        ("pièces", "C62"),
+        ("units", "C62"),
+        ("kg", "KGM"),
+        ("litres", "LTR"),
+        ("m2", "MTK"),
+        ("m²", "MTK"),
+        ("paires", "PR"),
+        ("pairs", "PR"),
+        ("m", "MTR"),
+        ("sets", "SET"),
+        ("zorglub", "inconnue"),
+    ],
 )
 def test_unites(texte, code):
     assert normalize_unit(texte).code == code
@@ -111,9 +144,22 @@ def test_unite_brute_conservee():
 
 @pytest.mark.parametrize(
     ("texte", "attendu"),
-    [("USD", "USD"), ("eur", "EUR"), ("€", "EUR"), ("£", "GBP"), ("US$", "USD"), ("HK$", "HKD"),
-     ("12 euros", "EUR"), ("RMB", "CNY"), ("₩", "KRW"), ("CHF", "CHF"), ("", None), ("12,00", None),
-     ("XYZ", "inconnue"), ("USD / EUR", "inconnue")],
+    [
+        ("USD", "USD"),
+        ("eur", "EUR"),
+        ("€", "EUR"),
+        ("£", "GBP"),
+        ("US$", "USD"),
+        ("HK$", "HKD"),
+        ("12 euros", "EUR"),
+        ("RMB", "CNY"),
+        ("₩", "KRW"),
+        ("CHF", "CHF"),
+        ("", None),
+        ("12,00", None),
+        ("XYZ", "inconnue"),
+        ("USD / EUR", "inconnue"),
+    ],
 )
 def test_devises(texte, attendu):
     assert normalize_currency(texte) == attendu
@@ -136,11 +182,28 @@ def test_dollar_ambigu():
 
 @pytest.mark.parametrize(
     ("texte", "iso"),
-    [("Chine", "CN"), ("China", "CN"), ("CN", "CN"), ("cn", "CN"), ("Allemagne", "DE"), ("Germany", "DE"),
-     ("Alemania", "DE"), ("États-Unis", "US"), ("United States of America", "US"), ("Estados Unidos", "US"),
-     ("Viêt Nam", "VN"), ("the Netherlands", "NL"), ("Pays-Bas", "NL"), ("Made in China", "CN"),
-     ("Royaume-Uni", "GB"), ("Corée du Sud", "KR"), ("Turquie", "TR"), ("FRA", "FR"), ("Atlantide", None),
-     ("ZZ", None)],
+    [
+        ("Chine", "CN"),
+        ("China", "CN"),
+        ("CN", "CN"),
+        ("cn", "CN"),
+        ("Allemagne", "DE"),
+        ("Germany", "DE"),
+        ("Alemania", "DE"),
+        ("États-Unis", "US"),
+        ("United States of America", "US"),
+        ("Estados Unidos", "US"),
+        ("Viêt Nam", "VN"),
+        ("the Netherlands", "NL"),
+        ("Pays-Bas", "NL"),
+        ("Made in China", "CN"),
+        ("Royaume-Uni", "GB"),
+        ("Corée du Sud", "KR"),
+        ("Turquie", "TR"),
+        ("FRA", "FR"),
+        ("Atlantide", None),
+        ("ZZ", None),
+    ],
 )
 def test_pays(texte, iso):
     assert country_to_iso2(texte) == iso
@@ -245,8 +308,10 @@ def test_identifier_transitaire_regle_unique():
     from controldone.model.referentiel import Transitaire
     from controldone.normalize.parties import identifier_transitaire
 
-    ts = [Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550", alias=["TF Logistique"]),
-          Transitaire(id="tra_2", nom="Douane Express FICTIF", tva=None)]
+    ts = [
+        Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550", alias=["TF Logistique"]),
+        Transitaire(id="tra_2", nom="Douane Express FICTIF", tva=None),
+    ]
     assert identifier_transitaire("FR 11 000555550", None, ts) == "tra_1"
     assert identifier_transitaire(None, "transit fictif", ts) == "tra_1"
     assert identifier_transitaire(None, "TF LOGISTIQUE", ts) == "tra_1"

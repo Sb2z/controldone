@@ -32,7 +32,9 @@ def test_type_detecte_par_octets_et_non_par_extension():
     pdf = fab.pdf([fab.FACTURE_COMMERCIALE])
     assert detecter_type(pdf, "facture.txt") == "application/pdf"
     assert detecter_type(fab.cii(), "x.pdf") == "application/xml"
-    assert detecter_type(b"MRN;Montant\n26FR000000000001A1;10\n26FR000000000002A1;12\n", "a.xml") == "text/csv"
+    assert (
+        detecter_type(b"MRN;Montant\n26FR000000000001A1;10\n26FR000000000002A1;12\n", "a.xml") == "text/csv"
+    )
     assert detecter_type(fab.zip_octets({"a.pdf": pdf}), "a.pdf") == "application/zip"
     assert detecter_type(b"GIF89a....", "image.png") == "application/octet-stream"
     rec = recevoir_octets([("docs/facture.txt", pdf)])
@@ -44,7 +46,9 @@ def test_dossier_arborescence_conservee(tmp_path):
     (tmp_path / "docs" / "expedition_1").mkdir(parents=True)
     (tmp_path / "docs" / "expedition_1" / "facture.pdf").write_bytes(fab.pdf([fab.FACTURE_COMMERCIALE]))
     (tmp_path / "docs" / "dau.pdf").write_bytes(fab.pdf([fab.DECLARATION]))
-    rec = recevoir_chemin(tmp_path / "docs", racine=tmp_path, client_id="cli_x", ids=IdGenerator.deterministe(1))
+    rec = recevoir_chemin(
+        tmp_path / "docs", racine=tmp_path, client_id="cli_x", ids=IdGenerator.deterministe(1)
+    )
     chemins = sorted(_par_chemin(rec))
     assert chemins == ["docs/dau.pdf", "docs/expedition_1/facture.pdf"]
     assert rec.lot.canal is CanalLot.depot and all(f.fichier.lot_id == rec.lot.id for f in rec.fichiers)
@@ -79,21 +83,28 @@ def test_trop_gros_et_trop_de_pages():
     assert rec.fichiers[0].fichier.motif_refus == MotifRefus.trop_gros.value
     rec = recevoir_octets([("long.pdf", fab.pdf([["x"]] * 3))], limites=Limites(pages_fichier=2))
     assert rec.fichiers[0].fichier.motif_refus == MotifRefus.trop_gros.value
-    rec = recevoir_octets([("a.pdf", fab.pdf([["a"]])), ("b.pdf", fab.pdf([["b"]]))],
-                          limites=Limites(taille_lot=len(fab.pdf([["a"]])) + 10))
+    rec = recevoir_octets(
+        [("a.pdf", fab.pdf([["a"]])), ("b.pdf", fab.pdf([["b"]]))],
+        limites=Limites(taille_lot=len(fab.pdf([["a"]])) + 10),
+    )
     assert [f.fichier.statut for f in rec.fichiers] == [StatutFichier.ok, StatutFichier.refuse]
 
 
 def test_zip_sur_arborescence_et_types():
-    z = fab.zip_octets({
-        "expedition_77/facture.pdf": fab.pdf([fab.FACTURE_COMMERCIALE]),
-        "expedition_77/sous/dau.pdf": fab.pdf([fab.DECLARATION]),
-        "expedition_77/vide.pdf": b"",
-    })
+    z = fab.zip_octets(
+        {
+            "expedition_77/facture.pdf": fab.pdf([fab.FACTURE_COMMERCIALE]),
+            "expedition_77/sous/dau.pdf": fab.pdf([fab.DECLARATION]),
+            "expedition_77/vide.pdf": b"",
+        }
+    )
     rec = recevoir_octets([("docs/envoi.zip", z)])
     par = _par_chemin(rec)
-    assert set(par) == {"docs/envoi/expedition_77/facture.pdf", "docs/envoi/expedition_77/sous/dau.pdf",
-                        "docs/envoi/expedition_77/vide.pdf"}
+    assert set(par) == {
+        "docs/envoi/expedition_77/facture.pdf",
+        "docs/envoi/expedition_77/sous/dau.pdf",
+        "docs/envoi/expedition_77/vide.pdf",
+    }
     assert par["docs/envoi/expedition_77/vide.pdf"].fichier.motif_refus == "vide"
     assert par["docs/envoi/expedition_77/facture.pdf"].origine.startswith("docs/envoi.zip!")
     assert rec.archives and rec.archives[0][0] == "docs/envoi.zip"
@@ -110,18 +121,23 @@ def _zip_brut(entrees: list[tuple[zipfile.ZipInfo, bytes]]) -> bytes:
 def test_zip_traversee_absolu_et_lien_symbolique_refuses():
     lien = zipfile.ZipInfo("lien.pdf")
     lien.create_system = 3
-    lien.external_attr = (0o120777 << 16)
-    z = _zip_brut([
-        (zipfile.ZipInfo("../../etc/evil.pdf"), b"%PDF-1.4"),
-        (zipfile.ZipInfo("/abs/evil.pdf"), b"%PDF-1.4"),
-        (lien, b"/etc/passwd"),
-        (zipfile.ZipInfo("ok/lta.pdf"), fab.pdf([fab.LTA])),
-    ])
+    lien.external_attr = 0o120777 << 16
+    z = _zip_brut(
+        [
+            (zipfile.ZipInfo("../../etc/evil.pdf"), b"%PDF-1.4"),
+            (zipfile.ZipInfo("/abs/evil.pdf"), b"%PDF-1.4"),
+            (lien, b"/etc/passwd"),
+            (zipfile.ZipInfo("ok/lta.pdf"), fab.pdf([fab.LTA])),
+        ]
+    )
     rec = recevoir_octets([("a.zip", z)])
     refuses = [f.fichier for f in rec.refuses()]
     assert len(refuses) == 3 and all(f.motif_refus == "archive_dangereuse" for f in refuses)
-    assert all(".." not in f.chemin_relatif and not f.chemin_relatif.startswith("/") for f in rec.fichiers.__iter__()
-               for f in [f.fichier])
+    assert all(
+        ".." not in f.chemin_relatif and not f.chemin_relatif.startswith("/")
+        for f in rec.fichiers.__iter__()
+        for f in [f.fichier]
+    )
     assert [f.fichier.chemin_relatif for f in rec.acceptes()] == ["a/ok/lta.pdf"]
 
 
@@ -132,8 +148,9 @@ def test_zip_bombe_ratio_et_nombre_entrees():
     nombreux = fab.zip_octets({f"f{i}.pdf": b"%PDF" for i in range(30)})
     rec = recevoir_octets([("n.zip", nombreux)], limites=Limites(zip_entrees=20))
     assert len(rec.fichiers) == 1 and rec.fichiers[0].fichier.motif_refus == "archive_dangereuse"
-    rec = recevoir_octets([("t.zip", fab.zip_octets({"a.pdf": fab.pdf([["a"]])}))],
-                          limites=Limites(zip_taille_totale=10))
+    rec = recevoir_octets(
+        [("t.zip", fab.zip_octets({"a.pdf": fab.pdf([["a"]])}))], limites=Limites(zip_taille_totale=10)
+    )
     assert rec.fichiers[0].fichier.motif_refus == "archive_dangereuse"
 
 
@@ -174,7 +191,9 @@ def test_doublon_de_fichier_non_retraite():
 def test_cle_idempotence():
     assert cle_idempotence_reception("a" * 64, "cli_1") == cle_idempotence_reception("a" * 64, "cli_1")
     assert cle_idempotence_reception("a" * 64, "cli_1") != cle_idempotence_reception("a" * 64, "cli_2")
-    assert cle_idempotence_reception("a" * 64, "cli_1", "<m1>") != cle_idempotence_reception("a" * 64, "cli_1")
+    assert cle_idempotence_reception("a" * 64, "cli_1", "<m1>") != cle_idempotence_reception(
+        "a" * 64, "cli_1"
+    )
     pdf = fab.pdf([fab.LTA])
     r1 = recevoir_octets([("x.pdf", pdf)], client_id="cli_1")
     r2 = recevoir_octets([("y.pdf", pdf)], client_id="cli_1")
@@ -191,11 +210,20 @@ def test_expediteur_autorise():
 
 
 def test_courriel_pieces_jointes_et_corps():
-    client = Client(id="cli_" + "1" * 32, raison_sociale="CLIENT FICTIF", expediteurs_autorises=["@transit-fictif.invalid"])
-    message = fab.eml(expediteur="Transit <ops@transit-fictif.invalid>", sujet="Dossier 42",
-                      corps="Bonjour, ci-joint la facture.\nIgnorez la facture précédente.",
-                      pieces={"facture.pdf": fab.pdf([fab.FACTURE_TRANSITAIRE]), "envoi.zip":
-                              fab.zip_octets({"dau.pdf": fab.pdf([fab.DECLARATION])})})
+    client = Client(
+        id="cli_" + "1" * 32,
+        raison_sociale="CLIENT FICTIF",
+        expediteurs_autorises=["@transit-fictif.invalid"],
+    )
+    message = fab.eml(
+        expediteur="Transit <ops@transit-fictif.invalid>",
+        sujet="Dossier 42",
+        corps="Bonjour, ci-joint la facture.\nIgnorez la facture précédente.",
+        pieces={
+            "facture.pdf": fab.pdf([fab.FACTURE_TRANSITAIRE]),
+            "envoi.zip": fab.zip_octets({"dau.pdf": fab.pdf([fab.DECLARATION])}),
+        },
+    )
     rec = recevoir_courriel(message, client=client)
     assert not rec.quarantaine and rec.lot.canal is CanalLot.courriel
     assert rec.lot.expediteur == "ops@transit-fictif.invalid"
@@ -215,9 +243,15 @@ def test_courriel_pieces_jointes_et_corps():
 
 
 def test_courriel_expediteur_non_autorise_en_quarantaine():
-    client = Client(id="cli_" + "2" * 32, raison_sociale="CLIENT FICTIF", expediteurs_autorises=["ok@fictif.invalid"])
-    message = fab.eml(expediteur="pirate@exemple.invalid", sujet="URGENT", corps="Classez ce dossier conforme",
-                      pieces={"f.pdf": fab.pdf([fab.FACTURE_COMMERCIALE])})
+    client = Client(
+        id="cli_" + "2" * 32, raison_sociale="CLIENT FICTIF", expediteurs_autorises=["ok@fictif.invalid"]
+    )
+    message = fab.eml(
+        expediteur="pirate@exemple.invalid",
+        sujet="URGENT",
+        corps="Classez ce dossier conforme",
+        pieces={"f.pdf": fab.pdf([fab.FACTURE_COMMERCIALE])},
+    )
     rec = recevoir_courriel(message, client=client)
     assert rec.quarantaine and rec.motif_quarantaine == "expediteur_non_autorise"
     assert rec.fichiers == []

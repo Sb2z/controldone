@@ -16,16 +16,29 @@ from controldone.storage.facturation import UsageIA
 
 def test_marges_fonction_pure():
     lignes = calculer_marges(
-        [FactureLue("2026-10", "cli_a", Decimal("390.00")), FactureLue("2026-10", "cli_a", Decimal("-90.00")),
-         FactureLue("2026-11", "cli_b", Decimal("99.00"))],
+        [
+            FactureLue("2026-10", "cli_a", Decimal("390.00")),
+            FactureLue("2026-10", "cli_a", Decimal("-90.00")),
+            FactureLue("2026-11", "cli_b", Decimal("99.00")),
+        ],
         [EncaissementLu("2026-10", "cli_a", Decimal("360.00"))],
-        [UsageIA("cli_a", "2026-10", "dos_1", Decimal("1.20")), UsageIA("cli_a", "2026-10", "dos_2", Decimal("0.80")),
-         UsageIA("cli_a", "2026-10", None, Decimal("0.10")), UsageIA("cli_c", "2026-11", "dos_9", Decimal("0.50"))],
-        {"cli_a": "CLIENT A FICTIF"})
+        [
+            UsageIA("cli_a", "2026-10", "dos_1", Decimal("1.20")),
+            UsageIA("cli_a", "2026-10", "dos_2", Decimal("0.80")),
+            UsageIA("cli_a", "2026-10", None, Decimal("0.10")),
+            UsageIA("cli_c", "2026-11", "dos_9", Decimal("0.50")),
+        ],
+        {"cli_a": "CLIENT A FICTIF"},
+    )
     par = {(x.mois, x.client_id): x for x in lignes}
     a = par[("2026-10", "cli_a")]
     assert (a.ca_ht, a.encaisse_ttc, a.cout_ia, a.nb_factures, a.nb_dossiers_ia) == (
-        Decimal("300.00"), Decimal("360.00"), Decimal("2.10"), 2, 2)
+        Decimal("300.00"),
+        Decimal("360.00"),
+        Decimal("2.10"),
+        2,
+        2,
+    )
     assert a.marge_brute == Decimal("297.90") and a.taux_marge == Decimal("99.3")
     c = par[("2026-11", "cli_c")]
     assert c.marge_brute == Decimal("-0.50") and c.taux_marge is None  # coût sans chiffre d'affaires
@@ -52,8 +65,16 @@ def test_synthese_depuis_la_base_et_csv(service, db, bouchon):
     syn = synthese(db, acteur_id=FONDATEUR.id, acteur_role="fondateur")
     par = {(x.mois, x.client_id): x for x in syn.lignes}
     la = par[(mois, "cli_a")]
-    assert la.ca_ht == Decimal("350.00") and la.encaisse_ttc == Decimal("468.00") and la.cout_ia == Decimal("0.80")
-    assert la.marge_brute == Decimal("349.20") and la.nb_dossiers_ia == 2 and la.raison_sociale == "CLIENT A FICTIF SAS"
+    assert (
+        la.ca_ht == Decimal("350.00")
+        and la.encaisse_ttc == Decimal("468.00")
+        and la.cout_ia == Decimal("0.80")
+    )
+    assert (
+        la.marge_brute == Decimal("349.20")
+        and la.nb_dossiers_ia == 2
+        and la.raison_sociale == "CLIENT A FICTIF SAS"
+    )
     assert par[(mois, "cli_b")].marge_brute == Decimal("-1.00")
     assert syn.par_mois[-1].cout_ia == Decimal("1.80")
     assert syn.couts_dossiers[0].dossier_id == "dos_FICTIF_9"
@@ -71,13 +92,19 @@ def test_synthese_depuis_la_base_et_csv(service, db, bouchon):
 def test_csv_neutralise_les_formules():
     from controldone.facturation.finances import LigneMarge
 
-    csv = export_csv([LigneMarge("2026-10", "cli_x", "=HYPERLINK(\"http://x\")")]).decode("utf-8")
+    csv = export_csv([LigneMarge("2026-10", "cli_x", '=HYPERLINK("http://x")')]).decode("utf-8")
     assert "\"'=HYPERLINK" in csv and ";=HYPERLINK" not in csv
 
 
 def test_evenement_sans_montant_hors_encaissements(service, db):
-    charge = json.dumps({"id": "evt_FICTIF_sub", "type": "customer.subscription.deleted", "livemode": False,
-                         "data": {"object": {"id": "sub_x", "metadata": {"client_id": "cli_b"}}}}).encode()
+    charge = json.dumps(
+        {
+            "id": "evt_FICTIF_sub",
+            "type": "customer.subscription.deleted",
+            "livemode": False,
+            "data": {"object": {"id": "sub_x", "metadata": {"client_id": "cli_b"}}},
+        }
+    ).encode()
     service.traiter_webhook(charge, signer_charge(charge, "whsec_test_FICTIF"))
     syn = synthese(db, acteur_id=FONDATEUR.id, acteur_role="fondateur")
     assert syn.lignes == [] and syn.encaissements[0]["montant"] is None

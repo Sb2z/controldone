@@ -83,8 +83,13 @@ class Constat(Modele):
     @model_validator(mode="after")
     def _invariants(self) -> Constat:
         # §3.3 / §3.5 : une note de renvoi est a_verifier et n'a jamais de montant.
-        if self.nature_montant in (NatureMontant.renvoi, NatureMontant.aucun) and self.montant_en_jeu is not None:
-            raise ValueError(f"{self.controle_id} : montant interdit pour la nature {self.nature_montant.value}")
+        if (
+            self.nature_montant in (NatureMontant.renvoi, NatureMontant.aucun)
+            and self.montant_en_jeu is not None
+        ):
+            raise ValueError(
+                f"{self.controle_id} : montant interdit pour la nature {self.nature_montant.value}"
+            )
         if self.renvoi and self.niveau is not Niveau.a_verifier:
             raise ValueError(f"{self.controle_id} : une note de renvoi est toujours a_verifier")
         if self.renvoi and self.montant_en_jeu is not None:

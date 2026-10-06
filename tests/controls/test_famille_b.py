@@ -46,7 +46,9 @@ def art(numero, doc=DEC, **champs):
 def tax(montant, *, article="1", code="A00", cat=CategorieTaxe.droit, doc=DEC, base=None, **kw):
     # Base cohérente avec le taux (base × 10 % = montant) : la ligne sommée est structurellement valide (D-2210).
     base = base if base is not None else str(D(montant) * 10)
-    return taxation(doc, article=article, type_taxe=code, categorie=cat, base=base, taux="10", montant=montant, **kw)
+    return taxation(
+        doc, article=article, type_taxe=code, categorie=cat, base=base, taux="10", montant=montant, **kw
+    )
 
 
 def dec_b2(*taxes, total=None, total_a_payer=None, n_articles=2, articles=2, doc=DEC, **kw):
@@ -99,8 +101,12 @@ def test_b2_ecart_certain():
     assert c.montant_en_jeu == D("100.00") and c.nature_montant is NatureMontant.arithmetique_declaration
     assert "250,00 EUR" in esp(c.libelle) and "150,00 EUR" in esp(c.libelle) and "MRN" in c.libelle
     assert c.prochaine_action == ACTION_B and PHRASE_RENVOI in c.prochaine_action
-    assert [p.role for p in c.preuves] == [RolePreuve.valeur_b, RolePreuve.operande, RolePreuve.operande,
-                                           RolePreuve.valeur_a]
+    assert [p.role for p in c.preuves] == [
+        RolePreuve.valeur_b,
+        RolePreuve.operande,
+        RolePreuve.operande,
+        RolePreuve.valeur_a,
+    ]
     textes_propres(r)
 
 
@@ -122,7 +128,10 @@ def test_b2_articles_non_tous_lus_somme_superieure_reste_a_verifier():
 
 
 def test_b2_tva_autoliquidee_deux_hypotheses():
-    taxes = [tax("100.00"), tax("200.00", code="B00", cat=CategorieTaxe.tva, paiement=PaiementNormalise.autoliquide)]
+    taxes = [
+        tax("100.00"),
+        tax("200.00", code="B00", cat=CategorieTaxe.tva, paiement=PaiementNormalise.autoliquide),
+    ]
     for total in ("100.00", "300.00"):
         (r,) = b2_sommes_taxes(contexte([dec_b2(*taxes, total=total)]))
         assert r.outcome is Outcome.conforme, total
@@ -161,9 +170,14 @@ def test_b2_non_verifiable_non_applicable_document_manquant():
 
 def test_b2_lecture_ocr_douteuse():
     total = dv("total_droits_taxes", "158.00", methode=Methode.ocr)
-    d = declaration(id=DEC, taxations=[tax("100.00"), tax("50.00", article="2")], total_droits_taxes=total,
-                    nombre_articles=dv("nombre_articles", "2"), articles=[art("1"), art("2")],
-                    qualite=QualiteTexte.ocr)
+    d = declaration(
+        id=DEC,
+        taxations=[tax("100.00"), tax("50.00", article="2")],
+        total_droits_taxes=total,
+        nombre_articles=dv("nombre_articles", "2"),
+        articles=[art("1"), art("2")],
+        qualite=QualiteTexte.ocr,
+    )
     (r,) = b2_sommes_taxes(contexte([d]))
     assert r.outcome is Outcome.a_verifier and RaisonCode.lecture_douteuse in r.constat.raisons
 
@@ -175,10 +189,12 @@ def test_b2_rattachement_faible():
 
 
 def test_b2_versions_rectificatives_seule_la_derniere():
-    v1 = dec_b2(tax("100.00", doc="doc_v1"), total="999.00", doc="doc_v1", version="1",
-                mrn="26FR00000000000001")
-    v2 = dec_b2(tax("100.00", doc="doc_v2"), total="100.00", doc="doc_v2", version="2",
-                mrn="26FR00000000000001")
+    v1 = dec_b2(
+        tax("100.00", doc="doc_v1"), total="999.00", doc="doc_v1", version="1", mrn="26FR00000000000001"
+    )
+    v2 = dec_b2(
+        tax("100.00", doc="doc_v2"), total="100.00", doc="doc_v2", version="2", mrn="26FR00000000000001"
+    )
     rs = b2_sommes_taxes(contexte([v1, v2]))
     assert len(rs) == 1 and rs[0].outcome is Outcome.conforme and rs[0].documents_concernes == ["doc_v2"]
 
@@ -189,9 +205,12 @@ def test_b2_versions_rectificatives_seule_la_derniere():
 def dec_b3(montants, total, *, devise="EUR", n_articles=None, **kw):
     arts = [art(str(i + 1), montant_facture_article=m) for i, m in enumerate(montants)]
     return declaration(
-        id=DEC, articles=arts, montant_total_facture=dv("montant_total_facture", total),
+        id=DEC,
+        articles=arts,
+        montant_total_facture=dv("montant_total_facture", total),
         devise_facture=dv("devise_facture", devise),
-        nombre_articles=dv("nombre_articles", str(n_articles if n_articles is not None else len(montants))), **kw,
+        nombre_articles=dv("nombre_articles", str(n_articles if n_articles is not None else len(montants))),
+        **kw,
     )
 
 
@@ -209,8 +228,13 @@ def test_b3_ecart_certain_eur():
 
 
 def test_b3_devise_convertie_au_taux_imprime():
-    d = dec_b3(["1000.00", "250.00"], "1350.00", devise="USD",
-               taux_change=dv("taux_change", "1.25000"), taux_change_sens=dv("taux_change_sens", "devise_par_eur"))
+    d = dec_b3(
+        ["1000.00", "250.00"],
+        "1350.00",
+        devise="USD",
+        taux_change=dv("taux_change", "1.25000"),
+        taux_change_sens=dv("taux_change_sens", "devise_par_eur"),
+    )
     (r,) = b3_somme_montants_articles(contexte([d]))
     assert r.outcome is Outcome.ecart_certain
     assert r.constat.montant_en_jeu == D("80.00")  # 100 USD / 1,25
@@ -243,7 +267,11 @@ def test_b4_nette_superieure_a_brute_certain():
     d = declaration(id=DEC, articles=[art("1", masse_nette="120.0", masse_brute="100.0")])
     (r,) = b4_masses(contexte([d]))
     assert r.sous_controle == "nette_brute" and r.outcome is Outcome.ecart_certain
-    assert r.constat.montant_en_jeu is None and "(120 kg)" in esp(r.constat.libelle) and "(0,6 kg)" in esp(r.constat.libelle)
+    assert (
+        r.constat.montant_en_jeu is None
+        and "(120 kg)" in esp(r.constat.libelle)
+        and "(0,6 kg)" in esp(r.constat.libelle)
+    )
     textes_propres(r)
 
 
@@ -256,9 +284,14 @@ def test_b4_tolerance_masse():
 
 
 def test_b4_somme_brute_a_verifier_seulement():
-    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "500.0"),
-                    articles=[art("1", masse_nette="90", masse_brute="100"),
-                              art("2", masse_nette="90", masse_brute="100")])
+    d = declaration(
+        id=DEC,
+        masse_brute_totale=dv("masse_brute_totale", "500.0"),
+        articles=[
+            art("1", masse_nette="90", masse_brute="100"),
+            art("2", masse_nette="90", masse_brute="100"),
+        ],
+    )
     rs = b4_masses(contexte([d]))
     (somme,) = par_sous(rs, "somme_brute")
     assert somme.outcome is Outcome.a_verifier
@@ -269,8 +302,11 @@ def test_b4_somme_brute_a_verifier_seulement():
 
 
 def test_b4_nette_totale_superieure():
-    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "150"),
-                    articles=[art("1", masse_nette="100"), art("2", masse_nette="100")])
+    d = declaration(
+        id=DEC,
+        masse_brute_totale=dv("masse_brute_totale", "150"),
+        articles=[art("1", masse_nette="100"), art("2", masse_nette="100")],
+    )
     (tot,) = par_sous(b4_masses(contexte([d])), "nette_total")
     assert tot.outcome is Outcome.ecart_certain
 
@@ -278,26 +314,40 @@ def test_b4_nette_totale_superieure():
 def test_b4_total_consequence_d_un_article_deja_constate_pas_de_second_constat():
     # D-2201 : article 1 nette 3,715 > brute 0,715 (constaté) ; au total Σ nettes 7,195 > brute 4,517, mais sans
     # l'excédent de l'article 1 (3,000) le total tient : un seul constat pour un seul fait.
-    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "4.517"),
-                    articles=[art("1", masse_nette="3.715", masse_brute="0.715"),
-                              art("2", masse_nette="3.000", masse_brute="3.291"),
-                              art("3", masse_nette="0.480", masse_brute="0.511")])
+    d = declaration(
+        id=DEC,
+        masse_brute_totale=dv("masse_brute_totale", "4.517"),
+        articles=[
+            art("1", masse_nette="3.715", masse_brute="0.715"),
+            art("2", masse_nette="3.000", masse_brute="3.291"),
+            art("3", masse_nette="0.480", masse_brute="0.511"),
+        ],
+    )
     rs = b4_masses(contexte([d]))
-    assert [r.outcome for r in par_sous(rs, "nette_brute")] == [Outcome.ecart_certain, Outcome.conforme,
-                                                                  Outcome.conforme]
+    assert [r.outcome for r in par_sous(rs, "nette_brute")] == [
+        Outcome.ecart_certain,
+        Outcome.conforme,
+        Outcome.conforme,
+    ]
     (tot,) = par_sous(rs, "nette_total")
     assert tot.outcome is Outcome.non_applicable and tot.raison_code is RaisonCode.couvert_par_autre_controle
     # Un article seul : même fait au total et sur l'article.
-    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "281.765"),
-                    articles=[art("1", masse_nette="287.4", masse_brute="281.765")])
+    d = declaration(
+        id=DEC,
+        masse_brute_totale=dv("masse_brute_totale", "281.765"),
+        articles=[art("1", masse_nette="287.4", masse_brute="281.765")],
+    )
     rs = b4_masses(contexte([d]))
     assert [r.outcome for r in rs if r.outcome.est_constat] == [Outcome.ecart_certain]
 
 
 def test_b4_total_au_dela_des_articles_constates_reste_constate():
     # L'excédent au total dépasse celui des articles constatés : le total garde son propre constat.
-    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "100"),
-                    articles=[art("1", masse_nette="60", masse_brute="50"), art("2", masse_nette="80")])
+    d = declaration(
+        id=DEC,
+        masse_brute_totale=dv("masse_brute_totale", "100"),
+        articles=[art("1", masse_nette="60", masse_brute="50"), art("2", masse_nette="80")],
+    )
     (tot,) = par_sous(b4_masses(contexte([d])), "nette_total")
     assert tot.outcome is Outcome.ecart_certain
 
@@ -311,18 +361,27 @@ def test_b4_sans_masse():
 
 
 def test_b5():
-    d = declaration(id=DEC, nombre_colis_total=dv("nombre_colis_total", "5"),
-                    articles=[art("1", nombre_colis="2"), art("2", nombre_colis="3")])
+    d = declaration(
+        id=DEC,
+        nombre_colis_total=dv("nombre_colis_total", "5"),
+        articles=[art("1", nombre_colis="2"), art("2", nombre_colis="3")],
+    )
     assert b5_colis(contexte([d]))[0].outcome is Outcome.conforme
-    d = declaration(id=DEC, nombre_colis_total=dv("nombre_colis_total", "6"),
-                    articles=[art("1", nombre_colis="2"), art("2", nombre_colis="3")])
+    d = declaration(
+        id=DEC,
+        nombre_colis_total=dv("nombre_colis_total", "6"),
+        articles=[art("1", nombre_colis="2"), art("2", nombre_colis="3")],
+    )
     (r,) = b5_colis(contexte([d]))
     assert r.outcome is Outcome.a_verifier and RaisonCode.controle_signal_seulement in r.constat.raisons
     textes_propres(r)
     d = declaration(id=DEC, articles=[art("1", nombre_colis="2")])
     assert b5_colis(contexte([d]))[0].outcome is Outcome.non_applicable
-    d = declaration(id=DEC, nombre_colis_total=dv("nombre_colis_total", "6"),
-                    articles=[art("1", nombre_colis="2"), art("2")])
+    d = declaration(
+        id=DEC,
+        nombre_colis_total=dv("nombre_colis_total", "6"),
+        articles=[art("1", nombre_colis="2"), art("2")],
+    )
     assert b5_colis(contexte([d]))[0].outcome is Outcome.non_verifiable
 
 
@@ -344,11 +403,18 @@ def test_moteur_et_b1_inchange():
 def test_b4_somme_brute_lue_sous_le_seuil_non_verifiable():
     # D-3107 : signal interne, sans montant, dont une masse n'est lue que sous le seuil de confiance (OCR) : la
     # lecture ne peut pas trancher, aucun constat.
-    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "500.0"),
-                    articles=[art("1", masse_nette="90", masse_brute="100"),
-                              ArticleDeclaration(numero_article=dv("articles[].numero_article", "2"),
-                                                 masse_nette=dv("articles[].masse_nette", "90"),
-                                                 masse_brute=dv("articles[].masse_brute", "100", confiance=0.8))])
+    d = declaration(
+        id=DEC,
+        masse_brute_totale=dv("masse_brute_totale", "500.0"),
+        articles=[
+            art("1", masse_nette="90", masse_brute="100"),
+            ArticleDeclaration(
+                numero_article=dv("articles[].numero_article", "2"),
+                masse_nette=dv("articles[].masse_nette", "90"),
+                masse_brute=dv("articles[].masse_brute", "100", confiance=0.8),
+            ),
+        ],
+    )
     (somme,) = par_sous(b4_masses(contexte([d])), "somme_brute")
     assert somme.outcome is Outcome.non_verifiable and somme.raison_code is RaisonCode.confiance_insuffisante
 
@@ -359,21 +425,32 @@ def test_b4_somme_brute_lue_sous_le_seuil_non_verifiable():
 def tot_code(code, montant, doc=DEC, **kw):
     from controldone.model import TotalTaxeCode
 
-    return TotalTaxeCode(type_taxe=dv("totaux_par_code[].type_taxe", code, doc),
-                         montant=dv("totaux_par_code[].montant", montant, doc, **kw))
+    return TotalTaxeCode(
+        type_taxe=dv("totaux_par_code[].type_taxe", code, doc),
+        montant=dv("totaux_par_code[].montant", montant, doc, **kw),
+    )
 
 
 def _lignes_b2(a00_art2="20.00"):
-    return [tax("10.00"), tax(a00_art2, article="2"),
-            tax("50.00", code="B00", cat=CategorieTaxe.tva), tax("60.00", article="2", code="B00", cat=CategorieTaxe.tva)]
+    return [
+        tax("10.00"),
+        tax(a00_art2, article="2"),
+        tax("50.00", code="B00", cat=CategorieTaxe.tva),
+        tax("60.00", article="2", code="B00", cat=CategorieTaxe.tva),
+    ]
 
 
 def test_b2_code_total_imprime_faux_ecart_certain():
-    d = dec_b2(*_lignes_b2(), total="140.00", totaux_par_code=[tot_code("A00", "40.00"), tot_code("B00", "110.00")])
+    d = dec_b2(
+        *_lignes_b2(), total="140.00", totaux_par_code=[tot_code("A00", "40.00"), tot_code("B00", "110.00")]
+    )
     rs = b2_sommes_taxes(contexte([d]))
     (a00, b00) = par_sous(rs, "code")
     assert a00.outcome is Outcome.ecart_certain and a00.ecart == D("10.00")
-    assert a00.constat.montant_en_jeu == D("10.00") and a00.constat.nature_montant is NatureMontant.arithmetique_declaration
+    assert (
+        a00.constat.montant_en_jeu == D("10.00")
+        and a00.constat.nature_montant is NatureMontant.arithmetique_declaration
+    )
     assert "taxe A00" in a00.constat.libelle
     textes_propres(a00)
     assert b00.outcome is Outcome.conforme
@@ -384,7 +461,9 @@ def test_b2_code_total_imprime_faux_ecart_certain():
 def test_b2_code_lecture_corroboree():
     # Valeurs lues (texte natif) : chaque ligne sommée est confirmée par base × taux = montant (D-1700) ; le total du
     # code est la valeur mise en cause.
-    d = dec_b2(*_lignes_b2(), total="140.00", totaux_par_code=[tot_code("A00", "40.00"), tot_code("B00", "110.00")])
+    d = dec_b2(
+        *_lignes_b2(), total="140.00", totaux_par_code=[tot_code("A00", "40.00"), tot_code("B00", "110.00")]
+    )
     (a00, _) = par_sous(b2_sommes_taxes(contexte([d], exiger_lecture_corroboree=True)), "code")
     assert a00.outcome is Outcome.ecart_certain
 
@@ -399,7 +478,11 @@ def test_b2_code_meme_ecart_que_le_total_un_seul_constat():
     (tot,) = par_sous(rs, "total")
     assert tot.outcome.est_constat and tot.ecart == D("-5.00")
     # tous les totaux par code imprimés redonnent le total général : ce sont les lignes qui sont en cause
-    d = dec_b2(*_lignes_b2("25.00"), total="140.00", totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "110.00")])
+    d = dec_b2(
+        *_lignes_b2("25.00"),
+        total="140.00",
+        totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "110.00")],
+    )
     (a00, _) = par_sous(b2_sommes_taxes(contexte([d])), "code")
     assert not a00.outcome.est_constat
 
@@ -443,8 +526,11 @@ def test_b2_code_ligne_de_total_de_categorie_prioritaire():
 
 
 def test_b2_code_lu_sous_le_seuil_a_verifier():
-    d = dec_b2(*_lignes_b2(), total="140.00",
-               totaux_par_code=[tot_code("A00", "40.00", confiance=0.8, methode="ocr"), tot_code("B00", "110.00")])
+    d = dec_b2(
+        *_lignes_b2(),
+        total="140.00",
+        totaux_par_code=[tot_code("A00", "40.00", confiance=0.8, methode="ocr"), tot_code("B00", "110.00")],
+    )
     (a00, _) = par_sous(b2_sommes_taxes(contexte([d])), "code")
     assert a00.outcome is Outcome.a_verifier and RaisonCode.confiance_insuffisante in a00.constat.raisons
 
@@ -461,8 +547,11 @@ def _deduit(t, regle=None):
 
 
 def test_b2_code_total_deduit_jamais_certain_d3710():
-    d = dec_b2(*_lignes_b2(), total="140.00",
-               totaux_par_code=[_deduit(tot_code("A00", "40.00")), tot_code("B00", "110.00")])
+    d = dec_b2(
+        *_lignes_b2(),
+        total="140.00",
+        totaux_par_code=[_deduit(tot_code("A00", "40.00")), tot_code("B00", "110.00")],
+    )
     (a00, b00) = par_sous(b2_sommes_taxes(contexte([d])), "code")
     assert a00.outcome is Outcome.a_verifier and RaisonCode.structure_non_validee in a00.constat.raisons
     assert b00.outcome is Outcome.conforme

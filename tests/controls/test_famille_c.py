@@ -47,29 +47,55 @@ C_IDS = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]
 # --- fabriques -----------------------------------------------------------------------------------
 
 
-def ligne(fid, nature, montant, *, mrn=None, libelle=None, methode="texte_natif", confiance=0.99, brut=None,
-          pourcentage=None, page=1, **kw):
+def ligne(
+    fid,
+    nature,
+    montant,
+    *,
+    mrn=None,
+    libelle=None,
+    methode="texte_natif",
+    confiance=0.99,
+    brut=None,
+    pourcentage=None,
+    page=1,
+    **kw,
+):
     def v(nom, val, b=None):
         if val is None:
             return None
-        return vs(f"facture_transitaire.lignes[].{nom}", val, brut=b, document_id=fid, methode=methode,
-                  confiance=confiance, page=page)
+        return vs(
+            f"facture_transitaire.lignes[].{nom}",
+            val,
+            brut=b,
+            document_id=fid,
+            methode=methode,
+            confiance=confiance,
+            page=page,
+        )
 
     return LigneFactureTransitaire(
-        libelle=v("libelle", libelle or nature.value), nature=nature, montant_ht=v("montant_ht", montant, brut),
-        mrn=v("mrn", mrn), pourcentage=v("pourcentage", pourcentage),
+        libelle=v("libelle", libelle or nature.value),
+        nature=nature,
+        montant_ht=v("montant_ht", montant, brut),
+        mrn=v("mrn", mrn),
+        pourcentage=v("pourcentage", pourcentage),
         **{k: v(k, x) for k, x in kw.items()},
     )
 
 
-def ft(fid, *lignes, numero="FT-FICTIF-001", refs_mrn=(), client_tva=TVA_CLIENT, qualite=QualiteTexte.natif,
-       **kw):
+def ft(
+    fid, *lignes, numero="FT-FICTIF-001", refs_mrn=(), client_tva=TVA_CLIENT, qualite=QualiteTexte.natif, **kw
+):
     f = facture_transitaire(
-        id=fid, numero=vs("facture_transitaire.numero", numero, document_id=fid),
+        id=fid,
+        numero=vs("facture_transitaire.numero", numero, document_id=fid),
         refs_mrn=[vs("facture_transitaire.refs_mrn[]", m, document_id=fid) for m in refs_mrn],
         client_facture=Partie(tva=vs("facture_transitaire.client_facture.tva", client_tva, document_id=fid))
-        if client_tva else Partie(),
-        lignes=list(lignes), **kw,
+        if client_tva
+        else Partie(),
+        lignes=list(lignes),
+        **kw,
     )
     if qualite is not QualiteTexte.natif:
         for p in f.pages:
@@ -92,14 +118,17 @@ def dec(did, *taxes, mrn=MRN_A, total=None, indices=(), version=None, articles=N
         champs["nombre_articles"] = vs("declaration.nombre_articles", str(articles), document_id=did)
     if tva_imp:
         champs["importateur"] = Partie(tva=vs("declaration.importateur.tva", tva_imp, document_id=did))
-    return declaration(id=did, mrn=mrn, taxations=tx, version=version,
-                       indices_autoliquidation=list(indices), **champs)
+    return declaration(
+        id=did, mrn=mrn, taxations=tx, version=version, indices_autoliquidation=list(indices), **champs
+    )
 
 
 def indice_1008(did, confiance=0.99):
     return IndiceAutoliquidation(
         type=TypeIndiceAutoliquidation.code_1008,
-        valeur=vs("declaration.indices_autoliquidation[].valeur", "1008", document_id=did, confiance=confiance),
+        valeur=vs(
+            "declaration.indices_autoliquidation[].valeur", "1008", document_id=did, confiance=confiance
+        ),
         tva=vs("declaration.indices_autoliquidation[].tva", TVA_CLIENT, document_id=did, confiance=confiance),
     )
 
@@ -205,8 +234,12 @@ def test_ecart_en_faveur_du_client_a_verifier_negatif():
 
 def test_c2_autres_taxes_non_liquidees():
     d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "220.00"), total="320.00")
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_autres_taxes, "35.00"),
-           ligne("doc_ft1", N.debours_tva, "220.00"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00"),
+        ligne("doc_ft1", N.debours_autres_taxes, "35.00"),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+    )
     rs = run([d, f])
     c = un(rs, "C2").constat
     assert c.niveau is Niveau.ecart_certain and c.montant_en_jeu == D("35.00")
@@ -216,8 +249,12 @@ def test_c2_autres_taxes_non_liquidees():
 
 def test_composante_absente_sans_total_reste_a_verifier():
     d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "220.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_autres_taxes, "35.00"),
-           ligne("doc_ft1", N.debours_tva, "220.00"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00"),
+        ligne("doc_ft1", N.debours_autres_taxes, "35.00"),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+    )
     c = un(run([d, f]), "C2").constat
     assert c.niveau is Niveau.a_verifier and RaisonCode.valeur_absente in c.raisons
 
@@ -226,19 +263,27 @@ def test_composante_absente_sans_total_reste_a_verifier():
 
 
 def _dec_autoliquidee(conf=0.99):
-    return dec("doc_dec1", (DROIT, "100.00"), (TVA, "1240.00", PaiementNormalise.autoliquide),
-               indices=[indice_1008("doc_dec1", conf)])
+    return dec(
+        "doc_dec1",
+        (DROIT, "100.00"),
+        (TVA, "1240.00", PaiementNormalise.autoliquide),
+        indices=[indice_1008("doc_dec1", conf)],
+    )
 
 
 def test_c3_tva_refacturee_malgre_autoliquidation():
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_tva, "1240.00"))
+    f = ft(
+        "doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_tva, "1240.00")
+    )
     rs = run([_dec_autoliquidee(), f])
     r = un(rs, "C3")
     c = r.constat
     assert r.outcome is Outcome.ecart_certain and c.montant_en_jeu == D("1240.00")
     assert c.composante.value == "tva"
     assert "1 240,00 EUR de TVA à l'importation" in lib(c)
-    assert "indiquée comme autoliquidée" in lib(c) and "code document 1008 suivi du numéro " + TVA_CLIENT in lib(c)
+    assert "indiquée comme autoliquidée" in lib(
+        c
+    ) and "code document 1008 suivi du numéro " + TVA_CLIENT in lib(c)
     assert "applicab" not in lib(c)  # le libellé ne dit rien de l'applicabilité
     assert c.prochaine_action == ACTION_C3
     assert un(rs, "C4").outcome is Outcome.non_applicable
@@ -255,7 +300,9 @@ def test_autoliquidation_sans_tva_refacturee_aucun_constat():
 
 
 def test_c3_indice_peu_sur_a_verifier():
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_tva, "1240.00"))
+    f = ft(
+        "doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_tva, "1240.00")
+    )
     d = dec("doc_dec1", (DROIT, "100.00"), indices=[indice_1008("doc_dec1", 0.7)])
     c = un(run([d, f]), "C3").constat
     assert c.niveau is Niveau.a_verifier and RaisonCode.confiance_insuffisante in c.raisons
@@ -297,24 +344,37 @@ def test_ligne_combinee_conforme():
 def test_regle_de_completude():
     # « autres taxes » non extraites : le total à payer (350) dépasse la somme lue (300).
     d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "200.00"), total="350.00")
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_autres_taxes, "50.00"),
-           ligne("doc_ft1", N.debours_tva, "200.00"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00"),
+        ligne("doc_ft1", N.debours_autres_taxes, "50.00"),
+        ligne("doc_ft1", N.debours_tva, "200.00"),
+    )
     rs = run([d, f])
     assert un(rs, "C2").outcome is Outcome.non_verifiable
     assert un(rs, "C1").outcome is Outcome.conforme
     c5 = un(rs, "C5")
     assert c5.outcome is Outcome.conforme and c5.attendu == "350.00"
     # Même dossier avec 80 EUR d'autres taxes refacturés : C5 porte seul le montant.
-    f2 = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_autres_taxes, "80.00"),
-            ligne("doc_ft1", N.debours_tva, "200.00"))
+    f2 = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00"),
+        ligne("doc_ft1", N.debours_autres_taxes, "80.00"),
+        ligne("doc_ft1", N.debours_tva, "200.00"),
+    )
     c = un(run([d, f2]), "C5").constat
     assert c.niveau is Niveau.ecart_certain and c.montant_en_jeu == D("30.00")
     assert "total à payer imprimé" in lib(c)
 
 
 def test_total_coherent_avec_tva_autoliquidee_incluse():
-    d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "200.00", PaiementNormalise.autoliquide), total="300.00",
-            indices=[indice_1008("doc_dec1")])
+    d = dec(
+        "doc_dec1",
+        (DROIT, "100.00"),
+        (TVA, "200.00", PaiementNormalise.autoliquide),
+        total="300.00",
+        indices=[indice_1008("doc_dec1")],
+    )
     r = reference_declaration(contexte([d]), d)
     assert r.complet_verifie and not r.total_utilise and r.liquide_total == D("100.00")
 
@@ -325,8 +385,13 @@ def test_total_coherent_avec_tva_autoliquidee_incluse():
 def test_releve_multi_mrn_ventile_par_ligne():
     d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
     d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00", mrn=MRN_A),
-           ligne("doc_ft1", N.debours_droits, "80.00", mrn=MRN_B), refs_mrn=[MRN_A, MRN_B], est_releve=True)
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00", mrn=MRN_A),
+        ligne("doc_ft1", N.debours_droits, "80.00", mrn=MRN_B),
+        refs_mrn=[MRN_A, MRN_B],
+        est_releve=True,
+    )
     rs = run([d1, d2, f])
     c1 = {r.unite: r for r in par_id(rs, "C1")}
     assert set(c1) == {"dec:doc_dec1|ft:doc_ft1", "dec:doc_dec2|ft:doc_ft1"}
@@ -353,12 +418,24 @@ def test_allocation_prorata_ignoree_comparaison_sur_la_somme():
     d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
     f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "160.00"), refs_mrn=[MRN_A, MRN_B])
     ctx = contexte([d1, d2, f])
-    ctx.dossier.allocations.extend([
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
-                   montant_alloue=D("60.00"), methode=MethodeAllocation.prorata),
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
-                   montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
-    ])
+    ctx.dossier.allocations.extend(
+        [
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec1",
+                montant_alloue=D("60.00"),
+                methode=MethodeAllocation.prorata,
+            ),
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec2",
+                montant_alloue=D("100.00"),
+                methode=MethodeAllocation.prorata,
+            ),
+        ]
+    )
     rs = run_controls(ctx, controles=["C1"])
     assert [(r.unite, r.outcome) for r in rs] == [("dec:doc_dec1+doc_dec2|ft:doc_ft1", Outcome.conforme)]
 
@@ -368,12 +445,24 @@ def test_allocation_prorata_ecart_sur_la_somme_reste_a_verifier():
     d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
     f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "200.00"), refs_mrn=[MRN_A, MRN_B])
     ctx = contexte([d1, d2, f])
-    ctx.dossier.allocations.extend([
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
-                   montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
-                   montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
-    ])
+    ctx.dossier.allocations.extend(
+        [
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec1",
+                montant_alloue=D("100.00"),
+                methode=MethodeAllocation.prorata,
+            ),
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec2",
+                montant_alloue=D("100.00"),
+                methode=MethodeAllocation.prorata,
+            ),
+        ]
+    )
     rs = run_controls(ctx, controles=["C1"])
     assert len(rs) == 1 and rs[0].unite == "dec:doc_dec1+doc_dec2|ft:doc_ft1"
     c = rs[0].constat
@@ -388,12 +477,24 @@ def test_allocation_prorata_designe_les_declarations_couvertes():
     d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
     f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "160.00"), refs_mrn=[MRN_A])
     ctx = contexte([d1, d2, f])
-    ctx.dossier.allocations.extend([
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
-                   montant_alloue=D("100.00"), methode=MethodeAllocation.prorata),
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
-                   montant_alloue=D("60.00"), methode=MethodeAllocation.prorata),
-    ])
+    ctx.dossier.allocations.extend(
+        [
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec1",
+                montant_alloue=D("100.00"),
+                methode=MethodeAllocation.prorata,
+            ),
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec2",
+                montant_alloue=D("60.00"),
+                methode=MethodeAllocation.prorata,
+            ),
+        ]
+    )
     rs = run_controls(ctx, controles=["C1"])
     assert [(r.unite, r.outcome) for r in rs] == [("dec:doc_dec1+doc_dec2|ft:doc_ft1", Outcome.conforme)]
 
@@ -403,12 +504,24 @@ def test_allocation_explicite_respectee():
     d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
     f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "200.00"), refs_mrn=[MRN_A, MRN_B])
     ctx = contexte([d1, d2, f])
-    ctx.dossier.allocations.extend([
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec1",
-                   montant_alloue=D("100.00"), methode=MethodeAllocation.reference_explicite),
-        Allocation(source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
-                   montant_alloue=D("100.00"), methode=MethodeAllocation.reference_explicite),
-    ])
+    ctx.dossier.allocations.extend(
+        [
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec1",
+                montant_alloue=D("100.00"),
+                methode=MethodeAllocation.reference_explicite,
+            ),
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec2",
+                montant_alloue=D("100.00"),
+                methode=MethodeAllocation.reference_explicite,
+            ),
+        ]
+    )
     c1 = {r.unite: r for r in run_controls(ctx, controles=["C1"])}
     assert c1["dec:doc_dec2|ft:doc_ft1"].constat.montant_en_jeu == D("40.00")
     assert c1["dec:doc_dec1|ft:doc_ft1"].outcome is Outcome.conforme
@@ -416,9 +529,15 @@ def test_allocation_explicite_respectee():
 
 def test_factures_debours_et_prestations_separees():
     d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "220.00"))
-    f1 = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), ligne("doc_ft1", N.debours_tva, "220.00"),
-            refs_mrn=[MRN_A])
-    f2 = ft("doc_ft2", ligne("doc_ft2", N.frais_dedouanement, "65.00"), numero="FT-FICTIF-002", refs_mrn=[MRN_A])
+    f1 = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00"),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+        refs_mrn=[MRN_A],
+    )
+    f2 = ft(
+        "doc_ft2", ligne("doc_ft2", N.frais_dedouanement, "65.00"), numero="FT-FICTIF-002", refs_mrn=[MRN_A]
+    )
     rs = run([d, f1, f2])
     assert [u.cle for u in unites_c(contexte([d, f1, f2]))] == ["dec:doc_dec1|ft:doc_ft1"]
     assert un(rs, "C1").outcome is Outcome.conforme and un(rs, "C5").outcome is Outcome.conforme
@@ -444,8 +563,12 @@ def test_meme_declaration_refacturee_deux_fois_excedent_en_c5():
 
 def test_ligne_non_rattachee_a_un_autre_dossier_ecartee():
     d = dec("doc_dec1", (DROIT, "100.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00", mrn=MRN_A),
-           ligne("doc_ft1", N.debours_droits, "999.00", mrn=MRN_B), est_releve=True)
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "100.00", mrn=MRN_A),
+        ligne("doc_ft1", N.debours_droits, "999.00", mrn=MRN_B),
+        est_releve=True,
+    )
     assert un(run([d, f]), "C1").outcome is Outcome.conforme
 
 
@@ -466,11 +589,15 @@ def test_derniere_version_rectificative_seulement():
 
 def test_avoir_deja_recu_deduit_montant_brut_conserve():
     d, f = dossier_simple(droits="150.00")
-    a = document(TypeDocument.avoir, ChampsAvoir(
-        numero=vs("avoir.numero", "AV-FICTIF-1", document_id="doc_av1"),
-        refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-FICTIF-001", document_id="doc_av1")],
-        lignes=[ligne("doc_av1", N.debours_droits, "30.00")],
-    ), id="doc_av1")
+    a = document(
+        TypeDocument.avoir,
+        ChampsAvoir(
+            numero=vs("avoir.numero", "AV-FICTIF-1", document_id="doc_av1"),
+            refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-FICTIF-001", document_id="doc_av1")],
+            lignes=[ligne("doc_av1", N.debours_droits, "30.00")],
+        ),
+        id="doc_av1",
+    )
     rs = run([d, f, a])
     c = un(rs, "C1").constat
     assert c.montant_en_jeu == D("20.00") and c.montant_brut == D("50.00")
@@ -483,14 +610,21 @@ def test_avoir_deja_recu_deduit_montant_brut_conserve():
 def test_avoir_d_un_autre_emetteur_non_deduit():
     # D-1210 (§17.2, D-304) : même émetteur exigé, comme en famille E.
     d = dec("doc_dec1", (DROIT, "100.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "150.00"),
-           emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", "FR11000555550", document_id="doc_ft1")))
-    a = document(TypeDocument.avoir, ChampsAvoir(
-        numero=vs("avoir.numero", "AV-FICTIF-1", document_id="doc_av1"),
-        emetteur=Partie(tva=vs("avoir.emetteur.tva", TVA_AUTRE, document_id="doc_av1")),
-        refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-FICTIF-001", document_id="doc_av1")],
-        lignes=[ligne("doc_av1", N.debours_droits, "30.00")],
-    ), id="doc_av1")
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "150.00"),
+        emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", "FR11000555550", document_id="doc_ft1")),
+    )
+    a = document(
+        TypeDocument.avoir,
+        ChampsAvoir(
+            numero=vs("avoir.numero", "AV-FICTIF-1", document_id="doc_av1"),
+            emetteur=Partie(tva=vs("avoir.emetteur.tva", TVA_AUTRE, document_id="doc_av1")),
+            refs_facture_origine=[vs("avoir.refs_facture_origine[]", "FT-FICTIF-001", document_id="doc_av1")],
+            lignes=[ligne("doc_av1", N.debours_droits, "30.00")],
+        ),
+        id="doc_av1",
+    )
     c = un(run([d, f, a]), "C1").constat
     assert c.montant_en_jeu == D("50.00") and "doc_av1" not in c.documents_concernes
 
@@ -500,8 +634,12 @@ def test_avoir_d_un_autre_emetteur_non_deduit():
 
 def test_lecture_ocr_douteuse():
     d = dec("doc_dec1", (DROIT, "108.00"), (TVA, "220.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "168.00", methode="ocr", confiance=0.95),
-           ligne("doc_ft1", N.debours_tva, "220.00"), qualite=QualiteTexte.ocr)
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "168.00", methode="ocr", confiance=0.95),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+        qualite=QualiteTexte.ocr,
+    )
     c = un(run([d, f]), "C1").constat
     assert c.niveau is Niveau.a_verifier and RaisonCode.lecture_douteuse in c.raisons
     assert c.montant_en_jeu == D("60.00")
@@ -509,15 +647,22 @@ def test_lecture_ocr_douteuse():
 
 def test_transposition_reste_certaine():
     d = dec("doc_dec1", (DROIT, "108.00"), (TVA, "220.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "180.00", methode="ocr", confiance=0.95),
-           ligne("doc_ft1", N.debours_tva, "220.00"), qualite=QualiteTexte.ocr)
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "180.00", methode="ocr", confiance=0.95),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+        qualite=QualiteTexte.ocr,
+    )
     assert un(run([d, f]), "C1").outcome is Outcome.ecart_certain
 
 
 def test_confiance_insuffisante_et_rattachement_faible():
     d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "220.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "150.00", confiance=0.8),
-           ligne("doc_ft1", N.debours_tva, "220.00"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "150.00", confiance=0.8),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+    )
     assert RaisonCode.confiance_insuffisante in un(run([d, f]), "C1").constat.raisons
     d2, f2 = dossier_simple(droits="150.00")
     c = un(run([d2, f2], force=ForceLien.faible), "C1").constat
@@ -542,8 +687,11 @@ def test_sans_declaration_non_verifiable():
 
 def test_ligne_illisible_non_verifiable():
     d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "220.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "150.00", confiance=0.3),
-           ligne("doc_ft1", N.debours_tva, "220.00"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "150.00", confiance=0.3),
+        ligne("doc_ft1", N.debours_tva, "220.00"),
+    )
     rs = run([d, f])
     assert un(rs, "C1").raison_code is RaisonCode.confiance_insuffisante
     assert un(rs, "C5").outcome is Outcome.non_verifiable
@@ -569,8 +717,11 @@ def test_declaration_sans_taxation_ni_total_non_verifiable():
 
 def test_c6_faf_sur_excedent_seulement():
     d = dec("doc_dec1", (DROIT, "100.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "1100.00"),
-           ligne("doc_ft1", N.frais_avance_fonds, "27.50", pourcentage="2.5", libelle="Avance de fonds"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "1100.00"),
+        ligne("doc_ft1", N.frais_avance_fonds, "27.50", pourcentage="2.5", libelle="Avance de fonds"),
+    )
     rs = run([d, f])
     assert un(rs, "C1").outcome is Outcome.ecart_certain
     r = un(rs, "C6")
@@ -585,8 +736,11 @@ def test_c6_faf_corrige_arrondi_avant_la_difference():
     # D-1212 : 2,5 % × 3 444,20 = 86,105 -> 86,11 (facturé) ; 2,5 % × 3 382,02 = 84,5505 -> 84,55 ;
     # excédent = 86,11 − 84,55 = 1,56 (et non 1,5545 arrondi à 1,55).
     d = dec("doc_dec1", (DROIT, "3382.02"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "3444.20"),
-           ligne("doc_ft1", N.frais_avance_fonds, "86.11", pourcentage="2.5", libelle="Avance de fonds"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "3444.20"),
+        ligne("doc_ft1", N.frais_avance_fonds, "86.11", pourcentage="2.5", libelle="Avance de fonds"),
+    )
     assert un(run([d, f]), "C6").constat.montant_en_jeu == D("1.56")
 
 
@@ -594,29 +748,51 @@ def test_c6_faf_au_minimum_sans_excedent():
     from controldone.model import GrilleTarifaire, ModePoste, PosteGrille, StatutGrille, Transitaire
 
     d = dec("doc_dec1", (DROIT, "100.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "300.00"),
-           ligne("doc_ft1", N.frais_avance_fonds, "15.00"),
-           emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", "FR11000555550", document_id="doc_ft1")))
-    g = GrilleTarifaire(transitaire_id="tra_1", reference="DEV-FICTIF-1", statut=StatutGrille.validee, postes=[
-        PosteGrille(code_poste="FAF", nature=N.frais_avance_fonds, mode=ModePoste.pourcentage,
-                    pourcentage=D("2.5"), minimum=D("15.00")),
-    ])
-    rs = run([d, f], grilles=[g], transitaires=[Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550")])
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "300.00"),
+        ligne("doc_ft1", N.frais_avance_fonds, "15.00"),
+        emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", "FR11000555550", document_id="doc_ft1")),
+    )
+    g = GrilleTarifaire(
+        transitaire_id="tra_1",
+        reference="DEV-FICTIF-1",
+        statut=StatutGrille.validee,
+        postes=[
+            PosteGrille(
+                code_poste="FAF",
+                nature=N.frais_avance_fonds,
+                mode=ModePoste.pourcentage,
+                pourcentage=D("2.5"),
+                minimum=D("15.00"),
+            ),
+        ],
+    )
+    rs = run(
+        [d, f], grilles=[g], transitaires=[Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550")]
+    )
     assert un(rs, "C1").outcome is Outcome.ecart_certain
     assert un(rs, "C6").outcome is Outcome.conforme
 
 
 def test_c6_depend_d_un_constat_a_verifier():
     d = dec("doc_dec1", (DROIT, "100.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "1100.00", confiance=0.8),
-           ligne("doc_ft1", N.frais_avance_fonds, "27.50", pourcentage="2.5"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "1100.00", confiance=0.8),
+        ligne("doc_ft1", N.frais_avance_fonds, "27.50", pourcentage="2.5"),
+    )
     c = un(run([d, f]), "C6").constat
     assert c.niveau is Niveau.a_verifier and c.montant_en_jeu == D("25.00")
 
 
 def test_c6_taux_inconnu_non_verifiable():
     d = dec("doc_dec1", (DROIT, "100.00"))
-    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "1100.00"), ligne("doc_ft1", N.frais_avance_fonds, "27.50"))
+    f = ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, "1100.00"),
+        ligne("doc_ft1", N.frais_avance_fonds, "27.50"),
+    )
     assert un(run([d, f]), "C6").outcome is Outcome.non_verifiable
 
 
@@ -655,19 +831,32 @@ def test_c7_reference_transport():
     from controldone.model import DocumentReference
 
     d = dec("doc_dec1", (DROIT, "100.00"))
-    d.dec.documents_references.append(DocumentReference(
-        type_code=vs("declaration.documents_references[].type_code", "N740", document_id="doc_dec1"),
-        reference=vs("declaration.documents_references[].reference", "999-11112222", document_id="doc_dec1")))
-    ok = ft("doc_ft1", refs_transport=[vs("facture_transitaire.refs_transport[]", "999 1111 2222", document_id="doc_ft1")])
+    d.dec.documents_references.append(
+        DocumentReference(
+            type_code=vs("declaration.documents_references[].type_code", "N740", document_id="doc_dec1"),
+            reference=vs(
+                "declaration.documents_references[].reference", "999-11112222", document_id="doc_dec1"
+            ),
+        )
+    )
+    ok = ft(
+        "doc_ft1",
+        refs_transport=[vs("facture_transitaire.refs_transport[]", "999 1111 2222", document_id="doc_ft1")],
+    )
     assert c7_references(contexte([d, ok]))[0].outcome is Outcome.conforme
-    ko = ft("doc_ft1", refs_transport=[vs("facture_transitaire.refs_transport[]", "176-55556666", document_id="doc_ft1")])
+    ko = ft(
+        "doc_ft1",
+        refs_transport=[vs("facture_transitaire.refs_transport[]", "176-55556666", document_id="doc_ft1")],
+    )
     r = c7_references(contexte([d, ko]))[0]
     assert r.outcome is Outcome.a_verifier and "176-55556666" in lib(r.constat)
 
 
 def test_c8_client_facture():
-    entites = [Entite(id="ent_1", raison_sociale="Société A FICTIVE", tva=TVA_CLIENT),
-               Entite(id="ent_2", raison_sociale="Société B FICTIVE", tva=TVA_AUTRE)]
+    entites = [
+        Entite(id="ent_1", raison_sociale="Société A FICTIVE", tva=TVA_CLIENT),
+        Entite(id="ent_2", raison_sociale="Société B FICTIVE", tva=TVA_AUTRE),
+    ]
     d = dec("doc_dec1", (DROIT, "100.00"))
     ok = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"))
     assert c8_client_facture(contexte([d, ok], entites=entites))[0].outcome is Outcome.conforme
@@ -683,8 +872,9 @@ def test_c8_client_facture():
 def test_c8_tva_peu_sure_a_verifier():
     d = dec("doc_dec1", (DROIT, "100.00"))
     f = ft("doc_ft1", client_tva=None)
-    f.ft.client_facture.tva = vs("facture_transitaire.client_facture.tva", TVA_AUTRE, document_id="doc_ft1",
-                                 confiance=0.7)
+    f.ft.client_facture.tva = vs(
+        "facture_transitaire.client_facture.tva", TVA_AUTRE, document_id="doc_ft1", confiance=0.7
+    )
     r = c8_client_facture(contexte([d, f]))[0]
     assert r.outcome is Outcome.a_verifier and RaisonCode.confiance_insuffisante in r.constat.raisons
 
@@ -698,15 +888,21 @@ def _dec_lignes(did, lignes, *, total=None, total_conf=0.83, articles=None):
     tx = [taxation(did, article=a, categorie=cat, type_taxe=code[cat], montant=m) for a, cat, m in lignes]
     champs = {"importateur": Partie(tva=vs("declaration.importateur.tva", TVA_CLIENT, document_id=did))}
     if total is not None:
-        champs["total_a_payer"] = vs("declaration.total_a_payer", total, document_id=did, confiance=total_conf)
+        champs["total_a_payer"] = vs(
+            "declaration.total_a_payer", total, document_id=did, confiance=total_conf
+        )
     if articles is not None:
         champs["nombre_articles"] = vs("declaration.nombre_articles", str(articles), document_id=did)
     return declaration(id=did, mrn=MRN_A, taxations=tx, **champs)
 
 
 def _ft_debours(droits, autres, tva):
-    return ft("doc_ft1", ligne("doc_ft1", N.debours_droits, droits),
-              ligne("doc_ft1", N.debours_autres_taxes, autres), ligne("doc_ft1", N.debours_tva, tva))
+    return ft(
+        "doc_ft1",
+        ligne("doc_ft1", N.debours_droits, droits),
+        ligne("doc_ft1", N.debours_autres_taxes, autres),
+        ligne("doc_ft1", N.debours_tva, tva),
+    )
 
 
 def test_total_imprime_contredit_la_somme_lue_composante_a_verifier():
@@ -715,36 +911,58 @@ def test_total_imprime_contredit_la_somme_lue_composante_a_verifier():
     lignes = [("1", DROIT, "100.00"), ("1", AUTRE, "200.00"), ("1", TVA, "200000.00")]
     f = _ft_debours("100.00", "274.76", "2000.00")
     sans_total = un(run([_dec_lignes("doc_dec1", lignes), f]), "C2").constat
-    assert sans_total.niveau is Niveau.ecart_certain  # aucun total imprimé lu : rien ne signale l'incomplétude
+    assert (
+        sans_total.niveau is Niveau.ecart_certain
+    )  # aucun total imprimé lu : rien ne signale l'incomplétude
     rs = run([_dec_lignes("doc_dec1", lignes, total="2374.76"), f])
     c2 = un(rs, "C2")
     assert c2.constat.niveau is Niveau.a_verifier and RaisonCode.valeur_absente in c2.constat.raisons
-    assert c2.details["lecture_incomplete"] == {"doc_dec1": "total_imprime_different_de_la_somme_des_lignes_lues"}
+    assert c2.details["lecture_incomplete"] == {
+        "doc_dec1": "total_imprime_different_de_la_somme_des_lignes_lues"
+    }
     assert un(rs, "C5").constat.niveau is Niveau.a_verifier
     textes_propres(rs)
 
 
 def test_total_imprime_concordant_ecart_reste_certain():
     lignes = [("1", DROIT, "100.00"), ("1", AUTRE, "200.00"), ("1", TVA, "2000.00")]
-    rs = run([_dec_lignes("doc_dec1", lignes, total="2300.00", total_conf=0.83),
-              _ft_debours("100.00", "274.76", "2000.00")])
+    rs = run(
+        [
+            _dec_lignes("doc_dec1", lignes, total="2300.00", total_conf=0.83),
+            _ft_debours("100.00", "274.76", "2000.00"),
+        ]
+    )
     assert un(rs, "C2").constat.niveau is Niveau.ecart_certain
 
 
 def test_total_peu_lisible_ignore():
     # Total sous C_MIN_UTILE : inexploitable, il ne déclenche pas la garde.
     lignes = [("1", DROIT, "100.00"), ("1", AUTRE, "200.00"), ("1", TVA, "2000.00")]
-    rs = run([_dec_lignes("doc_dec1", lignes, total="9999.99", total_conf=0.3),
-              _ft_debours("100.00", "274.76", "2000.00")])
+    rs = run(
+        [
+            _dec_lignes("doc_dec1", lignes, total="9999.99", total_conf=0.3),
+            _ft_debours("100.00", "274.76", "2000.00"),
+        ]
+    )
     assert un(rs, "C2").constat.niveau is Niveau.ecart_certain
 
 
 def test_difference_expliquee_par_la_tva_autoliquidee():
-    d = dec("doc_dec1", (DROIT, "100.00"), (TVA, "200.00", PaiementNormalise.autoliquide), total="300.00",
-            indices=[indice_1008("doc_dec1")])
+    d = dec(
+        "doc_dec1",
+        (DROIT, "100.00"),
+        (TVA, "200.00", PaiementNormalise.autoliquide),
+        total="300.00",
+        indices=[indice_1008("doc_dec1")],
+    )
     assert reference_declaration(contexte([d]), d).lecture_incomplete is None
-    d2 = dec("doc_dec1", (DROIT, "100.00"), (TVA, "200.00", PaiementNormalise.autoliquide), total="100.00",
-             indices=[indice_1008("doc_dec1")])
+    d2 = dec(
+        "doc_dec1",
+        (DROIT, "100.00"),
+        (TVA, "200.00", PaiementNormalise.autoliquide),
+        total="100.00",
+        indices=[indice_1008("doc_dec1")],
+    )
     assert reference_declaration(contexte([d2]), d2).lecture_incomplete is None
 
 
@@ -776,9 +994,15 @@ def test_releve_reparti_entre_dossiers_un_seul_constat_d3704():
     def ctx_avec(autre_id):
         autre = AutreDossier(dossier_pour([d1, f], id=autre_id), {d1.id: d1, f.id: f})
         ctx = contexte([d2, f], autres_dossiers=[autre])
-        ctx.dossier.allocations.append(Allocation(
-            source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
-            montant_alloue=D("80.00"), methode=MethodeAllocation.prorata))
+        ctx.dossier.allocations.append(
+            Allocation(
+                source_document_id="doc_ft1",
+                source_ligne=0,
+                cible_document_id="doc_dec2",
+                montant_alloue=D("80.00"),
+                methode=MethodeAllocation.prorata,
+            )
+        )
         return ctx
 
     (r,) = run_controls(ctx_avec("dos_autre"), controles=["C1"])  # « dos_autre » < « dos_test »
@@ -798,8 +1022,14 @@ def test_ligne_ventilee_par_mrn_reste_comparee_dans_chaque_dossier_d3704():
     d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
     autre = AutreDossier(dossier_pour([d1, f], id="dos_autre"), {d1.id: d1, f.id: f})
     ctx = contexte([d2, f], autres_dossiers=[autre])
-    ctx.dossier.allocations.append(Allocation(
-        source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
-        montant_alloue=D("80.00"), methode=MethodeAllocation.prorata))
+    ctx.dossier.allocations.append(
+        Allocation(
+            source_document_id="doc_ft1",
+            source_ligne=0,
+            cible_document_id="doc_dec2",
+            montant_alloue=D("80.00"),
+            methode=MethodeAllocation.prorata,
+        )
+    )
     (r,) = run_controls(ctx, controles=["C1"])
     assert r.outcome is not Outcome.non_applicable and r.constat is not None

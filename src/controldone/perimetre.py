@@ -18,8 +18,9 @@ __all__ = ["perimetre"]
 
 
 @contextmanager
-def perimetre(db: Database, tenant_id: str, acteur: Acteur, *, motif: str = "exploitation",
-              lecture: bool = False) -> Iterator[TenantScope]:
+def perimetre(
+    db: Database, tenant_id: str, acteur: Acteur, *, motif: str = "exploitation", lecture: bool = False
+) -> Iterator[TenantScope]:
     """``TenantScope`` validé à la sortie (rollback sur exception)."""
     if acteur.role is Role.fondateur:
         with db.operateur(acteur) as op:

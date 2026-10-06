@@ -29,8 +29,15 @@ __all__ = [
 ]
 
 
-def enqueue(kind: str, payload: dict[str, Any], idempotency_key: str, tenant_id: str | None = None,
-            *, db: Database | None = None, **options: Any) -> JobInfo:
+def enqueue(
+    kind: str,
+    payload: dict[str, Any],
+    idempotency_key: str,
+    tenant_id: str | None = None,
+    *,
+    db: Database | None = None,
+    **options: Any,
+) -> JobInfo:
     """Met un job en file ; une clé d'idempotence déjà connue renvoie le job existant (aucun doublon)."""
     job, _cree = JobStore(db or Database()).enqueue(kind, payload, idempotency_key, tenant_id, **options)
     return job

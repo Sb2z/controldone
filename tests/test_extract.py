@@ -42,13 +42,25 @@ def test_anchor_normalise_les_espaces():
 
 def test_ancrer():
     textes = {1: "Total 1 234,56 EUR"}
-    v = vs("facture_commerciale.total_facture", "1234.56", brut="1 234,56", methode="ocr", confiance=0.85,
-           ancree=False)
+    v = vs(
+        "facture_commerciale.total_facture",
+        "1234.56",
+        brut="1 234,56",
+        methode="ocr",
+        confiance=0.85,
+        ancree=False,
+    )
     assert ancrer(v, textes).ancree is True and ancrer(v, textes).confiance == 0.85
     # une valeur llm construite non ancrée est déjà plafonnée à 0,50 par le modèle (§6.3)
     assert vs("a", "1", methode="llm", confiance=0.85, ancree=False).confiance == 0.5
-    w = vs("facture_commerciale.total_facture", "1234.56", brut="1 234,57", methode="llm", confiance=0.85,
-           ancree=True)
+    w = vs(
+        "facture_commerciale.total_facture",
+        "1234.56",
+        brut="1 234,57",
+        methode="llm",
+        confiance=0.85,
+        ancree=True,
+    )
     a = ancrer(w, textes)
     assert a.ancree is False and a.confiance == 0.5
     x = vs("a", "1", methode="xml_structure", ancree=False)
@@ -89,8 +101,9 @@ def test_fusionner_resultats():
         total_facture=vs("facture_commerciale.total_facture", "100.00", confiance=0.95, extracteur=DET),
     )
     c2 = ChampsFactureCommerciale(
-        total_facture=vs("facture_commerciale.total_facture", "160.00", confiance=0.85, methode="llm",
-                         extracteur=LLM),
+        total_facture=vs(
+            "facture_commerciale.total_facture", "160.00", confiance=0.85, methode="llm", extracteur=LLM
+        ),
         incoterm=vs("facture_commerciale.incoterm", "FOB", confiance=0.85, methode="llm", extracteur=LLM),
     )
     r = fusionner_resultats(
@@ -105,8 +118,10 @@ def test_fusionner_resultats():
 
 
 def test_fusion_conserve_les_classifications_de_la_base():
-    l0 = LigneFactureTransitaire(nature=NatureLigne.debours_tva,
-                                 montant_ht=vs("facture_transitaire.lignes[0].montant_ht", "20.00", extracteur=DET))
+    l0 = LigneFactureTransitaire(
+        nature=NatureLigne.debours_tva,
+        montant_ht=vs("facture_transitaire.lignes[0].montant_ht", "20.00", extracteur=DET),
+    )
     base = ChampsFactureTransitaire(lignes=[l0])
     r = fusionner_resultats([ExtractionResult(extracteur=DET, champs=base)], TypeDocument.facture_transitaire)
     assert r.champs.lignes[0].nature is NatureLigne.debours_tva
@@ -129,14 +144,29 @@ def test_normaliser_valeur():
 
 
 def test_valeur_sourcee():
-    v = valeur_sourcee(type_document=TypeDocument.facture_commerciale, chemin="total_facture",
-                       brut="USD 12,540.00", document_id="doc_1", page=2, extracteur=DET,
-                       methode=Methode.texte_natif, confiance=0.97,
-                       textes_pages={2: "TOTAL AMOUNT DUE  USD 12,540.00"})
+    v = valeur_sourcee(
+        type_document=TypeDocument.facture_commerciale,
+        chemin="total_facture",
+        brut="USD 12,540.00",
+        document_id="doc_1",
+        page=2,
+        extracteur=DET,
+        methode=Methode.texte_natif,
+        confiance=0.97,
+        textes_pages={2: "TOTAL AMOUNT DUE  USD 12,540.00"},
+    )
     assert v.chemin == "facture_commerciale.total_facture" and v.valeur == "12540.00" and v.unite == "USD"
     assert v.ancree and v.type is TypeValeur.montant and v.decimal() == D("12540.00")
-    amb = valeur_sourcee(type_document="facture_commerciale", chemin="total_facture", brut="1,234",
-                         document_id="d", page=1, extracteur=DET, methode=Methode.ocr, confiance=0.9)
+    amb = valeur_sourcee(
+        type_document="facture_commerciale",
+        chemin="total_facture",
+        brut="1,234",
+        document_id="d",
+        page=1,
+        extracteur=DET,
+        methode=Methode.ocr,
+        confiance=0.9,
+    )
     assert amb.confiance == 0.75 and not amb.ancree
 
 

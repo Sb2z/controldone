@@ -73,25 +73,42 @@ def test_ecart_sous_le_seuil():
 
 
 def test_taux_specifique():
-    d = _dec(taxation("doc_dec1", base_quantite="120", taux="3.50", montant="420.00", nature=TauxNature.specifique))
+    d = _dec(
+        taxation("doc_dec1", base_quantite="120", taux="3.50", montant="420.00", nature=TauxNature.specifique)
+    )
     assert _un(contexte([d])).outcome is Outcome.conforme
-    d = _dec(taxation("doc_dec1", base_quantite="120", taux="3.50", montant="480.00", nature=None), total="480.00")
+    d = _dec(
+        taxation("doc_dec1", base_quantite="120", taux="3.50", montant="480.00", nature=None), total="480.00"
+    )
     r = _un(contexte([d]))  # nature déduite de la seule base présente
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("60.00")
 
 
 def test_lecture_ocr_douteuse():
     # 52,28 imprimé, lu « 82,28 » par l'OCR (5 et 8 de la même classe) : l'écart s'explique par la lecture
-    d = _dec(taxation("doc_dec1", base="2091.00", taux="2.5", montant="82.28", brut_montant="82,28",
-                      methode="ocr", confiance=0.95), qualite=QualiteTexte.ocr)
+    d = _dec(
+        taxation(
+            "doc_dec1",
+            base="2091.00",
+            taux="2.5",
+            montant="82.28",
+            brut_montant="82,28",
+            methode="ocr",
+            confiance=0.95,
+        ),
+        qualite=QualiteTexte.ocr,
+    )
     r = _un(contexte([d]))
     assert r.outcome is Outcome.a_verifier
     assert RaisonCode.lecture_douteuse in r.constat.raisons
 
 
 def test_ocr_sans_confusion_possible_reste_certain_si_confiance():
-    d = _dec(taxation("doc_dec1", base="2091.00", taux="2.5", montant="418.20", methode="ocr", confiance=0.95),
-             qualite=QualiteTexte.ocr, total="418.20")
+    d = _dec(
+        taxation("doc_dec1", base="2091.00", taux="2.5", montant="418.20", methode="ocr", confiance=0.95),
+        qualite=QualiteTexte.ocr,
+        total="418.20",
+    )
     r = _un(contexte([d]))
     assert r.outcome is Outcome.ecart_certain
 
@@ -117,10 +134,25 @@ def test_rattachement_faible():
 def test_forfait_exclu_et_plusieurs_lignes():
     d = _dec(
         taxation("doc_dec1", article="1", base="1000", taux="2", montant="20.00"),
-        taxation("doc_dec1", article=None, type_taxe="FPE", categorie=CategorieTaxe.forfait_petits_envois,
-                 base_quantite="3", taux="3", montant="9", nature=TauxNature.specifique),
-        taxation("doc_dec1", article="1", type_taxe="B00", categorie=CategorieTaxe.tva, base="1020", taux="20",
-                 montant="204.00"),
+        taxation(
+            "doc_dec1",
+            article=None,
+            type_taxe="FPE",
+            categorie=CategorieTaxe.forfait_petits_envois,
+            base_quantite="3",
+            taux="3",
+            montant="9",
+            nature=TauxNature.specifique,
+        ),
+        taxation(
+            "doc_dec1",
+            article="1",
+            type_taxe="B00",
+            categorie=CategorieTaxe.tva,
+            base="1020",
+            taux="20",
+            montant="204.00",
+        ),
     )
     rs = b1_base_taux_montant(contexte([d]))
     assert [r.outcome for r in rs] == [Outcome.conforme, Outcome.conforme]
@@ -133,10 +165,18 @@ def test_sans_declaration():
 
 
 def test_seule_la_derniere_version_est_controlee():
-    v1 = declaration(id="doc_v1", mrn="26FR0000000000001A", version="1",
-                     taxations=[taxation("doc_v1", base="100", taux="2", montant="99")])
-    v2 = declaration(id="doc_v2", mrn="26FR0000000000001B", version="2",
-                     taxations=[taxation("doc_v2", base="100", taux="2", montant="2.00")])
+    v1 = declaration(
+        id="doc_v1",
+        mrn="26FR0000000000001A",
+        version="1",
+        taxations=[taxation("doc_v1", base="100", taux="2", montant="99")],
+    )
+    v2 = declaration(
+        id="doc_v2",
+        mrn="26FR0000000000001B",
+        version="2",
+        taxations=[taxation("doc_v2", base="100", taux="2", montant="2.00")],
+    )
     rs = b1_base_taux_montant(contexte([v1, v2]))
     assert len(rs) == 1 and rs[0].documents_concernes == ["doc_v2"] and rs[0].outcome is Outcome.conforme
 

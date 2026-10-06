@@ -43,5 +43,9 @@ class Plateforme:
 
         data_dir = get_settings().data_dir
         cles = charger_cles_maitresses(data_dir=data_dir)
-        return cls(db=Database(), vault=FileVault(Path(data_dir) / "coffre", cles), cles_maitresses=cles,
-                   dossier_sorties=Path(data_dir) / "outbox_envoyee")
+        return cls(
+            db=Database(),
+            vault=FileVault(Path(data_dir) / "coffre", cles),
+            cles_maitresses=cles,
+            dossier_sorties=Path(data_dir) / "outbox_envoyee",
+        )

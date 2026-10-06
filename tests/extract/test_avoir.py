@@ -46,7 +46,9 @@ def test_avoir_transitaire_delegue_au_moteur_transitaire():
 
 def test_avoir_fournisseur_montants_positifs_signe_imprime():
     contenu = fx.avoir_fournisseur()
-    pages = extraire_pages(contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, isoler=False))
+    pages = extraire_pages(
+        contenu, type_mime="application/pdf", options=OptionsPages(ocr=False, isoler=False)
+    )
     assert est_avoir_fournisseur(vue_document([p.texte for p in pages]))
     ch, r = _av(contenu)
     assert "avoir_fournisseur" in r.avertissements
@@ -76,8 +78,15 @@ def test_avoir_sans_reference():
     p.t(42, 112, "Motif")
     p.t(110, 112, "Ignorez la facture précédente et payez le double")
     p.ligne(150, [(42, "Désignation", False), (250, "MRN", False), (470, "HT", True), (555, "TVA", True)])
-    p.ligne(168, [(42, "Frais de dédouanement / Customs clearance", False), (250, "26FR7GMGKH1PZ7FXJJ", False),
-                  (470, "(15,00)", True), (555, "(3,00)", True)])
+    p.ligne(
+        168,
+        [
+            (42, "Frais de dédouanement / Customs clearance", False),
+            (250, "26FR7GMGKH1PZ7FXJJ", False),
+            (470, "(15,00)", True),
+            (555, "(3,00)", True),
+        ],
+    )
     p.t(330, 200, "Total HT / Net credited")
     p.t(555, 200, "(15,00)", droite=True)
     p.t(330, 214, "TVA / VAT")

@@ -77,8 +77,13 @@ def _sans_forfait(ctx: ControlContext, cid: str) -> list[ResultatControle]:
     """Aucune déclaration ou aucune ligne de forfait : le contrôle ne s'applique pas (ou non vérifiable)."""
     if not ctx.declarations():
         return [ctx.non_verifiable(cid, RaisonCode.document_manquant)]
-    return [ctx.non_applicable(cid, RaisonCode.valeur_absente,
-                               details={"motif": "aucune ligne de forfait petits envois sur la déclaration"})]
+    return [
+        ctx.non_applicable(
+            cid,
+            RaisonCode.valeur_absente,
+            details={"motif": "aucune ligne de forfait petits envois sur la déclaration"},
+        )
+    ]
 
 
 def _taux(t: TaxationDeclaration) -> ValeurSourcee | None:
@@ -105,14 +110,23 @@ def _g1_ligne(ctx: ControlContext, dec: Document, i: int, t: TaxationDeclaration
     t_g1 = tol.t_ligne()
     ecart = montant - calcul
     commun = dict(
-        unite=unite, entrees=requis, attendu=arrondi_centime(calcul), constate=montant,
-        ecart=montant_arithmetique(montant, calcul), tolerance=t_g1, seuil_certitude=tol.s_calcul_declaration(),
-        documents=[dec.id], details=details,
+        unite=unite,
+        entrees=requis,
+        attendu=arrondi_centime(calcul),
+        constate=montant,
+        ecart=montant_arithmetique(montant, calcul),
+        tolerance=t_g1,
+        seuil_certitude=tol.s_calcul_declaration(),
+        documents=[dec.id],
+        details=details,
     )
     if abs(ecart) <= t_g1:
         return ctx.conforme("G1", **commun)
     classement = ctx.classify(
-        "G1", ecart=ecart, tolerance=t_g1, seuil_certitude=tol.s_calcul_declaration(),
+        "G1",
+        ecart=ecart,
+        tolerance=t_g1,
+        seuil_certitude=tol.s_calcul_declaration(),
         valeurs_cles=[t.base_quantite, t.taux, t.montant],
         confusion=[
             Confusion(t.montant, accepte=lambda v: abs(v - calcul) <= t_g1),
@@ -128,10 +142,18 @@ def _g1_ligne(ctx: ControlContext, dec: Document, i: int, t: TaxationDeclaration
         f"montant unitaire imprimé ({calcul_txt})."
     )
     return ctx.constat(
-        "G1", classement, libelle=libelle, prochaine_action=ACTION_G_CALCUL,
-        montant=montant_arithmetique(montant, calcul), composante=Composante.forfait_petits_envois,
-        preuves=[preuve(t.base_quantite, RolePreuve.operande), preuve(t.taux, RolePreuve.operande),
-                 preuve(t.montant, RolePreuve.valeur_b), preuve(None, RolePreuve.valeur_a, calcul=calcul_txt)],
+        "G1",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_G_CALCUL,
+        montant=montant_arithmetique(montant, calcul),
+        composante=Composante.forfait_petits_envois,
+        preuves=[
+            preuve(t.base_quantite, RolePreuve.operande),
+            preuve(t.taux, RolePreuve.operande),
+            preuve(t.montant, RolePreuve.valeur_b),
+            preuve(None, RolePreuve.valeur_a, calcul=calcul_txt),
+        ],
         **commun,
     )
 
@@ -170,7 +192,9 @@ def _g2_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     details: dict = {"declaration_id": dec.id}
     base = _base_declaree(ctx, dec)
     if base is None:
-        return ctx.non_verifiable("G2", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "G2", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     v_base, bases = base
     raisons: list[RaisonCode] = []
     if ctx.utilisable(c.nombre_articles) and aides.entier(c.nombre_articles) is not None:
@@ -182,29 +206,48 @@ def _g2_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
         n, v_n, source = Decimal(len(c.articles)), None, "blocs_articles"
         raisons.append(RaisonCode.valeur_absente)
     else:
-        return ctx.non_verifiable("G2", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "G2", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     ecart = v_base - n
     forfaits = _forfaits(ctx, dec)
     taux_vals = [t.taux for _, t in forfaits]
     taux_unique = {num(v) for v in taux_vals if aides.utilisable_num(ctx, v)}
-    taux = taux_unique.pop() if len(taux_unique) == 1 and all(aides.utilisable_num(ctx, v) for v in taux_vals) else None
+    taux = (
+        taux_unique.pop()
+        if len(taux_unique) == 1 and all(aides.utilisable_num(ctx, v) for v in taux_vals)
+        else None
+    )
     montant = arrondi_centime(ecart * taux) if taux is not None else None
     commun = dict(
-        unite=unite, entrees={"base_quantite": bases[0], **({"nombre_articles": v_n} if v_n else {})},
-        attendu=n, constate=v_base, ecart=ecart, tolerance=ZERO, seuil_certitude=ZERO, documents=[dec.id],
+        unite=unite,
+        entrees={"base_quantite": bases[0], **({"nombre_articles": v_n} if v_n else {})},
+        attendu=n,
+        constate=v_base,
+        ecart=ecart,
+        tolerance=ZERO,
+        seuil_certitude=ZERO,
+        documents=[dec.id],
         details={**details, "source_nombre_articles": source},
     )
     if ecart == 0:
         return ctx.conforme("G2", **commun)
     cles = [*bases, *([v_n] if v_n is not None else [])]
     classement = ctx.classify(
-        "G2", ecart=ecart, tolerance=ZERO, seuil_certitude=ZERO, valeurs_cles=cles,
+        "G2",
+        ecart=ecart,
+        tolerance=ZERO,
+        seuil_certitude=ZERO,
+        valeurs_cles=cles,
         confusion=[Confusion(b, accepte=lambda v, b=b: v_base - (num(b) or ZERO) + v == n) for b in bases]
         + ([Confusion(v_n, accepte=lambda v: v == v_base)] if v_n is not None else []),
         raisons_supplementaires=raisons,
     )
-    ref_n = (f"le nombre d'articles imprimé ({format_nombre(n)})" if v_n is not None
-             else f"le nombre de blocs articles lus ({format_nombre(n)})")
+    ref_n = (
+        f"le nombre d'articles imprimé ({format_nombre(n)})"
+        if v_n is not None
+        else f"le nombre de blocs articles lus ({format_nombre(n)})"
+    )
     libelle = (
         f"Sur {aides.ref_document(dec, bases[0])}, la base imprimée de la ligne de forfait petits envois "
         f"({format_nombre(v_base)} articles) diffère de {ref_n}."
@@ -215,11 +258,20 @@ def _g2_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
             f"{format_montant(montant, 'EUR')}."
         )
     preuves = [preuve(b, RolePreuve.valeur_b) for b in bases]
-    preuves.append(preuve(v_n, RolePreuve.valeur_a) if v_n is not None
-                   else preuve(None, RolePreuve.valeur_a, calcul=f"{len(c.articles)} blocs articles lus"))
+    preuves.append(
+        preuve(v_n, RolePreuve.valeur_a)
+        if v_n is not None
+        else preuve(None, RolePreuve.valeur_a, calcul=f"{len(c.articles)} blocs articles lus")
+    )
     return ctx.constat(
-        "G2", classement, libelle=libelle, prochaine_action=ACTION_G_CALCUL, montant=montant,
-        composante=Composante.forfait_petits_envois, preuves=preuves, **commun,
+        "G2",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_G_CALCUL,
+        montant=montant,
+        composante=Composante.forfait_petits_envois,
+        preuves=preuves,
+        **commun,
     )
 
 
@@ -245,34 +297,56 @@ def _g3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     details: dict = {"declaration_id": dec.id}
     base = _base_declaree(ctx, dec)
     if base is None:
-        return ctx.non_verifiable("G3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "G3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     v_base, bases = base
     codes = [a.code_marchandise for a in c.articles]
     if not codes or any(not ctx.utilisable(v) for v in codes):
-        return ctx.non_verifiable("G3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "G3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     chiffres = [re.sub(r"\D", "", v.valeur or "") for v in codes if v is not None]
     if any(len(x) < 6 for x in chiffres):
-        return ctx.non_verifiable("G3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "G3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     n_complet = len(set(chiffres))
     n_sh6 = len({x[:6] for x in chiffres})
     commun = dict(
-        unite=unite, entrees={"base_quantite": bases[0]}, attendu=f"{n_complet}|{n_sh6}", constate=v_base,
-        documents=[dec.id], details={**details, "codes_distincts": n_complet, "codes_distincts_6": n_sh6},
+        unite=unite,
+        entrees={"base_quantite": bases[0]},
+        attendu=f"{n_complet}|{n_sh6}",
+        constate=v_base,
+        documents=[dec.id],
+        details={**details, "codes_distincts": n_complet, "codes_distincts_6": n_sh6},
     )
     if v_base in (Decimal(n_complet), Decimal(n_sh6)):
         return ctx.conforme("G3", **commun)
-    classement = ctx.classify("G3", ecart=None, tolerance=None, seuil_certitude=None,
-                              valeurs_cles=[*bases, *(v for v in codes if v is not None)], renvoi=True)
+    classement = ctx.classify(
+        "G3",
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=[*bases, *(v for v in codes if v is not None)],
+        renvoi=True,
+    )
     libelle = (
         f"Sur {aides.ref_document(dec, bases[0])}, la base imprimée de la ligne de forfait petits envois "
         f"({format_nombre(v_base)}) diffère du nombre de codes marchandise distincts imprimés sur les articles "
         f"({n_complet} en code complet, {n_sh6} à 6 chiffres)."
     )
     return ctx.constat(
-        "G3", classement, libelle=libelle, prochaine_action=ACTION_G_RENVOI, renvoi=True,
+        "G3",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_G_RENVOI,
+        renvoi=True,
         composante=Composante.forfait_petits_envois,
-        preuves=[*(preuve(b, RolePreuve.valeur_b) for b in bases),
-                 *(preuve(v, RolePreuve.contexte) for v in codes if v is not None)],
+        preuves=[
+            *(preuve(b, RolePreuve.valeur_b) for b in bases),
+            *(preuve(v, RolePreuve.contexte) for v in codes if v is not None),
+        ],
         **commun,
     )
 
@@ -302,9 +376,9 @@ def _a_droits_hors_forfait(ctx: ControlContext, decs: list[Document]) -> bool:
     return False
 
 
-def _lignes_g4(ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours, decs: list[Document]) -> tuple[
-    list[int], NatureLigne
-]:
+def _lignes_g4(
+    ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours, decs: list[Document]
+) -> tuple[list[int], NatureLigne]:
     """Lignes de forfait refacturées du groupe ; à défaut, lignes de droits si la déclaration ne porte
     que ce droit (§16 G4)."""
     lignes = [i for i in groupe.lignes if ft.ft.lignes[i].nature is NatureLigne.debours_forfait_petits_envois]
@@ -326,7 +400,10 @@ def _credit_impute(
         return ZERO
     emetteur = aides.emetteur_de(ctx, ft)
     ecart = EcartImputable(
-        id=unite, composante=Composante.forfait_petits_envois, reste=arrondi_centime(brut), emetteur=emetteur,
+        id=unite,
+        composante=Composante.forfait_petits_envois,
+        reste=arrondi_centime(brut),
+        emetteur=emetteur,
         facture_ref=aides.texte(ft.ft.numero),
         mrn=aides.texte(decs[0].dec.mrn) if len(decs) == 1 else None,
     )
@@ -335,8 +412,9 @@ def _credit_impute(
     return imputer_avoirs(lignes, [ecart], t_debours=ctx.tol.t_debours(nb)).credit_pour(unite)
 
 
-def _g4_unite(ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours,
-              decs: list[Document]) -> ResultatControle | None:
+def _g4_unite(
+    ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours, decs: list[Document]
+) -> ResultatControle | None:
     unite = cle_unite(ft=ft.id, dec=[d.id for d in decs])
     doc_ids = [ft.id, *(d.id for d in decs)]
     details: dict = {"facture_transitaire_id": ft.id, "declarations": [d.id for d in decs]}
@@ -345,12 +423,16 @@ def _g4_unite(ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours,
         return None
     liq = aides.liquide(ctx, taxes)
     if liq is None:
-        return ctx.non_verifiable("G4", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details)
+        return ctx.non_verifiable(
+            "G4", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details
+        )
     v_liq, vals_liq = liq
     lignes, nature = _lignes_g4(ctx, ft, groupe, decs)
     vals_ref = [aides.montant_ht(ft.ft.lignes[i]) for i in lignes]
     if any(not aides.utilisable_num(ctx, v) for v in vals_ref):
-        return ctx.non_verifiable("G4", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details)
+        return ctx.non_verifiable(
+            "G4", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details
+        )
     refacture = sum((num(v) or ZERO for v in vals_ref), ZERO)
     brut = refacture - v_liq
     nb = sum(aides.nb_articles(d) for d in decs)
@@ -362,15 +444,26 @@ def _g4_unite(ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours,
     if credit > 0:
         details["ecart_brut_avant_avoirs"] = str(arrondi_centime(brut))
     commun = dict(
-        unite=unite, entrees={f"refacture_{k}": v for k, v in enumerate(vals_ref) if v is not None},
-        attendu=arrondi_centime(v_liq), constate=arrondi_centime(refacture), ecart=arrondi_centime(net),
-        tolerance=t_deb, seuil_certitude=s_deb, documents=doc_ids, details=details,
+        unite=unite,
+        entrees={f"refacture_{k}": v for k, v in enumerate(vals_ref) if v is not None},
+        attendu=arrondi_centime(v_liq),
+        constate=arrondi_centime(refacture),
+        ecart=arrondi_centime(net),
+        tolerance=t_deb,
+        seuil_certitude=s_deb,
+        documents=doc_ids,
+        details=details,
     )
     if abs(net) <= t_deb:
         return ctx.conforme("G4", **commun)
     valeurs_cles = [*(v for v in vals_ref if v is not None), *vals_liq]
     classement = ctx.classify(
-        "G4", ecart=net, tolerance=t_deb, seuil_certitude=s_deb, valeurs_cles=valeurs_cles, montant=net,
+        "G4",
+        ecart=net,
+        tolerance=t_deb,
+        seuil_certitude=s_deb,
+        valeurs_cles=valeurs_cles,
+        montant=net,
         confusion=[Confusion(v, autre=num(v) - net, tolerance=t_deb) for v in vals_ref if v is not None],
     )
     mrns = ", ".join(aides.texte(d.dec.mrn) or "?" for d in decs)
@@ -383,11 +476,17 @@ def _g4_unite(ctx: ControlContext, ft: Document, groupe: aides.GroupeDebours,
     if credit > 0:
         libelle += f" Un avoir de {format_montant(credit, 'EUR')} déjà reçu est déduit de l'écart."
     return ctx.constat(
-        "G4", classement, libelle=libelle, prochaine_action=ACTION_G_REFACTURATION,
-        montant=montant_recouvrable(refacture - credit, v_liq), montant_brut=montant_recouvrable(refacture, v_liq),
+        "G4",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_G_REFACTURATION,
+        montant=montant_recouvrable(refacture - credit, v_liq),
+        montant_brut=montant_recouvrable(refacture, v_liq),
         composante=Composante.forfait_petits_envois,
-        preuves=[*(preuve(v, RolePreuve.valeur_b) for v in vals_ref),
-                 *(preuve(v, RolePreuve.valeur_a) for v in vals_liq)],
+        preuves=[
+            *(preuve(v, RolePreuve.valeur_b) for v in vals_ref),
+            *(preuve(v, RolePreuve.valeur_a) for v in vals_liq),
+        ],
         **commun,
     )
 
@@ -414,8 +513,13 @@ def g4_forfait_refacture(ctx: ControlContext) -> list[ResultatControle]:
             r = _g4_unite(ctx, ft, g, concernees)
             if r is not None:
                 out.append(r)
-    return out or [ctx.non_applicable("G4", RaisonCode.valeur_absente,
-                                      details={"motif": "aucun débours rattaché à une déclaration avec forfait"})]
+    return out or [
+        ctx.non_applicable(
+            "G4",
+            RaisonCode.valeur_absente,
+            details={"motif": "aucun débours rattaché à une déclaration avec forfait"},
+        )
+    ]
 
 
 # =====================================================================================================
@@ -431,9 +535,13 @@ def _g5_ligne(ctx: ControlContext, ft: Document, i: int, decs: list[Document]) -
     bases = [_base_declaree(ctx, d) for d in decs]
     for v in (ln.quantite, ln.prix_unitaire):
         if not aides.utilisable_num(ctx, v):
-            return ctx.non_verifiable("G5", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details)
+            return ctx.non_verifiable(
+                "G5", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details
+            )
     if any(b is None for b in bases):
-        return ctx.non_verifiable("G5", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details)
+        return ctx.non_verifiable(
+            "G5", RaisonCode.valeur_absente, unite=unite, documents=doc_ids, details=details
+        )
     assert ln.quantite is not None and ln.prix_unitaire is not None
     n_tr, pu = num(ln.quantite) or ZERO, num(ln.prix_unitaire) or ZERO
     base_dec = sum((b[0] for b in bases if b is not None), ZERO)
@@ -442,15 +550,25 @@ def _g5_ligne(ctx: ControlContext, ft: Document, i: int, decs: list[Document]) -
     tol = ctx.tol
     s_deb = tol.s_debours()
     commun = dict(
-        unite=unite, entrees={"quantite": ln.quantite, "prix_unitaire": ln.prix_unitaire},
-        attendu=base_dec, constate=n_tr, ecart=arrondi_centime(ecart), tolerance=ZERO, seuil_certitude=s_deb,
-        documents=doc_ids, details=details,
+        unite=unite,
+        entrees={"quantite": ln.quantite, "prix_unitaire": ln.prix_unitaire},
+        attendu=base_dec,
+        constate=n_tr,
+        ecart=arrondi_centime(ecart),
+        tolerance=ZERO,
+        seuil_certitude=s_deb,
+        documents=doc_ids,
+        details=details,
     )
     if n_tr == base_dec:
         return ctx.conforme("G5", **commun)
     classement = ctx.classify(
-        "G5", ecart=ecart, tolerance=ZERO, seuil_certitude=s_deb,
-        valeurs_cles=[ln.quantite, *vals_base], montant=ecart,
+        "G5",
+        ecart=ecart,
+        tolerance=ZERO,
+        seuil_certitude=s_deb,
+        valeurs_cles=[ln.quantite, *vals_base],
+        montant=ecart,
         confusion=[Confusion(ln.quantite, accepte=lambda v: v == base_dec)],
     )
     libelle = (
@@ -460,10 +578,17 @@ def _g5_ligne(ctx: ControlContext, ft: Document, i: int, decs: list[Document]) -
         f"{format_montant(arrondi_centime(ecart), 'EUR')}."
     )
     return ctx.constat(
-        "G5", classement, libelle=libelle, prochaine_action=ACTION_G_REFACTURATION, montant=ecart,
+        "G5",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_G_REFACTURATION,
+        montant=ecart,
         composante=Composante.forfait_petits_envois,
-        preuves=[preuve(ln.quantite, RolePreuve.valeur_b), preuve(ln.prix_unitaire, RolePreuve.operande),
-                 *(preuve(v, RolePreuve.valeur_a) for v in vals_base)],
+        preuves=[
+            preuve(ln.quantite, RolePreuve.valeur_b),
+            preuve(ln.prix_unitaire, RolePreuve.operande),
+            *(preuve(v, RolePreuve.valeur_a) for v in vals_base),
+        ],
         **commun,
     )
 
@@ -491,8 +616,13 @@ def g5_base_refacturation(ctx: ControlContext) -> list[ResultatControle]:
                 if ft.ft.lignes[i].quantite is None:
                     continue  # aucune base imprimée sur la ligne : G5 ne s'applique pas
                 out.append(_g5_ligne(ctx, ft, i, concernees))
-    return out or [ctx.non_applicable("G5", RaisonCode.valeur_absente,
-                                      details={"motif": "aucune base imprimée sur une ligne de forfait refacturé"})]
+    return out or [
+        ctx.non_applicable(
+            "G5",
+            RaisonCode.valeur_absente,
+            details={"motif": "aucune base imprimée sur une ligne de forfait refacturé"},
+        )
+    ]
 
 
 # =====================================================================================================
@@ -504,8 +634,12 @@ def _g6_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     p = ctx.parametres_petits_envois
     c = dec.dec
     unite = cle_unite(dec=dec.id)
-    details: dict = {"declaration_id": dec.id, "date_debut": p.date_debut.isoformat(),
-                     "date_fin": p.date_fin.isoformat(), "seuil_eur": str(p.seuil_valeur_eur)}
+    details: dict = {
+        "declaration_id": dec.id,
+        "date_debut": p.date_debut.isoformat(),
+        "date_fin": p.date_fin.isoformat(),
+        "seuil_eur": str(p.seuil_valeur_eur),
+    }
     signaux: list[str] = []
     preuves = []
     inconnu = False
@@ -533,7 +667,11 @@ def _g6_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     if valeur_eur is None:
         inconnu = True
     elif valeur_eur > p.seuil_valeur_eur:
-        conv = "" if devise == "EUR" else f", soit {format_montant(arrondi_centime(valeur_eur), 'EUR')} au taux imprimé"
+        conv = (
+            ""
+            if devise == "EUR"
+            else f", soit {format_montant(arrondi_centime(valeur_eur), 'EUR')} au taux imprimé"
+        )
         signaux.append(
             f"le montant total facturé imprimé ({format_montant(montant or ZERO, devise)}{conv}) dépasse le seuil "
             f"configuré de {format_montant(p.seuil_valeur_eur, 'EUR')}"
@@ -548,13 +686,24 @@ def _g6_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
         return ctx.conforme("G6", **commun)
     forfait = _forfaits(ctx, dec)[0][1]
     preuves.insert(0, preuve(forfait.montant or forfait.type_taxe, RolePreuve.contexte))
-    classement = ctx.classify("G6", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[], renvoi=True)
+    classement = ctx.classify(
+        "G6", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[], renvoi=True
+    )
     libelle = (
         f"{aides.maj(aides.ref_document(dec))} porte une ligne de forfait petits envois et "
-        + " ; ".join(signaux) + "."
+        + " ; ".join(signaux)
+        + "."
     )
-    return ctx.constat("G6", classement, libelle=libelle, prochaine_action=ACTION_G_RENVOI, renvoi=True,
-                       composante=Composante.forfait_petits_envois, preuves=preuves, **commun)
+    return ctx.constat(
+        "G6",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_G_RENVOI,
+        renvoi=True,
+        composante=Composante.forfait_petits_envois,
+        preuves=preuves,
+        **commun,
+    )
 
 
 @control("G6")

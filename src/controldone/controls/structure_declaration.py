@@ -71,7 +71,9 @@ class _Tol(_TolSomme, Protocol):
 
 
 def code_taxe(t: TaxationDeclaration) -> str:
-    return (t.type_taxe.valeur or "").strip().upper() if t.type_taxe is not None and t.type_taxe.valeur else ""
+    return (
+        (t.type_taxe.valeur or "").strip().upper() if t.type_taxe is not None and t.type_taxe.valeur else ""
+    )
 
 
 def montant_taxe(t: TaxationDeclaration) -> ValeurSourcee | None:
@@ -181,7 +183,9 @@ def _articles_attendus(dec: Document) -> set[str]:
             n = nb.entier()
         except ValueError:
             n = 0
-        numeriques = all(x.isdigit() for x in attendus | {numero_article(t.article) for t in c.taxations} - {""})
+        numeriques = all(
+            x.isdigit() for x in attendus | {numero_article(t.article) for t in c.taxations} - {""}
+        )
         if 0 < n <= 999 and numeriques:
             attendus |= {str(k) for k in range(1, n + 1)}
     return attendus
@@ -211,7 +215,9 @@ def _ligne_coherente(t: TaxationDeclaration, num: Num, tol: _Tol) -> bool:
     return tol.taxe_ligne_concorde(m, calcul)
 
 
-def _code_complet_par_total(dec: Document, code: str, lignes: Sequence[int], num: Num, tol: _TolSomme) -> bool:
+def _code_complet_par_total(
+    dec: Document, code: str, lignes: Sequence[int], num: Num, tol: _TolSomme
+) -> bool:
     """Les lignes lues d'un code sont complètes : le total imprimé du code (``totaux_par_code``) est retrouvé par
     leur somme (D-3101)."""
     taxations = dec.dec.taxations
@@ -230,7 +236,12 @@ def _code_complet_par_total(dec: Document, code: str, lignes: Sequence[int], num
 
 
 def motifs_structure_taxes(
-    dec: Document, lignes: Sequence[int], num: Num, tol: _Tol, *, i_total: int | None = None,
+    dec: Document,
+    lignes: Sequence[int],
+    num: Num,
+    tol: _Tol,
+    *,
+    i_total: int | None = None,
     ecart: Decimal | None = None,
 ) -> list[str]:
     """Motifs pour lesquels la somme des ``lignes`` (indices de taxations) contre un total ne fonde pas un écart
@@ -249,14 +260,21 @@ def motifs_structure_taxes(
                 motifs.append(f"article(s) sans ligne de taxe lue : {', '.join(sorted(manquants))}")
             if ecart is not None and ecart > 0:
                 attendus = numeros | _articles_attendus(dec)
-                codes = {code_taxe(taxations[i]) for i in lignes if numero_article(taxations[i].article)} - {""}
+                codes = {code_taxe(taxations[i]) for i in lignes if numero_article(taxations[i].article)} - {
+                    ""
+                }
                 for code in sorted(codes):
-                    du_code = {numero_article(taxations[i].article) for i in lignes
-                               if code_taxe(taxations[i]) == code} - {""}
+                    du_code = {
+                        numero_article(taxations[i].article)
+                        for i in lignes
+                        if code_taxe(taxations[i]) == code
+                    } - {""}
                     sans = attendus - du_code
                     if sans and not _code_complet_par_total(dec, code, lignes, num, tol):
-                        motifs.append(f"le code {code} n'a pas de ligne lue pour l'article {', '.join(sorted(sans))} : "
-                                      "une ligne non lue peut expliquer l'écart")
+                        motifs.append(
+                            f"le code {code} n'a pas de ligne lue pour l'article {', '.join(sorted(sans))} : "
+                            "une ligne non lue peut expliquer l'écart"
+                        )
         else:
             du_code = {numero_article(taxations[i].article) for i in lignes} - {""}
             manquants = (numeros | _articles_attendus(dec)) - du_code
@@ -272,8 +290,11 @@ def motifs_structure_taxes(
         k = numero_article(t.article)
         if k:
             par_article[k] = par_article.get(k, 0) + 1
-    sans_code = [t for t in taxations if t.type_taxe is None or not (t.type_taxe.valeur or "").strip()
-                 or not t.type_taxe.est_lisible]
+    sans_code = [
+        t
+        for t in taxations
+        if t.type_taxe is None or not (t.type_taxe.valeur or "").strip() or not t.type_taxe.est_lisible
+    ]
     if len(par_article) >= 2 and len(set(par_article.values())) > 1 and sans_code:
         motifs.append("articles au nombre de lignes de taxe inégal et ligne sans code de taxe lisible")
     incoherentes = [i for i in lignes if not _ligne_coherente(taxations[i], num, tol)]
@@ -291,7 +312,14 @@ def motifs_structure_taxes(
 
 
 def motifs_structure_total_code(
-    dec: Document, code: str, lignes: Sequence[int], num: Num, tol: _Tol, *, ecart: Decimal, complet: bool = False,
+    dec: Document,
+    code: str,
+    lignes: Sequence[int],
+    num: Num,
+    tol: _Tol,
+    *,
+    ecart: Decimal,
+    complet: bool = False,
 ) -> list[str]:
     """Motifs pour lesquels Σ des lignes d'un code contre le total **imprimé** de ce code
     (``ChampsDeclaration.totaux_par_code``, D-3101) ne fonde pas un écart certain : ceux du total de la
@@ -302,14 +330,19 @@ def motifs_structure_total_code(
     lues (Σ des lignes = total des droits et taxes) ; une ligne absente vaut alors zéro et n'explique rien."""
     c = dec.dec
     taxations = c.taxations
-    motifs = [m for m in motifs_structure_taxes(dec, lignes, num, tol)
-              if not (complet and m.startswith("article(s) sans ligne"))]
+    motifs = [
+        m
+        for m in motifs_structure_taxes(dec, lignes, num, tol)
+        if not (complet and m.startswith("article(s) sans ligne"))
+    ]
     numeros = {numero_article(t.article) for t in taxations} - {""}
     if numeros and ecart > 0 and not complet:
         du_code = {numero_article(taxations[i].article) for i in lignes} - {""}
         manquants = (numeros | _articles_attendus(dec)) - du_code
         if manquants:
-            motifs.append(f"le code {code} n'a pas de ligne lue pour l'article {', '.join(sorted(manquants))}")
+            motifs.append(
+                f"le code {code} n'a pas de ligne lue pour l'article {', '.join(sorted(manquants))}"
+            )
     totaux = [num(t.montant) for t in c.totaux_par_code]
     if totaux and all(x is not None for x in totaux):
         s_codes = sum((x for x in totaux if x is not None), _ZERO)
@@ -320,8 +353,10 @@ def motifs_structure_total_code(
                 continue
             t = tol.t_somme(len(taxations))
             if abs(vt - s_codes) <= tol.t_somme(len(totaux)) and all(abs(vt - x) > t for x in s_lignes):
-                motifs.append("le total des droits et taxes imprimé reprend la somme des totaux par code, pas celle "
-                              "des lignes lues")
+                motifs.append(
+                    "le total des droits et taxes imprimé reprend la somme des totaux par code, pas celle "
+                    "des lignes lues"
+                )
                 break
     return motifs
 

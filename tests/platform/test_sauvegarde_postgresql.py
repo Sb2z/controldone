@@ -21,15 +21,25 @@ from controldone.storage import ErreurIntegrite
 from controldone.storage import sauvegarde as sv
 from controldone.storage.controle_restauration import controler
 
-URL_FICTIVE = "postgresql+pg8000://cd_fictif:MOTDEPASSE-FICTIF@db-fictive.test:5433/controldone?sslmode=require"
+URL_FICTIVE = (
+    "postgresql+pg8000://cd_fictif:MOTDEPASSE-FICTIF@db-fictive.test:5433/controldone?sslmode=require"
+)
 
 
 def _archive_factice(tmp_path: Path, cles: list[bytes], contenu: bytes) -> Path:
     def preparer(tmp: Path):
         dump = tmp / "controldone.dump"
         dump.write_bytes(contenu)
-        return dump, "base/controldone.dump", {"moteur": "postgresql", "integrite": "ok", "tables": {"tenants": 2},
-                                               "audit": {"entrees": 0, "tete": None}}
+        return (
+            dump,
+            "base/controldone.dump",
+            {
+                "moteur": "postgresql",
+                "integrite": "ok",
+                "tables": {"tenants": 2},
+                "audit": {"entrees": 0, "tete": None},
+            },
+        )
 
     coffre = tmp_path / "coffre" / "cli_a" / "fichiers"
     coffre.mkdir(parents=True)
@@ -40,7 +50,11 @@ def _archive_factice(tmp_path: Path, cles: list[bytes], contenu: bytes) -> Path:
 def test_env_libpq_sans_mot_de_passe_en_argument():
     env = sv._env_libpq(URL_FICTIVE)
     assert (env["PGHOST"], env["PGPORT"], env["PGUSER"], env["PGDATABASE"]) == (
-        "db-fictive.test", "5433", "cd_fictif", "controldone")
+        "db-fictive.test",
+        "5433",
+        "cd_fictif",
+        "controldone",
+    )
     assert env["PGPASSWORD"] == "MOTDEPASSE-FICTIF" and env["PGSSLMODE"] == "require"
 
 
@@ -55,7 +69,9 @@ def test_archive_avec_dump_verifiee_et_restauree(tmp_path, monkeypatch):
     def absent(nom):
         raise sv.OutilAbsent(nom)
 
-    monkeypatch.setattr(sv, "_outil", absent)  # pas de pg_restore : relecture du dump sautée, fichiers restaurés
+    monkeypatch.setattr(
+        sv, "_outil", absent
+    )  # pas de pg_restore : relecture du dump sautée, fichiers restaurés
     cible = sv.restaurer(archive, tmp_path / "r", cles)
     assert (cible / "base" / "controldone.dump").read_bytes().startswith(b"PGDMP")
     rapport = controler(cible, cles)

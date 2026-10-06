@@ -49,8 +49,11 @@ class RapportControle:
             f"coffre              : {self.objets_coffre} objets déchiffrés ({self.octets_coffre} octets en clair)",
             f"références          : {self.references} fichiers et textes référencés par la base",
             f"traces d'envoi      : {self.traces_dechiffrees} déchiffrées"
-            + (f", {self.traces_en_clair} en clair (antérieures à D-4106 : chiffrées par « controldone migrer »)"
-               if self.traces_en_clair else ""),
+            + (
+                f", {self.traces_en_clair} en clair (antérieures à D-4106 : chiffrées par « controldone migrer »)"
+                if self.traces_en_clair
+                else ""
+            ),
             "résultat            : " + ("CONFORME" if self.ok else "EN ÉCHEC"),
         ]
         return sortie + [f"  - {p}" for p in self.problemes]
@@ -63,11 +66,19 @@ def _references(base: Path) -> list[tuple[str, str, str]]:
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         refs: list[tuple[str, str, str]] = []
         if "fichiers" in tables:
-            refs += [(t, "fichiers", r) for t, r in con.execute(
-                "SELECT tenant_id, coffre_ref FROM fichiers WHERE coffre_ref IS NOT NULL AND purge_le IS NULL")]
+            refs += [
+                (t, "fichiers", r)
+                for t, r in con.execute(
+                    "SELECT tenant_id, coffre_ref FROM fichiers WHERE coffre_ref IS NOT NULL AND purge_le IS NULL"
+                )
+            ]
         if "pages" in tables:
-            refs += [(t, "textes", r) for t, r in con.execute(
-                "SELECT tenant_id, texte_ref FROM pages WHERE texte_ref IS NOT NULL AND purge_le IS NULL")]
+            refs += [
+                (t, "textes", r)
+                for t, r in con.execute(
+                    "SELECT tenant_id, texte_ref FROM pages WHERE texte_ref IS NOT NULL AND purge_le IS NULL"
+                )
+            ]
     finally:
         con.close()
     return refs
@@ -84,11 +95,23 @@ def _references_sql(url: str) -> list[tuple[str, str, str]]:
         refs: list[tuple[str, str, str]] = []
         with moteur.connect() as con:
             if "fichiers" in tables:
-                refs += [(t, "fichiers", r) for t, r in con.execute(text(
-                    "SELECT tenant_id, coffre_ref FROM fichiers WHERE coffre_ref IS NOT NULL AND purge_le IS NULL"))]
+                refs += [
+                    (t, "fichiers", r)
+                    for t, r in con.execute(
+                        text(
+                            "SELECT tenant_id, coffre_ref FROM fichiers WHERE coffre_ref IS NOT NULL AND purge_le IS NULL"
+                        )
+                    )
+                ]
             if "pages" in tables:
-                refs += [(t, "textes", r) for t, r in con.execute(text(
-                    "SELECT tenant_id, texte_ref FROM pages WHERE texte_ref IS NOT NULL AND purge_le IS NULL"))]
+                refs += [
+                    (t, "textes", r)
+                    for t, r in con.execute(
+                        text(
+                            "SELECT tenant_id, texte_ref FROM pages WHERE texte_ref IS NOT NULL AND purge_le IS NULL"
+                        )
+                    )
+                ]
     finally:
         moteur.dispose()
     return refs
@@ -108,8 +131,10 @@ def controler(cible: Path | str, cles: Any, *, base_url: str | None = None) -> R
     dump = cible / "base" / "controldone.dump"
     if not base.is_file() and dump.is_file():
         if not base_url:
-            rapport.problemes.append("base PostgreSQL non chargée : indiquer l'URL de la base où le dump a été "
-                                     "restauré (--base-cible / --base-url)")
+            rapport.problemes.append(
+                "base PostgreSQL non chargée : indiquer l'URL de la base où le dump a été "
+                "restauré (--base-cible / --base-url)"
+            )
             return rapport
     elif not base.is_file():
         rapport.problemes.append("base absente")
@@ -119,7 +144,9 @@ def controler(cible: Path | str, cles: Any, *, base_url: str | None = None) -> R
     if (cible / MANIFESTE).is_file():
         manifeste = json.loads((cible / MANIFESTE).read_text(encoding="utf-8"))
     else:
-        rapport.problemes.append("manifeste absent : comptes de lignes non comparables (archive antérieure à D-3301)")
+        rapport.problemes.append(
+            "manifeste absent : comptes de lignes non comparables (archive antérieure à D-3301)"
+        )
 
     try:
         etat = instantane_postgresql(base_url) if postgresql else instantane_base(base)  # type: ignore[arg-type]
@@ -150,7 +177,9 @@ def controler(cible: Path | str, cles: Any, *, base_url: str | None = None) -> R
     rapport.problemes += [f"audit, entrée {a.id} : {a.motif}" for a in anomalies[:20]]
     audit_attendu = attendu.get("audit") or {}
     if audit_attendu and (audit_attendu.get("entrees"), audit_attendu.get("tete")) != (
-            etat["audit"]["entrees"], etat["audit"]["tete"]):
+        etat["audit"]["entrees"],
+        etat["audit"]["tete"],
+    ):
         rapport.problemes.append("journal d'audit différent de l'instantané (nombre d'entrées ou tête)")
 
     # coffre : chaque objet se déchiffre et correspond à sa référence
@@ -168,7 +197,9 @@ def controler(cible: Path | str, cles: Any, *, base_url: str | None = None) -> R
     refs = _references_sql(base_url) if postgresql else _references(base)  # type: ignore[arg-type]
     rapport.references = len(refs)
     manquants = sorted(set(refs) - presents)
-    rapport.problemes += [f"contenu référencé absent du coffre : {c}/{e}/{s[:12]}…" for c, e, s in manquants[:20]]
+    rapport.problemes += [
+        f"contenu référencé absent du coffre : {c}/{e}/{s[:12]}…" for c, e, s in manquants[:20]
+    ]
     if len(manquants) > 20:
         rapport.problemes.append(f"… et {len(manquants) - 20} autres contenus absents")
 

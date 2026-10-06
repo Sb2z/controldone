@@ -52,7 +52,9 @@ TRANSITIONS_RECLAMATION: dict[StatutReclamation, frozenset[StatutReclamation]] =
     # Un avoir peut arriver avant que le client ne déclare l'envoi (relance orale…).
     S.valide: frozenset({S.envoyee, S.partiellement_credite, S.credite, S.abandonnee}),
     S.envoyee: frozenset({S.partiellement_credite, S.credite, S.conteste, S.clos, S.abandonnee}),
-    S.partiellement_credite: frozenset({S.partiellement_credite, S.credite, S.conteste, S.clos, S.abandonnee}),
+    S.partiellement_credite: frozenset(
+        {S.partiellement_credite, S.credite, S.conteste, S.clos, S.abandonnee}
+    ),
     S.conteste: frozenset({S.envoyee, S.partiellement_credite, S.credite, S.clos, S.abandonnee}),
     S.credite: frozenset({S.clos}),
     S.clos: frozenset(),
@@ -73,7 +75,9 @@ def exige_motif(de: StatutReclamation, vers: StatutReclamation) -> bool:
     return vers is S.abandonnee or (vers is S.clos and de is not S.credite)
 
 
-def verifier_transition(de: StatutReclamation | str, vers: StatutReclamation | str, motif: str | None = None) -> None:
+def verifier_transition(
+    de: StatutReclamation | str, vers: StatutReclamation | str, motif: str | None = None
+) -> None:
     de, vers = StatutReclamation(de), StatutReclamation(vers)
     if vers not in TRANSITIONS_RECLAMATION[de]:
         raise TransitionReclamationInterdite(f"transition interdite : {de.value} -> {vers.value}")
@@ -81,7 +85,9 @@ def verifier_transition(de: StatutReclamation | str, vers: StatutReclamation | s
         raise TransitionReclamationInterdite(f"{de.value} -> {vers.value} exige un motif")
 
 
-def statut_depuis_ecarts(actuel: StatutReclamation | str, statuts_ecarts: Iterable[StatutEcart | str]) -> StatutReclamation:
+def statut_depuis_ecarts(
+    actuel: StatutReclamation | str, statuts_ecarts: Iterable[StatutEcart | str]
+) -> StatutReclamation:
     """Statut de la réclamation après une imputation d'avoir (§17.2) : ``credite`` si tous les écarts
     non abandonnés sont crédités, ``partiellement_credite`` si au moins un crédit est intervenu, sinon
     inchangé."""

@@ -53,20 +53,38 @@ def v_ft(chemin, valeur, *, conf=0.99, methode=Methode.texte_natif, **kw):
     return vs(f"facture_transitaire.{chemin}", valeur, document_id=FT, confiance=conf, methode=methode, **kw)
 
 
-def ligne(i, nature, montant, *, conf=0.99, methode=Methode.texte_natif, libelle=None, mrn=None, quantite=None,
-          prix=None, q_methode=Methode.texte_natif):
+def ligne(
+    i,
+    nature,
+    montant,
+    *,
+    conf=0.99,
+    methode=Methode.texte_natif,
+    libelle=None,
+    mrn=None,
+    quantite=None,
+    prix=None,
+    q_methode=Methode.texte_natif,
+):
     return _ligne(i, nature, montant, conf, methode, libelle, mrn, quantite, prix, q_methode)
 
 
 def _ligne(i, nature, montant, conf, methode, libelle, mrn, quantite, prix, q_methode):
     return LigneFactureTransitaire(
         nature=nature,
-        libelle=None if libelle == "" else v_ft(f"lignes[{i}].libelle", libelle or nature.value.replace("_", " ")),
+        libelle=None
+        if libelle == ""
+        else v_ft(f"lignes[{i}].libelle", libelle or nature.value.replace("_", " ")),
         montant_ht=v_ft(f"lignes[{i}].montant_ht", montant, conf=conf, methode=methode),
         mrn=v_ft(f"lignes[{i}].mrn", mrn) if mrn else None,
-        quantite=v_ft(f"lignes[{i}].quantite", quantite, methode=q_methode,
-                      **({"regle_derivation": "quantite_implicite"} if q_methode is Methode.derive else {}))
-        if quantite else None,
+        quantite=v_ft(
+            f"lignes[{i}].quantite",
+            quantite,
+            methode=q_methode,
+            **({"regle_derivation": "quantite_implicite"} if q_methode is Methode.derive else {}),
+        )
+        if quantite
+        else None,
         prix_unitaire=v_ft(f"lignes[{i}].prix_unitaire", prix) if prix else None,
     )
 
@@ -85,8 +103,9 @@ def ft(*lignes, total_ht=None, total_conf=0.99, qualite=QualiteTexte.ocr, mrns=(
 
 
 def ctx(docs, **kw):
-    return ControlContext.construire(dossier_pour(docs), docs, ProfilTolerances(id="tol_test"),
-                                     execution_id="exe_test", **kw)
+    return ControlContext.construire(
+        dossier_pour(docs), docs, ProfilTolerances(id="tol_test"), execution_id="exe_test", **kw
+    )
 
 
 # --- D-2303 : une lecture confirmée par une identité imprimée n'est pas « douteuse » ---------------------------
@@ -151,8 +170,13 @@ def test_lecture_improbable_conjonction_seulement():
 def test_b1_ocr_peu_sur_explique_par_confusion_non_verifiable():
     # base 100 × 10 % = 10,00 ; montant lu « 16,00 » (6 pour 0) à 0,80 : pas de constat
     did = "doc_dec_b1"
-    d = declaration(id=did, qualite=QualiteTexte.ocr, taxations=[
-        taxation(did, base="100.00", taux="10", montant="16.00", methode=Methode.ocr, confiance=0.8)])
+    d = declaration(
+        id=did,
+        qualite=QualiteTexte.ocr,
+        taxations=[
+            taxation(did, base="100.00", taux="10", montant="16.00", methode=Methode.ocr, confiance=0.8)
+        ],
+    )
     rs = [r for r in run_controls(ctx([d]), controles=["B1"]) if r.controle_id == "B1"]
     assert rs and all(r.constat is None for r in rs)
     nv = [r for r in rs if r.outcome is Outcome.non_verifiable]
@@ -164,8 +188,13 @@ def test_b1_ocr_peu_sur_explique_par_confusion_non_verifiable():
 
 
 def _alloc(src, ligne_, cible, methode=MethodeAllocation.prorata, montant=D("1")):
-    return Allocation(source_document_id=src, source_ligne=ligne_, cible_document_id=cible, methode=methode,
-                      montant_alloue=montant)
+    return Allocation(
+        source_document_id=src,
+        source_ligne=ligne_,
+        cible_document_id=cible,
+        methode=methode,
+        montant_alloue=montant,
+    )
 
 
 def _ctx_alloc(docs, allocations):
@@ -235,7 +264,11 @@ def test_fret_plus_assurance_moins_remise_explique_l_ecart():
     remise = vs("facture_commerciale.sous_totaux[2].montant", "112.80")
     pieds = [(fret, 1), (assu, 1), (remise, -1)]
     assert _explique_par_pied(pieds, D("-395.30"), D("0.05")) == [fret, assu, remise]
-    assert _explique_par_pied(pieds, D("-620.90"), D("0.05")) == [fret, assu, remise]  # lecture en valeur absolue
+    assert _explique_par_pied(pieds, D("-620.90"), D("0.05")) == [
+        fret,
+        assu,
+        remise,
+    ]  # lecture en valeur absolue
     assert _explique_par_pied(pieds, D("-200.00"), D("0.05")) == []
 
 
@@ -243,14 +276,23 @@ def test_fret_plus_assurance_moins_remise_explique_l_ecart():
 
 
 def _dec_articles(did, *, montants=(), brutes=(), total=None, brute_totale=None, n=3):
-    arts = [ArticleDeclaration(
-        numero_article=vs("declaration.articles[].numero_article", str(k + 1), document_id=did),
-        montant_facture_article=vs("declaration.articles[].montant_facture_article", m, document_id=did) if m else None,
-        masse_brute=vs("declaration.articles[].masse_brute", b, document_id=did) if b else None,
-    ) for k, (m, b) in enumerate(zip(montants or [None] * len(brutes), brutes or [None] * len(montants),
-                                     strict=True))]
-    champs = dict(articles=arts, nombre_articles=vs("declaration.nombre_articles", str(n), document_id=did),
-                  devise_facture=vs("declaration.devise_facture", "EUR", document_id=did))
+    arts = [
+        ArticleDeclaration(
+            numero_article=vs("declaration.articles[].numero_article", str(k + 1), document_id=did),
+            montant_facture_article=vs("declaration.articles[].montant_facture_article", m, document_id=did)
+            if m
+            else None,
+            masse_brute=vs("declaration.articles[].masse_brute", b, document_id=did) if b else None,
+        )
+        for k, (m, b) in enumerate(
+            zip(montants or [None] * len(brutes), brutes or [None] * len(montants), strict=True)
+        )
+    ]
+    champs = dict(
+        articles=arts,
+        nombre_articles=vs("declaration.nombre_articles", str(n), document_id=did),
+        devise_facture=vs("declaration.devise_facture", "EUR", document_id=did),
+    )
     if total:
         champs["montant_total_facture"] = vs("declaration.montant_total_facture", total, document_id=did)
     if brute_totale:
@@ -279,16 +321,26 @@ def test_b4_somme_brute_incomplete_non_verifiable():
 # --- D-2306 / D-2311 / D-2313 / D-2316 : familles C et D ----------------------------------------------------------
 
 GRILLE = GrilleTarifaire(
-    transitaire_id="tra_1", reference="DEV-FICTIF-23", statut=StatutGrille.validee,
+    transitaire_id="tra_1",
+    reference="DEV-FICTIF-23",
+    statut=StatutGrille.validee,
     prestations_hors_grille=PrestationsHorsGrille.interdites,
-    postes=[PosteGrille(code_poste="DEDOU", nature=N.frais_dedouanement, mode=ModePoste.forfait, prix=D("50.00"))],
+    postes=[
+        PosteGrille(code_poste="DEDOU", nature=N.frais_dedouanement, mode=ModePoste.forfait, prix=D("50.00"))
+    ],
 )
 TRANSITAIRES = [Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550")]
 
 
 def _resultats(docs, cid):
-    c = ControlContext.construire(dossier_pour(docs), docs, ProfilTolerances(id="tol_test"),
-                                  execution_id="exe_test", grilles=[GRILLE], transitaires=TRANSITAIRES)
+    c = ControlContext.construire(
+        dossier_pour(docs),
+        docs,
+        ProfilTolerances(id="tol_test"),
+        execution_id="exe_test",
+        grilles=[GRILLE],
+        transitaires=TRANSITAIRES,
+    )
     return [r for r in run_controls(c, controles=[cid]) if r.controle_id == cid]
 
 
@@ -319,19 +371,26 @@ def test_d1_quantite_implicite_non_verifiable():
 def test_d1_confusion_sur_un_facteur_de_produit():
     # 7 × 72,00 lu pour 1 × 72,00 (7 et 1 de la même classe) : le facteur est remplacé, pas ajouté
     lg = LigneFactureTransitaire(
-        nature=N.frais_dedouanement, libelle=v_ft("lignes[0].libelle", "Inklaring FICTIF"),
+        nature=N.frais_dedouanement,
+        libelle=v_ft("lignes[0].libelle", "Inklaring FICTIF"),
         montant_ht=v_ft("lignes[0].montant_ht", "72.00", conf=0.92, methode=Methode.ocr),
         quantite=v_ft("lignes[0].quantite", "7", conf=0.92, methode=Methode.ocr),
-        prix_unitaire=v_ft("lignes[0].prix_unitaire", "72.00", conf=0.92, methode=Methode.ocr))
+        prix_unitaire=v_ft("lignes[0].prix_unitaire", "72.00", conf=0.92, methode=Methode.ocr),
+    )
     rs = [r for r in _resultats([ft(lg)], "D1") if r.sous_controle == "ligne"]
     assert rs and rs[0].constat is not None and RaisonCode.lecture_douteuse in rs[0].constat.raisons
 
 
 def test_c4_aucune_ligne_de_tva_refacturee_non_verifiable():
     did = "doc_dec_c4"
-    d = declaration(id=did, mrn=MRN_A, taxations=[
-        taxation(did, montant="100.00"),
-        taxation(did, type_taxe="B00", categorie=CategorieTaxe.tva, montant="220.00")])
+    d = declaration(
+        id=did,
+        mrn=MRN_A,
+        taxations=[
+            taxation(did, montant="100.00"),
+            taxation(did, type_taxe="B00", categorie=CategorieTaxe.tva, montant="220.00"),
+        ],
+    )
     f = ft(ligne(0, N.debours_droits, "100.00", mrn=MRN_A), qualite=QualiteTexte.natif)
     rs = _resultats([f, d], "C4")
     assert rs and all(r.constat is None for r in rs)
@@ -339,8 +398,13 @@ def test_c4_aucune_ligne_de_tva_refacturee_non_verifiable():
 
 
 def _lib(i, texte, y, conf=0.88):
-    return v_ft(f"lignes[{i}].libelle", texte, conf=conf, methode=Methode.ocr,
-                zone=Zone(x0=0.1, y0=y, x1=0.5, y1=y + 0.01))
+    return v_ft(
+        f"lignes[{i}].libelle",
+        texte,
+        conf=conf,
+        methode=Methode.ocr,
+        zone=Zone(x0=0.1, y0=y, x1=0.5, y1=y + 0.01),
+    )
 
 
 def test_d5_deux_lectures_identiques_du_libelle_se_confirment():
@@ -364,9 +428,12 @@ def test_d5_libelles_differents_ou_meme_endroit_non_confirmes():
 
 def test_p4_plusieurs_liens_faibles_un_seul_constat():
     docs = [declaration(id="doc_d1", mrn=MRN_A), declaration(id="doc_d2", mrn=MRN_B), ft()]
-    liens = [LienDocument(document_id=d.id, role=r, force=ForceLien.faible, signaux=[SignalLien.graine])
-             for d, r in zip(docs, (RoleLien.declaration, RoleLien.declaration, RoleLien.facture_transitaire),
-                             strict=True)]
+    liens = [
+        LienDocument(document_id=d.id, role=r, force=ForceLien.faible, signaux=[SignalLien.graine])
+        for d, r in zip(
+            docs, (RoleLien.declaration, RoleLien.declaration, RoleLien.facture_transitaire), strict=True
+        )
+    ]
     dos = Dossier(id="dos_p4", version=1, liens=liens)
     c = ControlContext.construire(dos, docs, ProfilTolerances(id="tol_test"), execution_id="exe_test")
     rs = [r for r in run_controls(c, controles=["P4"]) if r.controle_id == "P4"]

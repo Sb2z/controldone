@@ -109,8 +109,11 @@ def collecter(corpus: Path, split: str, run: Path) -> tuple[list[Bruit], dict[st
             continue
         findings = _lire_json(fp)
         truth = _lire_json(tp)
-        cles = Counter((c.get("controle_id"), c.get("libelle")) for c in findings.get("constats", [])
-                       if c.get("niveau") in ("a_verifier", "ecart_certain"))
+        cles = Counter(
+            (c.get("controle_id"), c.get("libelle"))
+            for c in findings.get("constats", [])
+            if c.get("niveau") in ("a_verifier", "ecart_certain")
+        )
         for (cid, lib), n in cles.items():
             if n > 1:
                 doublons.append((dossier_id, cid or "?", lib or "", n))
@@ -128,22 +131,37 @@ def collecter(corpus: Path, split: str, run: Path) -> tuple[list[Bruit], dict[st
                 types.append(t)
                 degs.append(g)
             piege = d.get("trap_id")
-            out.append(Bruit(
-                jeu=jeu, dossier_id=dossier_id, finding_id=d.get("finding_id") or "",
-                controle_id=d.get("controle_id") or c.get("controle_id") or "?",
-                sous_controle=c.get("sous_controle"), motif=d.get("motif") or "non_apparie",
-                raisons=list(c.get("raisons") or []), libelle=c.get("libelle") or "",
-                types_docs=sorted(set(types)), degradations=sorted(set(degs)),
-                mise_en_page=truth.get("declaration_layout"), gabarit=truth.get("transitaire_template"),
-                degradation_dossier=truth.get("degradation"), piege=piege,
-                piege_description=(pieges.get(piege) or {}).get("description") if piege else None,
-            ))
+            out.append(
+                Bruit(
+                    jeu=jeu,
+                    dossier_id=dossier_id,
+                    finding_id=d.get("finding_id") or "",
+                    controle_id=d.get("controle_id") or c.get("controle_id") or "?",
+                    sous_controle=c.get("sous_controle"),
+                    motif=d.get("motif") or "non_apparie",
+                    raisons=list(c.get("raisons") or []),
+                    libelle=c.get("libelle") or "",
+                    types_docs=sorted(set(types)),
+                    degradations=sorted(set(degs)),
+                    mise_en_page=truth.get("declaration_layout"),
+                    gabarit=truth.get("transitaire_template"),
+                    degradation_dossier=truth.get("degradation"),
+                    piege=piege,
+                    piege_description=(pieges.get(piege) or {}).get("description") if piege else None,
+                )
+            )
     g = metrics.get("global", {})
     compteurs = {
-        "jeu": jeu, "n_dossiers": g.get("n_dossiers"), "fp_a_verifier": g.get("fp_a_verifier"),
-        "bruit_par_dossier": g.get("bruit_a_verifier_par_dossier"), "violations_pieges": g.get("violations_pieges"),
-        "pieges_toleres": dict(tol), "doublons_lot": doublons,
-        "vp_certain": g.get("vp_certain"), "fp_certain": g.get("fp_certain"), "rappel": g.get("rappel"),
+        "jeu": jeu,
+        "n_dossiers": g.get("n_dossiers"),
+        "fp_a_verifier": g.get("fp_a_verifier"),
+        "bruit_par_dossier": g.get("bruit_a_verifier_par_dossier"),
+        "violations_pieges": g.get("violations_pieges"),
+        "pieges_toleres": dict(tol),
+        "doublons_lot": doublons,
+        "vp_certain": g.get("vp_certain"),
+        "fp_certain": g.get("fp_certain"),
+        "rappel": g.get("rappel"),
         "rappel_certain": g.get("rappel_certain"),
     }
     return out, compteurs
@@ -217,21 +235,34 @@ def main(argv: list[str] | None = None) -> int:
     bruits, cpts = charger(args.run)
     tables = ventiler(bruits)
     n_dossiers = sum(c["n_dossiers"] or 0 for c in cpts)
-    print("# Bruit « à vérifier » (fp_a_verifier)" + (f" — contrôle {args.controle}" if args.controle else ""))
+    print(
+        "# Bruit « à vérifier » (fp_a_verifier)" + (f" — contrôle {args.controle}" if args.controle else "")
+    )
     for c in cpts:
-        print(f"  {c['jeu']}: {c['n_dossiers']} dossiers, bruit {c['fp_a_verifier']} "
-              f"({c['bruit_par_dossier']} / dossier), pièges déclenchés {c['violations_pieges']}, "
-              f"VP/FP certains {c['vp_certain']}/{c['fp_certain']}, rappel {c['rappel']}, "
-              f"rappel certain {c['rappel_certain']}, doublons de lot {len(c['doublons_lot'])}")
-    print(f"  total : {len(bruits)} constats sur {n_dossiers} dossiers "
-          f"({len(bruits) / n_dossiers:.3f} / dossier)" if n_dossiers else "")
-    for cle, titre in (("motif", "Motif"), ("controle_sous", "Contrôle × sous-contrôle"),
-                       ("controle_raison", "Contrôle × raison"), ("type_doc", "Type / format / dégradation"),
-                       ("controle_type_doc", "Contrôle × document"), ("degradation_doc", "Dégradation des documents"),
-                       ("mise_en_page", "Mise en page de la déclaration (dossier)"),
-                       ("gabarit", "Gabarit de transitaire (dossier)"),
-                       ("pieges_controle", "Pièges déclenchés par contrôle"),
-                       ("pieges_description", "Pièges déclenchés par description")):
+        print(
+            f"  {c['jeu']}: {c['n_dossiers']} dossiers, bruit {c['fp_a_verifier']} "
+            f"({c['bruit_par_dossier']} / dossier), pièges déclenchés {c['violations_pieges']}, "
+            f"VP/FP certains {c['vp_certain']}/{c['fp_certain']}, rappel {c['rappel']}, "
+            f"rappel certain {c['rappel_certain']}, doublons de lot {len(c['doublons_lot'])}"
+        )
+    print(
+        f"  total : {len(bruits)} constats sur {n_dossiers} dossiers "
+        f"({len(bruits) / n_dossiers:.3f} / dossier)"
+        if n_dossiers
+        else ""
+    )
+    for cle, titre in (
+        ("motif", "Motif"),
+        ("controle_sous", "Contrôle × sous-contrôle"),
+        ("controle_raison", "Contrôle × raison"),
+        ("type_doc", "Type / format / dégradation"),
+        ("controle_type_doc", "Contrôle × document"),
+        ("degradation_doc", "Dégradation des documents"),
+        ("mise_en_page", "Mise en page de la déclaration (dossier)"),
+        ("gabarit", "Gabarit de transitaire (dossier)"),
+        ("pieges_controle", "Pièges déclenchés par contrôle"),
+        ("pieges_description", "Pièges déclenchés par description"),
+    ):
         _imprimer_table(titre, tables.get(cle, Counter()), n_dossiers, args.top)
     doublons = [d for c in cpts for d in c["doublons_lot"] if not args.controle or d[1] == args.controle]
     if doublons:
@@ -244,15 +275,19 @@ def main(argv: list[str] | None = None) -> int:
         tb = tables["controle_sous"]
         print(f"\n## Différence avec --avant ({len(avant)} -> {len(bruits)})")
         for ca, cb in zip(cpts_av, cpts, strict=True):
-            print(f"  {ca['jeu']} -> {cb['jeu']} : bruit {ca['fp_a_verifier']} -> {cb['fp_a_verifier']}, "
-                  f"pièges {ca['violations_pieges']} -> {cb['violations_pieges']}, VP/FP certains "
-                  f"{ca['vp_certain']}/{ca['fp_certain']} -> {cb['vp_certain']}/{cb['fp_certain']}, rappel "
-                  f"{ca['rappel']} -> {cb['rappel']}, rappel certain {ca['rappel_certain']} -> {cb['rappel_certain']}")
+            print(
+                f"  {ca['jeu']} -> {cb['jeu']} : bruit {ca['fp_a_verifier']} -> {cb['fp_a_verifier']}, "
+                f"pièges {ca['violations_pieges']} -> {cb['violations_pieges']}, VP/FP certains "
+                f"{ca['vp_certain']}/{ca['fp_certain']} -> {cb['vp_certain']}/{cb['fp_certain']}, rappel "
+                f"{ca['rappel']} -> {cb['rappel']}, rappel certain {ca['rappel_certain']} -> {cb['rappel_certain']}"
+            )
         for k in sorted(set(ta) | set(tb), key=lambda k: (tb.get(k, 0) - ta.get(k, 0), k)):
             if ta.get(k, 0) != tb.get(k, 0):
                 print(f"  {ta.get(k, 0):5d} -> {tb.get(k, 0):5d}  {k}")
-        ids_av = {(b.jeu.split('_')[0], b.dossier_id, b.controle_id, b.libelle) for b in avant}
-        nouveaux = [b for b in bruits if (b.jeu.split('_')[0], b.dossier_id, b.controle_id, b.libelle) not in ids_av]
+        ids_av = {(b.jeu.split("_")[0], b.dossier_id, b.controle_id, b.libelle) for b in avant}
+        nouveaux = [
+            b for b in bruits if (b.jeu.split("_")[0], b.dossier_id, b.controle_id, b.libelle) not in ids_av
+        ]
         if nouveaux and args.exemples:
             print("\n## Nouveaux constats de bruit (absents de --avant)")
             for b in nouveaux[: args.exemples]:
@@ -262,9 +297,19 @@ def main(argv: list[str] | None = None) -> int:
         for b in bruits[: args.exemples]:
             print(f"  {b.dossier_id} {_cle_sc(b)} {b.motif} {b.raisons} {b.types_docs}: {b.libelle[:220]}")
     if args.json:
-        args.json.write_text(json.dumps({
-            "compteurs": cpts, "tables": {k: dict(v) for k, v in tables.items()},
-            "constats": [asdict(b) for b in bruits]}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        args.json.write_text(
+            json.dumps(
+                {
+                    "compteurs": cpts,
+                    "tables": {k: dict(v) for k, v in tables.items()},
+                    "constats": [asdict(b) for b in bruits],
+                },
+                ensure_ascii=False,
+                indent=1,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     return 0
 
 

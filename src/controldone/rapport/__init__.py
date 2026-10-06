@@ -27,7 +27,12 @@ from controldone.rapport.vue import RapportVue, construire_vue
 from controldone.referentiel_io import ProfilClient
 
 __all__ = [
-    "SortiesRapport", "ajouter_images", "construire_vue", "generer_rapport", "rendre_html", "rendre_pdf",
+    "SortiesRapport",
+    "ajouter_images",
+    "construire_vue",
+    "generer_rapport",
+    "rendre_html",
+    "rendre_pdf",
     "verifier_textes",
 ]
 
@@ -88,10 +93,18 @@ def generer_rapport(
     (out / "report.html").write_text(html, encoding="utf-8")
     (out / "report.pdf").write_bytes(rendre_pdf(vue, horodatage=horodatage))
     (out / "report.json").write_text(
-        json.dumps(rapport_json(vue, resultats), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        json.dumps(rapport_json(vue, resultats), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     lot = findings_lot_json(resultats)
     (out / "findings.json").write_text(
-        json.dumps(lot[0] if len(lot) == 1 else lot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        json.dumps(lot[0] if len(lot) == 1 else lot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     ecrire_xlsx(vue, resultats, out / "findings.xlsx")
-    return SortiesRapport(html=out / "report.html", pdf=out / "report.pdf", json=out / "report.json",
-                          xlsx=out / "findings.xlsx", findings=out / "findings.json", vue=vue)
+    return SortiesRapport(
+        html=out / "report.html",
+        pdf=out / "report.pdf",
+        json=out / "report.json",
+        xlsx=out / "findings.xlsx",
+        findings=out / "findings.json",
+        vue=vue,
+    )

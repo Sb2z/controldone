@@ -29,8 +29,13 @@ def _classer(lignes, titre=None, numero=1):
 def _decouper(contenu: bytes, nom: str = "f.pdf"):
     rec = recevoir_octets([(nom, contenu)], ids=IdGenerator.deterministe(3))
     fr = rec.fichiers[0]
-    return decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, ids=IdGenerator.deterministe(4),
-                            corps_courriel=fr.corps_courriel)
+    return decouper_fichier(
+        fr.fichier,
+        fr.contenu,
+        options=LOCAL,
+        ids=IdGenerator.deterministe(4),
+        corps_courriel=fr.corps_courriel,
+    )
 
 
 @pytest.mark.parametrize(
@@ -38,38 +43,62 @@ def _decouper(contenu: bytes, nom: str = "f.pdf"):
     [
         (fab.FACTURE_COMMERCIALE, "COMMERCIAL INVOICE", TypeDocument.facture_commerciale, "facture"),
         (fab.FACTURE_COMMERCIALE, "PROFORMA INVOICE", TypeDocument.facture_commerciale, "pro_forma"),
-        ([*fab.FACTURE_COMMERCIALE, "Value for customs purposes only"], "INVOICE",
-         TypeDocument.facture_commerciale, "valeur_douane_seulement"),
+        (
+            [*fab.FACTURE_COMMERCIALE, "Value for customs purposes only"],
+            "INVOICE",
+            TypeDocument.facture_commerciale,
+            "valeur_douane_seulement",
+        ),
         (fab.FACTURE_TRANSITAIRE, "FACTURE", TypeDocument.facture_transitaire, None),
         (fab.DECLARATION, "DÉCLARATION EN DOUANE (DAU)", TypeDocument.declaration, "h1"),
         (fab.DECLARATION, None, TypeDocument.declaration, "h1"),
         (fab.AVOIR, "CREDIT NOTE", TypeDocument.avoir, None),
-        (fab.CONDITIONS_GENERALES, "CONDITIONS GÉNÉRALES DE VENTE", TypeDocument.document_support,
-         "conditions_generales"),
+        (
+            fab.CONDITIONS_GENERALES,
+            "CONDITIONS GÉNÉRALES DE VENTE",
+            TypeDocument.document_support,
+            "conditions_generales",
+        ),
         (fab.LETTRE, None, TypeDocument.document_support, "lettre_accompagnement"),
         (fab.LTA, "AIR WAYBILL", TypeDocument.document_support, "titre_transport"),
         (fab.PACKING_LIST, "PACKING LIST", TypeDocument.document_support, "liste_colisage"),
-        (["Factura N° FAC-77", "Vendedor: FICTICIA SL", "Descripción Cantidad Precio unitario Importe",
-          "Zapatos 10 25,00 250,00", "País de origen: ES", "Total factura 250,00 EUR"], "FACTURA COMERCIAL",
-         TypeDocument.facture_commerciale, "facture"),
+        (
+            [
+                "Factura N° FAC-77",
+                "Vendedor: FICTICIA SL",
+                "Descripción Cantidad Precio unitario Importe",
+                "Zapatos 10 25,00 250,00",
+                "País de origen: ES",
+                "Total factura 250,00 EUR",
+            ],
+            "FACTURA COMERCIAL",
+            TypeDocument.facture_commerciale,
+            "facture",
+        ),
     ],
 )
 def test_types(lignes, titre, type_, sous_type):
-    c = classer_page(extraire_pages(fab.pdf([lignes], titres=[titre]), type_mime="application/pdf",
-                                    options=LOCAL)[0].texte)
+    c = classer_page(
+        extraire_pages(fab.pdf([lignes], titres=[titre]), type_mime="application/pdf", options=LOCAL)[0].texte
+    )
     assert c.type == type_ and c.sous_type == sous_type
     assert c.confiance >= 0.7
 
 
 def test_facture_avec_reference_de_transport_reste_une_facture():
-    c = _classer([*fab.FACTURE_COMMERCIALE, "Air Waybill / LTA : 176-12345675", "Bill of lading BL-FICTIF-1"],
-                 "COMMERCIAL INVOICE")
+    c = _classer(
+        [*fab.FACTURE_COMMERCIALE, "Air Waybill / LTA : 176-12345675", "Bill of lading BL-FICTIF-1"],
+        "COMMERCIAL INVOICE",
+    )
     assert c.type is TypeDocument.facture_commerciale
 
 
 def test_nom_de_transporteur_ne_fait_pas_une_facture_transitaire():
-    lignes = [*fab.FACTURE_COMMERCIALE, "Carrier: FICTIF EXPRESS WORLDWIDE - transport by air freight",
-              "Forwarder: FICTIF LOGISTICS (shipping agent)"]
+    lignes = [
+        *fab.FACTURE_COMMERCIALE,
+        "Carrier: FICTIF EXPRESS WORLDWIDE - transport by air freight",
+        "Forwarder: FICTIF LOGISTICS (shipping agent)",
+    ]
     assert _classer(lignes, "INVOICE").type is TypeDocument.facture_commerciale
 
 
@@ -86,10 +115,17 @@ def test_avoir_par_total_negatif():
     ("lignes", "titre", "motif"),
     [
         (fab.DEVIS, "DEVIS", MotifNonExploitable.devis),
-        (["Order No PO-1234", "Item qty price", "Total 1000.00"], "PURCHASE ORDER", MotifNonExploitable.bon_commande),
+        (
+            ["Order No PO-1234", "Item qty price", "Total 1000.00"],
+            "PURCHASE ORDER",
+            MotifNonExploitable.bon_commande,
+        ),
         (fab.FACTURE_COMMERCIALE[:3], "PRE-ALERT INVOICE", MotifNonExploitable.pre_alerte),
-        (["Delivery note no 123", "Carton 3", "Laptop 10 pcs"], "DELIVERY NOTE",
-         MotifNonExploitable.bon_livraison_sans_valeur),
+        (
+            ["Delivery note no 123", "Carton 3", "Laptop 10 pcs"],
+            "DELIVERY NOTE",
+            MotifNonExploitable.bon_livraison_sans_valeur,
+        ),
         (["Shipping list 2026-14", "Carton 1 to 3"], "SHIPPING LIST", MotifNonExploitable.liste_expedition),
     ],
 )
@@ -119,10 +155,15 @@ def test_extraire_refs():
 
 
 def test_pdf_fusionne_decoupe():
-    pages = [fab.FACTURE_COMMERCIALE, ["Page 2/2", "2  Mouse  10  12.00  120.00"], fab.CONDITIONS_GENERALES,
-             fab.DECLARATION, [*fab.DECLARATION[:1], "suite des articles", "Article 2 Code marchandise 8471600000"],
-             [x.replace("26FR000000000001A1", "26FR222222222222B7") for x in fab.DECLARATION],
-             fab.FACTURE_TRANSITAIRE]
+    pages = [
+        fab.FACTURE_COMMERCIALE,
+        ["Page 2/2", "2  Mouse  10  12.00  120.00"],
+        fab.CONDITIONS_GENERALES,
+        fab.DECLARATION,
+        [*fab.DECLARATION[:1], "suite des articles", "Article 2 Code marchandise 8471600000"],
+        [x.replace("26FR000000000001A1", "26FR222222222222B7") for x in fab.DECLARATION],
+        fab.FACTURE_TRANSITAIRE,
+    ]
     titres = ["COMMERCIAL INVOICE", None, "CONDITIONS GÉNÉRALES", "DAU", None, "DAU", "FACTURE"]
     r = _decouper(fab.pdf(pages, titres=titres), "fusion.pdf")
     resume = [(d.type.value, [p.numero for p in d.pages]) for d in r.documents]
@@ -142,7 +183,9 @@ def test_continuation_avec_nouveau_mrn_commence_un_document():
     p2 = ["MRN : 26FR999999999999Z9", "Article 1 Code marchandise 6403990000"]
     r = _decouper(fab.pdf([p1, p2], titres=["DAU", None]))
     assert [(d.type.value, [p.numero for p in d.pages]) for d in r.documents] == [
-        ("declaration", [1]), ("declaration", [2])]
+        ("declaration", [1]),
+        ("declaration", [2]),
+    ]
 
 
 def test_nouveau_numero_de_facture_commence_un_document():
@@ -165,15 +208,26 @@ def test_document_entier_identite_sha_fichier_et_confiance_basse_inconnu():
 
 def test_corps_de_courriel_et_structure():
     client = __import__("controldone.model.referentiel", fromlist=["Client"]).Client(
-        id="cli_" + "3" * 32, raison_sociale="CLIENT FICTIF", expediteurs_autorises=["@fictif.invalid"])
+        id="cli_" + "3" * 32, raison_sociale="CLIENT FICTIF", expediteurs_autorises=["@fictif.invalid"]
+    )
     from controldone.ingest import recevoir_courriel
 
-    rec = recevoir_courriel(fab.eml(expediteur="a@fictif.invalid", sujet="Facture", corps="Facture n° 12 ci-jointe",
-                                    pieces={"f.xml": fab.cii()}), client=client)
+    rec = recevoir_courriel(
+        fab.eml(
+            expediteur="a@fictif.invalid",
+            sujet="Facture",
+            corps="Facture n° 12 ci-jointe",
+            pieces={"f.xml": fab.cii()},
+        ),
+        client=client,
+    )
     types = {}
     for fr in rec.a_traiter():
         r = decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, corps_courriel=fr.corps_courriel)
-        types[fr.fichier.nom_original.rsplit(".", 1)[-1]] = (r.documents[0].type.value, r.documents[0].sous_type)
+        types[fr.fichier.nom_original.rsplit(".", 1)[-1]] = (
+            r.documents[0].type.value,
+            r.documents[0].sous_type,
+        )
     assert types == {"eml": ("document_support", "courriel"), "xml": ("facture_commerciale", "facture")}
 
 
@@ -189,8 +243,12 @@ def test_cle_classement_stable():
 def test_intitule_facture_avec_mention_explicite_non_exploitable():
     """D-801 : « FACTURE - BON DE LIVRAISON » + « document sans valeur commerciale » : la mention explicite
     l'emporte sur l'intitulé « facture » (motif lu conservé)."""
-    lignes = ["Ref. PRE-EXP-26-0001   May 15, 2026", "Bon de livraison - document sans valeur commerciale.",
-              "1  AB-1234  Pompe  10", "Packages: 3"]
+    lignes = [
+        "Ref. PRE-EXP-26-0001   May 15, 2026",
+        "Bon de livraison - document sans valeur commerciale.",
+        "1  AB-1234  Pompe  10",
+        "Packages: 3",
+    ]
     c = _classer(lignes, "FACTURE - BON DE LIVRAISON")
     assert c.type is TypeDocument.document_non_exploitable
     assert c.motif_non_exploitable is MotifNonExploitable.bon_livraison_sans_valeur

@@ -31,14 +31,28 @@ DEFAUT = "/espace"
 
 # --- redirection ------------------------------------------------------------------------------------------------
 
-hostiles = st.sampled_from([
-    "//evil.example", "/\\evil.example", "https://evil.example", "javascript:alert(1)", "/%2F%2Fevil.example",
-    "\\\\evil.example", "/\t/evil.example", " /espace", "/espace\r\nLocation: //evil", "///evil.example",
-    "http:/evil", "/espace@evil.example", "data:text/html,x",
-])
+hostiles = st.sampled_from(
+    [
+        "//evil.example",
+        "/\\evil.example",
+        "https://evil.example",
+        "javascript:alert(1)",
+        "/%2F%2Fevil.example",
+        "\\\\evil.example",
+        "/\t/evil.example",
+        " /espace",
+        "/espace\r\nLocation: //evil",
+        "///evil.example",
+        "http:/evil",
+        "/espace@evil.example",
+        "data:text/html,x",
+    ]
+)
 
 
-@given(st.one_of(st.text(max_size=60), hostiles, st.from_regex(r"\A/[ -~]{0,40}\Z"), st.none(), st.integers()))
+@given(
+    st.one_of(st.text(max_size=60), hostiles, st.from_regex(r"\A/[ -~]{0,40}\Z"), st.none(), st.integers())
+)
 def test_retour_toujours_interne(valeur):
     r = retour_sur(valeur, DEFAUT)
     assert r in (DEFAUT, valeur)
@@ -49,7 +63,11 @@ def test_retour_toujours_interne(valeur):
     assert all(0x21 <= ord(c) < 0x7F for c in r)
 
 
-@given(st.from_regex(r"\A/[A-Za-z0-9_\-]{1,20}(?:/[A-Za-z0-9_\-]{1,20}){0,3}(?:\?[a-z]{1,5}=[A-Za-z0-9]{0,8})?\Z"))
+@given(
+    st.from_regex(
+        r"\A/[A-Za-z0-9_\-]{1,20}(?:/[A-Za-z0-9_\-]{1,20}){0,3}(?:\?[a-z]{1,5}=[A-Za-z0-9]{0,8})?\Z"
+    )
+)
 def test_retour_chemin_interne_conserve(chemin):
     assert retour_sur(chemin, DEFAUT) == chemin
 
@@ -66,14 +84,43 @@ TRIS = ("date", "-date", "montant", "-montant")
 
 
 def requete(paires: list[tuple[str, str]]) -> Request:
-    return Request({"type": "http", "method": "GET", "path": "/liste", "headers": [],
-                    "query_string": urlencode(paires).encode()})
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/liste",
+            "headers": [],
+            "query_string": urlencode(paires).encode(),
+        }
+    )
 
 
 noms = st.sampled_from(["q", "statut", "min", "du", "tri", "page", "taille", "inconnu"])
-valeurs = st.one_of(st.text(max_size=100), st.sampled_from(["ouvert", "clos", "1 234,56", "2026-10-06", "1999-01-01",
-                                                            "date", "-montant", "²", "0", "10001", "25", "50", "100",
-                                                            "-1", "1e3", "NaN", "\x00", "a\x1fb"]))
+valeurs = st.one_of(
+    st.text(max_size=100),
+    st.sampled_from(
+        [
+            "ouvert",
+            "clos",
+            "1 234,56",
+            "2026-10-06",
+            "1999-01-01",
+            "date",
+            "-montant",
+            "²",
+            "0",
+            "10001",
+            "25",
+            "50",
+            "100",
+            "-1",
+            "1e3",
+            "NaN",
+            "\x00",
+            "a\x1fb",
+        ]
+    ),
+)
 
 
 @given(st.lists(st.tuples(noms, valeurs), max_size=8))
@@ -108,7 +155,7 @@ def test_pagination_couvre_tout_sans_doublon(page, taille, n):
     req = Requete(filtres={}, brut={}, tri="-date", tri_defaut="-date", page=page, taille=taille)
     p = paginer(elements, req)
     assert 1 <= p.page <= p.pages
-    assert p.elements == elements[(p.page - 1) * taille: p.page * taille]
+    assert p.elements == elements[(p.page - 1) * taille : p.page * taille]
     assert p.total == n
     if n:
         assert p.debut == (p.page - 1) * taille + 1 and p.fin == p.debut + len(p.elements) - 1

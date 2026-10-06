@@ -37,7 +37,9 @@ def _etat(request: Request) -> EtatSecurite:
 
 
 def _ref(etat: EtatSecurite, sid: str) -> str:
-    return hmac.new((etat.secret_signature + "|session-ref").encode(), sid.encode(), hashlib.sha256).hexdigest()[:24]
+    return hmac.new(
+        (etat.secret_signature + "|session-ref").encode(), sid.encode(), hashlib.sha256
+    ).hexdigest()[:24]
 
 
 def _sessions(request: Request) -> tuple[Any, list[Any]]:
@@ -56,15 +58,38 @@ def _instant(x: float | None) -> datetime | None:
 def sessions(request: Request) -> Response:
     s, liste = _sessions(request)
     etat = _etat(request)
-    vues = [{"ref": _ref(etat, x.sid), "courante": x.sid == s.sid or bool(getattr(x, "courante", False)),
-             "debut": _instant(x.debut), "vu": _instant(x.vu), "appareil": x.appareil or "",
-             "reseau": x.reseau or ""} for x in liste]
+    vues = [
+        {
+            "ref": _ref(etat, x.sid),
+            "courante": x.sid == s.sid or bool(getattr(x, "courante", False)),
+            "debut": _instant(x.debut),
+            "vu": _instant(x.vu),
+            "appareil": x.appareil or "",
+            "reseau": x.reseau or "",
+        }
+        for x in liste
+    ]
     if not any(v["courante"] for v in vues):  # session ouverte avant l'enregistrement des sessions
-        vues.insert(0, {"ref": _ref(etat, s.sid), "courante": True, "debut": _instant(s.debut),
-                        "vu": _instant(s.emis), "appareil": "", "reseau": ""})
+        vues.insert(
+            0,
+            {
+                "ref": _ref(etat, s.sid),
+                "courante": True,
+                "debut": _instant(s.debut),
+                "vu": _instant(s.emis),
+                "appareil": "",
+                "reseau": "",
+            },
+        )
     vues.sort(key=lambda v: not v["courante"])
-    return page(request, "compte/sessions.html.j2", titre="Mes sessions actives", nav="sessions", sessions=vues,
-                autres=sum(1 for v in vues if not v["courante"]))
+    return page(
+        request,
+        "compte/sessions.html.j2",
+        titre="Mes sessions actives",
+        nav="sessions",
+        sessions=vues,
+        autres=sum(1 for v in vues if not v["courante"]),
+    )
 
 
 @routeur.post("/compte/sessions/fermer-autres")
@@ -90,7 +115,9 @@ def fermer_une(request: Request, ref: str) -> Response:
     formulaire_sync(request)
     s, liste = _sessions(request)
     etat = _etat(request)
-    cible = next((x for x in liste if hmac.compare_digest(_ref(etat, x.sid), ref[:64]) and x.sid != s.sid), None)
+    cible = next(
+        (x for x in liste if hmac.compare_digest(_ref(etat, x.sid), ref[:64]) and x.sid != s.sid), None
+    )
     fermer = getattr(etat.sessions, "fermer_session", None)
     if cible is None or fermer is None or not fermer(acteur.id, cible.sid):
         return redirection(request, "/compte/sessions", erreur="Session introuvable ou déjà fermée.")
@@ -103,8 +130,15 @@ def poser_langue(request: Request, reponse: Response, langue: str) -> None:
     request.state.langue = langue
     etat = _etat(request)
     nom = ("__Host-" if etat.prod else "") + COOKIE_LANGUE
-    reponse.set_cookie(nom, langue, max_age=DUREE_LANGUE_S, httponly=True, secure=etat.cookie["secure"],
-                       samesite="lax", path="/")
+    reponse.set_cookie(
+        nom,
+        langue,
+        max_age=DUREE_LANGUE_S,
+        httponly=True,
+        secure=etat.cookie["secure"],
+        samesite="lax",
+        path="/",
+    )
 
 
 def langue_du_compte(request: Request, user_id: str) -> str | None:
@@ -146,8 +180,14 @@ def choisir_langue(request: Request) -> Response:
 def compte(request: Request) -> Response:
     acteur = acteur_de(request)
     info = utilisateur(request.app.state.plateforme.db, acteur.id)
-    return page(request, "compte/compte.html.j2", titre="Mon compte", nav="compte",
-                email=info.email if info else "", langue_compte=info.langue if info else None)
+    return page(
+        request,
+        "compte/compte.html.j2",
+        titre="Mon compte",
+        nav="compte",
+        email=info.email if info else "",
+        langue_compte=info.langue if info else None,
+    )
 
 
 @routeur.post("/compte/langue")

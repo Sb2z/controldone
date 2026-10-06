@@ -90,8 +90,13 @@ def charge_utile(kind: str, nombre: int, quand: datetime) -> dict[str, Any]:
     libelle = LIBELLES.get(kind, kind)
     horodatage = quand.astimezone(UTC).isoformat(timespec="seconds")
     return {
-        "source": "controldone", "evenement": "alerte", "kind": kind, "libelle": libelle, "nombre": nombre,
-        "horodatage": horodatage, "lien": LIEN,
+        "source": "controldone",
+        "evenement": "alerte",
+        "kind": kind,
+        "libelle": libelle,
+        "nombre": nombre,
+        "horodatage": horodatage,
+        "lien": LIEN,
         "text": f"ControlDOne — {libelle} ({nombre}) — {horodatage} — voir {LIEN}",
     }
 
@@ -122,8 +127,14 @@ class CanalWebhook:
         with httpx.Client(timeout=10, follow_redirects=False, transport=self.transport) as client:
             if self.format == "texte":  # ntfy : titre, priorité et étiquette par en-têtes
                 priorite = 3 if charge.get("kind") == "essai" else self.priorite
-                entetes.update({"Content-Type": "text/plain; charset=utf-8", "Title": "ControlDOne",
-                                "Priority": str(priorite), "Tags": "warning" if priorite >= 4 else "bell"})
+                entetes.update(
+                    {
+                        "Content-Type": "text/plain; charset=utf-8",
+                        "Title": "ControlDOne",
+                        "Priority": str(priorite),
+                        "Tags": "warning" if priorite >= 4 else "bell",
+                    }
+                )
                 r = client.post(self.url, content=charge["text"].encode(), headers=entetes)
             else:
                 r = client.post(self.url, json=charge, headers=entetes)
@@ -152,7 +163,8 @@ class CanalCourriel:
             f"{charge['libelle']} : {charge['nombre']} alerte(s) de type « {charge['kind']} ».\n"
             f"Horodatage : {charge['horodatage']}\n\n"
             f"Le détail est dans l'application, après connexion : {charge['lien']}\n"
-            "(Ce message ne contient volontairement aucune donnée client.)\n")
+            "(Ce message ne contient volontairement aucune donnée client.)\n"
+        )
         contexte = ssl.create_default_context()
         if self.fabrique is not None:
             serveur = self.fabrique(self.hote, self.port, timeout=15)
@@ -195,7 +207,9 @@ class ConfigNotifications:
         if url:
             parties = urlsplit(url)
             fmt = env("CONTROLDONE_NOTIF_WEBHOOK_FORMAT", "json").strip().lower()
-            if parties.scheme != "https" and not (parties.scheme == "http" and _boucle_locale(parties.hostname)):
+            if parties.scheme != "https" and not (
+                parties.scheme == "http" and _boucle_locale(parties.hostname)
+            ):
                 cfg.erreurs.append("CONTROLDONE_NOTIF_WEBHOOK_URL : HTTPS obligatoire (sauf boucle locale)")
             elif fmt not in ("json", "texte"):
                 cfg.erreurs.append("CONTROLDONE_NOTIF_WEBHOOK_FORMAT : json ou texte")
@@ -207,8 +221,14 @@ class ConfigNotifications:
                 if not 1 <= priorite <= 5:
                     cfg.erreurs.append("CONTROLDONE_NOTIF_NTFY_PRIORITE : 1 à 5 (4 retenu)")
                     priorite = 4
-                cfg.canaux.append(CanalWebhook(url=url, format=fmt, priorite=priorite,
-                                               jeton=env("CONTROLDONE_NOTIF_WEBHOOK_JETON").strip()))
+                cfg.canaux.append(
+                    CanalWebhook(
+                        url=url,
+                        format=fmt,
+                        priorite=priorite,
+                        jeton=env("CONTROLDONE_NOTIF_WEBHOOK_JETON").strip(),
+                    )
+                )
         hote = env("CONTROLDONE_NOTIF_SMTP_HOTE").strip()
         if hote:
             securite = env("CONTROLDONE_NOTIF_SMTP_SECURITE", "starttls").strip().lower()
@@ -218,16 +238,29 @@ class ConfigNotifications:
                 port = int(env("CONTROLDONE_NOTIF_SMTP_PORT", "465" if securite == "ssl" else "587"))
             except ValueError:
                 port = 0
-            if securite not in ("starttls", "ssl", "aucune") or (securite == "aucune" and not _boucle_locale(hote)):
-                cfg.erreurs.append("CONTROLDONE_NOTIF_SMTP_SECURITE : starttls ou ssl (aucune : relais local seulement)")
+            if securite not in ("starttls", "ssl", "aucune") or (
+                securite == "aucune" and not _boucle_locale(hote)
+            ):
+                cfg.erreurs.append(
+                    "CONTROLDONE_NOTIF_SMTP_SECURITE : starttls ou ssl (aucune : relais local seulement)"
+                )
             elif not de or not a or not all("@" in x for x in [de, *a]) or not 0 < port < 65536:
-                cfg.erreurs.append("courriel : CONTROLDONE_NOTIF_COURRIEL_DE, CONTROLDONE_NOTIF_COURRIEL_A et "
-                                   "CONTROLDONE_NOTIF_SMTP_PORT requis")
+                cfg.erreurs.append(
+                    "courriel : CONTROLDONE_NOTIF_COURRIEL_DE, CONTROLDONE_NOTIF_COURRIEL_A et "
+                    "CONTROLDONE_NOTIF_SMTP_PORT requis"
+                )
             else:
-                cfg.canaux.append(CanalCourriel(
-                    hote=hote, port=port, expediteur=de, destinataires=a, securite=securite,
-                    utilisateur=env("CONTROLDONE_NOTIF_SMTP_UTILISATEUR").strip(),
-                    mot_de_passe=env("CONTROLDONE_NOTIF_SMTP_MOT_DE_PASSE")))
+                cfg.canaux.append(
+                    CanalCourriel(
+                        hote=hote,
+                        port=port,
+                        expediteur=de,
+                        destinataires=a,
+                        securite=securite,
+                        utilisateur=env("CONTROLDONE_NOTIF_SMTP_UTILISATEUR").strip(),
+                        mot_de_passe=env("CONTROLDONE_NOTIF_SMTP_MOT_DE_PASSE"),
+                    )
+                )
         types = {t.strip() for t in env("CONTROLDONE_NOTIF_TYPES").split(",") if t.strip()}
         cfg.types = frozenset(types) if types else None
         return cfg
@@ -247,7 +280,9 @@ class RapportNotifications:
             return [f"notifications inactives : {self.motif}"]
         sortie = [f"notifiées : {k} ({n})" for k, n in sorted(self.envoyees.items())]
         sortie += [f"échec : {k} ({', '.join(c)})" for k, c in sorted(self.echecs.items())]
-        sortie.append(f"regroupées (déjà notifiées aujourd'hui) : {self.regroupees} ; écartées : {self.ecartees}")
+        sortie.append(
+            f"regroupées (déjà notifiées aujourd'hui) : {self.regroupees} ; écartées : {self.ecartees}"
+        )
         return sortie
 
 
@@ -259,13 +294,15 @@ def _envoyer(canaux: list[Any], charge: dict[str, Any]) -> tuple[list[str], list
             reussis.append(canal.nom)
         except Exception as exc:  # jamais l'URL ni le mot de passe : nom de classe seulement
             rates.append(canal.nom)
-            log.warning("notification_echec canal=%s kind=%s erreur=%s", canal.nom, charge["kind"],
-                        type(exc).__name__)
+            log.warning(
+                "notification_echec canal=%s kind=%s erreur=%s", canal.nom, charge["kind"], type(exc).__name__
+            )
     return reussis, rates
 
 
-def notifier_alertes(db: Any, config: ConfigNotifications | None = None, *,
-                     now: datetime | None = None) -> RapportNotifications:
+def notifier_alertes(
+    db: Any, config: ConfigNotifications | None = None, *, now: datetime | None = None
+) -> RapportNotifications:
     """Pousse les alertes récentes non traitées : une notification par type et par jour, sur tous les canaux."""
     from controldone.storage.alertes import (
         a_notifier,
@@ -296,8 +333,15 @@ def notifier_alertes(db: Any, config: ConfigNotifications | None = None, *,
                 continue
         reussis, rates = _envoyer(config.canaux, charge_utile(kind, len(ids), now))  # hors transaction
         with db.transaction_systeme() as s:
-            essais = enregistrer_notification(s, cle=cle, kind=kind, nombre=len(ids), canaux=_resultats(reussis, rates),
-                                              envoyee=bool(reussis), quand=now)
+            essais = enregistrer_notification(
+                s,
+                cle=cle,
+                kind=kind,
+                nombre=len(ids),
+                canaux=_resultats(reussis, rates),
+                envoyee=bool(reussis),
+                quand=now,
+            )
             if reussis or essais >= ESSAIS_MAX_PAR_JOUR:
                 marquer_notifiees(s, ids, now)
         if reussis:
@@ -312,8 +356,9 @@ def _resultats(reussis: list[str], rates: list[str]) -> list[str]:
     return [f"{c}:ok" for c in reussis] + [f"{c}:echec" for c in rates]
 
 
-def envoyer_essai(config: ConfigNotifications | None = None, *, now: datetime | None = None, db: Any = None
-                  ) -> tuple[list[str], list[str]]:
+def envoyer_essai(
+    config: ConfigNotifications | None = None, *, now: datetime | None = None, db: Any = None
+) -> tuple[list[str], list[str]]:
     """Notification d'essai (type ``essai``) sur chaque canal configuré. Lancée **seulement** par le fondateur
     (``controldone alertes essai``). Avec ``db`` : l'essai est inscrit dans l'historique (clé
     ``essai:<horodatage>``, aucune alerte touchée) ; une base injoignable n'empêche pas l'essai."""
@@ -327,9 +372,15 @@ def envoyer_essai(config: ConfigNotifications | None = None, *, now: datetime | 
             from controldone.storage.alertes import enregistrer_notification
 
             with db.transaction_systeme() as s:
-                enregistrer_notification(s, cle=f"essai:{now.astimezone(UTC).isoformat(timespec='seconds')}",
-                                         kind="essai", nombre=1, canaux=_resultats(reussis, rates),
-                                         envoyee=bool(reussis), quand=now)
+                enregistrer_notification(
+                    s,
+                    cle=f"essai:{now.astimezone(UTC).isoformat(timespec='seconds')}",
+                    kind="essai",
+                    nombre=1,
+                    canaux=_resultats(reussis, rates),
+                    envoyee=bool(reussis),
+                    quand=now,
+                )
         except Exception as exc:  # l'essai a eu lieu ; seule son inscription manque
             log.warning("notification_essai_non_inscrite erreur=%s", type(exc).__name__)
     return reussis, rates
@@ -354,8 +405,14 @@ class HistoriqueNotifications:
         return LIBELLES.get(kind, kind)
 
 
-def historique(db: Any, *, limite: int = 50, jours: int = 30, config: ConfigNotifications | None = None,
-               now: datetime | None = None) -> HistoriqueNotifications:
+def historique(
+    db: Any,
+    *,
+    limite: int = 50,
+    jours: int = 30,
+    config: ConfigNotifications | None = None,
+    now: datetime | None = None,
+) -> HistoriqueNotifications:
     """Historique des notifications des ``jours`` derniers jours et santé des canaux. Lecture seule ; aucune
     URL de webhook, aucun jeton ni aucune adresse dans le résultat."""
     from controldone.storage.alertes import etat_canaux, historique_notifications
@@ -366,6 +423,10 @@ def historique(db: Any, *, limite: int = 50, jours: int = 30, config: ConfigNoti
         lignes = historique_notifications(s, limite=limite, depuis=depuis)
         canaux = etat_canaux(s, depuis=depuis)
     return HistoriqueNotifications(
-        actif=config.actif, motif_inactif=config.motif_inactif(),
-        canaux_configures=tuple(c.nom for c in config.canaux), erreurs_configuration=tuple(config.erreurs),
-        canaux=canaux, notifications=lignes)
+        actif=config.actif,
+        motif_inactif=config.motif_inactif(),
+        canaux_configures=tuple(c.nom for c in config.canaux),
+        erreurs_configuration=tuple(config.erreurs),
+        canaux=canaux,
+        notifications=lignes,
+    )

@@ -47,15 +47,29 @@ def dv(champ, val, doc=DEC, **kw):
 
 
 def forfait(base="3", taux="3.00", montant="9.00", *, doc=DEC, **kw):
-    return taxation(doc, article=None, type_taxe="F00", categorie=CategorieTaxe.forfait_petits_envois,
-                    base_quantite=base, taux=taux, montant=montant, nature=TauxNature.specifique, **kw)
+    return taxation(
+        doc,
+        article=None,
+        type_taxe="F00",
+        categorie=CategorieTaxe.forfait_petits_envois,
+        base_quantite=base,
+        taux=taux,
+        montant=montant,
+        nature=TauxNature.specifique,
+        **kw,
+    )
 
 
-def dec_g(*taxes, n_articles="3", codes=CODES, date_acc="2026-08-01", devise="EUR", total="120.00", doc=DEC,
-          **kw):
-    arts = [ArticleDeclaration(numero_article=dv("articles[].numero_article", str(i + 1), doc),
-                               code_marchandise=dv("articles[].code_marchandise", c, doc))
-            for i, c in enumerate(codes)]
+def dec_g(
+    *taxes, n_articles="3", codes=CODES, date_acc="2026-08-01", devise="EUR", total="120.00", doc=DEC, **kw
+):
+    arts = [
+        ArticleDeclaration(
+            numero_article=dv("articles[].numero_article", str(i + 1), doc),
+            code_marchandise=dv("articles[].code_marchandise", c, doc),
+        )
+        for i, c in enumerate(codes)
+    ]
     champs = dict(articles=arts)
     if n_articles is not None:
         champs["nombre_articles"] = dv("nombre_articles", n_articles, doc)
@@ -72,9 +86,12 @@ def ftv(champ, val, doc=FT):
     return vs(f"facture_transitaire.{champ}", val, document_id=doc)
 
 
-def ligne_ft(montant, nature=NatureLigne.debours_forfait_petits_envois, *, quantite=None, pu=None, mrn=MRN, doc=FT):
+def ligne_ft(
+    montant, nature=NatureLigne.debours_forfait_petits_envois, *, quantite=None, pu=None, mrn=MRN, doc=FT
+):
     return LigneFactureTransitaire(
-        nature=nature, montant_ht=ftv("lignes[].montant_ht", montant, doc),
+        nature=nature,
+        montant_ht=ftv("lignes[].montant_ht", montant, doc),
         quantite=ftv("lignes[].quantite", quantite, doc) if quantite else None,
         prix_unitaire=ftv("lignes[].prix_unitaire", pu, doc) if pu else None,
         mrn=ftv("lignes[].mrn", mrn, doc) if mrn else None,
@@ -82,18 +99,26 @@ def ligne_ft(montant, nature=NatureLigne.debours_forfait_petits_envois, *, quant
 
 
 def ft_g(*lignes, numero="FT-001"):
-    return facture_transitaire(id=FT, numero=ftv("numero", numero), date=ftv("date", "2026-08-05"),
-                               emetteur=Partie(nom=ftv("emetteur.nom", "Transit Fictif SA")), lignes=list(lignes))
+    return facture_transitaire(
+        id=FT,
+        numero=ftv("numero", numero),
+        date=ftv("date", "2026-08-05"),
+        emetteur=Partie(nom=ftv("emetteur.nom", "Transit Fictif SA")),
+        lignes=list(lignes),
+    )
 
 
 def avoir_g(montant, nature=NatureLigne.debours_forfait_petits_envois):
     def av(champ, val):
         return vs(f"avoir.{champ}", val, document_id=AV)
 
-    c = ChampsAvoir(numero=av("numero", "AV-001"), date=av("date", "2026-09-01"),
-                    emetteur=Partie(nom=av("emetteur.nom", "Transit Fictif SA")),
-                    refs_facture_origine=[av("refs_facture_origine[]", "FT-001")],
-                    lignes=[LigneFactureTransitaire(nature=nature, montant_ht=av("lignes[].montant_ht", montant))])
+    c = ChampsAvoir(
+        numero=av("numero", "AV-001"),
+        date=av("date", "2026-09-01"),
+        emetteur=Partie(nom=av("emetteur.nom", "Transit Fictif SA")),
+        refs_facture_origine=[av("refs_facture_origine[]", "FT-001")],
+        lignes=[LigneFactureTransitaire(nature=nature, montant_ht=av("lignes[].montant_ht", montant))],
+    )
     return document(TypeDocument.avoir, c, id=AV)
 
 
@@ -105,8 +130,17 @@ def propre(r):
 # --- absence de forfait ------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("fn", [g1_nombre_articles_montant, g2_base_nombre_articles, g3_base_codes_distincts,
-                                g4_forfait_refacture, g5_base_refacturation, g6_applicabilite])
+@pytest.mark.parametrize(
+    "fn",
+    [
+        g1_nombre_articles_montant,
+        g2_base_nombre_articles,
+        g3_base_codes_distincts,
+        g4_forfait_refacture,
+        g5_base_refacturation,
+        g6_applicabilite,
+    ],
+)
 def test_sans_forfait_non_applicable(fn):
     d = dec_g(taxation(DEC, base="100", taux="10", montant="10.00"))
     (r,) = fn(contexte([d]))
@@ -116,8 +150,16 @@ def test_sans_forfait_non_applicable(fn):
 
 
 def test_detection_par_code_configure():
-    t = taxation(DEC, article=None, type_taxe="Q99", categorie=CategorieTaxe.inconnue, base_quantite="3",
-                 taux="3.00", montant="9.00", nature=TauxNature.specifique)
+    t = taxation(
+        DEC,
+        article=None,
+        type_taxe="Q99",
+        categorie=CategorieTaxe.inconnue,
+        base_quantite="3",
+        taux="3.00",
+        montant="9.00",
+        nature=TauxNature.specifique,
+    )
     params = ParametresPetitsEnvois(codes_forfait_petits_envois=["Q99"])
     (r,) = g1_nombre_articles_montant(contexte([dec_g(t)], parametres_petits_envois=params))
     assert r.outcome is Outcome.conforme
@@ -265,7 +307,9 @@ def test_g4_g5_pas_de_double_comptage():
     ctx = contexte([dec_g(), ft_g(ligne_ft("15.00", quantite="5", pu="3.00"))])
     rs = {r.controle_id: r for r in run_controls(ctx, controles=["G4", "G5"])}
     assert rs["G4"].constat.montant_en_jeu == D("6.00")
-    assert rs["G5"].constat.montant_en_jeu is None and RaisonCode.doublon_composantes in rs["G5"].constat.raisons
+    assert (
+        rs["G5"].constat.montant_en_jeu is None and RaisonCode.doublon_composantes in rs["G5"].constat.raisons
+    )
 
 
 # --- G6 ---------------------------------------------------------------------------------------------------
@@ -288,8 +332,12 @@ def test_g6_date_hors_periode():
 
 def test_g6_seuil_converti_au_taux_imprime():
     def d(total):
-        return dec_g(devise="USD", total=total, taux_change=dv("taux_change", "1.10000"),
-                     taux_change_sens=dv("taux_change_sens", "devise_par_eur"))
+        return dec_g(
+            devise="USD",
+            total=total,
+            taux_change=dv("taux_change", "1.10000"),
+            taux_change_sens=dv("taux_change_sens", "devise_par_eur"),
+        )
 
     (r,) = g6_applicabilite(contexte([d("160.00")]))  # 145,45 EUR
     assert r.outcome is Outcome.conforme

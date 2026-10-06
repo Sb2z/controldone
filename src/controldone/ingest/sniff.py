@@ -45,8 +45,19 @@ MIME_INCONNU = "application/octet-stream"
 
 #: Types lus par l'ingestion (XLS : format binaire ancien, non lu par les bibliothèques retenues).
 MIMES_SUPPORTES = frozenset(
-    {MIME_PDF, MIME_PNG, MIME_JPEG, MIME_TIFF, MIME_ZIP, MIME_XLSX, MIME_ODS, MIME_XML, MIME_CSV, MIME_EML,
-     MIME_TEXTE}
+    {
+        MIME_PDF,
+        MIME_PNG,
+        MIME_JPEG,
+        MIME_TIFF,
+        MIME_ZIP,
+        MIME_XLSX,
+        MIME_ODS,
+        MIME_XML,
+        MIME_CSV,
+        MIME_EML,
+        MIME_TEXTE,
+    }
 )
 
 _ENTETES_EML = re.compile(
@@ -132,7 +143,7 @@ def _sans_prologue(debut: str) -> str:
         m = _PROLOGUE.match(echantillon)
         if not m or not m.group(0):
             break
-        echantillon = echantillon[m.end():]
+        echantillon = echantillon[m.end() :]
     return echantillon.lstrip()
 
 

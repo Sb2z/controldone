@@ -36,9 +36,14 @@ print(json.dumps(out))
 
 def un(p: Path, delai: float) -> dict:
     try:
-        r = subprocess.run([sys.executable, "-c", CODE, str(p)], capture_output=True, timeout=delai, check=False)
-        d = json.loads(r.stdout.decode().strip().splitlines()[-1]) if r.stdout.strip() else {
-            "ok": False, "exception": f"code_{r.returncode}", "stderr": r.stderr.decode()[-500:]}
+        r = subprocess.run(
+            [sys.executable, "-c", CODE, str(p)], capture_output=True, timeout=delai, check=False
+        )
+        d = (
+            json.loads(r.stdout.decode().strip().splitlines()[-1])
+            if r.stdout.strip()
+            else {"ok": False, "exception": f"code_{r.returncode}", "stderr": r.stderr.decode()[-500:]}
+        )
     except subprocess.TimeoutExpired:
         d = {"ok": False, "exception": "delai"}
     d["echantillon"] = str(p)
@@ -58,8 +63,13 @@ def main() -> int:
     res.sort(key=lambda d: -d.get("duree_s", 1e9) if d.get("ok") else -1e9)
     Path(a.out).write_text(json.dumps(res, indent=1, ensure_ascii=False), "utf-8")
     print("échecs :", [(d["echantillon"], d.get("exception")) for d in res if not d.get("ok")])
-    print("plus lents :", [(d["echantillon"], d["duree_s"], d["rss_max_mo"]) for d in res if d.get("ok")][:15])
-    print("plus gourmands :", sorted(((d["rss_max_mo"], d["echantillon"]) for d in res if d.get("ok")), reverse=True)[:10])
+    print(
+        "plus lents :", [(d["echantillon"], d["duree_s"], d["rss_max_mo"]) for d in res if d.get("ok")][:15]
+    )
+    print(
+        "plus gourmands :",
+        sorted(((d["rss_max_mo"], d["echantillon"]) for d in res if d.get("ok")), reverse=True)[:10],
+    )
     return 0
 
 

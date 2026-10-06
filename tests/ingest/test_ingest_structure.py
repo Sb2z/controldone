@@ -43,9 +43,14 @@ def _extraire(contenu: bytes, nom: str, fiches=None):
     fr = rec.fichiers[0]
     r = decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, fiches=fiches)
     doc = r.documents[0]
-    ctx = ExtractionContext(contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime,
-                            ids=IdGenerator.deterministe(9))
-    ex = ExtracteurDeclarationExport(fiches) if doc.type is TypeDocument.declaration else ExtracteurFactureXML()
+    ctx = ExtractionContext(
+        contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime, ids=IdGenerator.deterministe(9)
+    )
+    ex = (
+        ExtracteurDeclarationExport(fiches)
+        if doc.type is TypeDocument.declaration
+        else ExtracteurFactureXML()
+    )
     assert ex.supports(doc, r.pages)
     return doc, ex.extract(doc, r.pages, ctx)
 
@@ -55,7 +60,11 @@ def _provenance_complete(res, doc):
         assert v.document_id == doc.id and v.page == 1 and v.chemin.startswith(doc.type.value + ".")
         assert "[]" not in v.chemin
         if v.methode is not Methode.derive:
-            assert v.valeur_brute and v.texte_contexte and v.methode in (Methode.xml_structure, Methode.csv_structure)
+            assert (
+                v.valeur_brute
+                and v.texte_contexte
+                and v.methode in (Methode.xml_structure, Methode.csv_structure)
+            )
 
 
 def test_extracteurs_respectent_le_protocole():
@@ -80,20 +89,32 @@ def test_cii_facture_commerciale():
 
 
 def test_facturx_transitaire_debours_et_mrn():
-    xml = fab.cii(numero="FT-2026-00042", devise="EUR", incoterm=None, refs_doc=["26FR000000000001A1", "176-12345675"],
-                  lignes=[("Droits de douane", "1", "313.50", "313.50", None, None, "0"),
-                          ("TVA import", "1", "2508.00", "2508.00", None, None, "0"),
-                          ("Frais de dédouanement", "1", "65.00", "65.00", None, None, "20"),
-                          ("Avance de fonds", "1", "70.53", "70.53", None, None, "20")],
-                  vendeur="FICTIF TRANSIT SARL", tva_vendeur="FR40000987651")
+    xml = fab.cii(
+        numero="FT-2026-00042",
+        devise="EUR",
+        incoterm=None,
+        refs_doc=["26FR000000000001A1", "176-12345675"],
+        lignes=[
+            ("Droits de douane", "1", "313.50", "313.50", None, None, "0"),
+            ("TVA import", "1", "2508.00", "2508.00", None, None, "0"),
+            ("Frais de dédouanement", "1", "65.00", "65.00", None, None, "20"),
+            ("Avance de fonds", "1", "70.53", "70.53", None, None, "20"),
+        ],
+        vendeur="FICTIF TRANSIT SARL",
+        tva_vendeur="FR40000987651",
+    )
     pdf = fab.facturx_pdf(xml, fab.FACTURE_TRANSITAIRE)
     info = analyser_contenu_structure(pdf, "application/pdf")
     assert info is not None and info.format == "facturx" and info.type is TypeDocument.facture_transitaire
     doc, res = _extraire(pdf, "ft.pdf")
     assert doc.type is TypeDocument.facture_transitaire
     c = res.champs
-    assert [x.nature for x in c.lignes] == [NatureLigne.debours_droits, NatureLigne.debours_tva,
-                                          NatureLigne.frais_dedouanement, NatureLigne.frais_avance_fonds]
+    assert [x.nature for x in c.lignes] == [
+        NatureLigne.debours_droits,
+        NatureLigne.debours_tva,
+        NatureLigne.frais_dedouanement,
+        NatureLigne.frais_avance_fonds,
+    ]
     assert [v.valeur for v in c.refs_mrn] == ["26FR000000000001A1"]
     assert [v.valeur for v in c.refs_transport] == ["176-12345675"]
     assert c.total_debours.valeur == "2821.50" and c.total_debours.total_origine is TotalOrigine.reconstruit
@@ -104,9 +125,15 @@ def test_facturx_transitaire_debours_et_mrn():
 
 
 def test_cii_avoir():
-    xml = fab.cii(numero="AV-1", type_code="381", devise="EUR", incoterm=None, ref_origine="FT-2026-00042",
-                  lignes=[("Frais de dédouanement", "1", "65.00", "65.00", None, None, "20")],
-                  note="Motif : geste commercial")
+    xml = fab.cii(
+        numero="AV-1",
+        type_code="381",
+        devise="EUR",
+        incoterm=None,
+        ref_origine="FT-2026-00042",
+        lignes=[("Frais de dédouanement", "1", "65.00", "65.00", None, None, "20")],
+        note="Motif : geste commercial",
+    )
     doc, res = _extraire(xml, "av.xml")
     assert doc.type is TypeDocument.avoir
     c = res.champs
@@ -120,8 +147,15 @@ def test_ubl_facture_et_avoir():
     assert res.champs.total_facture.valeur == "12540.00" and res.champs.acheteur.tva.valeur == fab.TVA_CLIENT
     assert res.champs.lignes[0].quantite.unite == "C62"
     assert all(v.confiance == 1.0 for v in res.valeurs if v.valeur is not None)
-    doc, res = _extraire(fab.ubl(avoir=True, numero="CN-9", ref_origine="UBL-2026-001",
-                                 lignes=[("Frais de dédouanement", "1", "65.00", None, None)]), "cn.xml")
+    doc, res = _extraire(
+        fab.ubl(
+            avoir=True,
+            numero="CN-9",
+            ref_origine="UBL-2026-001",
+            lignes=[("Frais de dédouanement", "1", "65.00", None, None)],
+        ),
+        "cn.xml",
+    )
     assert doc.type is TypeDocument.avoir
     assert [v.valeur for v in res.champs.refs_facture_origine] == ["UBL-2026-001"]
     _provenance_complete(res, doc)
@@ -131,46 +165,63 @@ def test_ubl_lieu_incoterm_tire_des_conditions_en_clair():
     """Lieu absent de ``DeliveryLocation`` : tiré de ``SpecialTerms`` (« DAP Le Havre Incoterms 2020 »), confiance
     0,90 ; un ``DeliveryLocation`` imprimé reste prioritaire ; des conditions qui ne commencent pas par le code ne
     donnent aucun lieu (D-2013)."""
-    libre = ("<cac:DeliveryTerms><cbc:ID>DAP</cbc:ID><cbc:SpecialTerms>DAP Le Havre Incoterms 2020</cbc:SpecialTerms>"
-             "</cac:DeliveryTerms>")
+    libre = (
+        "<cac:DeliveryTerms><cbc:ID>DAP</cbc:ID><cbc:SpecialTerms>DAP Le Havre Incoterms 2020</cbc:SpecialTerms>"
+        "</cac:DeliveryTerms>"
+    )
     _doc, res = _extraire(fab.ubl(livraison=libre), "ubl.xml")
     assert res.champs.incoterm.valeur == "DAP"
     assert res.champs.incoterm_lieu.valeur == "Le Havre" and res.champs.incoterm_lieu.confiance == 0.9
-    lieu = ("<cac:DeliveryTerms><cbc:ID>CIF</cbc:ID><cbc:SpecialTerms>CIF Fos (Incoterms 2020)</cbc:SpecialTerms>"
-            "<cac:DeliveryLocation><cbc:ID>Marseille</cbc:ID></cac:DeliveryLocation></cac:DeliveryTerms>")
+    lieu = (
+        "<cac:DeliveryTerms><cbc:ID>CIF</cbc:ID><cbc:SpecialTerms>CIF Fos (Incoterms 2020)</cbc:SpecialTerms>"
+        "<cac:DeliveryLocation><cbc:ID>Marseille</cbc:ID></cac:DeliveryLocation></cac:DeliveryTerms>"
+    )
     _doc, res = _extraire(fab.ubl(livraison=lieu), "ubl.xml")
     assert res.champs.incoterm_lieu.valeur == "Marseille" and res.champs.incoterm_lieu.confiance == 1.0
-    autre = ("<cac:DeliveryTerms><cbc:ID>FOB</cbc:ID><cbc:SpecialTerms>Delivery within 30 days</cbc:SpecialTerms>"
-             "</cac:DeliveryTerms>")
+    autre = (
+        "<cac:DeliveryTerms><cbc:ID>FOB</cbc:ID><cbc:SpecialTerms>Delivery within 30 days</cbc:SpecialTerms>"
+        "</cac:DeliveryTerms>"
+    )
     _doc, res = _extraire(fab.ubl(livraison=autre), "ubl.xml")
     assert res.champs.incoterm_lieu is None
 
 
 def test_xml_non_valide_au_schema_confiance_095():
-    xml = fab.cii().replace(b"<ram:TypeCode>380</ram:TypeCode>", b"<ram:TypeCode>380</ram:TypeCode><ram:Inconnu/>")
+    xml = fab.cii().replace(
+        b"<ram:TypeCode>380</ram:TypeCode>", b"<ram:TypeCode>380</ram:TypeCode><ram:Inconnu/>"
+    )
     _doc, res = _extraire(xml, "f.xml")
     assert "schema_non_valide" in res.avertissements
     assert all(v.confiance == 0.95 for v in res.valeurs if v.valeur is not None)
 
 
 def test_xml_sans_entites_externes():
-    xxe = (b'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
-           b'<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100">'
-           b'&x;</rsm:CrossIndustryInvoice>')
+    xxe = (
+        b'<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
+        b'<rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100">'
+        b"&x;</rsm:CrossIndustryInvoice>"
+    )
     info = analyser_contenu_structure(xxe, "application/xml")
     assert info is None or b"root:" not in (info.xml or b"")
 
 
 @pytest.mark.parametrize(
     ("libelle", "nature"),
-    [("Droits de douane", NatureLigne.debours_droits), ("Droits et taxes", NatureLigne.debours_combines),
-     ("TVA à l'importation", NatureLigne.debours_tva), ("Autres taxes", NatureLigne.debours_autres_taxes),
-     ("Droit forfaitaire petits envois", NatureLigne.debours_forfait_petits_envois),
-     ("Frais d'avance de fonds", NatureLigne.frais_avance_fonds),
-     ("Lignes supplémentaires", NatureLigne.frais_ligne_supplementaire),
-     ("Customs clearance", NatureLigne.frais_dedouanement), ("Magasinage", NatureLigne.magasinage),
-     ("Livraison", NatureLigne.transport), ("Handling", NatureLigne.manutention),
-     ("Surcharge carburant", NatureLigne.surcharge), ("Frais de dossier informatique", NatureLigne.autre_prestation)],
+    [
+        ("Droits de douane", NatureLigne.debours_droits),
+        ("Droits et taxes", NatureLigne.debours_combines),
+        ("TVA à l'importation", NatureLigne.debours_tva),
+        ("Autres taxes", NatureLigne.debours_autres_taxes),
+        ("Droit forfaitaire petits envois", NatureLigne.debours_forfait_petits_envois),
+        ("Frais d'avance de fonds", NatureLigne.frais_avance_fonds),
+        ("Lignes supplémentaires", NatureLigne.frais_ligne_supplementaire),
+        ("Customs clearance", NatureLigne.frais_dedouanement),
+        ("Magasinage", NatureLigne.magasinage),
+        ("Livraison", NatureLigne.transport),
+        ("Handling", NatureLigne.manutention),
+        ("Surcharge carburant", NatureLigne.surcharge),
+        ("Frais de dossier informatique", NatureLigne.autre_prestation),
+    ],
 )
 def test_nature_ligne(libelle, nature):
     assert nature_ligne(libelle) is nature
@@ -250,11 +301,21 @@ def test_export_xml_x1():
     assert a.quantite_unite_supplementaire.unite_brute == "p/st"
     t0, t1 = c.taxations
     assert (t0.article.valeur, t0.type_taxe.valeur, t0.categorie, t0.paiement_normalise) == (
-        "1", "A00", CategorieTaxe.droit, PaiementNormalise.differe)
+        "1",
+        "A00",
+        CategorieTaxe.droit,
+        PaiementNormalise.differe,
+    )
     assert t1.categorie is CategorieTaxe.tva and t1.paiement_normalise is PaiementNormalise.autoliquide
-    assert t1.taux_nature is TauxNature.ad_valorem and t1.montant.valeur == "2229.33" and t1.montant.unite == "EUR"
+    assert (
+        t1.taux_nature is TauxNature.ad_valorem
+        and t1.montant.valeur == "2229.33"
+        and t1.montant.unite == "EUR"
+    )
     types = [i.type for i in c.indices_autoliquidation]
-    assert TypeIndiceAutoliquidation.code_1008 in types and TypeIndiceAutoliquidation.mode_paiement_tva in types
+    assert (
+        TypeIndiceAutoliquidation.code_1008 in types and TypeIndiceAutoliquidation.mode_paiement_tva in types
+    )
     assert c.indices_autoliquidation[0].tva.valeur == fab.TVA_CLIENT
     assert c.total_a_payer.valeur == "0.00"
     assert "element_ignore:ChampFutur" in res.avertissements  # élément inconnu ignoré et journalisé
@@ -283,12 +344,18 @@ def test_export_csv_x2_multi_enregistrements():
 
 def test_fiche_fictive_ajoutee_sans_code(tmp_path: Path):
     fiche = {
-        "format_id": "fictif_simple_csv", "type": "csv",
+        "format_id": "fictif_simple_csv",
+        "type": "csv",
         "detection": {"colonnes_requises": ["NUM_MRN", "VALEUR"]},
         "csv": {"separateur": ",", "separateur_decimal": "."},
         "entete": {"mrn": "NUM_MRN", "montant_total_facture": {"source": "VALEUR", "unite": "EUR"}},
-        "listes": {"taxations": {"type_enregistrement": None, "cle": "CODE",
-                                 "champs": {"type_taxe": "CODE", "montant": "MONTANT"}}},
+        "listes": {
+            "taxations": {
+                "type_enregistrement": None,
+                "cle": "CODE",
+                "champs": {"type_taxe": "CODE", "montant": "MONTANT"},
+            }
+        },
     }
     (tmp_path / "fictif_simple_csv.yaml").write_text(yaml.safe_dump(fiche), "utf-8")
     fiches = charger_fiches(tmp_path)
@@ -302,5 +369,6 @@ def test_fiche_fictive_ajoutee_sans_code(tmp_path: Path):
 
 def test_fiche_invalide_refusee():
     with pytest.raises(ValueError):
-        FicheCorrespondance.depuis_dict({"format_id": "x", "type": "xml", "detection": {},
-                                         "entete": {"champ_inexistant": "a"}})
+        FicheCorrespondance.depuis_dict(
+            {"format_id": "x", "type": "xml", "detection": {}, "entete": {"champ_inexistant": "a"}}
+        )

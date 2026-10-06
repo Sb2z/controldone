@@ -65,9 +65,7 @@ __all__ = [
 CONFIANCE_P5 = 0.90
 
 ACTION_P1 = "Compléter le dossier avec le ou les documents manquants, puis relancer le contrôle."
-ACTION_P2 = (
-    "Vérifier ce document ; si une facture commerciale exploitable existe pour cet envoi, l'ajouter au dossier."
-)
+ACTION_P2 = "Vérifier ce document ; si une facture commerciale exploitable existe pour cet envoi, l'ajouter au dossier."
 ACTION_P4 = (
     "Confirmer que ce document appartient bien à ce dossier (rattachement manuel) ; en attendant, les constats "
     "qui en dépendent restent à vérifier."
@@ -92,8 +90,10 @@ _LIBELLES_TYPE = {
     TypeDocument.facture_commerciale: "facture commerciale",
     TypeDocument.declaration: "déclaration en douane",
 }
-_ROLE_TYPE = {RoleLien.facture_commerciale: TypeDocument.facture_commerciale,
-              RoleLien.declaration: TypeDocument.declaration}
+_ROLE_TYPE = {
+    RoleLien.facture_commerciale: TypeDocument.facture_commerciale,
+    RoleLien.declaration: TypeDocument.declaration,
+}
 _SIGNAUX = {
     "mrn_cite": "MRN cité",
     "ref_facture_citee": "référence de facture citée",
@@ -280,8 +280,10 @@ def _freres_meme_manque(ctx: ControlContext, manquants: Sequence[TypeDocument]) 
         return []
     types = (TypeDocument.facture_commerciale, TypeDocument.declaration)
     attendu = set(manquants)
-    return sorted((a for a in freres if {t for t in types if not _a_exploitable(a.documents.values(), t)} == attendu),
-                  key=lambda a: a.dossier.id)
+    return sorted(
+        (a for a in freres if {t for t in types if not _a_exploitable(a.documents.values(), t)} == attendu),
+        key=lambda a: a.dossier.id,
+    )
 
 
 @control("P1")
@@ -318,7 +320,8 @@ def p1_completude(ctx: ControlContext) -> list[ResultatControle]:
         if presents:
             motifs = ", ".join(
                 LIBELLES_MOTIF.get(d.motif_non_exploitable, "document non reconnu")
-                if d.motif_non_exploitable else "document non reconnu"
+                if d.motif_non_exploitable
+                else "document non reconnu"
                 for d in presents
             )
             phrases.append(f"{nom} présente mais non exploitable : {motifs}")
@@ -338,12 +341,22 @@ def p1_completude(ctx: ControlContext) -> list[ResultatControle]:
             if porteur != ctx.dossier.id:
                 # D-4206 : le lot entier n'a aucun document de ce type ; le manque est signalé une fois, par le
                 # premier dossier du lot qui le partage (comme D-3105). Le dossier reste incomplet (statut).
-                return [ctx.non_applicable("P1", RaisonCode.couvert_par_autre_controle, details={
-                    **details, "dossier": porteur, "motif": "manque_commun_du_lot"})]
+                return [
+                    ctx.non_applicable(
+                        "P1",
+                        RaisonCode.couvert_par_autre_controle,
+                        details={**details, "dossier": porteur, "motif": "manque_commun_du_lot"},
+                    )
+                ]
             # Le constat porté cite les documents restés sans contrepartie dans chacun de ces dossiers.
-            docs_freres = [d.id for a in freres_d for d in a.documents.values()
-                           if d.type in (TypeDocument.facture_commerciale, TypeDocument.declaration)
-                           and d.champs is not None and not d.doublon_de]
+            docs_freres = [
+                d.id
+                for a in freres_d
+                for d in a.documents.values()
+                if d.type in (TypeDocument.facture_commerciale, TypeDocument.declaration)
+                and d.champs is not None
+                and not d.doublon_de
+            ]
             libelle = libelle[:-1] + (
                 f" (même manque pour {len(freres)} autre{'s' if len(freres) > 1 else ''} dossier"
                 f"{'s' if len(freres) > 1 else ''} du lot : aucun document de ce type dans le lot)."
@@ -442,7 +455,10 @@ def p3_champ_cle_illisible(ctx: ControlContext) -> list[ResultatControle]:
         for chemin, raison in champs_cles_illisibles(ctx, doc):
             resultats.append(
                 ctx.non_verifiable(
-                    "P3", raison, unite=cle_unite(doc=doc.id, champ=chemin), documents=[doc.id],
+                    "P3",
+                    raison,
+                    unite=cle_unite(doc=doc.id, champ=chemin),
+                    documents=[doc.id],
                     details={"champ": chemin, "type_document": doc.type.value},
                 )
             )
@@ -488,8 +504,15 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
         details = {"force": lien.force.value, "signaux": signaux}
         if doc.doublon_de:
             # Copie d'un document déjà présent (F1) : écartée des contrôles, son lien suit celui de l'original.
-            resultats.append(ctx.non_applicable("P4", RaisonCode.couvert_par_autre_controle, unite=unite,
-                                                documents=[doc.id], details={**details, "doublon_de": doc.doublon_de}))
+            resultats.append(
+                ctx.non_applicable(
+                    "P4",
+                    RaisonCode.couvert_par_autre_controle,
+                    unite=unite,
+                    documents=[doc.id],
+                    details={**details, "doublon_de": doc.doublon_de},
+                )
+            )
             continue
         if lien.force is not ForceLien.faible:
             resultats.append(ctx.conforme("P4", unite=unite, documents=[doc.id], details=details))
@@ -498,9 +521,15 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
         if porteur is not None:
             # D-4210 : document du lot rattaché faiblement à plusieurs dossiers (relevé, avoir d'une page d'un PDF
             # « envoi complet ») : la même vérification n'est demandée qu'une fois, par le premier de ces dossiers.
-            resultats.append(ctx.non_applicable("P4", RaisonCode.couvert_par_autre_controle, unite=unite,
-                                                documents=[doc.id], details={**details, "dossier": porteur,
-                                                                             "motif": "lien_faible_partage"}))
+            resultats.append(
+                ctx.non_applicable(
+                    "P4",
+                    RaisonCode.couvert_par_autre_controle,
+                    unite=unite,
+                    documents=[doc.id],
+                    details={**details, "dossier": porteur, "motif": "lien_faible_partage"},
+                )
+            )
             continue
         faibles.append((lien, doc, signaux, details))
     if not faibles:
@@ -521,8 +550,11 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
             f"(signaux : {noms})."
         )
     else:
-        libelle = ("Les documents suivants sont rattachés au dossier par un lien faible : "
-                   + " ; ".join(m[2] for m in morceaux) + ".")
+        libelle = (
+            "Les documents suivants sont rattachés au dossier par un lien faible : "
+            + " ; ".join(m[2] for m in morceaux)
+            + "."
+        )
     unite0 = cle_unite(lien=lien0.document_id)
     resultats.append(
         ctx.constat(
@@ -534,14 +566,24 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
             preuves=[_preuve_document(doc, noms) for doc, noms, _ in morceaux],
             documents=[doc.id for doc, _, _ in morceaux],
             constate=lien0.force.value,
-            details={**details0, "documents_faibles": [
-                {"document_id": doc.id, "signaux": signaux} for _, doc, signaux, _ in faibles]},
+            details={
+                **details0,
+                "documents_faibles": [
+                    {"document_id": doc.id, "signaux": signaux} for _, doc, signaux, _ in faibles
+                ],
+            },
         )
     )
     for lien, doc, _signaux, details in faibles[1:]:
-        resultats.append(ctx.non_applicable(
-            "P4", RaisonCode.couvert_par_autre_controle, unite=cle_unite(lien=lien.document_id), documents=[doc.id],
-            details={**details, "regroupe_dans": unite0}))
+        resultats.append(
+            ctx.non_applicable(
+                "P4",
+                RaisonCode.couvert_par_autre_controle,
+                unite=cle_unite(lien=lien.document_id),
+                documents=[doc.id],
+                details={**details, "regroupe_dans": unite0},
+            )
+        )
     return resultats
 
 
@@ -552,7 +594,12 @@ def _acheteur_hors_client(ctx: ControlContext, fc: Document) -> ValeurSourcee | 
     """TVA lue avec confiance ≥ 0,90 dans le pavé acheteur, qui n'est celle d'aucune entité du client, et
     aucune autre lecture (SIREN, alias, destinataire) n'identifie le client."""
     tva = fc.fc.acheteur.tva
-    if tva is None or not ctx.utilisable(tva) or tva.confiance < CONFIANCE_P5 or not normalize_vat(tva.valeur):
+    if (
+        tva is None
+        or not ctx.utilisable(tva)
+        or tva.confiance < CONFIANCE_P5
+        or not normalize_vat(tva.valeur)
+    ):
         return None
     if identifier_facture(ctx, fc).entite is not None:
         return None
@@ -575,7 +622,9 @@ def p5_dossier_non_concerne(ctx: ControlContext) -> list[ResultatControle]:
     if not fcs or not decs:
         return [ctx.non_verifiable("P5", RaisonCode.document_manquant)]
     if not ctx.entites:
-        return [ctx.non_verifiable("P5", RaisonCode.valeur_absente, details={"motif": "aucune_entite_client"})]
+        return [
+            ctx.non_verifiable("P5", RaisonCode.valeur_absente, details={"motif": "aucune_entite_client"})
+        ]
     tvas_acheteur = [_acheteur_hors_client(ctx, fc) for fc in fcs]
     importateurs_lus = all(ctx.utilisable(d.dec.importateur.tva) for d in decs)
     tva_client_dec = any(entites_client_declaration(ctx, d) for d in decs)
@@ -583,7 +632,9 @@ def p5_dossier_non_concerne(ctx: ControlContext) -> list[ResultatControle]:
     if all(t is not None for t in tvas_acheteur) and importateurs_lus and not tva_client_dec:
         return [
             ctx.non_applicable(
-                "P5", RaisonCode.dossier_non_concerne, documents=docs,
+                "P5",
+                RaisonCode.dossier_non_concerne,
+                documents=docs,
                 entrees={f"acheteur_tva_{i}": t for i, t in enumerate(tvas_acheteur) if t is not None},
                 details={
                     "non_concerne": True,

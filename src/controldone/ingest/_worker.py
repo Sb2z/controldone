@@ -19,8 +19,9 @@ def main() -> int:
     opts = OptionsPages(**{k: v for k, v in req.get("options", {}).items() if k in champs})
     contenu = Path(req["entree"]).read_bytes()
     pages = extraire_pages_local(contenu, req["mime"], opts)
-    Path(req["sortie"]).write_text(json.dumps({"pages": [p.to_dict() for p in pages]}, ensure_ascii=False),
-                                   "utf-8")
+    Path(req["sortie"]).write_text(
+        json.dumps({"pages": [p.to_dict() for p in pages]}, ensure_ascii=False), "utf-8"
+    )
     return 0
 
 

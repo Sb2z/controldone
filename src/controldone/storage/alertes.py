@@ -19,19 +19,37 @@ from sqlalchemy.orm import Session
 from controldone.storage.coltypes import maintenant
 from controldone.storage.models import Alerte, NotificationAlerte
 
-__all__ = ["EtatCanal", "NotificationEnvoyee", "a_notifier", "emettre_alerte", "enregistrer_notification",
-           "etat_canaux", "etat_notification", "historique_notifications", "marquer_lue", "marquer_notifiees"]
+__all__ = [
+    "EtatCanal",
+    "NotificationEnvoyee",
+    "a_notifier",
+    "emettre_alerte",
+    "enregistrer_notification",
+    "etat_canaux",
+    "etat_notification",
+    "historique_notifications",
+    "marquer_lue",
+    "marquer_notifiees",
+]
 
 
-def emettre_alerte(session: Session, *, cle: str, kind: str, message: str, tenant_id: str | None = None,
-                   details: dict[str, Any] | None = None) -> bool:
+def emettre_alerte(
+    session: Session,
+    *,
+    cle: str,
+    kind: str,
+    message: str,
+    tenant_id: str | None = None,
+    details: dict[str, Any] | None = None,
+) -> bool:
     """Crée l'alerte si ``cle`` est nouvelle ; renvoie ``True`` si créée."""
     if session.execute(select(Alerte.id).where(Alerte.cle == cle)).scalar() is not None:
         return False
     try:
         with session.begin_nested():
-            session.add(Alerte(cle=cle, kind=kind, message=message[:500], tenant_id=tenant_id,
-                               details=details or {}))
+            session.add(
+                Alerte(cle=cle, kind=kind, message=message[:500], tenant_id=tenant_id, details=details or {})
+            )
     except IntegrityError:
         return False
     return True
@@ -43,16 +61,20 @@ def marquer_lue(session: Session, alerte_id: int) -> None:
         a.lue_le = maintenant()
 
 
-def a_notifier(session: Session, *, depuis: datetime, quand: datetime | None = None,
-               limite: int = 5000) -> dict[str, list[int]]:
+def a_notifier(
+    session: Session, *, depuis: datetime, quand: datetime | None = None, limite: int = 5000
+) -> dict[str, list[int]]:
     """Alertes non lues et non traitées, groupées par type : ``{kind: [id…]}``. Celles d'avant ``depuis`` (ou déjà
     lues) sont marquées traitées sans envoi : activer les notifications n'envoie pas l'historique."""
     quand = quand or maintenant()
     groupes: dict[str, list[int]] = defaultdict(list)
     anciennes: list[int] = []
     for aid, kind, cree_le, lue_le in session.execute(
-            select(Alerte.id, Alerte.kind, Alerte.cree_le, Alerte.lue_le)
-            .where(Alerte.notifiee_le.is_(None)).order_by(Alerte.id).limit(limite)):
+        select(Alerte.id, Alerte.kind, Alerte.cree_le, Alerte.lue_le)
+        .where(Alerte.notifiee_le.is_(None))
+        .order_by(Alerte.id)
+        .limit(limite)
+    ):
         if lue_le is not None or cree_le < depuis:
             anciennes.append(aid)
         else:
@@ -63,8 +85,9 @@ def a_notifier(session: Session, *, depuis: datetime, quand: datetime | None = N
 
 def marquer_notifiees(session: Session, ids: list[int], quand: datetime | None = None) -> None:
     for i in range(0, len(ids), 500):
-        session.execute(update(Alerte).where(Alerte.id.in_(ids[i:i + 500]))
-                        .values(notifiee_le=quand or maintenant()))
+        session.execute(
+            update(Alerte).where(Alerte.id.in_(ids[i : i + 500])).values(notifiee_le=quand or maintenant())
+        )
 
 
 def etat_notification(session: Session, cle: str) -> tuple[str | None, int]:
@@ -73,8 +96,16 @@ def etat_notification(session: Session, cle: str) -> tuple[str | None, int]:
     return (n.statut, n.essais) if n is not None else (None, 0)
 
 
-def enregistrer_notification(session: Session, *, cle: str, kind: str, nombre: int, canaux: list[str],
-                             envoyee: bool, quand: datetime | None = None) -> int:
+def enregistrer_notification(
+    session: Session,
+    *,
+    cle: str,
+    kind: str,
+    nombre: int,
+    canaux: list[str],
+    envoyee: bool,
+    quand: datetime | None = None,
+) -> int:
     """Inscrit un essai d'envoi ; renvoie le nombre d'essais de la journée pour ce type."""
     quand = quand or maintenant()
     n = session.execute(select(NotificationAlerte).where(NotificationAlerte.cle == cle)).scalar_one_or_none()
@@ -125,8 +156,9 @@ class EtatCanal:
     @property
     def en_echec(self) -> bool:
         """Le dernier essai connu est un échec."""
-        return self.dernier_echec is not None and (self.dernier_succes is None
-                                                   or self.dernier_echec > self.dernier_succes)
+        return self.dernier_echec is not None and (
+            self.dernier_succes is None or self.dernier_echec > self.dernier_succes
+        )
 
 
 def _canaux(brut: str, statut: str) -> dict[str, str]:
@@ -142,12 +174,22 @@ def _canaux(brut: str, statut: str) -> dict[str, str]:
 
 def _ligne(n: NotificationAlerte) -> NotificationEnvoyee:
     jour = n.cle.split(":", 1)[1][:10] if ":" in n.cle else ""
-    return NotificationEnvoyee(id=n.id, kind=n.kind, jour=jour, nombre=n.nombre, statut=n.statut, essais=n.essais,
-                               canaux=_canaux(n.canaux, n.statut), premier_essai=n.cree_le, envoyee_le=n.envoyee_le)
+    return NotificationEnvoyee(
+        id=n.id,
+        kind=n.kind,
+        jour=jour,
+        nombre=n.nombre,
+        statut=n.statut,
+        essais=n.essais,
+        canaux=_canaux(n.canaux, n.statut),
+        premier_essai=n.cree_le,
+        envoyee_le=n.envoyee_le,
+    )
 
 
-def historique_notifications(session: Session, *, limite: int = 50, depuis: datetime | None = None,
-                             kind: str | None = None) -> list[NotificationEnvoyee]:
+def historique_notifications(
+    session: Session, *, limite: int = 50, depuis: datetime | None = None, kind: str | None = None
+) -> list[NotificationEnvoyee]:
     """Notifications poussées, la plus récente d'abord (``limite`` bornée à 500)."""
     q = select(NotificationAlerte).order_by(NotificationAlerte.cree_le.desc(), NotificationAlerte.id.desc())
     if depuis is not None:
@@ -157,7 +199,9 @@ def historique_notifications(session: Session, *, limite: int = 50, depuis: date
     return [_ligne(n) for n in session.execute(q.limit(max(1, min(int(limite), 500)))).scalars()]
 
 
-def etat_canaux(session: Session, *, depuis: datetime | None = None, limite: int = 500) -> dict[str, EtatCanal]:
+def etat_canaux(
+    session: Session, *, depuis: datetime | None = None, limite: int = 500
+) -> dict[str, EtatCanal]:
     """État de chaque canal vu dans l'historique récent (``{canal: EtatCanal}``). L'heure retenue est
     l'envoi réussi (``envoyee_le``) ou, faute de mieux, le premier essai du jour."""
     succes: dict[str, datetime] = {}

@@ -36,7 +36,8 @@ from controldone.testing import taxation, vs
 MRN = "26FR0000000000AAA1"
 TVA = "FR32000123459"
 PROFIL = {
-    "schema": "controldone.bench.profil/1.0.0", "client_id": "CL99",
+    "schema": "controldone.bench.profil/1.0.0",
+    "client_id": "CL99",
     "entites": [{"raison_sociale": "IMPORT FICTIF SAS", "tva": TVA, "siren": "000123459", "alias": []}],
     "transitaires": [{"transitaire_id": "T9", "nom": "TRANSIT FICTIF", "tva": "FR11000000017", "alias": []}],
     "tolerances": {},
@@ -58,9 +59,12 @@ def fabrique(doc, pages):
             devise_facture=vs("declaration.devise_facture", "USD", document_id=i),
             montant_total_facture=vs("declaration.montant_total_facture", "1000.00", document_id=i),
             importateur=Partie(tva=vs("declaration.importateur.tva", TVA, document_id=i)),
-            documents_references=[DocumentReference(
-                type_code=vs("declaration.documents_references[].type_code", "N380", document_id=i),
-                reference=vs("declaration.documents_references[].reference", "INV-10001", document_id=i))],
+            documents_references=[
+                DocumentReference(
+                    type_code=vs("declaration.documents_references[].type_code", "N380", document_id=i),
+                    reference=vs("declaration.documents_references[].reference", "INV-10001", document_id=i),
+                )
+            ],
             # B1 : 1 000,00 × 5 % = 50,00 ; imprimé 60,00 -> écart de calcul
             taxations=[taxation(i, base="1000.00", taux="5", montant="60.00")],
             # Total imprimé qui reprend la ligne : lecture corroborée (D-1700).
@@ -70,9 +74,12 @@ def fabrique(doc, pages):
         return ChampsFactureTransitaire(
             numero=vs("facture_transitaire.numero", "FT-500", document_id=i),
             refs_mrn=[vs("facture_transitaire.refs_mrn[]", MRN, document_id=i)],
-            lignes=[LigneFactureTransitaire(nature=NatureLigne.debours_droits,
-                                            montant_ht=vs("facture_transitaire.lignes[].montant_ht", "60.00",
-                                                          document_id=i))],
+            lignes=[
+                LigneFactureTransitaire(
+                    nature=NatureLigne.debours_droits,
+                    montant_ht=vs("facture_transitaire.lignes[].montant_ht", "60.00", document_id=i),
+                )
+            ],
         )
     return None
 
@@ -88,20 +95,32 @@ def lot(tmp_path):
 
 
 def _composants(**kw):
-    return Composants(decoupeur=DecoupeurDouble(**{k: v for k, v in kw.items() if k in ("echec", "inconnus")}),
-                      extracteurs=[ExtracteurDouble(fabrique, **{k: v for k, v in kw.items()
-                                                                  if k in ("echec_types", "cout")})])
+    return Composants(
+        decoupeur=DecoupeurDouble(**{k: v for k, v in kw.items() if k in ("echec", "inconnus")}),
+        extracteurs=[
+            ExtracteurDouble(fabrique, **{k: v for k, v in kw.items() if k in ("echec_types", "cout")})
+        ],
+    )
 
 
 def test_bout_en_bout(lot):
-    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, dossier_id_sortie="BX9001",
-                                                                       annee=2026), composants=_composants())
+    res = traiter_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1, dossier_id_sortie="BX9001", annee=2026),
+        composants=_composants(),
+    )
     assert len(res) == 1
     r = res[0]
     f = r.findings
     assert f.dossier_id == "BX9001"
     assert sorted(d.file for d in f.documents) == [
-        "docs/annexe.pdf", "docs/dec_h1.pdf", "docs/fc_invoice.pdf", "docs/ft_facture.pdf"]
+        "docs/annexe.pdf",
+        "docs/dec_h1.pdf",
+        "docs/fc_invoice.pdf",
+        "docs/ft_facture.pdf",
+    ]
     assert all(d.pages == [1] or d.pages == [1, 2] for d in f.documents)
     forces = {lien.role: lien.force for lien in f.liens}
     assert forces["declaration"] == ForceLien.forte.value and forces["facture_transitaire"] == "forte"
@@ -118,8 +137,13 @@ def test_bout_en_bout(lot):
 
 
 def test_composant_en_erreur_ne_bloque_pas_le_lot(lot):
-    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1),
-                      composants=_composants(echec=["annexe.pdf"]))
+    res = traiter_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1),
+        composants=_composants(echec=["annexe.pdf"]),
+    )
     assert len(res) == 1
     motifs = {(n.fichier, n.motif) for n in res[0].non_lus}
     assert ("docs/annexe.pdf", "lecture_en_erreur:RuntimeError") in motifs
@@ -127,8 +151,13 @@ def test_composant_en_erreur_ne_bloque_pas_le_lot(lot):
 
 
 def test_extracteur_en_panne(lot):
-    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1),
-                      composants=_composants(echec_types=[TypeDocument.facture_transitaire]))
+    res = traiter_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1),
+        composants=_composants(echec_types=[TypeDocument.facture_transitaire]),
+    )
     assert len(res) == 1
     r = res[0]
     ft = [d for d in r.documents.values() if d.type is TypeDocument.facture_transitaire]
@@ -136,11 +165,21 @@ def test_extracteur_en_panne(lot):
 
 
 def test_sans_decoupeur_tous_les_fichiers_sont_non_lus(lot):
-    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1),
-                      composants=Composants(decoupeur=None, extracteurs=[]))
+    res = traiter_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1),
+        composants=Composants(decoupeur=None, extracteurs=[]),
+    )
     assert res == []
-    prep = preparer_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1),
-                        composants=Composants(decoupeur=None, extracteurs=[]))
+    prep = preparer_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1),
+        composants=Composants(decoupeur=None, extracteurs=[]),
+    )
     assert {n.motif for n in prep.non_lus} == {"ingestion_indisponible"} and len(prep.non_lus) == 4
 
 
@@ -151,8 +190,13 @@ def test_fichier_refuse_liste(lot):
 
 
 def test_document_inconnu_liste(lot):
-    prep = preparer_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1),
-                        composants=_composants(inconnus=["annexe.pdf"]))
+    prep = preparer_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1),
+        composants=_composants(inconnus=["annexe.pdf"]),
+    )
     assert any(n.motif == "document_non_reconnu" for n in prep.non_lus)
 
 
@@ -163,8 +207,12 @@ def _sans_duree(f):
 
 
 def test_reproductible_avec_graine(lot):
-    a = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=7, annee=2026), composants=_composants())
-    b = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=7, annee=2026), composants=_composants())
+    a = traiter_lot(
+        lot / "docs", PROFIL, [], options=OptionsPipeline(seed=7, annee=2026), composants=_composants()
+    )
+    b = traiter_lot(
+        lot / "docs", PROFIL, [], options=OptionsPipeline(seed=7, annee=2026), composants=_composants()
+    )
     assert _sans_duree(a[0].findings) == _sans_duree(b[0].findings)
 
 
@@ -178,8 +226,9 @@ def test_memo_des_etapes(lot):
 
 
 def test_cout_ia_agrege(lot):
-    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1),
-                      composants=_composants(cout="0.05"))
+    res = traiter_lot(
+        lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1), composants=_composants(cout="0.05")
+    )
     # 4 documents extraits (fc, dec, ft, support) à 0,05 EUR
     assert res[0].execution.cout_ia_eur == Decimal("0.20")
     assert res[0].findings.execution.cout_ia_eur == "0.20"
@@ -190,6 +239,7 @@ def test_famille_f_voit_les_autres_dossiers(tmp_path, lot):
     ecrire_pdf(autre / "docs" / "fc_invoice.pdf", ["COMMERCIAL INVOICE INV-10001"])
     vus = {}
     with registre_temporaire():
+
         @control("F1")
         def f1(ctx):
             vus[ctx.dossier.id] = len(ctx.autres_dossiers)
@@ -205,6 +255,7 @@ def test_famille_f_voit_les_autres_dossiers(tmp_path, lot):
 
 def test_controle_en_erreur_isole(lot):
     with registre_temporaire():
+
         @control("B2")
         def b2(ctx):
             raise ZeroDivisionError
@@ -219,8 +270,13 @@ def test_fichier_en_double_rattache_et_signale(lot):
     de fichier ») comme copie de l'original : F1 le signale, aucun montant n'est compté deux fois."""
     (lot / "docs" / "courriel").mkdir()
     (lot / "docs" / "courriel" / "ft_facture.pdf").write_bytes((lot / "docs" / "ft_facture.pdf").read_bytes())
-    res = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, dossier_id_sortie="BX9001",
-                                                                       annee=2026), composants=_composants())
+    res = traiter_lot(
+        lot / "docs",
+        PROFIL,
+        [],
+        options=OptionsPipeline(seed=1, dossier_id_sortie="BX9001", annee=2026),
+        composants=_composants(),
+    )
     assert len(res) == 1
     r = res[0]
     doubles = [n.fichier for n in r.non_lus if n.motif == "doublon_de_fichier"]
@@ -232,7 +288,9 @@ def test_fichier_en_double_rattache_et_signale(lot):
     assert len(f1) == 1 and f1[0].documents_concernes == [copies[0].id] and f1[0].niveau == "a_verifier"
     # une seule facture transitaire comptée par les contrôles (pas de second C1/C5 ni de second P4)
     assert len([x for x in r.resultats if x.controle_id == "C1" and x.constat is not None]) <= 1
-    assert not [c for c in r.findings.constats if c.controle_id == "P4" and copies[0].id in c.documents_concernes]
+    assert not [
+        c for c in r.findings.constats if c.controle_id == "P4" and copies[0].id in c.documents_concernes
+    ]
 
 
 def test_progression_etapes_fines(lot):
@@ -250,11 +308,16 @@ def test_progression_etapes_fines(lot):
     assert premieres == list(ETAPES_PROGRESSION)
     assert ("pages", 4, 4) in vus and ("regroupement", 1, 1) in vus and ("controles", 1, 1) in vus
     extraction = [(f, t) for e, f, t in vus if e == "extraction"]
-    assert extraction[-1][0] == extraction[-1][1] and [f for f, _t in extraction] == sorted(f for f, _t in extraction)
+    assert extraction[-1][0] == extraction[-1][1] and [f for f, _t in extraction] == sorted(
+        f for f, _t in extraction
+    )
 
     def casse(*_a):
         raise RuntimeError("affichage indisponible")
 
-    res2 = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, progression=casse),
-                       composants=_composants())
-    assert [c.controle_id for c in res2[0].findings.constats] == [c.controle_id for c in res[0].findings.constats]
+    res2 = traiter_lot(
+        lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, progression=casse), composants=_composants()
+    )
+    assert [c.controle_id for c in res2[0].findings.constats] == [
+        c.controle_id for c in res[0].findings.constats
+    ]

@@ -32,8 +32,14 @@ from .base import ContexteAgent, Outil
 
 __all__ = ["CATALOGUE", "KINDS_ALERTE", "KINDS_JOB"]
 
-KINDS_ALERTE = Literal["revue_extraction", "litige_inactif", "litige_a_preparer", "litige_a_valider",
-                       "litige_a_clore", "question_client_instruction"]
+KINDS_ALERTE = Literal[
+    "revue_extraction",
+    "litige_inactif",
+    "litige_a_preparer",
+    "litige_a_valider",
+    "litige_a_clore",
+    "question_client_instruction",
+]
 KINDS_JOB = Literal["traiter_lot", "preparer_reclamation"]
 TYPES_FACTURE = Literal["diagnostic", "abonnement", "commission"]
 
@@ -67,7 +73,9 @@ def _abonnement(ctx: ContexteAgent, tenant_id: str, reglages: dict[str, Any]) ->
 
     compte = stock.compte_paiement(ctx.db, tenant_id)
     palier = (compte.palier if compte and compte.palier else None) or reglages.get("palier")
-    stripe_actif = bool(compte and compte.abonnement_id and (compte.statut_abonnement or "") in ("active", "trialing"))
+    stripe_actif = bool(
+        compte and compte.abonnement_id and (compte.statut_abonnement or "") in ("active", "trialing")
+    )
     prix = reglages.get("abonnement_mensuel_eur")
     if prix is None:
         try:
@@ -88,20 +96,33 @@ def lire_client(ctx: ContexteAgent) -> dict[str, Any]:
         c = sc.client()
         raison_sociale, offre, r = c.raison_sociale, c.offre, dict(c.reglages or {})
     abonnement = _abonnement(ctx, t, r)  # hors du périmètre : lit les tables de facturation (plateforme)
-    return {"raison_sociale": raison_sociale, "offre": offre, "contacts": destinataires_client(r, t),
-            "diagnostic_prix_eur": str(r.get("diagnostic_prix_eur", "390.00")),
-            "abonnement_mensuel_eur": abonnement["prix"], "abonnement_palier": abonnement["palier"],
-            "abonnement_stripe_actif": abonnement["stripe_actif"],
-            "litiges_inactivite_jours": int(r.get("litiges_inactivite_jours", 60)),
-            "seuil_confiance_revue": float(r.get("seuil_confiance_revue", 0.70))}
+    return {
+        "raison_sociale": raison_sociale,
+        "offre": offre,
+        "contacts": destinataires_client(r, t),
+        "diagnostic_prix_eur": str(r.get("diagnostic_prix_eur", "390.00")),
+        "abonnement_mensuel_eur": abonnement["prix"],
+        "abonnement_palier": abonnement["palier"],
+        "abonnement_stripe_actif": abonnement["stripe_actif"],
+        "litiges_inactivite_jours": int(r.get("litiges_inactivite_jours", 60)),
+        "seuil_confiance_revue": float(r.get("seuil_confiance_revue", 0.70)),
+    }
 
 
 def lister_lots(ctx: ContexteAgent, statut: str | None = None) -> list[dict[str, Any]]:
     t = _exiger_client(ctx)
     with perimetre(ctx.db, t, ctx.acteur, lecture=True) as sc:
         filtres = {"statut": statut} if statut else {}
-        return [{"id": x.id, "statut": x.statut, "canal": x.canal, "recu_le": _iso(x.recu_le),
-                 "resume": dict(x.resume or {})} for x in sc.lister(Lot, ordre=Lot.recu_le, **filtres)]
+        return [
+            {
+                "id": x.id,
+                "statut": x.statut,
+                "canal": x.canal,
+                "recu_le": _iso(x.recu_le),
+                "resume": dict(x.resume or {}),
+            }
+            for x in sc.lister(Lot, ordre=Lot.recu_le, **filtres)
+        ]
 
 
 def lire_dossiers_du_lot(ctx: ContexteAgent, lot_id: str) -> list[dict[str, Any]]:
@@ -115,10 +136,19 @@ def lire_dossiers_du_lot(ctx: ContexteAgent, lot_id: str) -> list[dict[str, Any]
             manquants = set(contenu.get("documents_manquants") or [])
             for r in sc.lister(Resultat, dossier_id=d.id, controle_id="P1"):
                 if r.outcome != "conforme":
-                    manquants |= set(((r.contenu or {}).get("details") or {}).get("documents_manquants") or [])
-            sortie.append({"dossier_id": d.id, "reference": d.reference, "version": d.version,
-                           "incomplet": bool(contenu.get("incomplet")) or bool(manquants),
-                           "documents_manquants": sorted(manquants), "cles": contenu.get("cles") or {}})
+                    manquants |= set(
+                        ((r.contenu or {}).get("details") or {}).get("documents_manquants") or []
+                    )
+            sortie.append(
+                {
+                    "dossier_id": d.id,
+                    "reference": d.reference,
+                    "version": d.version,
+                    "incomplet": bool(contenu.get("incomplet")) or bool(manquants),
+                    "documents_manquants": sorted(manquants),
+                    "cles": contenu.get("cles") or {},
+                }
+            )
         return sortie
 
 
@@ -148,9 +178,16 @@ def lister_extractions_peu_fiables(ctx: ContexteAgent, seuil: float = 0.70) -> l
             faibles = [c for c, conf in _valeurs((doc.contenu or {}).get("champs") or {}) if conf < seuil]
             if faibles:
                 par_dossier.setdefault(doc.dossier_id, []).extend(faibles)
-        return [{"dossier_id": did, "reference": dossiers[did].reference if did in dossiers else None,
-                 "version": dossiers[did].version if did in dossiers else None, "nombre": len(ch),
-                 "chemins": sorted(set(ch))[:10]} for did, ch in sorted(par_dossier.items())]
+        return [
+            {
+                "dossier_id": did,
+                "reference": dossiers[did].reference if did in dossiers else None,
+                "version": dossiers[did].version if did in dossiers else None,
+                "nombre": len(ch),
+                "chemins": sorted(set(ch))[:10],
+            }
+            for did, ch in sorted(par_dossier.items())
+        ]
 
 
 def lister_constats_publies(ctx: ContexteAgent) -> list[dict[str, Any]]:
@@ -162,25 +199,47 @@ def lister_constats_publies(ctx: ContexteAgent) -> list[dict[str, Any]]:
         for c in sc.lister(Constat, statut_validation="valide", ordre=Constat.id):
             cj = c.contenu or {}
             d = dossiers.get(c.dossier_id)
-            sortie.append({
-                "constat_id": c.id, "dossier_id": c.dossier_id, "dossier_reference": d.reference if d else None,
-                "cles": (d.contenu or {}).get("cles") if d else {}, "controle_id": c.controle_id,
-                "niveau": c.niveau, "libelle": cj.get("libelle") or "",
-                "montant_en_jeu": str(c.montant_en_jeu) if c.montant_en_jeu is not None else None,
-                "nature_montant": c.nature_montant, "composante": cj.get("composante"),
-                "renvoi": bool(cj.get("renvoi")),
-            })
+            sortie.append(
+                {
+                    "constat_id": c.id,
+                    "dossier_id": c.dossier_id,
+                    "dossier_reference": d.reference if d else None,
+                    "cles": (d.contenu or {}).get("cles") if d else {},
+                    "controle_id": c.controle_id,
+                    "niveau": c.niveau,
+                    "libelle": cj.get("libelle") or "",
+                    "montant_en_jeu": str(c.montant_en_jeu) if c.montant_en_jeu is not None else None,
+                    "nature_montant": c.nature_montant,
+                    "composante": cj.get("composante"),
+                    "renvoi": bool(cj.get("renvoi")),
+                }
+            )
         return sortie
 
 
 def _resume_litige(d: Any, restes: dict[str, Decimal]) -> dict[str, Any]:
-    return {"id": d.id, "statut": d.statut.value, "transitaire_id": d.transitaire_id, "factures": d.factures,
-            "total_demande": str(d.total_demande), "reste": str(sum(restes.values(), Decimal("0.00"))),
-            "envoyee_le": _iso(d.envoyee_le), "derniere_activite": _iso(d.derniere_activite),
-            "cree_le": _iso(d.cree_le),
-            "commissions": [{"avoir_id": c.avoir_id, "base": str(c.base), "taux": str(c.taux),
-                             "montant": str(c.montant), "outbox_id": c.outbox_id,
-                             "le": _iso(c.le)} for c in d.commissions]}
+    return {
+        "id": d.id,
+        "statut": d.statut.value,
+        "transitaire_id": d.transitaire_id,
+        "factures": d.factures,
+        "total_demande": str(d.total_demande),
+        "reste": str(sum(restes.values(), Decimal("0.00"))),
+        "envoyee_le": _iso(d.envoyee_le),
+        "derniere_activite": _iso(d.derniere_activite),
+        "cree_le": _iso(d.cree_le),
+        "commissions": [
+            {
+                "avoir_id": c.avoir_id,
+                "base": str(c.base),
+                "taux": str(c.taux),
+                "montant": str(c.montant),
+                "outbox_id": c.outbox_id,
+                "le": _iso(c.le),
+            }
+            for c in d.commissions
+        ],
+    }
 
 
 def lister_litiges(ctx: ContexteAgent) -> list[dict[str, Any]]:
@@ -207,8 +266,11 @@ def lister_ecarts_a_reclamer(ctx: ContexteAgent) -> list[dict[str, Any]]:
     t = _exiger_client(ctx)
     service = ServiceLitiges(ctx.db, horloge=ctx.horloge)
     with perimetre(ctx.db, t, ctx.acteur, lecture=True) as sc:
-        actives = {r.id for r in sc.lister(Reclamation)
-                   if (r.contenu or {}).get("statut") != StatutReclamation.abandonnee.value}
+        actives = {
+            r.id
+            for r in sc.lister(Reclamation)
+            if (r.contenu or {}).get("statut") != StatutReclamation.abandonnee.value
+        }
         par_tra: dict[str, list[Decimal]] = {}
         for c in service.constats_eligibles(sc):
             if c.niveau != "ecart_certain":
@@ -222,54 +284,98 @@ def lister_ecarts_a_reclamer(ctx: ContexteAgent) -> list[dict[str, Any]]:
             tra = sc.lire_dossier(c.dossier_id).transitaire_id
             if tra:
                 par_tra.setdefault(tra, []).append(Decimal(c.montant_en_jeu))
-        return [{"transitaire_id": k, "nombre": len(v), "total": str(sum(v, Decimal("0.00")))}
-                for k, v in sorted(par_tra.items())]
+        return [
+            {"transitaire_id": k, "nombre": len(v), "total": str(sum(v, Decimal("0.00")))}
+            for k, v in sorted(par_tra.items())
+        ]
 
 
 # --- propositions (seules écritures) -----------------------------------------------------------------------
 
 
-def proposer_courriel_client(ctx: ContexteAgent, objet: str, corps: str, cle: str,
-                             donnees: dict[str, Any] | None = None) -> str:
+def proposer_courriel_client(
+    ctx: ContexteAgent, objet: str, corps: str, cle: str, donnees: dict[str, Any] | None = None
+) -> str:
     """Brouillon ``email_client`` adressé aux contacts **du client du contexte** (l'agent ne choisit pas
     les destinataires). ``donnees`` : identifiants et données entrantes citées (non rédigées par nous)."""
     t = _exiger_client(ctx)
     contacts = lire_client(ctx)["contacts"]
-    payload: dict[str, Any] = {"objet": objet, "corps": corps, "destinataires": contacts,
-                               "destinataire_role": "client", "agent": ctx.agent}
+    payload: dict[str, Any] = {
+        "objet": objet,
+        "corps": corps,
+        "destinataires": contacts,
+        "destinataire_role": "client",
+        "agent": ctx.agent,
+    }
     if donnees:
         payload["donnees_entrantes"] = donnees
-    return FileSortante(ctx.db).proposer("email_client", payload, ctx.acteur, tenant_id=t,
-                                         idempotency_key=_cle(ctx, cle)).id
+    return (
+        FileSortante(ctx.db)
+        .proposer("email_client", payload, ctx.acteur, tenant_id=t, idempotency_key=_cle(ctx, cle))
+        .id
+    )
 
 
-def proposer_facture(ctx: ContexteAgent, type_facture: TYPES_FACTURE, lignes: list[dict[str, str]], cle: str,
-                     references: dict[str, str] | None = None) -> str:
+def proposer_facture(
+    ctx: ContexteAgent,
+    type_facture: TYPES_FACTURE,
+    lignes: list[dict[str, str]],
+    cle: str,
+    references: dict[str, str] | None = None,
+) -> str:
     """Brouillon ``facture_emise`` (diagnostic, abonnement, commission) : ``lignes`` =
     ``[{"libelle": …, "prix_unitaire_ht": "390.00", "quantite": "1"}]``."""
     t = _exiger_client(ctx)
     client = lire_client(ctx)
-    lf = [LigneFacture(libelle=x["libelle"], prix_unitaire_ht=Decimal(x["prix_unitaire_ht"]),
-                       quantite=Decimal(x.get("quantite", "1"))) for x in lignes]
-    payload = payload_facture(type_facture, lf, destinataires=client["contacts"],
-                              raison_sociale=client["raison_sociale"], references=references)
-    return FileSortante(ctx.db).proposer("facture_emise", payload, ctx.acteur, tenant_id=t,
-                                         idempotency_key=_cle(ctx, cle)).id
+    lf = [
+        LigneFacture(
+            libelle=x["libelle"],
+            prix_unitaire_ht=Decimal(x["prix_unitaire_ht"]),
+            quantite=Decimal(x.get("quantite", "1")),
+        )
+        for x in lignes
+    ]
+    payload = payload_facture(
+        type_facture,
+        lf,
+        destinataires=client["contacts"],
+        raison_sociale=client["raison_sociale"],
+        references=references,
+    )
+    return (
+        FileSortante(ctx.db)
+        .proposer("facture_emise", payload, ctx.acteur, tenant_id=t, idempotency_key=_cle(ctx, cle))
+        .id
+    )
 
 
-def proposer_note_veille(ctx: ContexteAgent, objet: str, corps: str, cle: str,
-                         sources: list[dict[str, str]] | None = None) -> str:
+def proposer_note_veille(
+    ctx: ContexteAgent, objet: str, corps: str, cle: str, sources: list[dict[str, str]] | None = None
+) -> str:
     """Note de veille pour le fondateur (brouillon de plateforme, jamais publié)."""
     if ctx.tenant_id is not None:
         raise AccesRefuse("note de veille : agent de plateforme seulement")
-    payload = {"objet": objet, "corps": corps, "destinataires": ["fondateur"], "publication": "jamais",
-               "donnees_entrantes": {"sources": sources or []}}
-    return FileSortante(ctx.db).proposer("note_veille", payload, ctx.acteur, tenant_id=None,
-                                         idempotency_key=cle).id
+    payload = {
+        "objet": objet,
+        "corps": corps,
+        "destinataires": ["fondateur"],
+        "publication": "jamais",
+        "donnees_entrantes": {"sources": sources or []},
+    }
+    return (
+        FileSortante(ctx.db)
+        .proposer("note_veille", payload, ctx.acteur, tenant_id=None, idempotency_key=cle)
+        .id
+    )
 
 
-def signaler_alerte(ctx: ContexteAgent, cle: str, kind: KINDS_ALERTE, message: str,
-                    details: dict[str, str | int] | None = None) -> bool:
+def signaler_alerte(
+    ctx: ContexteAgent,
+    cle: str,
+    kind: KINDS_ALERTE,
+    message: str,
+    details: dict[str, str | int] | None = None,
+) -> bool:
     """Alerte au tableau de bord du fondateur (dédoublonnée par ``cle``), sans contenu de document."""
     t = _exiger_client(ctx)
     with perimetre(ctx.db, t, ctx.acteur) as sc:
@@ -289,7 +395,8 @@ def planifier_relances(ctx: ContexteAgent) -> list[str]:
     """Brouillons ``relance`` échus, adressés au client (``ServiceLitiges.creer_relances_dues``)."""
     t = _exiger_client(ctx)
     return ServiceLitiges(ctx.db, horloge=ctx.horloge).creer_relances_dues(
-        t, maintenant_=ctx.maintenant(), acteur=ctx.acteur)
+        t, maintenant_=ctx.maintenant(), acteur=ctx.acteur
+    )
 
 
 # --- veille (plateforme) ------------------------------------------------------------------------------------
@@ -331,26 +438,44 @@ def enregistrer_instantanes(ctx: ContexteAgent, instantanes: dict[str, dict[str,
     return len(instantanes)
 
 
-CATALOGUE: dict[str, Outil] = {o.nom: o for o in (
-    Outil("lire_client", "Raison sociale, offre et réglages utiles du client", lire_client),
-    Outil("lister_lots", "Lots du client (statut, canal, résumé)", lister_lots),
-    Outil("lire_dossiers_du_lot", "Dossiers d'un lot et pièces manquantes (P1)", lire_dossiers_du_lot),
-    Outil("lister_extractions_peu_fiables", "Dossiers à valeurs lues de faible confiance",
-          lister_extractions_peu_fiables),
-    Outil("lister_constats_publies", "Constats publiés (validés) du client", lister_constats_publies),
-    Outil("lister_litiges", "Dossiers de demande d'avoir du client", lister_litiges),
-    Outil("lister_litiges_inactifs", "Litiges en cours sans activité depuis N jours", lister_litiges_inactifs),
-    Outil("lister_ecarts_a_reclamer", "Écarts validés pas encore demandés, par transitaire",
-          lister_ecarts_a_reclamer),
-    Outil("proposer_courriel_client", "Brouillon de courriel au client (validation du fondateur)",
-          proposer_courriel_client),
-    Outil("proposer_facture", "Brouillon de facture (validation du fondateur)", proposer_facture),
-    Outil("proposer_note_veille", "Note de veille pour le fondateur (brouillon)", proposer_note_veille),
-    Outil("signaler_alerte", "Alerte au fondateur", signaler_alerte),
-    Outil("demander_job", "Demande de job (traitement d'un lot, préparation d'un dossier)", demander_job),
-    Outil("planifier_relances", "Brouillons de relance au client échus", planifier_relances),
-    Outil("lire_sources", "Sources officielles suivies", lire_sources),
-    Outil("telecharger_source", "Téléchargement d'une source officielle (liste blanche)", telecharger_source),
-    Outil("lire_instantanes", "Dernières empreintes des sources", lire_instantanes),
-    Outil("enregistrer_instantanes", "Nouvelles empreintes des sources", enregistrer_instantanes),
-)}
+CATALOGUE: dict[str, Outil] = {
+    o.nom: o
+    for o in (
+        Outil("lire_client", "Raison sociale, offre et réglages utiles du client", lire_client),
+        Outil("lister_lots", "Lots du client (statut, canal, résumé)", lister_lots),
+        Outil("lire_dossiers_du_lot", "Dossiers d'un lot et pièces manquantes (P1)", lire_dossiers_du_lot),
+        Outil(
+            "lister_extractions_peu_fiables",
+            "Dossiers à valeurs lues de faible confiance",
+            lister_extractions_peu_fiables,
+        ),
+        Outil("lister_constats_publies", "Constats publiés (validés) du client", lister_constats_publies),
+        Outil("lister_litiges", "Dossiers de demande d'avoir du client", lister_litiges),
+        Outil(
+            "lister_litiges_inactifs",
+            "Litiges en cours sans activité depuis N jours",
+            lister_litiges_inactifs,
+        ),
+        Outil(
+            "lister_ecarts_a_reclamer",
+            "Écarts validés pas encore demandés, par transitaire",
+            lister_ecarts_a_reclamer,
+        ),
+        Outil(
+            "proposer_courriel_client",
+            "Brouillon de courriel au client (validation du fondateur)",
+            proposer_courriel_client,
+        ),
+        Outil("proposer_facture", "Brouillon de facture (validation du fondateur)", proposer_facture),
+        Outil("proposer_note_veille", "Note de veille pour le fondateur (brouillon)", proposer_note_veille),
+        Outil("signaler_alerte", "Alerte au fondateur", signaler_alerte),
+        Outil("demander_job", "Demande de job (traitement d'un lot, préparation d'un dossier)", demander_job),
+        Outil("planifier_relances", "Brouillons de relance au client échus", planifier_relances),
+        Outil("lire_sources", "Sources officielles suivies", lire_sources),
+        Outil(
+            "telecharger_source", "Téléchargement d'une source officielle (liste blanche)", telecharger_source
+        ),
+        Outil("lire_instantanes", "Dernières empreintes des sources", lire_instantanes),
+        Outil("enregistrer_instantanes", "Nouvelles empreintes des sources", enregistrer_instantanes),
+    )
+}

@@ -53,7 +53,9 @@ class DecoupeurDouble:
         self.echec = set(echec)
         self.inconnus = set(inconnus)
 
-    def decouper(self, source: FichierSource, *, ids: IdGenerator, client_id: str | None) -> ResultatDecoupage:
+    def decouper(
+        self, source: FichierSource, *, ids: IdGenerator, client_id: str | None
+    ) -> ResultatDecoupage:
         f = source.fichier
         if f.nom_original in self.echec:
             raise RuntimeError("lecture impossible")
@@ -64,21 +66,34 @@ class DecoupeurDouble:
         try:
             for i in range(len(doc_pdf)):
                 texte = doc_pdf[i].get_textpage().get_text_range()
-                pages.append(Page(id=ids.nouveau(Prefixe.page), fichier_id=f.id, numero=i + 1, texte=texte,
-                                  qualite_texte=QualiteTexte.natif))
+                pages.append(
+                    Page(
+                        id=ids.nouveau(Prefixe.page),
+                        fichier_id=f.id,
+                        numero=i + 1,
+                        texte=texte,
+                        qualite_texte=QualiteTexte.natif,
+                    )
+                )
         finally:
             doc_pdf.close()
         nom = f.nom_original
         type_ = TypeDocument.document_support
-        for prefixe, t in (("fc", TypeDocument.facture_commerciale), ("dec", TypeDocument.declaration),
-                           ("ft", TypeDocument.facture_transitaire), ("av", TypeDocument.avoir)):
+        for prefixe, t in (
+            ("fc", TypeDocument.facture_commerciale),
+            ("dec", TypeDocument.declaration),
+            ("ft", TypeDocument.facture_transitaire),
+            ("av", TypeDocument.avoir),
+        ):
             if nom.startswith(prefixe):
                 type_ = t
         if nom in self.inconnus:
             type_ = TypeDocument.inconnu
         doc = Document(
-            id=ids.nouveau(Prefixe.document), type=type_, confiance_classement=0.95 if type_ is not TypeDocument.inconnu
-            else 0.4, pages=[PageRef(fichier_id=f.id, numero=p.numero, qualite_texte=p.qualite_texte) for p in pages],
+            id=ids.nouveau(Prefixe.document),
+            type=type_,
+            confiance_classement=0.95 if type_ is not TypeDocument.inconnu else 0.4,
+            pages=[PageRef(fichier_id=f.id, numero=p.numero, qualite_texte=p.qualite_texte) for p in pages],
         )
         return ResultatDecoupage(pages=pages, documents=[doc])
 
@@ -88,8 +103,15 @@ class ExtracteurDouble:
 
     type = "deterministe"
 
-    def __init__(self, fabrique: Callable[[Document, Sequence[Page]], object], *, id: str = "double",
-                 version: str = "0.1", echec_types: Sequence[TypeDocument] = (), cout: str = "0") -> None:
+    def __init__(
+        self,
+        fabrique: Callable[[Document, Sequence[Page]], object],
+        *,
+        id: str = "double",
+        version: str = "0.1",
+        echec_types: Sequence[TypeDocument] = (),
+        cout: str = "0",
+    ) -> None:
         self.fabrique = fabrique
         self.id = id
         self.version = version
@@ -100,7 +122,9 @@ class ExtracteurDouble:
     def supports(self, document: Document, pages: Sequence[Page]) -> bool:
         return document.type is not TypeDocument.inconnu
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         self.appels += 1
         if document.type in self.echec_types:
             raise ValueError("extracteur en panne")
@@ -109,5 +133,6 @@ class ExtracteurDouble:
         champs = self.fabrique(document, pages)
         return ExtractionResult(
             extracteur=ExtracteurInfo(type=TypeExtracteur.deterministe, id=self.id, version=self.version),
-            champs=champs, cout=CoutExtraction(cout_eur=Decimal(self.cout)),
+            champs=champs,
+            cout=CoutExtraction(cout_eur=Decimal(self.cout)),
         )

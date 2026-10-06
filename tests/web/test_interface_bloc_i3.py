@@ -42,10 +42,13 @@ def _acteurs(pf):
 def _reference(scope):
     """Calcul d'avant le bloc I3 (listes complètes en Python), pris comme référence."""
     dossiers = lister_dossiers(scope)
-    return {"dossiers": len(dossiers), "constats": len(constats_courants(scope)),
-            "proposes": sum(d.nb_proposes for d in dossiers),
-            "certain": sum((d.recouvrable_certain for d in dossiers), Decimal(0)),
-            "a_verifier": sum((d.recouvrable_a_verifier for d in dossiers), Decimal(0))}
+    return {
+        "dossiers": len(dossiers),
+        "constats": len(constats_courants(scope)),
+        "proposes": sum(d.nb_proposes for d in dossiers),
+        "certain": sum((d.recouvrable_certain for d in dossiers), Decimal(0)),
+        "a_verifier": sum((d.recouvrable_a_verifier for d in dossiers), Decimal(0)),
+    }
 
 
 def _graphes_reference(scope):
@@ -100,7 +103,11 @@ def test_indicateurs_cloisonnes(monde):
     _grossir(monde.pf, B, 30)
     with monde.pf.db.tenant(A, acteur, lecture=True) as scope:
         apres = indicateurs(scope)
-        assert (avant.dossiers, avant.constats, avant.certain) == (apres.dossiers, apres.constats, apres.certain)
+        assert (avant.dossiers, avant.constats, avant.certain) == (
+            apres.dossiers,
+            apres.constats,
+            apres.certain,
+        )
         assert apres.dossiers == len(lister_dossiers(scope))
 
 
@@ -206,15 +213,27 @@ def test_migration_langue_sur_une_base_existante(tmp_path):
     url = f"sqlite:///{tmp_path}/ancienne.db"
     moteur = create_engine(url)
     with moteur.begin() as conn:  # table users d'avant le bloc I3, étapes 1 à 4 déjà inscrites
-        conn.execute(text("CREATE TABLE users (id VARCHAR(64) PRIMARY KEY, email VARCHAR(320), role VARCHAR(32), "
-                          "mot_de_passe_hash VARCHAR(300))"))
-        conn.execute(text("INSERT INTO users VALUES ('usr_fictif', 'fictif@example.test', 'client_admin', 'x')"))
-        conn.execute(text("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, nom VARCHAR(100), "
-                          "applique_le DATETIME)"))
+        conn.execute(
+            text(
+                "CREATE TABLE users (id VARCHAR(64) PRIMARY KEY, email VARCHAR(320), role VARCHAR(32), "
+                "mot_de_passe_hash VARCHAR(300))"
+            )
+        )
+        conn.execute(
+            text("INSERT INTO users VALUES ('usr_fictif', 'fictif@example.test', 'client_admin', 'x')")
+        )
+        conn.execute(
+            text(
+                "CREATE TABLE schema_version (version INTEGER PRIMARY KEY, nom VARCHAR(100), "
+                "applique_le DATETIME)"
+            )
+        )
         for m in MIGRATIONS:
             if m.nom != "langue_utilisateur":
-                conn.execute(text("INSERT INTO schema_version VALUES (:v, :n, '2026-10-01')"),
-                             {"v": m.version, "n": m.nom})
+                conn.execute(
+                    text("INSERT INTO schema_version VALUES (:v, :n, '2026-10-01')"),
+                    {"v": m.version, "n": m.nom},
+                )
     faites = appliquer(moteur)
     assert [m.nom for m in faites] == ["langue_utilisateur"]
     assert "langue" in {c["name"] for c in inspect(moteur).get_columns("users")}
@@ -239,15 +258,29 @@ def _non_lues(monde):
 
 
 def test_bandeau_alertes_graves(monde):
-    _alertes(monde, "sauvegarde_echec", "sauvegarde_echec", "sauvegarde_hors_site_echec", "job_mort",
-             "volume_non_chiffre", "cout_ia_plafond", "cout_ia_alerte", "litige_inactif")
+    _alertes(
+        monde,
+        "sauvegarde_echec",
+        "sauvegarde_echec",
+        "sauvegarde_hors_site_echec",
+        "job_mort",
+        "volume_non_chiffre",
+        "cout_ia_plafond",
+        "cout_ia_alerte",
+        "litige_inactif",
+    )
     f = monde.client()
     connecter_fondateur(f, monde)
     r = f.get("/admin")
     assert 'class="bandeau-alertes"' in r.text
     bandeau = r.text.split('class="bandeau-alertes"')[1].split("</section>")[0]
-    for lib in ("Sauvegarde en échec", "Copie hors site en échec", "Tâche morte", "Volume de la base non chiffré",
-                "Plafond IA atteint"):
+    for lib in (
+        "Sauvegarde en échec",
+        "Copie hors site en échec",
+        "Tâche morte",
+        "Volume de la base non chiffré",
+        "Plafond IA atteint",
+    ):
         assert lib in bandeau, lib
     assert "Coût IA 80 %" not in bandeau and "Écart sans suite" not in bandeau
     assert "2 non lue(s)" in bandeau
@@ -287,14 +320,42 @@ def test_historique_des_notifications(monde, monkeypatch):
     monkeypatch.setenv("CONTROLDONE_NOTIF_WEBHOOK_URL", "https://hooks.example.test/jeton-secret-FICTIF")
     t0 = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
     with monde.pf.db.transaction_systeme() as s:
-        s.add(NotificationAlerte(cle="sauvegarde_echec:2026-10-01", kind="sauvegarde_echec", nombre=2,
-                                 canaux="webhook,courriel", statut="envoyee", essais=1, cree_le=t0, envoyee_le=t0))
-        s.add(NotificationAlerte(cle="job_mort:2026-10-02", kind="job_mort", nombre=1, canaux="courriel",
-                                 statut="echec", essais=3, cree_le=t0 + timedelta(days=1)))
+        s.add(
+            NotificationAlerte(
+                cle="sauvegarde_echec:2026-10-01",
+                kind="sauvegarde_echec",
+                nombre=2,
+                canaux="webhook,courriel",
+                statut="envoyee",
+                essais=1,
+                cree_le=t0,
+                envoyee_le=t0,
+            )
+        )
+        s.add(
+            NotificationAlerte(
+                cle="job_mort:2026-10-02",
+                kind="job_mort",
+                nombre=1,
+                canaux="courriel",
+                statut="echec",
+                essais=3,
+                cree_le=t0 + timedelta(days=1),
+            )
+        )
         for i in range(30):
-            s.add(NotificationAlerte(cle=f"essai:2026-09-{i:02d}", kind="essai", nombre=1, canaux="webhook",
-                                     statut="envoyee", essais=1, cree_le=t0 - timedelta(days=i + 1),
-                                     envoyee_le=t0 - timedelta(days=i + 1)))
+            s.add(
+                NotificationAlerte(
+                    cle=f"essai:2026-09-{i:02d}",
+                    kind="essai",
+                    nombre=1,
+                    canaux="webhook",
+                    statut="envoyee",
+                    essais=1,
+                    cree_le=t0 - timedelta(days=i + 1),
+                    envoyee_le=t0 - timedelta(days=i + 1),
+                )
+            )
     f = monde.client()
     connecter_fondateur(f, monde)
     r = f.get("/admin/notifications")
@@ -331,12 +392,18 @@ def test_opt_out_lecture_llm_sur_la_fiche(monde):
     assert etat_plafond(A, db=monde.pf.db).desactive is True
     assert etat_plafond(B, db=monde.pf.db).desactive is False
     page = f.get(fiche).text
-    assert "Désactivée pour ce client" in page and 'value="1" checked' not in page.split('id="lecture-llm"')[1][:900]
+    assert (
+        "Désactivée pour ce client" in page
+        and 'value="1" checked' not in page.split('id="lecture-llm"')[1][:900]
+    )
     assert "Lecture par modèle désactivée" in f.get("/admin").text
     poster(f, fiche, f"{fiche}/llm", {"llm_autorise": "1"})
     assert etat_plafond(A, db=monde.pf.db).desactive is False
     with monde.pf.db.transaction_systeme() as s:
-        assert s.query(AuditLog).filter(AuditLog.action == "modifier_client", AuditLog.tenant_id == A).count() == 2
+        assert (
+            s.query(AuditLog).filter(AuditLog.action == "modifier_client", AuditLog.tenant_id == A).count()
+            == 2
+        )
     c = monde.client()
     connecter_client(c, monde, ADMIN_A)
     assert poster(c, "/espace", f"{fiche}/llm", {}).status_code in (403, 404)

@@ -57,8 +57,14 @@ def monde(db, vault) -> Monde:
     m = Monde(db=db, vault=vault, acteurs={"fondateur": FONDATEUR})
     h = hacher_mot_de_passe("phrase-de-passe-FICTIVE-123")
     for tenant, nom in (("cli_a", "admin_a"), ("cli_b", "admin_b")):
-        creer_utilisateur(db, user_id=f"usr_{nom}", email=f"{nom}@exemple-fictif.test", mot_de_passe_hash=h,
-                          role=Role.client_admin, acteur=FONDATEUR)
+        creer_utilisateur(
+            db,
+            user_id=f"usr_{nom}",
+            email=f"{nom}@exemple-fictif.test",
+            mot_de_passe_hash=h,
+            role=Role.client_admin,
+            acteur=FONDATEUR,
+        )
         with db.operateur(FONDATEUR) as op:
             op.client(tenant, "création des comptes de test").ajouter_membre(f"usr_{nom}", Role.client_admin)
         m.acteurs[nom] = Acteur(f"usr_{nom}", Role.client_admin, tenant)

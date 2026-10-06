@@ -7,17 +7,27 @@ from test_ingest_structure import _extraire
 
 from controldone.model.enums import NatureLigne, TypeDocument
 
-_PERIODE = ("<ram:BillingSpecifiedPeriod><ram:StartDateTime><udt:DateTimeString format=\"102\">20260602"
-            "</udt:DateTimeString></ram:StartDateTime><ram:EndDateTime><udt:DateTimeString format=\"102\">"
-            "20260611</udt:DateTimeString></ram:EndDateTime></ram:BillingSpecifiedPeriod>")
+_PERIODE = (
+    '<ram:BillingSpecifiedPeriod><ram:StartDateTime><udt:DateTimeString format="102">20260602'
+    '</udt:DateTimeString></ram:StartDateTime><ram:EndDateTime><udt:DateTimeString format="102">'
+    "20260611</udt:DateTimeString></ram:EndDateTime></ram:BillingSpecifiedPeriod>"
+)
 _ANCRE = "<ram:SpecifiedTradeSettlementLineMonetarySummation>"
 
 
 def _ft_cii(avec_periode: bool) -> bytes:
-    xml = fab.cii(numero="FT-FICTIF-2301", devise="EUR", incoterm=None, refs_doc=["26FR000000000001A1"],
-                  lignes=[("Frais de dédouanement", "1", "55.00", "55.00", None, None, "20"),
-                          ("Magasinage", "10", "12.50", "125.00", None, None, "20")],
-                  vendeur="FICTIF TRANSIT SARL", tva_vendeur="FR40000987651").decode()
+    xml = fab.cii(
+        numero="FT-FICTIF-2301",
+        devise="EUR",
+        incoterm=None,
+        refs_doc=["26FR000000000001A1"],
+        lignes=[
+            ("Frais de dédouanement", "1", "55.00", "55.00", None, None, "20"),
+            ("Magasinage", "10", "12.50", "125.00", None, None, "20"),
+        ],
+        vendeur="FICTIF TRANSIT SARL",
+        tva_vendeur="FR40000987651",
+    ).decode()
     if avec_periode:
         avant, _, apres = xml.rpartition(_ANCRE)
         xml = avant + _PERIODE + _ANCRE + apres

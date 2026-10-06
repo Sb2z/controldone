@@ -87,13 +87,20 @@ def _plafond_as(octets: int):
     return _f
 
 
-def executer(fichier: Path, delai: float, rss_max: int, env: dict[str, str], as_max: int = 1_500_000_000) -> dict:
+def executer(
+    fichier: Path, delai: float, rss_max: int, env: dict[str, str], as_max: int = 1_500_000_000
+) -> dict:
     with tempfile.TemporaryDirectory(prefix="cdo-camp-") as tmp:
         sortie = Path(tmp) / "bilan.json"
         debut = time.monotonic()
-        proc = subprocess.Popen([sys.executable, str(ICI / "executer_un.py"), str(fichier), str(sortie)],
-                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env,
-                                start_new_session=True, preexec_fn=_plafond_as(as_max))
+        proc = subprocess.Popen(
+            [sys.executable, str(ICI / "executer_un.py"), str(fichier), str(sortie)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=env,
+            start_new_session=True,
+            preexec_fn=_plafond_as(as_max),
+        )
         pic_principal = pic_arbre = 0
         cause = None
         err: list[bytes] = []
@@ -118,9 +125,16 @@ def executer(fichier: Path, delai: float, rss_max: int, env: dict[str, str], as_
         with contextlib.suppress(OSError):
             os.killpg(proc.pid, 9)  # restes éventuels (forkserver orphelin)
         bilan = json.loads(sortie.read_text("utf-8")) if sortie.exists() else {}
-    bilan.update({"echantillon": str(fichier), "duree_totale_s": round(duree, 2), "code": proc.returncode,
-                  "rss_principal_mo": round(pic_principal / 2**20), "rss_arbre_mo": round(pic_arbre / 2**20),
-                  "stderr": (b"".join(err)[-1500:]).decode("utf-8", "replace")})
+    bilan.update(
+        {
+            "echantillon": str(fichier),
+            "duree_totale_s": round(duree, 2),
+            "code": proc.returncode,
+            "rss_principal_mo": round(pic_principal / 2**20),
+            "rss_arbre_mo": round(pic_arbre / 2**20),
+            "stderr": (b"".join(err)[-1500:]).decode("utf-8", "replace"),
+        }
+    )
     if cause is None and bilan.get("exception") == "MemoryError":
         cause = "memoire"  # plafond d'espace d'adressage atteint dans le processus principal
     bilan["issue"] = cause or classer(bilan)
@@ -134,8 +148,10 @@ def classer(b: dict) -> str:
     refus = [n for n in nl if n["motif"].startswith("refuse:")]
     autres = {n["fichier"] for n in nl if not n["motif"].startswith("refuse:")}
     lus = [f for f in b.get("fichiers", []) if f["chemin"] not in autres]
-    if any(n["motif"].startswith(("reception_en_erreur", "lecture_en_erreur", "regroupement_en_erreur"))
-           for n in nl):
+    if any(
+        n["motif"].startswith(("reception_en_erreur", "lecture_en_erreur", "regroupement_en_erreur"))
+        for n in nl
+    ):
         return "plantage"  # exception rattrapée par le pipeline mais qui a fait perdre la réception ou le fichier
     if lus and b.get("pages", 0) > 0:
         return "traite"
@@ -168,8 +184,11 @@ def main(argv: list[str] | None = None) -> int:
         r = executer(f, a.delai, a.rss_max_mo * 2**20, env, a.as_max_octets)
         with verrou:
             resultats.append(r)
-            print(f"[{len(resultats):4d}/{len(fichiers)}] {r['issue']:10s} {r['duree_totale_s']:7.1f}s "
-                  f"{r['rss_principal_mo']:5d}/{r['rss_arbre_mo']:5d} Mo  {f}", flush=True)
+            print(
+                f"[{len(resultats):4d}/{len(fichiers)}] {r['issue']:10s} {r['duree_totale_s']:7.1f}s "
+                f"{r['rss_principal_mo']:5d}/{r['rss_arbre_mo']:5d} Mo  {f}",
+                flush=True,
+            )
         return r
 
     with ThreadPoolExecutor(max(1, min(a.paralleles, PARALLELES_MAX))) as ex:
@@ -181,18 +200,25 @@ def main(argv: list[str] | None = None) -> int:
         cat = Path(r["echantillon"]).parent.name
         par_cat.setdefault(cat, Counter())[r["issue"]] += 1
     synthese = {
-        "total": len(resultats), "issues": dict(resume),
+        "total": len(resultats),
+        "issues": dict(resume),
         "par_categorie": {k: dict(v) for k, v in sorted(par_cat.items())},
         "duree_max_s": max((r["duree_totale_s"] for r in resultats), default=0),
         "rss_principal_max_mo": max((r["rss_principal_mo"] for r in resultats), default=0),
         "rss_arbre_max_mo": max((r["rss_arbre_mo"] for r in resultats), default=0),
-        "lents_120s": [(r["echantillon"], r["duree_totale_s"]) for r in resultats if r["duree_totale_s"] > 120],
-        "defauts": [(r["echantillon"], r["issue"], r.get("exception")) for r in resultats
-                    if r["issue"] in ("plantage", "delai", "memoire", "silencieux")],
+        "lents_120s": [
+            (r["echantillon"], r["duree_totale_s"]) for r in resultats if r["duree_totale_s"] > 120
+        ],
+        "defauts": [
+            (r["echantillon"], r["issue"], r.get("exception"))
+            for r in resultats
+            if r["issue"] in ("plantage", "delai", "memoire", "silencieux")
+        ],
     }
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(a.out).write_text(json.dumps({"synthese": synthese, "resultats": resultats}, ensure_ascii=False, indent=1),
-                           "utf-8")
+    Path(a.out).write_text(
+        json.dumps({"synthese": synthese, "resultats": resultats}, ensure_ascii=False, indent=1), "utf-8"
+    )
     print(json.dumps(synthese, ensure_ascii=False, indent=1))
     return 0
 

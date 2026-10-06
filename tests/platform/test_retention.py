@@ -58,7 +58,9 @@ def test_purge_apres_retention(monde):
     assert rapport.fichiers == {"cli_a": 1} and rapport.textes == {"cli_a": 1}
     ref2, purge, sha2 = _fichier(monde, "cli_a", "fic_a")
     assert ref2 is None and purge is not None and sha2 == sha  # métadonnées conservées
-    assert not monde.vault.existe("cli_a", ref) and not monde.vault.existe("cli_a", texte_ref, espace="textes")
+    assert not monde.vault.existe("cli_a", ref) and not monde.vault.existe(
+        "cli_a", texte_ref, espace="textes"
+    )
     with monde.db.tenant("cli_a", SYSTEME) as sc:
         assert sc.obtenir(Dossier, "dos_a") is not None  # le dossier et ses constats restent
     # client B intact (dossier non clôturé)
@@ -92,8 +94,16 @@ def test_contenu_partage_conserve_tant_qu_une_ligne_le_reference(monde):
     ref, _, sha = _fichier(monde, "cli_a", "fic_a")
     with monde.db.tenant("cli_a", SYSTEME) as sc:  # même contenu reçu dans un autre lot, non clôturé
         sc._ajouter_interne(Lot(id="lot_a2"))
-        sc._ajouter_interne(Fichier(id="fic_a2", lot_id="lot_a2", nom_original="copie.pdf",
-                                    chemin_relatif="copie.pdf", sha256=sha, coffre_ref=ref))
+        sc._ajouter_interne(
+            Fichier(
+                id="fic_a2",
+                lot_id="lot_a2",
+                nom_original="copie.pdf",
+                chemin_relatif="copie.pdf",
+                sha256=sha,
+                coffre_ref=ref,
+            )
+        )
     _cloturer(monde, "cli_a", "dos_a", T0)
     purger_expires(monde.db, monde.vault, T0 + timedelta(days=181))
     assert monde.vault.existe("cli_a", ref)
@@ -103,9 +113,16 @@ def test_contenu_partage_conserve_tant_qu_une_ligne_le_reference(monde):
 def test_fichier_orphelin_suit_la_cloture_du_lot(monde):
     with monde.db.tenant("cli_b", SYSTEME) as sc:
         sc._ajouter_interne(Lot(id="lot_b2", cloture_le=T0))
-        sc._ajouter_interne(Fichier(id="fic_b2", lot_id="lot_b2", nom_original="inconnu.png",
-                                    chemin_relatif="inconnu.png", sha256="c" * 64,
-                                    coffre_ref=monde.vault.deposer("cli_b", b"image")))
+        sc._ajouter_interne(
+            Fichier(
+                id="fic_b2",
+                lot_id="lot_b2",
+                nom_original="inconnu.png",
+                chemin_relatif="inconnu.png",
+                sha256="c" * 64,
+                coffre_ref=monde.vault.deposer("cli_b", b"image"),
+            )
+        )
     assert purger_expires(monde.db, monde.vault, T0 + timedelta(days=181)).fichiers == {"cli_b": 1}
 
 
@@ -144,8 +161,15 @@ def test_export_fondateur_complet(monde, tmp_path):
     chemin = exporter_client(monde.db, monde.vault, "cli_a", FONDATEUR, tmp_path / "export_a.zip")
     with zipfile.ZipFile(chemin) as z:
         noms = set(z.namelist())
-        assert {"client.json", "entites.json", "grilles.json", "recouvrement.json", "manifest.json",
-                "dossiers/dos_a.json", "pieces/fic_a/facture.pdf"} <= noms
+        assert {
+            "client.json",
+            "entites.json",
+            "grilles.json",
+            "recouvrement.json",
+            "manifest.json",
+            "dossiers/dos_a.json",
+            "pieces/fic_a/facture.pdf",
+        } <= noms
         assert z.read("pieces/fic_a/facture.pdf") == b"PDF FICTIF cli_a"
         dossier = json.loads(z.read("dossiers/dos_a.json"))
         assert {c["id"] for c in dossier["constats"]} == {"f_a", "fv_a"} and dossier["resultats"]

@@ -84,7 +84,9 @@ class ClientPAFictif:
         for p in sorted(Path(dossier).glob("*")):
             if p.is_file() and p.suffix.lower() in (".xml", ".pdf"):
                 fmt = "factur-x" if p.suffix.lower() == ".pdf" else "ubl"
-                sortie.append(FacturePA(identifiant=p.stem, format=fmt, nom_fichier=p.name, contenu=p.read_bytes()))
+                sortie.append(
+                    FacturePA(identifiant=p.stem, format=fmt, nom_fichier=p.name, contenu=p.read_bytes())
+                )
         return cls(sortie)
 
     def factures_recues(self) -> list[FacturePA]:
@@ -103,11 +105,20 @@ class PlateformeAgreeeEntrante:
 
     def relever(self) -> list[Depot]:
         return [
-            Depot(tenant_id=self.tenant_id, canal="api", source=self.nom,
-                  elements=[(f"plateforme_agreee/{f.identifiant}/{f.nom_fichier}", f.contenu)],
-                  reference=f.identifiant,
-                  meta={"facture_pa_id": f.identifiant, "controle_avant_paiement": True, "format": f.format,
-                        "numero": f.numero, "date_echeance": f.date_echeance.isoformat() if f.date_echeance else None})
+            Depot(
+                tenant_id=self.tenant_id,
+                canal="api",
+                source=self.nom,
+                elements=[(f"plateforme_agreee/{f.identifiant}/{f.nom_fichier}", f.contenu)],
+                reference=f.identifiant,
+                meta={
+                    "facture_pa_id": f.identifiant,
+                    "controle_avant_paiement": True,
+                    "format": f.format,
+                    "numero": f.numero,
+                    "date_echeance": f.date_echeance.isoformat() if f.date_echeance else None,
+                },
+            )
             for f in self.client.factures_recues()
         ]
 
@@ -116,17 +127,31 @@ class PlateformeAgreeeEntrante:
             self.client.accuser_lecture(depot.reference)
 
 
-def proposer_statut_litige(db: Database, tenant_id: str, lot_id: str, facture_pa_id: str, *,
-                           numero: str | None = None, date_echeance: str | None = None) -> str | None:
+def proposer_statut_litige(
+    db: Database,
+    tenant_id: str,
+    lot_id: str,
+    facture_pa_id: str,
+    *,
+    numero: str | None = None,
+    date_echeance: str | None = None,
+) -> str | None:
     """Après le contrôle avant paiement : si des écarts certains recouvrables sont constatés (constats non
     rejetés), brouillon ``statut_litige_pa`` adressé au **client** (validation du fondateur, puis décision
     du client). Renvoie l'identifiant du brouillon, ou ``None`` s'il n'y a rien à proposer."""
     acteur = Acteur.systeme("controle_avant_paiement")
     with db.tenant(tenant_id, acteur, lecture=True) as sc:
         dossiers = [d.id for d in sc.lister(DossierRow, lot_id=lot_id)]
-        constats = [c for c in sc.lister(Constat, ordre=Constat.id)
-                    if c.dossier_id in dossiers and c.niveau == "ecart_certain" and c.nature_montant == "recouvrable"
-                    and c.statut_validation != "rejete" and c.montant_en_jeu and c.montant_en_jeu > 0]
+        constats = [
+            c
+            for c in sc.lister(Constat, ordre=Constat.id)
+            if c.dossier_id in dossiers
+            and c.niveau == "ecart_certain"
+            and c.nature_montant == "recouvrable"
+            and c.statut_validation != "rejete"
+            and c.montant_en_jeu
+            and c.montant_en_jeu > 0
+        ]
         reglages = sc.client().reglages or {}
     if not constats:
         return None
@@ -147,10 +172,24 @@ def proposer_statut_litige(db: Database, tenant_id: str, lot_id: str, facture_pa
     )
     payload = {
         "objet": f"Contrôle avant paiement — facture n° {numero or facture_pa_id} : statut « en litige » proposé",
-        "corps": corps, "destinataires": destinataires_client(reglages, tenant_id), "destinataire_role": "client",
-        "facture_pa_id": facture_pa_id, "statut_propose": "en_litige", "motif": motif,
-        "validation_client_requise": True, "transmission_par": "client",
+        "corps": corps,
+        "destinataires": destinataires_client(reglages, tenant_id),
+        "destinataire_role": "client",
+        "facture_pa_id": facture_pa_id,
+        "statut_propose": "en_litige",
+        "motif": motif,
+        "validation_client_requise": True,
+        "transmission_par": "client",
         "refs": [c.id for c in constats],
     }
-    return FileSortante(db).proposer("statut_litige_pa", payload, acteur, tenant_id=tenant_id,
-                                     idempotency_key=f"statut_litige_pa:{tenant_id}:{facture_pa_id}").id
+    return (
+        FileSortante(db)
+        .proposer(
+            "statut_litige_pa",
+            payload,
+            acteur,
+            tenant_id=tenant_id,
+            idempotency_key=f"statut_litige_pa:{tenant_id}:{facture_pa_id}",
+        )
+        .id
+    )

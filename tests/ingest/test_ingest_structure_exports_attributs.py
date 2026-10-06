@@ -37,7 +37,9 @@ def _extraire(contenu: bytes, nom: str, fiches=None):
     r = decouper_fichier(fr.fichier, fr.contenu, options=LOCAL, fiches=fiches)
     doc = r.documents[0]
     assert doc.type is TypeDocument.declaration
-    ctx = ExtractionContext(contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime, ids=IdGenerator.deterministe(4))
+    ctx = ExtractionContext(
+        contenu_fichier=fr.contenu, type_mime=fr.fichier.type_mime, ids=IdGenerator.deterministe(4)
+    )
     ex = ExtracteurDeclarationExport(fiches)
     assert ex.supports(doc, r.pages)
     return doc, ex.extract(doc, r.pages, ctx)
@@ -101,37 +103,51 @@ def test_export_xml_a_attributs():
     assert c.mrn.valeur == MRN and c.version.valeur == "2" and c.date_acceptation.valeur == "2026-05-04"
     assert c.importateur.nom.valeur == "Atelier Fictif SARL" and c.importateur.tva.valeur == "FR01000424242"
     assert (c.devise_facture.valeur, c.montant_total_facture.valeur, c.montant_total_facture.unite) == (
-        "USD", "1000.00", "USD")
+        "USD",
+        "1000.00",
+        "USD",
+    )
     assert c.taux_change.valeur == "1.16000" and c.taux_change_sens.valeur == "devise_par_eur"
     assert c.taux_change_sens.valeur_brute == "unites_devise_pour_un_euro"  # valeur brute : celle du fichier
     a = c.articles[0]
     assert (a.masse_nette.valeur, a.masse_brute.valeur, a.quantite_unite_supplementaire.valeur) == (
-        "10.000", "12.500", "4")
+        "10.000",
+        "12.500",
+        "4",
+    )
     t_a00, t_b00, t_fpe = c.taxations
     assert t_a00.article.valeur == "1" and t_b00.paiement_normalise is PaiementNormalise.autoliquide
     # taxation de niveau déclaration : aucun article (le rang du dossier n'est pas un numéro d'article)
     assert t_fpe.article is None and t_fpe.categorie is CategorieTaxe.forfait_petits_envois
     assert t_fpe.taux_nature is TauxNature.specifique and t_fpe.base_quantite.valeur == "1"
     assert [(d.type_code.valeur, d.reference.valeur) for d in c.documents_references] == [
-        ("N380", "INV-T-1"), ("1008", "FR01000424242")]
-    assert {i.type for i in c.indices_autoliquidation} == {TypeIndiceAutoliquidation.code_1008,
-                                                           TypeIndiceAutoliquidation.mode_paiement_tva}
+        ("N380", "INV-T-1"),
+        ("1008", "FR01000424242"),
+    ]
+    assert {i.type for i in c.indices_autoliquidation} == {
+        TypeIndiceAutoliquidation.code_1008,
+        TypeIndiceAutoliquidation.mode_paiement_tva,
+    }
     assert all(v.methode is Methode.xml_structure and v.confiance == 1.0 for v in res.valeurs)
     # D-3101 : total imprimé par code, porté à part (jamais une ligne de taxation)
     assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "23.28")]
     assert len(c.taxations) == 3
 
 
-_COLONNES = ("mrn;lrn;rang;date_acceptation;importateur;tva_importateur;eori_importateur;declarant;tva_declarant;"
-             "incoterm;lieu_livraison;pays_expedition;monnaie_facture;total_facture;taux_change;base_taux;"
-             "masse_brute_totale;colis_total;nb_positions;pieces_jointes;position;code_nc;designation;origine;"
-             "preference;regime;montant_facture_position;valeur_statistique;masse_nette;masse_brute;quantite;"
-             "unite_quantite;colis_position;type_imposition;libelle_imposition;assiette;assiette_quantite;"
-             "unite_assiette;taux;mode_calcul;montant;montant_exigible;mode_paiement;total_droits_taxes;"
-             "total_a_acquitter")
-_ENTETE = (f"{MRN};LRN-T-2;1;04/05/2026;Atelier Fictif SARL;FR01000424242;FR00042424200000;Transit Imaginaire SAS;"
-           "FR61000515151;FOB;Ningbo;CN;EUR;1000,50;1,16000;1EUR;30,500;4;2;N380:INV-T-2|N705:BL-T-2|"
-           "1008:FR01000424242")
+_COLONNES = (
+    "mrn;lrn;rang;date_acceptation;importateur;tva_importateur;eori_importateur;declarant;tva_declarant;"
+    "incoterm;lieu_livraison;pays_expedition;monnaie_facture;total_facture;taux_change;base_taux;"
+    "masse_brute_totale;colis_total;nb_positions;pieces_jointes;position;code_nc;designation;origine;"
+    "preference;regime;montant_facture_position;valeur_statistique;masse_nette;masse_brute;quantite;"
+    "unite_quantite;colis_position;type_imposition;libelle_imposition;assiette;assiette_quantite;"
+    "unite_assiette;taux;mode_calcul;montant;montant_exigible;mode_paiement;total_droits_taxes;"
+    "total_a_acquitter"
+)
+_ENTETE = (
+    f"{MRN};LRN-T-2;1;04/05/2026;Atelier Fictif SARL;FR01000424242;FR00042424200000;Transit Imaginaire SAS;"
+    "FR61000515151;FOB;Ningbo;CN;EUR;1000,50;1,16000;1EUR;30,500;4;2;N380:INV-T-2|N705:BL-T-2|"
+    "1008:FR01000424242"
+)
 
 
 def _csv() -> bytes:
@@ -164,13 +180,19 @@ def test_export_csv_denormalise_commentaire_virgule_decimale():
     assert c.articles[0].masse_brute.valeur == "12.000"
     # article sans taxation propre (colonnes vides) : pas de ligne de taxation ; FPE sans article
     assert [(t.article.valeur if t.article else None, t.type_taxe.valeur) for t in c.taxations] == [
-        ("1", "A00"), ("1", "B00"), (None, "FPE")]
+        ("1", "A00"),
+        ("1", "B00"),
+        (None, "FPE"),
+    ]
     assert c.taxations[1].paiement_normalise is PaiementNormalise.autoliquide
     assert c.taxations[2].paiement_normalise is PaiementNormalise.comptant
     assert c.taxations[2].taux_nature is TauxNature.specifique
     # documents « code:référence » d'une seule cellule
     assert [(d.type_code.valeur, d.reference.valeur) for d in c.documents_references] == [
-        ("N380", "INV-T-2"), ("N705", "BL-T-2"), ("1008", "FR01000424242")]
+        ("N380", "INV-T-2"),
+        ("N705", "BL-T-2"),
+        ("1008", "FR01000424242"),
+    ]
     assert c.indices_autoliquidation
     assert all(v.methode is Methode.csv_structure for v in res.valeurs)
 
@@ -178,27 +200,33 @@ def test_export_csv_denormalise_commentaire_virgule_decimale():
 def test_options_generiques_fiche_csv(tmp_path: Path):
     """Options ajoutées sans code propre à un format : ``csv.commentaire``, ``eclater``, ``requis``, ``valeurs``."""
     fiche = {
-        "format_id": "fictif_options_csv", "type": "csv",
+        "format_id": "fictif_options_csv",
+        "type": "csv",
         "detection": {"colonnes_requises": ["REF", "DOCS"]},
         "csv": {"separateur": ";", "separateur_decimal": ".", "commentaire": "//"},
         "entete": {"mrn": "REF", "taux_change_sens": {"source": "SENS", "valeurs": {"A": "eur_par_devise"}}},
         "listes": {
-            "documents_references": {"eclater": {"source": "DOCS", "separateur": "+",
-                                                 "motif": "(?P<c>[^=]+)=(?P<r>.+)"},
-                                     "champs": {"type_code": "c", "reference": "r"}},
+            "documents_references": {
+                "eclater": {"source": "DOCS", "separateur": "+", "motif": "(?P<c>[^=]+)=(?P<r>.+)"},
+                "champs": {"type_code": "c", "reference": "r"},
+            },
             "taxations": {"requis": "CODE", "champs": {"type_taxe": "CODE", "montant": "MT"}},
         },
     }
     (tmp_path / "fictif_options_csv.yaml").write_text(yaml.safe_dump(fiche), "utf-8")
     fiches = charger_fiches(tmp_path)
-    contenu = (b"// mention fictive, ignoree\nREF;SENS;DOCS;CODE;MT\n"
-               b"26FR333333333333C3;A;N380=F-1+N740=L-2;A00;5.00\n26FR333333333333C3;A;N380=F-1+N740=L-2;;\n"
-               b"26FR333333333333C3;A;N380=F-1+N740=L-2;B00;20.00\n")
+    contenu = (
+        b"// mention fictive, ignoree\nREF;SENS;DOCS;CODE;MT\n"
+        b"26FR333333333333C3;A;N380=F-1+N740=L-2;A00;5.00\n26FR333333333333C3;A;N380=F-1+N740=L-2;;\n"
+        b"26FR333333333333C3;A;N380=F-1+N740=L-2;B00;20.00\n"
+    )
     _doc, res = _extraire(contenu, "options.csv", fiches=fiches)
     c = res.champs
     assert c.mrn.valeur == "26FR333333333333C3" and c.taux_change_sens.valeur == "eur_par_devise"
-    assert [(d.type_code.valeur, d.reference.valeur) for d in c.documents_references] == [("N380", "F-1"),
-                                                                                         ("N740", "L-2")]
+    assert [(d.type_code.valeur, d.reference.valeur) for d in c.documents_references] == [
+        ("N380", "F-1"),
+        ("N740", "L-2"),
+    ]
     assert [t.type_taxe.valeur for t in c.taxations] == ["A00", "B00"]
 
 
@@ -241,7 +269,10 @@ def test_export_xml_deduit_totaux_par_code():
     _, res = _extraire(XML_DEDUIT, "customs_entry.xml", fiches=())
     c = res.champs
     assert any(a.startswith("fiche_deduite") for a in res.avertissements)
-    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "9.10"), ("B00", "61.82")]
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [
+        ("A00", "9.10"),
+        ("B00", "61.82"),
+    ]
     assert len(c.taxations) == 4 and all(t.article is not None for t in c.taxations)
 
 
@@ -262,5 +293,8 @@ def test_export_csv_x2_totaux_par_code():
     _, res = _extraire(contenu, "export_declaration.csv")
     c = res.champs
     assert "fiche:bench_x2_csv@1.1.0" in res.avertissements
-    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "5.40"), ("B00", "40.00")]
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [
+        ("A00", "5.40"),
+        ("B00", "40.00"),
+    ]
     assert len(c.taxations) == 2

@@ -48,13 +48,22 @@ def main() -> int:
     from cryptography.fernet import Fernet
 
     data = Path(tempfile.mkdtemp(prefix="cdo-web-fuzz-"))
-    env = {**os.environ, "CONTROLDONE_ENV": "dev", "CONTROLDONE_DATA_DIR": str(data),
-           "CONTROLDONE_DATABASE_URL": f"sqlite:///{data}/controldone.db",
-           "CONTROLDONE_MASTER_KEY": Fernet.generate_key().decode(), "CONTROLDONE_LOG_LEVEL": "WARNING"}
+    env = {
+        **os.environ,
+        "CONTROLDONE_ENV": "dev",
+        "CONTROLDONE_DATA_DIR": str(data),
+        "CONTROLDONE_DATABASE_URL": f"sqlite:///{data}/controldone.db",
+        "CONTROLDONE_MASTER_KEY": Fernet.generate_key().decode(),
+        "CONTROLDONE_LOG_LEVEL": "WARNING",
+    }
     env.pop("CONTROLDONE_PAGES_CACHE_DIR", None)
     env.pop("ANTHROPIC_API_KEY", None)
     # Client et clé d'API (processus séparé : réglages lus depuis cet environnement)
-    prep = subprocess.run([sys.executable, "-c", r"""
+    prep = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            r"""
 from controldone.auth.roles import Acteur, Role
 from controldone.services.admin import creer_client, creer_cle
 from controldone.services.plateforme import Plateforme
@@ -67,12 +76,23 @@ creer_utilisateur_client(pf, f, tid, "fuzz@exemple.invalid", "client_admin")
 a = Acteur(utilisateur_par_email(pf.db, "fuzz@exemple.invalid").id, Role.client_admin, tid)
 with pf.db.tenant(tid, a) as s:
     print(creer_cle(s, "fuzz").cle)
-"""], env=env, capture_output=True, text=True, check=True)
+""",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     cle = prep.stdout.strip().splitlines()[-1]
     port = _port_libre()
     journal = open(data / "serve.log", "wb")  # noqa: SIM115 - fermé après l'arrêt du serveur
-    serveur = subprocess.Popen([sys.executable, "-m", "controldone.cli", "serve", "--port", str(port)], env=env,
-                               stdout=journal, stderr=subprocess.STDOUT, start_new_session=True)
+    serveur = subprocess.Popen(
+        [sys.executable, "-m", "controldone.cli", "serve", "--port", str(port)],
+        env=env,
+        stdout=journal,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
     base = f"http://127.0.0.1:{port}"
     resultats = []
     try:
@@ -90,15 +110,23 @@ with pf.db.tenant(tid, a) as s:
         for p in choix:
             t = time.monotonic()
             try:
-                r = client.post("/api/v1/lots", files=[("fichiers", (p.name, p.read_bytes(),
-                                                                       "application/octet-stream"))])
+                r = client.post(
+                    "/api/v1/lots", files=[("fichiers", (p.name, p.read_bytes(), "application/octet-stream"))]
+                )
                 code, corps = r.status_code, r.text[:400]
             except httpx.HTTPError as e:
                 code, corps = -1, type(e).__name__
             vivant = serveur.poll() is None and httpx.get(base + "/sante", timeout=10).status_code == 200
             pic = max(pic, _rss_mo(serveur.pid))
-            resultats.append({"echantillon": str(p), "http": code, "reponse": corps,
-                              "duree_s": round(time.monotonic() - t, 2), "serveur_vivant": vivant})
+            resultats.append(
+                {
+                    "echantillon": str(p),
+                    "http": code,
+                    "reponse": corps,
+                    "duree_s": round(time.monotonic() - t, 2),
+                    "serveur_vivant": vivant,
+                }
+            )
             print(code, round(time.monotonic() - t, 2), "vivant" if vivant else "MORT", p, flush=True)
             if not vivant:
                 break
@@ -107,14 +135,24 @@ with pf.db.tenant(tid, a) as s:
         debut = time.monotonic()
         etat = {}
         while time.monotonic() - debut < a.attente_max:
-            q = subprocess.run([sys.executable, "-c", r"""
+            q = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    r"""
 import json, sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 jobs = dict(c.execute("select statut, count(*) from jobs group by statut").fetchall())
 lots = dict(c.execute("select statut, count(*) from lots group by statut").fetchall())
 err = [r[0] for r in c.execute("select last_error from jobs where last_error is not null").fetchall()]
 print(json.dumps({"jobs": jobs, "lots": lots, "erreurs": err}))
-""", str(data / "controldone.db")], capture_output=True, text=True, env=env)
+""",
+                    str(data / "controldone.db"),
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
             etat = json.loads(q.stdout or "{}")
             pic = max(pic, _rss_mo(serveur.pid))
             if not set(etat.get("jobs", {})) - {"done", "dead"}:
@@ -133,14 +171,27 @@ print(json.dumps({"jobs": jobs, "lots": lots, "erreurs": err}))
     codes: dict[str, int] = {}
     for r in resultats:
         codes[str(r["http"])] = codes.get(str(r["http"]), 0) + 1
-    bilan = {"envoyes": len(resultats), "codes_http": codes, "file": etat, "serveur_vivant_fin": vivant_fin,
-             "rss_serveur_pic_mo": round(pic), "rss_serveur_fin_mo": round(rss_fin),
-             "tracebacks_journal": log.count("Traceback"), "extrait_journal": log[-3000:],
-             "duree_max_depot_s": max((r["duree_s"] for r in resultats), default=0), "resultats": resultats,
-             "data_dir": str(data)}
+    bilan = {
+        "envoyes": len(resultats),
+        "codes_http": codes,
+        "file": etat,
+        "serveur_vivant_fin": vivant_fin,
+        "rss_serveur_pic_mo": round(pic),
+        "rss_serveur_fin_mo": round(rss_fin),
+        "tracebacks_journal": log.count("Traceback"),
+        "extrait_journal": log[-3000:],
+        "duree_max_depot_s": max((r["duree_s"] for r in resultats), default=0),
+        "resultats": resultats,
+        "data_dir": str(data),
+    }
     Path(a.out).write_text(json.dumps(bilan, indent=1, ensure_ascii=False), "utf-8")
-    print(json.dumps({k: v for k, v in bilan.items() if k not in ("resultats", "extrait_journal")}, indent=1,
-                     ensure_ascii=False))
+    print(
+        json.dumps(
+            {k: v for k, v in bilan.items() if k not in ("resultats", "extrait_journal")},
+            indent=1,
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 

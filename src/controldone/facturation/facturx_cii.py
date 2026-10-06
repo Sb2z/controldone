@@ -59,8 +59,20 @@ def _siren_valide(s: str) -> bool:
     return len(s) == 9 and s.isdigit()
 
 
-def _partie(parent: etree._Element, nom: str, *, raison: str, siren: str, ligne: str, cp: str, ville: str,
-            pays: str, adresse_elec: str, tva: str, email: str = "") -> None:
+def _partie(
+    parent: etree._Element,
+    nom: str,
+    *,
+    raison: str,
+    siren: str,
+    ligne: str,
+    cp: str,
+    ville: str,
+    pays: str,
+    adresse_elec: str,
+    tva: str,
+    email: str = "",
+) -> None:
     p = _el(parent, nom)
     _el(p, "ram:Name", raison)
     if siren:
@@ -85,9 +97,18 @@ def _partie(parent: etree._Element, nom: str, *, raison: str, siren: str, ligne:
         _el(reg, "ram:ID", tva, schemeID="VA")
 
 
-def _taxe(parent: etree._Element, f: Facture, *, montant: Decimal | None = None, base: Decimal | None = None,
-          entete: bool = False) -> None:
-    t = _el(parent, "ram:ApplicableTradeTax" if not parent.tag.endswith("AllowanceCharge") else "ram:CategoryTradeTax")
+def _taxe(
+    parent: etree._Element,
+    f: Facture,
+    *,
+    montant: Decimal | None = None,
+    base: Decimal | None = None,
+    entete: bool = False,
+) -> None:
+    t = _el(
+        parent,
+        "ram:ApplicableTradeTax" if not parent.tag.endswith("AllowanceCharge") else "ram:CategoryTradeTax",
+    )
     if montant is not None:
         _el(t, "ram:CalculatedAmount", _m(montant))
     _el(t, "ram:TypeCode", "VAT")
@@ -130,20 +151,48 @@ def generer_xml(f: Facture) -> bytes:
         _el(_el(it, "ram:SpecifiedTradeProduct"), "ram:Name", ligne.libelle[:300])
         acc = _el(it, "ram:SpecifiedLineTradeAgreement")
         _el(_el(acc, "ram:NetPriceProductTradePrice"), "ram:ChargeAmount", _m(ligne.prix_unitaire_ht))
-        _el(_el(it, "ram:SpecifiedLineTradeDelivery"), "ram:BilledQuantity",
-            f"{Decimal(ligne.quantite).normalize():f}", unitCode="C62")
+        _el(
+            _el(it, "ram:SpecifiedLineTradeDelivery"),
+            "ram:BilledQuantity",
+            f"{Decimal(ligne.quantite).normalize():f}",
+            unitCode="C62",
+        )
         st = _el(it, "ram:SpecifiedLineTradeSettlement")
         _taxe(st, f)
-        _el(_el(st, "ram:SpecifiedTradeSettlementLineMonetarySummation"), "ram:LineTotalAmount", _m(ligne.montant_ht))
+        _el(
+            _el(st, "ram:SpecifiedTradeSettlementLineMonetarySummation"),
+            "ram:LineTotalAmount",
+            _m(ligne.montant_ht),
+        )
 
     v, a = f.vendeur, f.acheteur
     accord = _el(tx, "ram:ApplicableHeaderTradeAgreement")
-    _partie(accord, "ram:SellerTradeParty", raison=v.raison_sociale, siren=v.siren, ligne=v.adresse_ligne,
-            cp=v.code_postal, ville=v.ville, pays=v.pays, adresse_elec=v.adresse_electronique_effective,
-            tva=v.tva_intracom if f.tva.tva_applicable else "", email=v.email)
-    _partie(accord, "ram:BuyerTradeParty", raison=a.raison_sociale, siren=a.siren, ligne=a.adresse_ligne,
-            cp=a.code_postal, ville=a.ville, pays=a.pays, adresse_elec=a.adresse_electronique_effective,
-            tva=a.tva_intracom, email=a.email)
+    _partie(
+        accord,
+        "ram:SellerTradeParty",
+        raison=v.raison_sociale,
+        siren=v.siren,
+        ligne=v.adresse_ligne,
+        cp=v.code_postal,
+        ville=v.ville,
+        pays=v.pays,
+        adresse_elec=v.adresse_electronique_effective,
+        tva=v.tva_intracom if f.tva.tva_applicable else "",
+        email=v.email,
+    )
+    _partie(
+        accord,
+        "ram:BuyerTradeParty",
+        raison=a.raison_sociale,
+        siren=a.siren,
+        ligne=a.adresse_ligne,
+        cp=a.code_postal,
+        ville=a.ville,
+        pays=a.pays,
+        adresse_elec=a.adresse_electronique_effective,
+        tva=a.tva_intracom,
+        email=a.email,
+    )
 
     livr = _el(tx, "ram:ApplicableHeaderTradeDelivery")
     if a.adresse_livraison_differente:
@@ -179,7 +228,11 @@ def generer_xml(f: Facture) -> bytes:
         _taxe(ac, f)
     termes = _el(regl, "ram:SpecifiedTradePaymentTerms")
     if not f.est_avoir:
-        _el(termes, "ram:Description", f"Paiement à {f.paiement.delai_jours} jours. {f.paiement.moyen}".strip())
+        _el(
+            termes,
+            "ram:Description",
+            f"Paiement à {f.paiement.delai_jours} jours. {f.paiement.moyen}".strip(),
+        )
         _d(termes, "ram:DueDateDateTime", f.date_echeance)
     else:
         _el(termes, "ram:Description", "Avoir : montant à déduire ou à rembourser.")
@@ -223,4 +276,3 @@ def controles_reforme(f: Facture) -> list[str]:
     if len(f.numero) > 35:
         anomalies.append("numéro de facture de plus de 35 caractères (BR-FR-01)")
     return anomalies
-

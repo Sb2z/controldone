@@ -32,7 +32,7 @@ def _cle(secret: str) -> bytes:
 def code_hotp(cle: bytes, compteur: int, *, chiffres: int = 6, algo: str = "SHA1") -> str:
     mac = hmac.new(cle, struct.pack(">Q", compteur), _ALGOS[algo]).digest()
     decalage = mac[-1] & 0x0F
-    binaire = struct.unpack(">I", mac[decalage:decalage + 4])[0] & 0x7FFFFFFF
+    binaire = struct.unpack(">I", mac[decalage : decalage + 4])[0] & 0x7FFFFFFF
     return str(binaire % 10**chiffres).zfill(chiffres)
 
 
@@ -40,12 +40,22 @@ def pas_courant(t: float | None = None, *, periode: int = 30) -> int:
     return int((time.time() if t is None else t) // periode)
 
 
-def code_totp(secret: str, t: float | None = None, *, periode: int = 30, chiffres: int = 6, algo: str = "SHA1") -> str:
+def code_totp(
+    secret: str, t: float | None = None, *, periode: int = 30, chiffres: int = 6, algo: str = "SHA1"
+) -> str:
     return code_hotp(_cle(secret), pas_courant(t, periode=periode), chiffres=chiffres, algo=algo)
 
 
-def verifier_totp(secret: str, code: str, t: float | None = None, *, fenetre: int = 1, periode: int = 30,
-                  chiffres: int = 6, algo: str = "SHA1") -> int | None:
+def verifier_totp(
+    secret: str,
+    code: str,
+    t: float | None = None,
+    *,
+    fenetre: int = 1,
+    periode: int = 30,
+    chiffres: int = 6,
+    algo: str = "SHA1",
+) -> int | None:
     """Pas accepté (tolérance de ± ``fenetre`` pas pour la dérive d'horloge), sinon ``None``."""
     code = (code or "").strip().replace(" ", "")
     if len(code) != chiffres or not code.isdigit():

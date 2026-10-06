@@ -34,12 +34,25 @@ from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.models import Constat, Dossier, Ecart, EvenementRecouvrement, Transitaire
 from controldone.storage.scope import TenantScope
 
-__all__ = ["LIBELLES_STATUT_ECART", "LigneRegistre", "declarer_envoi", "declarer_envoi_releve", "enregistrer_avoir",
-           "enregistrer_avoir_recu", "jours_relance", "preparer_dossier", "registre"]
+__all__ = [
+    "LIBELLES_STATUT_ECART",
+    "LigneRegistre",
+    "declarer_envoi",
+    "declarer_envoi_releve",
+    "enregistrer_avoir",
+    "enregistrer_avoir_recu",
+    "jours_relance",
+    "preparer_dossier",
+    "registre",
+]
 
 LIBELLES_STATUT_ECART = {
-    "ouvert": "Ouvert", "reclame": "Relevé envoyé par le client", "partiellement_credite": "Avoir partiel reçu",
-    "credite": "Avoir reçu", "conteste": "Contesté par le transitaire", "abandonne": "Abandonné",
+    "ouvert": "Ouvert",
+    "reclame": "Relevé envoyé par le client",
+    "partiellement_credite": "Avoir partiel reçu",
+    "credite": "Avoir reçu",
+    "conteste": "Contesté par le transitaire",
+    "abandonne": "Abandonné",
 }
 MONTANT_AVOIR_MAX = Decimal("1000000000")
 
@@ -65,14 +78,27 @@ class LigneRegistre:
     evenements: list[dict[str, Any]]
 
     def en_dict(self) -> dict[str, Any]:
-        return {"litige_id": self.id, "constat_id": self.constat_id, "dossier_id": self.dossier_id,
-                "dossier_reference": self.dossier_reference, "transitaire": self.transitaire,
-                "composante": self.composante, "niveau": self.niveau, "mrn": self.mrn,
-                "montant_initial_eur": str(self.montant_initial), "montant_credite_eur": str(self.montant_credite),
-                "reste_eur": str(self.reste), "statut": self.statut_code, "age_jours": self.age_jours,
-                "relance_suggeree": self.relance, "rappel_suggere": self.relance, "evenements": self.evenements,
-                "ecart_id": self.id, "statut_libelle": self.statut,
-                "nature": "écart constaté entre documents ; ne préjuge pas des sommes légalement dues"}
+        return {
+            "litige_id": self.id,
+            "constat_id": self.constat_id,
+            "dossier_id": self.dossier_id,
+            "dossier_reference": self.dossier_reference,
+            "transitaire": self.transitaire,
+            "composante": self.composante,
+            "niveau": self.niveau,
+            "mrn": self.mrn,
+            "montant_initial_eur": str(self.montant_initial),
+            "montant_credite_eur": str(self.montant_credite),
+            "reste_eur": str(self.reste),
+            "statut": self.statut_code,
+            "age_jours": self.age_jours,
+            "relance_suggeree": self.relance,
+            "rappel_suggere": self.relance,
+            "evenements": self.evenements,
+            "ecart_id": self.id,
+            "statut_libelle": self.statut,
+            "nature": "écart constaté entre documents ; ne préjuge pas des sommes légalement dues",
+        }
 
 
 def jours_relance(reglages: dict[str, Any] | None) -> tuple[int, ...]:
@@ -95,8 +121,9 @@ def _relance(age: int | None, statut: str, jours: tuple[int, ...] | None = None)
     return f"rappel suggéré ({passees[-1]} jours)" if passees else None
 
 
-def registre(scope: TenantScope, *, ecart_id: str | None = None,
-             ecart_ids: list[str] | None = None) -> list[LigneRegistre]:
+def registre(
+    scope: TenantScope, *, ecart_id: str | None = None, ecart_ids: list[str] | None = None
+) -> list[LigneRegistre]:
     """Écarts du client dont le constat est visible par l'acteur (rôle client : constats publiés).
 
     ``ecart_ids`` : seulement ces écarts, dans cet ordre (page d'une liste filtrée en SQL, D-3801) ; les
@@ -115,8 +142,12 @@ def registre(scope: TenantScope, *, ecart_id: str | None = None,
         lignes = [scope.obtenir(Ecart, ecart_id)] if ecart_id else scope.lister(Ecart, ordre=Ecart.modifie_le)
     # événements de toutes les lignes en une requête par paquet (et non une par écart)
     evenements: dict[str, list[Any]] = {}
-    for v in scope.lister_parmi(EvenementRecouvrement, "ecart_id", [e.id for e in lignes if e.constat_id in visibles],
-                                ordre=EvenementRecouvrement.le):
+    for v in scope.lister_parmi(
+        EvenementRecouvrement,
+        "ecart_id",
+        [e.id for e in lignes if e.constat_id in visibles],
+        ordre=EvenementRecouvrement.le,
+    ):
         evenements.setdefault(v.ecart_id, []).append(v)
     maintenant = datetime.now(UTC)
     out = []
@@ -133,23 +164,44 @@ def registre(scope: TenantScope, *, ecart_id: str | None = None,
                 age = (maintenant - datetime.fromisoformat(reclame_le.replace("Z", "+00:00"))).days
             except ValueError:
                 age = None
-        evts = [{"de": v.de, "vers": v.vers, "le": v.le.isoformat() if v.le else None,
-                 "montant": str(v.montant) if v.montant is not None else None,
-                 "commentaire": (v.contenu or {}).get("commentaire"),
-                 "piece": ((v.contenu or {}).get("piece") or {}).get("autre")}
-                for v in evenements.get(e.id, [])]
+        evts = [
+            {
+                "de": v.de,
+                "vers": v.vers,
+                "le": v.le.isoformat() if v.le else None,
+                "montant": str(v.montant) if v.montant is not None else None,
+                "commentaire": (v.contenu or {}).get("commentaire"),
+                "piece": ((v.contenu or {}).get("piece") or {}).get("autre"),
+            }
+            for v in evenements.get(e.id, [])
+        ]
         try:
             comp = LIBELLES_COMPOSANTE.get(Composante(j.get("composante")), j.get("composante") or "—")
         except ValueError:
             comp = j.get("composante") or "—"
-        out.append(LigneRegistre(
-            id=e.id, constat_id=e.constat_id, dossier_id=j.get("dossier_id"),
-            dossier_reference=references.get(j.get("dossier_id") or ""),
-            transitaire=transitaires.get(e.transitaire_id or "", e.transitaire_id or "transitaire non identifié"),
-            transitaire_id=e.transitaire_id, composante=comp, niveau=visibles[e.constat_id].niveau, mrn=j.get("mrn"),
-            montant_initial=e.montant_initial, montant_credite=Decimal(str(j.get("montant_credite") or "0")),
-            reste=e.reste, statut=LIBELLES_STATUT_ECART.get(e.statut, e.statut), statut_code=e.statut,
-            age_jours=age, relance=_relance(age, e.statut, jours), evenements=evts))
+        out.append(
+            LigneRegistre(
+                id=e.id,
+                constat_id=e.constat_id,
+                dossier_id=j.get("dossier_id"),
+                dossier_reference=references.get(j.get("dossier_id") or ""),
+                transitaire=transitaires.get(
+                    e.transitaire_id or "", e.transitaire_id or "transitaire non identifié"
+                ),
+                transitaire_id=e.transitaire_id,
+                composante=comp,
+                niveau=visibles[e.constat_id].niveau,
+                mrn=j.get("mrn"),
+                montant_initial=e.montant_initial,
+                montant_credite=Decimal(str(j.get("montant_credite") or "0")),
+                reste=e.reste,
+                statut=LIBELLES_STATUT_ECART.get(e.statut, e.statut),
+                statut_code=e.statut,
+                age_jours=age,
+                relance=_relance(age, e.statut, jours),
+                evenements=evts,
+            )
+        )
     return out
 
 
@@ -158,13 +210,20 @@ def declarer_envoi(scope: TenantScope, ecart_id: str, commentaire: str | None = 
     exiger(scope.actor, Action.declarer_recouvrement, scope.tenant_id)
     registre(scope, ecart_id=ecart_id)  # visibilité du constat
     try:
-        scope.transitionner_ecart(ecart_id, StatutEcart.reclame, commentaire=(commentaire or "").strip()[:500] or None)
+        scope.transitionner_ecart(
+            ecart_id, StatutEcart.reclame, commentaire=(commentaire or "").strip()[:500] or None
+        )
     except ErreurTransition as exc:
         raise RequeteInvalide(str(exc)) from exc
 
 
-def enregistrer_avoir(scope: TenantScope, ecart_id: str, montant: Decimal, reference: str | None = None,
-                      commentaire: str | None = None) -> None:
+def enregistrer_avoir(
+    scope: TenantScope,
+    ecart_id: str,
+    montant: Decimal,
+    reference: str | None = None,
+    commentaire: str | None = None,
+) -> None:
     """Avoir reçu du transitaire : crédite l'écart (partiellement ou totalement)."""
     exiger(scope.actor, Action.declarer_recouvrement, scope.tenant_id)
     ligne = registre(scope, ecart_id=ecart_id)[0]
@@ -176,25 +235,34 @@ def enregistrer_avoir(scope: TenantScope, ecart_id: str, montant: Decimal, refer
     vers = StatutEcart.credite if montant >= ligne.reste else StatutEcart.partiellement_credite
     piece = PieceRecouvrement(autre=(reference or "").strip()[:200] or None)
     try:
-        scope.transitionner_ecart(ecart_id, vers, montant=montant.quantize(Decimal("0.01")), piece=piece,
-                                  commentaire=(commentaire or "").strip()[:500] or None)
+        scope.transitionner_ecart(
+            ecart_id,
+            vers,
+            montant=montant.quantize(Decimal("0.01")),
+            piece=piece,
+            commentaire=(commentaire or "").strip()[:500] or None,
+        )
     except ErreurTransition as exc:
         raise RequeteInvalide(str(exc)) from exc
 
 
 # --- façades sur le service des litiges (P0-1, D-1317) ---------------------------------------------------
 
+
 def _nature(composante: str | None) -> Any:
     from controldone.model.enums import NatureLigne
 
     return {
-        "droit": NatureLigne.debours_droits, "autre_taxe": NatureLigne.debours_autres_taxes,
-        "tva": NatureLigne.debours_tva, "forfait_petits_envois": NatureLigne.debours_forfait_petits_envois,
+        "droit": NatureLigne.debours_droits,
+        "autre_taxe": NatureLigne.debours_autres_taxes,
+        "tva": NatureLigne.debours_tva,
+        "forfait_petits_envois": NatureLigne.debours_forfait_petits_envois,
     }.get(composante or "", NatureLigne.autre_prestation)
 
 
-def _contexte_ecart(plateforme: Plateforme, acteur: Acteur, ecart_id: str) -> tuple[LigneRegistre, dict[str, Any],
-                                                                                    str | None, str | None]:
+def _contexte_ecart(
+    plateforme: Plateforme, acteur: Acteur, ecart_id: str
+) -> tuple[LigneRegistre, dict[str, Any], str | None, str | None]:
     """(ligne visible, contenu de l'écart, relevé contenant l'écart, statut du relevé) — lecture seule."""
     from controldone.storage.models import Reclamation
 
@@ -211,8 +279,9 @@ def _contexte_ecart(plateforme: Plateforme, acteur: Acteur, ecart_id: str) -> tu
         return ligne, contenu, rec_id, statut
 
 
-def declarer_envoi_releve(plateforme: Plateforme, acteur: Acteur, ecart_id: str,
-                          commentaire: str | None = None) -> None:
+def declarer_envoi_releve(
+    plateforme: Plateforme, acteur: Acteur, ecart_id: str, commentaire: str | None = None
+) -> None:
     """Le client déclare avoir envoyé lui-même son courrier (web, API, MCP). Écart rattaché à un relevé validé
     -> ``ServiceLitiges.declarer_envoi`` (tout le relevé passe ``reclame`` ; rappels planifiés) ; sinon
     transition directe de l'écart."""
@@ -235,9 +304,17 @@ def declarer_envoi_releve(plateforme: Plateforme, acteur: Acteur, ecart_id: str,
         declarer_envoi(scope, ecart_id, commentaire)
 
 
-def enregistrer_avoir_recu(plateforme: Plateforme, acteur: Acteur, ecart_id: str, montant: Decimal,
-                           reference: str | None = None, commentaire: str | None = None, *,
-                           origine: str = "transitaire", montant_tva: Decimal | None = None) -> dict[str, Any]:
+def enregistrer_avoir_recu(
+    plateforme: Plateforme,
+    acteur: Acteur,
+    ecart_id: str,
+    montant: Decimal,
+    reference: str | None = None,
+    commentaire: str | None = None,
+    *,
+    origine: str = "transitaire",
+    montant_tva: Decimal | None = None,
+) -> dict[str, Any]:
     """Avoir reçu, déclaré sur un écart (montant **hors taxes**). Écart rattaché à un relevé ->
     ``ServiceLitiges.enregistrer_avoir`` : imputation déterministe, transitions, commission (base HT, avoirs de
     transitaire seulement) et brouillon ``facture_emise`` ; sinon transition directe. Renvoie un résumé."""
@@ -264,19 +341,39 @@ def enregistrer_avoir_recu(plateforme: Plateforme, acteur: Acteur, ecart_id: str
             graine += "\x1f" + nouvel_id("avr")
         avoir_id = "avr_" + hashlib.sha256(graine.encode()).hexdigest()[:24]
         avoir = AvoirRecu.declare(
-            avoir_id, ligne.transitaire_id, {_nature(contenu.get("composante")): montant}, numero=ref,
+            avoir_id,
+            ligne.transitaire_id,
+            {_nature(contenu.get("composante")): montant},
+            numero=ref,
             factures_origine=[f for f in [_facture_ecart(plateforme, acteur, rec_id, ecart_id)] if f],
-            mrns=[ligne.mrn] if ligne.mrn else [], origine=origine, montant_tva=montant_tva)
+            mrns=[ligne.mrn] if ligne.mrn else [],
+            origine=origine,
+            montant_tva=montant_tva,
+        )
         res = ServiceLitiges(plateforme.db, vault=plateforme.vault).enregistrer_avoir(
-            acteur, acteur.tenant_id, avoir)  # type: ignore[arg-type]
+            acteur, acteur.tenant_id, avoir
+        )  # type: ignore[arg-type]
         if res.deja_traite or res.imputations:
-            return {"voie": "litiges", "avoir_id": avoir_id, "deja_traite": res.deja_traite,
-                    "impute": str(sum(res.imputations.values(), Decimal("0.00"))),
-                    "commission": str(res.commission), "facture_commission": res.outbox_facture}
+            return {
+                "voie": "litiges",
+                "avoir_id": avoir_id,
+                "deja_traite": res.deja_traite,
+                "impute": str(sum(res.imputations.values(), Decimal("0.00"))),
+                "commission": str(res.commission),
+                "facture_commission": res.outbox_facture,
+            }
     with plateforme.db.tenant(acteur.tenant_id, acteur) as scope:  # type: ignore[arg-type]
-        enregistrer_avoir(scope, ecart_id, montant, reference,
-                          ((commentaire or "") + (" (remboursement d'une administration)"
-                                                  if origine != "transitaire" else "")).strip() or None)
+        enregistrer_avoir(
+            scope,
+            ecart_id,
+            montant,
+            reference,
+            (
+                (commentaire or "")
+                + (" (remboursement d'une administration)" if origine != "transitaire" else "")
+            ).strip()
+            or None,
+        )
     return {"voie": "directe", "impute": str(min(montant, ligne.reste))}
 
 

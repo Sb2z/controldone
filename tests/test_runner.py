@@ -22,11 +22,25 @@ def ctx() -> ControlContext:
     return contexte([declaration(id="doc_dec"), facture_transitaire(id="doc_ft")])
 
 
-def _constat(ctx, cid, unite, montant, *, ecart=None, renvoi=False, libelle="Le document A indique 1 ; B indique 2."):
-    cl = ctx.classify(cid, ecart=ecart if ecart is not None else montant, tolerance=D("0.05"),
-                      seuil_certitude=D("1"), valeurs_cles=[vs("x", "1", document_id="doc_ft")])
-    return ctx.constat(cid, cl, unite=unite, libelle=libelle, montant=montant, renvoi=renvoi,
-                       preuves=[preuve(vs("x", "1", document_id="doc_ft"), RolePreuve.valeur_b)])
+def _constat(
+    ctx, cid, unite, montant, *, ecart=None, renvoi=False, libelle="Le document A indique 1 ; B indique 2."
+):
+    cl = ctx.classify(
+        cid,
+        ecart=ecart if ecart is not None else montant,
+        tolerance=D("0.05"),
+        seuil_certitude=D("1"),
+        valeurs_cles=[vs("x", "1", document_id="doc_ft")],
+    )
+    return ctx.constat(
+        cid,
+        cl,
+        unite=unite,
+        libelle=libelle,
+        montant=montant,
+        renvoi=renvoi,
+        preuves=[preuve(vs("x", "1", document_id="doc_ft"), RolePreuve.valeur_b)],
+    )
 
 
 def test_cle_unite():
@@ -108,8 +122,14 @@ def test_garde_fous_non_eligible_et_renvoi(ctx):
         def a12(c):
             # le contrôle oublie le renvoi et passe un montant : le moteur corrige
             cl = c.classify("A12", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[])
-            return [c.constat("A12", cl, libelle="Le pays d'origine imprimé sur la facture (CN) diffère.",
-                              montant=D("10"))]
+            return [
+                c.constat(
+                    "A12",
+                    cl,
+                    libelle="Le pays d'origine imprimé sur la facture (CN) diffère.",
+                    montant=D("10"),
+                )
+            ]
 
         rs = run_controls(ctx)
     c = rs[0].constat
@@ -252,7 +272,9 @@ def test_r4_g5_sans_montant_si_g4_porte_le_meme(ctx):
 
         rs = {r.controle_id: r for r in run_controls(ctx)}
     assert rs["G4"].constat.montant_en_jeu == D("6.00")
-    assert rs["G5"].constat.montant_en_jeu is None and RaisonCode.doublon_composantes in rs["G5"].constat.raisons
+    assert (
+        rs["G5"].constat.montant_en_jeu is None and RaisonCode.doublon_composantes in rs["G5"].constat.raisons
+    )
 
 
 def test_ecart_en_faveur_du_client_jamais_certain(ctx):
@@ -264,7 +286,9 @@ def test_ecart_en_faveur_du_client_jamais_certain(ctx):
 
         rs = run_controls(ctx)
     c = rs[0].constat
-    assert c.niveau is Niveau.a_verifier and c.montant_en_jeu == D("-25.00") and c.sens.value == "faveur_client"
+    assert (
+        c.niveau is Niveau.a_verifier and c.montant_en_jeu == D("-25.00") and c.sens.value == "faveur_client"
+    )
 
 
 def test_p5_arrete_les_controles(ctx):

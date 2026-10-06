@@ -40,11 +40,19 @@ def db(tmp_path):
     base = Database(f"sqlite:///{tmp_path}/facturation.db")
     base.creer_schema()
     with base.operateur(FONDATEUR) as op:
-        op.creer_client("cli_a", "CLIENT A FICTIF SAS", offre="diagnostic",
-                        reglages={"contacts": ["compta@client-a-fictif.test"], "facturation": FACTURATION_A})
-        op.creer_client("cli_b", "CLIENT B FICTIF SARL", offre="continu", reglages={"facturation": FACTURATION_B})
+        op.creer_client(
+            "cli_a",
+            "CLIENT A FICTIF SAS",
+            offre="diagnostic",
+            reglages={"contacts": ["compta@client-a-fictif.test"], "facturation": FACTURATION_A},
+        )
+        op.creer_client(
+            "cli_b", "CLIENT B FICTIF SARL", offre="continu", reglages={"facturation": FACTURATION_B}
+        )
         for i in range(3):
-            op.creer_client(f"cli_c{i}", f"CLIENT C{i} FICTIF", reglages={"facturation": {"siren": f"00000010{i}"}})
+            op.creer_client(
+                f"cli_c{i}", f"CLIENT C{i} FICTIF", reglages={"facturation": {"siren": f"00000010{i}"}}
+            )
     yield base
     base.fermer()
 
@@ -67,5 +75,6 @@ def bouchon(tmp_path) -> PaiementBouchon:
 
 @pytest.fixture
 def service(db, catalogue, pa, bouchon, tmp_path) -> ServiceFacturation:
-    return ServiceFacturation(db, catalogue=catalogue, pa=pa, paiement=bouchon, dossier_sorties=tmp_path / "sorties",
-                              prod=False)
+    return ServiceFacturation(
+        db, catalogue=catalogue, pa=pa, paiement=bouchon, dossier_sorties=tmp_path / "sorties", prod=False
+    )

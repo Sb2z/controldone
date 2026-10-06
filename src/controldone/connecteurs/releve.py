@@ -49,15 +49,23 @@ def connecteurs_configures(db: Database) -> list[ConnecteurEntrant]:
         if conf.get("imap"):
             try:
                 sortie.append(BoiteImap(tenant, ConfigImap.depuis_reglages(conf["imap"])))
-            except (KeyError, TypeError, ValueError) as exc:  # configuration refusée : les autres clients continuent
-                log.warning("connecteur_imap_config_refusee tenant=%s exception=%s", tenant, type(exc).__name__)
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as exc:  # configuration refusée : les autres clients continuent
+                log.warning(
+                    "connecteur_imap_config_refusee tenant=%s exception=%s", tenant, type(exc).__name__
+                )
         pa = conf.get("plateforme_agreee") or {}
         if pa.get("fournisseur") in FABRIQUES_PA:
             sortie.append(PlateformeAgreeeEntrante(tenant, FABRIQUES_PA[pa["fournisseur"]](pa)))
     return sortie
 
 
-def relever_tout(db: Database, vault: Any, connecteurs: Sequence[ConnecteurEntrant] | None = None) -> list[dict[str, Any]]:
+def relever_tout(
+    db: Database, vault: Any, connecteurs: Sequence[ConnecteurEntrant] | None = None
+) -> list[dict[str, Any]]:
     """Relève chaque connecteur une fois, intègre ses dépôts et les acquitte ; renvoie un résumé."""
     resume = []
     for c in connecteurs if connecteurs is not None else connecteurs_configures(db):
@@ -70,7 +78,12 @@ def relever_tout(db: Database, vault: Any, connecteurs: Sequence[ConnecteurEntra
                     acquitter(depot, res)
                 entree["depots"].append(res.en_dict())
         except Exception as exc:
-            log.warning("connecteur_erreur connecteur=%s tenant=%s exception=%s", c.nom, c.tenant_id, type(exc).__name__)
+            log.warning(
+                "connecteur_erreur connecteur=%s tenant=%s exception=%s",
+                c.nom,
+                c.tenant_id,
+                type(exc).__name__,
+            )
             entree["erreur"] = type(exc).__name__
         resume.append(entree)
     return resume

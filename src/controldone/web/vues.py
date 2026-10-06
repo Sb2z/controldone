@@ -30,11 +30,14 @@ def _rendu_page(vault: Any, scope: TenantScope, f: Fichier, numero: int, taille:
     if not f.coffre_ref or f.type_mime not in ("application/pdf", "image/png", "image/jpeg", "image/tiff"):
         return None
     ref = f.coffre_ref
-    return page_png(f"{scope.tenant_id}:{ref}", lambda: vault.lire(scope.tenant_id, ref), f.type_mime, numero,
-                    taille)
+    return page_png(
+        f"{scope.tenant_id}:{ref}", lambda: vault.lire(scope.tenant_id, ref), f.type_mime, numero, taille
+    )
 
 
-def image_page(vault: Any, scope: TenantScope, document_id: str, numero: int, taille: str = "grand") -> bytes | None:
+def image_page(
+    vault: Any, scope: TenantScope, document_id: str, numero: int, taille: str = "grand"
+) -> bytes | None:
     doc = DocumentModele.model_validate(scope.obtenir(Document, document_id).contenu)
     pr = doc.page_ref(numero)
     if pr is None:
@@ -45,8 +48,9 @@ def image_page(vault: Any, scope: TenantScope, document_id: str, numero: int, ta
     return _rendu_page(vault, scope, f, numero, taille)
 
 
-def images_preuves(vault: Any, scope: TenantScope, constats: list[Any],
-                   docs: dict[str, DocumentModele] | None = None) -> dict[tuple[str, int], bytes]:
+def images_preuves(
+    vault: Any, scope: TenantScope, constats: list[Any], docs: dict[str, DocumentModele] | None = None
+) -> dict[tuple[str, int], bytes]:
     """Extraits de page (rognages) des preuves : ``{(constat_id, index): PNG}``."""
     docs = dict(docs or {})
     sortie: dict[tuple[str, int], bytes] = {}
@@ -58,7 +62,9 @@ def images_preuves(vault: Any, scope: TenantScope, constats: list[Any],
                 continue
             if p.document_id not in docs:
                 try:
-                    docs[p.document_id] = DocumentModele.model_validate(scope.obtenir(Document, p.document_id).contenu)
+                    docs[p.document_id] = DocumentModele.model_validate(
+                        scope.obtenir(Document, p.document_id).contenu
+                    )
                 except AccesRefuse:
                     continue
             doc = docs[p.document_id]
@@ -72,8 +78,14 @@ def images_preuves(vault: Any, scope: TenantScope, constats: list[Any],
                 if v.id == vs_id and v.zone is not None:
                     zone = (v.zone.x0, v.zone.y0, v.zone.x1, v.zone.y1)
             ref = f.coffre_ref
-            img = extrait_png(f"{scope.tenant_id}:{ref}", lambda ref=ref: vault.lire(scope.tenant_id, ref),
-                              f.type_mime, p.page, zone=zone, valeur=p.valeur_lue)
+            img = extrait_png(
+                f"{scope.tenant_id}:{ref}",
+                lambda ref=ref: vault.lire(scope.tenant_id, ref),
+                f.type_mime,
+                p.page,
+                zone=zone,
+                valeur=p.valeur_lue,
+            )
             if img:
                 sortie[(c.id, p.index)] = img
     return sortie

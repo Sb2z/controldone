@@ -59,9 +59,14 @@ def test_post_recouvrement_croise_404(monde, action):
     connecter_client(c, monde, ADMIN_B)
     t = jeton(c.get("/espace/recouvrement").text)
     ecart_a = monde.ids[A]["ecart"][0]
-    r1 = c.post(f"/espace/recouvrement/{ecart_a}/{action}", data={"csrf": t, "montant": "10"}, follow_redirects=False)
-    r2 = c.post(f"/espace/recouvrement/{INEXISTANT}/{action}", data={"csrf": t, "montant": "10"},
-                follow_redirects=False)
+    r1 = c.post(
+        f"/espace/recouvrement/{ecart_a}/{action}", data={"csrf": t, "montant": "10"}, follow_redirects=False
+    )
+    r2 = c.post(
+        f"/espace/recouvrement/{INEXISTANT}/{action}",
+        data={"csrf": t, "montant": "10"},
+        follow_redirects=False,
+    )
     assert r1.status_code == r2.status_code == 404
 
 
@@ -75,8 +80,16 @@ def test_parametre_client_ignore(monde):
         assert d not in r.text
 
 
-ROUTES_FONDATEUR_GET = ["/admin", "/admin/clients", f"/admin/clients/{A}", "/admin/validation", "/admin/jobs",
-                        "/admin/journal", "/admin/alertes", "/admin/autonomie"]
+ROUTES_FONDATEUR_GET = [
+    "/admin",
+    "/admin/clients",
+    f"/admin/clients/{A}",
+    "/admin/validation",
+    "/admin/jobs",
+    "/admin/journal",
+    "/admin/alertes",
+    "/admin/autonomie",
+]
 
 
 @pytest.mark.parametrize("url", ROUTES_FONDATEUR_GET)
@@ -101,8 +114,12 @@ def test_lecteur_ne_depose_pas(monde):
     c = monde.client()
     connecter_client(c, monde, LECTEUR_A)
     t = jeton(c.get("/espace/depot").text)
-    r = c.post("/espace/depot", data={"csrf": t}, files={"fichiers": ("a.pdf", b"%PDF-1.4", "application/pdf")},
-               follow_redirects=False)
+    r = c.post(
+        "/espace/depot",
+        data={"csrf": t},
+        files={"fichiers": ("a.pdf", b"%PDF-1.4", "application/pdf")},
+        follow_redirects=False,
+    )
     assert r.status_code == 403
 
 
@@ -176,6 +193,9 @@ def test_api_liste_ne_contient_que_le_client_de_la_cle(monde):
     for d in monde.ids[B]["dossier"]:
         assert _api(monde, B).get(f"/api/v1/dossiers/{d}/constats").json()["constats"] == []
     ra = _api(monde, A)
-    vus = {c["constat_id"] for d in monde.ids[A]["dossier"]
-           for c in ra.get(f"/api/v1/dossiers/{d}/constats").json()["constats"]}
+    vus = {
+        c["constat_id"]
+        for d in monde.ids[A]["dossier"]
+        for c in ra.get(f"/api/v1/dossiers/{d}/constats").json()["constats"]
+    }
     assert vus == set(monde.ids[A]["constat_valide"])

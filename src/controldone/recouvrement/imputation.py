@@ -82,7 +82,10 @@ STATUTS_IMPUTABLES: frozenset[StatutEcart] = frozenset(
 )
 #: Ordre d'imputation d'une ligne « droits et taxes » combinée (§17.2, étape 4).
 ORDRE_COMBINE: tuple[Composante, ...] = (
-    Composante.droit, Composante.autre_taxe, Composante.tva, Composante.forfait_petits_envois,
+    Composante.droit,
+    Composante.autre_taxe,
+    Composante.tva,
+    Composante.forfait_petits_envois,
 )
 _ORDRE_NATURE = {n: i for i, n in enumerate(NatureLigne)}
 
@@ -248,7 +251,10 @@ def _cle_ecart(e: EcartImputable) -> tuple:
 def _cle_ligne(lc: LigneCredit) -> tuple:
     nat = _ORDRE_NATURE[lc.nature] if lc.nature is not None else len(_ORDRE_NATURE)
     return (
-        _cle_date(lc.date_avoir), norm_ref(lc.numero_avoir), lc.avoir_id, nat,
+        _cle_date(lc.date_avoir),
+        norm_ref(lc.numero_avoir),
+        lc.avoir_id,
+        nat,
         -1 if lc.ligne is None else lc.ligne,
     )
 
@@ -274,7 +280,8 @@ def choisir_par_paliers(
     (préfixe) ; à défaut, de même référence de transport. Retourne (palier, cibles retenues)."""
     if lc.factures_origine:
         par_facture = [
-            c for c in cibles
+            c
+            for c in cibles
             if any(f and ref_compatibles(o, f) for f in factures(c) for o in lc.factures_origine)
         ]
         if par_facture:
@@ -286,7 +293,8 @@ def choisir_par_paliers(
             return "mrn", par_mrn
     if lc.refs_transport and transports is not None:
         par_transport = [
-            c for c in cibles
+            c
+            for c in cibles
             if any(t and ref_transport_egales(r, t) for t in transports(c) for r in lc.refs_transport)
         ]
         if par_transport:
@@ -296,7 +304,10 @@ def choisir_par_paliers(
 
 def _palier(lc: LigneCredit, candidats: Sequence[EcartImputable]) -> tuple[str, list[EcartImputable]]:
     return choisir_par_paliers(
-        lc, candidats, factures=lambda e: (e.facture_ref,), mrns=lambda e: (e.mrn,),
+        lc,
+        candidats,
+        factures=lambda e: (e.facture_ref,),
+        mrns=lambda e: (e.mrn,),
         transports=lambda e: (e.ref_transport,),
     )
 
@@ -337,15 +348,21 @@ def imputer_avoirs(
         comps = composantes_de_nature(lc.nature)
         if comps:
             candidats = [
-                e for e in liste_ecarts
+                e
+                for e in liste_ecarts
                 if e.composante in comps
                 and emetteurs_compatibles(e.emetteur, lc.emetteur)
                 and etats[e.id].statut in STATUTS_IMPUTABLES
                 and etats[e.id].reste > 0
             ]
             palier, retenus = _palier(lc, candidats)
-            retenus.sort(key=lambda e: (comps.index(e.composante), e.nature is None or e.nature is not lc.nature,
-                                        *_cle_ecart(e)))
+            retenus.sort(
+                key=lambda e: (
+                    comps.index(e.composante),
+                    e.nature is None or e.nature is not lc.nature,
+                    *_cle_ecart(e),
+                )
+            )
             for e in retenus:
                 if reste_avoir <= 0:
                     break
@@ -356,7 +373,9 @@ def imputer_avoirs(
                 reste_avoir = _c(reste_avoir - impute)
                 etat.reste = _c(etat.reste - impute)
                 etat.montant_credite = _c(etat.montant_credite + impute)
-                etat.statut = StatutEcart.credite if etat.reste <= t_debours else StatutEcart.partiellement_credite
+                etat.statut = (
+                    StatutEcart.credite if etat.reste <= t_debours else StatutEcart.partiellement_credite
+                )
                 credits[e.id] = _c(credits.get(e.id, _ZERO) + impute)
                 imputations.append(Imputation(lc.avoir_id, lc.ligne, e.id, impute, palier))
         if reste_avoir > 0:
@@ -412,7 +431,8 @@ def montant_net_ligne(
     if ttc is None:
         return ht
     sans_tva = any(
-        v is not None and v.est_lisible and v.decimal_ou_none() == 0 for v in (ligne.taux_tva, ligne.montant_tva)
+        v is not None and v.est_lisible and v.decimal_ou_none() == 0
+        for v in (ligne.taux_tva, ligne.montant_tva)
     )
     return ttc if sans_tva else _marquer_tva_comprise(ttc)
 
@@ -455,9 +475,17 @@ def lignes_credit_depuis_avoir(
         transport_ligne = _valeurs_texte([ligne.ref_transport])
         out.append(
             LigneCredit(
-                avoir_id=doc.id, ligne=i, nature=ligne.nature, montant=abs(montant), emetteur=emetteur,
-                date_avoir=d_avoir, numero_avoir=numero, factures_origine=origine,
-                mrns=mrn_ligne or mrn_tete, refs_transport=transport_ligne or transport_tete, valeur=m,
+                avoir_id=doc.id,
+                ligne=i,
+                nature=ligne.nature,
+                montant=abs(montant),
+                emetteur=emetteur,
+                date_avoir=d_avoir,
+                numero_avoir=numero,
+                factures_origine=origine,
+                mrns=mrn_ligne or mrn_tete,
+                refs_transport=transport_ligne or transport_tete,
+                valeur=m,
             )
         )
     if not out:
@@ -466,9 +494,17 @@ def lignes_credit_depuis_avoir(
         if montant is not None:
             out.append(
                 LigneCredit(
-                    avoir_id=doc.id, ligne=None, nature=None, montant=abs(montant), emetteur=emetteur,
-                    date_avoir=d_avoir, numero_avoir=numero, factures_origine=origine, mrns=mrn_tete,
-                    refs_transport=transport_tete, valeur=total,
+                    avoir_id=doc.id,
+                    ligne=None,
+                    nature=None,
+                    montant=abs(montant),
+                    emetteur=emetteur,
+                    date_avoir=d_avoir,
+                    numero_avoir=numero,
+                    factures_origine=origine,
+                    mrns=mrn_tete,
+                    refs_transport=transport_tete,
+                    valeur=total,
                 )
             )
     return out

@@ -35,15 +35,31 @@ def _jeton(html: str) -> str:
 @pytest.fixture
 def web(db, service, tmp_path):
     cle = Fernet.generate_key()
-    pf = Plateforme(db=db, vault=FileVault(tmp_path / "coffre", [cle]), cles_maitresses=[cle],
-                    dossier_sorties=tmp_path / "sorties")
+    pf = Plateforme(
+        db=db,
+        vault=FileVault(tmp_path / "coffre", [cle]),
+        cles_maitresses=[cle],
+        dossier_sorties=tmp_path / "sorties",
+    )
     pf.facturation = service  # type: ignore[attr-defined]
-    creer_utilisateur(db, user_id=FONDATEUR.id, email="fondateur@controldone-fictif.test",
-                      mot_de_passe_hash=hacher_mot_de_passe(MDP), role=Role.fondateur, acteur=FONDATEUR)
+    creer_utilisateur(
+        db,
+        user_id=FONDATEUR.id,
+        email="fondateur@controldone-fictif.test",
+        mot_de_passe_hash=hacher_mot_de_passe(MDP),
+        role=Role.fondateur,
+        acteur=FONDATEUR,
+    )
     secret = generer_secret()
     enregistrer_totp(db, FONDATEUR.id, chiffrer_secret([cle], secret), acteur=FONDATEUR)
-    creer_utilisateur(db, user_id="usr_client_a", email="admin@client-a-fictif.test",
-                      mot_de_passe_hash=hacher_mot_de_passe(MDP), role=Role.client_admin, acteur=FONDATEUR)
+    creer_utilisateur(
+        db,
+        user_id="usr_client_a",
+        email="admin@client-a-fictif.test",
+        mot_de_passe_hash=hacher_mot_de_passe(MDP),
+        role=Role.client_admin,
+        acteur=FONDATEUR,
+    )
     with db.operateur(FONDATEUR) as op:
         op.client("cli_a", "compte de test").ajouter_membre("usr_client_a", Role.client_admin)
     app = create_app(ParametresWeb(plateforme=pf, secrets_session=[SECRET_SESSION], prod=False))
@@ -86,7 +102,9 @@ def test_page_finances_et_cycle_complet(web, db, pa):
     page = c.get("/admin/finances").text
     assert f.numero in page and "Déposée (200)" in page
     pdf = c.get(f"/admin/finances/factures/{f.id}.pdf")
-    assert pdf.status_code == 200 and pdf.content == f.pdf and pdf.headers["content-type"] == "application/pdf"
+    assert (
+        pdf.status_code == 200 and pdf.content == f.pdf and pdf.headers["content-type"] == "application/pdf"
+    )
     xml = c.get(f"/admin/finances/factures/{f.id}.xml")
     assert xml.status_code == 200 and b"CrossIndustryInvoice" in xml.content
     # lien de paiement (bouchon) puis paiement simulé : passe par la vérification de signature du webhook
@@ -98,7 +116,9 @@ def test_page_finances_et_cycle_complet(web, db, pa):
     assert r.status_code == 303
     assert stock.evenements_paiement(db)[0].facture_id == f.id
     csv = c.get("/admin/finances/export.csv")
-    assert csv.status_code == 200 and "cli_a;CLIENT A FICTIF SAS;1;390,00;468,00" in csv.content.decode("utf-8")
+    assert csv.status_code == 200 and "cli_a;CLIENT A FICTIF SAS;1;390,00;468,00" in csv.content.decode(
+        "utf-8"
+    )
     # coupon sans accord de publication : la remise s'applique quand même (accord distinct, D-1313)
     r = _poster(c, "/admin/finances/diagnostic", {"client_id": "cli_b", "coupon": "LANCEMENT-3-DIAGNOSTICS"})
     assert r.status_code == 303 and r.headers["location"].startswith("/admin/validation")
@@ -116,14 +136,25 @@ def test_finances_refusees_a_un_client(web):
 def test_webhook_stripe_signature(web, db):
     app, _ = web
     c = TestClient(app, base_url="http://testserver")
-    charge = (b'{"id": "evt_FICTIF_web", "type": "invoice.payment_failed", "livemode": false, '
-              b'"data": {"object": {"id": "in_FICTIF", "metadata": {}}}}')
-    assert c.post("/webhooks/stripe", content=charge, headers={"stripe-signature": "t=1,v1=faux"}).status_code == 400
+    charge = (
+        b'{"id": "evt_FICTIF_web", "type": "invoice.payment_failed", "livemode": false, '
+        b'"data": {"object": {"id": "in_FICTIF", "metadata": {}}}}'
+    )
+    assert (
+        c.post("/webhooks/stripe", content=charge, headers={"stripe-signature": "t=1,v1=faux"}).status_code
+        == 400
+    )
     assert c.post("/webhooks/stripe", content=charge).status_code == 400
-    r = c.post("/webhooks/stripe", content=charge,
-               headers={"stripe-signature": signer_charge(charge, "whsec_test_FICTIF")})
+    r = c.post(
+        "/webhooks/stripe",
+        content=charge,
+        headers={"stripe-signature": signer_charge(charge, "whsec_test_FICTIF")},
+    )
     assert r.status_code == 200 and r.json() == {"recu": True, "statut": "traite"}
-    r = c.post("/webhooks/stripe", content=charge,
-               headers={"stripe-signature": signer_charge(charge, "whsec_test_FICTIF")})
+    r = c.post(
+        "/webhooks/stripe",
+        content=charge,
+        headers={"stripe-signature": signer_charge(charge, "whsec_test_FICTIF")},
+    )
     assert r.json()["statut"] == "deja_traite"
     assert len(stock.evenements_paiement(db)) == 1

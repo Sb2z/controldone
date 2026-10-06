@@ -184,7 +184,9 @@ def montant_arithmetique(imprime: Decimal, recalcule: Decimal) -> Decimal:
     return arrondi_centime(imprime - recalcule)
 
 
-def montant_pour_spec(spec: ControlSpec | str, montant: Decimal | None, *, renvoi: bool = False) -> Decimal | None:
+def montant_pour_spec(
+    spec: ControlSpec | str, montant: Decimal | None, *, renvoi: bool = False
+) -> Decimal | None:
     """Applique les règles de nature : ``renvoi``/``aucun`` -> ``None`` ; sinon arrondi au centime."""
     sp = get_spec(spec) if isinstance(spec, str) else spec
     if renvoi or not sp.montant_autorise or montant is None:

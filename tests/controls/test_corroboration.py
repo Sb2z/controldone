@@ -28,13 +28,23 @@ FT = "doc_ft1"
 
 
 def _tva(article, base, montant, *, paiement=PaiementNormalise.differe, **kw):
-    return taxation(DEC, article=article, type_taxe="B00", categorie=CategorieTaxe.tva, base=base, taux="20",
-                    montant=montant, paiement=paiement, **kw)
+    return taxation(
+        DEC,
+        article=article,
+        type_taxe="B00",
+        categorie=CategorieTaxe.tva,
+        base=base,
+        taux="20",
+        montant=montant,
+        paiement=paiement,
+        **kw,
+    )
 
 
 def _droit(article, base, taux, montant, **kw):
-    return taxation(DEC, article=article, base=base, taux=taux, montant=montant,
-                    paiement=PaiementNormalise.differe, **kw)
+    return taxation(
+        DEC, article=article, base=base, taux=taux, montant=montant, paiement=PaiementNormalise.differe, **kw
+    )
 
 
 def _dec(*taxations, total=None, a_payer=None, **champs):
@@ -102,12 +112,14 @@ def test_b1_colonne_a_payer_prise_pour_le_montant():
         _tva("1", "260.63", "0.00", paiement=PaiementNormalise.autoliquide),
         _droit("2", "684.96", "2.7", "18.49"),
         _tva("2", "703.45", "0.00", paiement=PaiementNormalise.autoliquide),
-        total="226.06", a_payer="33.24",
+        total="226.06",
+        a_payer="33.24",
     )
     rs = _constats(b1_base_taux_montant(contexte([d])))
     assert len(rs) == 2
-    assert all(r.outcome is Outcome.a_verifier and RaisonCode.lecture_non_corroboree in r.constat.raisons
-               for r in rs)
+    assert all(
+        r.outcome is Outcome.a_verifier and RaisonCode.lecture_non_corroboree in r.constat.raisons for r in rs
+    )
 
 
 def test_b1_sans_total_imprime_a_verifier():
@@ -143,8 +155,13 @@ def test_b2_vrai_total_faux_lignes_confirmees_par_b1():
 
 def _article(n, montant, vstat, *, x_montant=0.50, x_vstat=0.70, methode="texte_natif"):
     def v(nom, val, x):
-        return vs(f"declaration.articles[].{nom}", val, document_id=DEC, methode=methode,
-                  zone=Zone(x0=x, y0=0.1 * n, x1=x + 0.08, y1=0.1 * n + 0.02))
+        return vs(
+            f"declaration.articles[].{nom}",
+            val,
+            document_id=DEC,
+            methode=methode,
+            zone=Zone(x0=x, y0=0.1 * n, x1=x + 0.08, y1=0.1 * n + 0.02),
+        )
 
     return ArticleDeclaration(
         numero_article=vs("declaration.articles[].numero_article", str(n), document_id=DEC),
@@ -164,24 +181,30 @@ def _dec_b3(*articles, total):
 
 def test_b3_colonne_voisine_lue():
     """Montants des articles lus dans une colonne voisine (100 partout) : aucun n'est confirmé."""
-    d = _dec_b3(_article(1, "100", "4.21"), _article(2, "100", "35.77"), _article(3, "100", "87.30"),
-                total="6792.00")
+    d = _dec_b3(
+        _article(1, "100", "4.21"), _article(2, "100", "35.77"), _article(3, "100", "87.30"), total="6792.00"
+    )
     r = _constats(b3_somme_montants_articles(contexte([d])))[0]
     assert r.outcome is Outcome.a_verifier and RaisonCode.lecture_non_corroboree in r.constat.raisons
 
 
 def test_b3_vrai_un_article_modifie():
     """Un article augmenté sans changer le total ; les autres sont confirmés par leur valeur statistique."""
-    d = _dec_b3(_article(1, "4730.32", "4730.32"), _article(2, "5363.15", "5161.38"),
-                _article(3, "7245.78", "7245.78"), total="17137.48")
+    d = _dec_b3(
+        _article(1, "4730.32", "4730.32"),
+        _article(2, "5363.15", "5161.38"),
+        _article(3, "7245.78", "7245.78"),
+        total="17137.48",
+    )
     r = _constats(b3_somme_montants_articles(contexte([d])))[0]
     assert r.outcome is Outcome.ecart_certain
 
 
 def test_echo_meme_zone_non_probant():
     """Deux champs lus au même endroit (même colonne lue deux fois) ne se confirment pas."""
-    d = _dec_b3(_article(1, "4730.32", "4730.32", x_vstat=0.50), _article(2, "5363.15", "5161.38"),
-                total="4730.32")
+    d = _dec_b3(
+        _article(1, "4730.32", "4730.32", x_vstat=0.50), _article(2, "5363.15", "5161.38"), total="4730.32"
+    )
     reseau = corroboration.reseau(d, lambda v: v is not None, contexte([d]).tol)
     assert not [i for i in reseau if i.genre == "echo"]
 
@@ -196,16 +219,24 @@ def _ligne(nature, montant, *, taux=None, tva=None, quantite=None, pu=None):
         return None if val is None else vs(f"facture_transitaire.lignes[].{nom}", val, document_id=FT)
 
     return LigneFactureTransitaire(
-        libelle=v("libelle", nature.value), nature=nature, montant_ht=v("montant_ht", montant),
-        taux_tva=v("taux_tva", taux), montant_tva=v("montant_tva", tva), quantite=v("quantite", quantite),
+        libelle=v("libelle", nature.value),
+        nature=nature,
+        montant_ht=v("montant_ht", montant),
+        taux_tva=v("taux_tva", taux),
+        montant_tva=v("montant_tva", tva),
+        quantite=v("quantite", quantite),
         prix_unitaire=v("prix_unitaire", pu),
     )
 
 
 def _ft(*lignes, **totaux):
     champs = {k: vs(f"facture_transitaire.{k}", x, document_id=FT) for k, x in totaux.items()}
-    return facture_transitaire(id=FT, numero=vs("facture_transitaire.numero", "FT-FICTIF-1", document_id=FT),
-                               lignes=list(lignes), **champs)
+    return facture_transitaire(
+        id=FT,
+        numero=vs("facture_transitaire.numero", "FT-FICTIF-1", document_id=FT),
+        lignes=list(lignes),
+        **champs,
+    )
 
 
 def _d1(f, sous):
@@ -215,16 +246,26 @@ def _d1(f, sous):
 def test_d1_lignes_de_prestation_non_lues():
     """Seules les lignes de débours ont été lues : le total HT ne peut pas être certain (le total de TVA
     imprimé ne correspond pas aux lignes lues)."""
-    f = _ft(_ligne(NatureLigne.debours_droits, "11.17", taux="0", tva="0.00"),
-            _ligne(NatureLigne.debours_tva, "74.63", taux="0", tva="0.00"),
-            total_debours="85.80", total_ht="268.00", total_tva="36.44", total_ttc="304.44")
+    f = _ft(
+        _ligne(NatureLigne.debours_droits, "11.17", taux="0", tva="0.00"),
+        _ligne(NatureLigne.debours_tva, "74.63", taux="0", tva="0.00"),
+        total_debours="85.80",
+        total_ht="268.00",
+        total_tva="36.44",
+        total_ttc="304.44",
+    )
     for r in _d1(f, "total_ht"):
         assert r.outcome is not Outcome.ecart_certain
 
 
 def test_d1_lignes_de_debours_non_lues():
-    f = _ft(_ligne(NatureLigne.debours_droits, "65.00", taux="0", tva="0.00"),
-            total_debours="1532.86", total_ht="1644.85", total_tva="22.40", total_ttc="1667.25")
+    f = _ft(
+        _ligne(NatureLigne.debours_droits, "65.00", taux="0", tva="0.00"),
+        total_debours="1532.86",
+        total_ht="1644.85",
+        total_tva="22.40",
+        total_ttc="1667.25",
+    )
     for sous in ("total_debours", "total_ht"):
         for r in _d1(f, sous):
             assert r.outcome is not Outcome.ecart_certain
@@ -232,10 +273,16 @@ def test_d1_lignes_de_debours_non_lues():
 
 def test_d1_vrai_total_ht_faux_lignes_completes():
     """Total HT augmenté ; débours confirmés par leur total, prestations par le total de TVA : certain."""
-    f = _ft(_ligne(NatureLigne.debours_droits, "473.40"), _ligne(NatureLigne.debours_tva, "795.47"),
-            _ligne(NatureLigne.frais_dedouanement, "62.50", taux="20"),
-            _ligne(NatureLigne.transport, "140.00", taux="20"),
-            total_debours="1268.87", total_ht="1512.23", total_tva="40.50", total_ttc="1552.73")
+    f = _ft(
+        _ligne(NatureLigne.debours_droits, "473.40"),
+        _ligne(NatureLigne.debours_tva, "795.47"),
+        _ligne(NatureLigne.frais_dedouanement, "62.50", taux="20"),
+        _ligne(NatureLigne.transport, "140.00", taux="20"),
+        total_debours="1268.87",
+        total_ht="1512.23",
+        total_tva="40.50",
+        total_ttc="1552.73",
+    )
     rs = _d1(f, "total_ht")
     assert len(rs) == 1 and rs[0].outcome is Outcome.ecart_certain
     assert rs[0].constat.montant_en_jeu == D("40.86")
@@ -243,9 +290,14 @@ def test_d1_vrai_total_ht_faux_lignes_completes():
 
 def test_d1_ligne_montant_ttc_lu_comme_ht():
     """Montant TTC de la ligne lu à la place du HT : la ligne n'est confirmée par aucun total."""
-    f = _ft(_ligne(NatureLigne.debours_droits, "59.65", quantite="2", pu="24.855"),
-            _ligne(NatureLigne.debours_tva, "465.60"),
-            total_debours="515.31", total_ht="669.31", total_tva="38.74", total_ttc="708.05")
+    f = _ft(
+        _ligne(NatureLigne.debours_droits, "59.65", quantite="2", pu="24.855"),
+        _ligne(NatureLigne.debours_tva, "465.60"),
+        total_debours="515.31",
+        total_ht="669.31",
+        total_tva="38.74",
+        total_ttc="708.05",
+    )
     for r in _d1(f, "ligne"):
         assert r.outcome is Outcome.a_verifier and RaisonCode.lecture_non_corroboree in r.constat.raisons
 
@@ -259,7 +311,8 @@ def test_c5_declaration_sans_ligne_de_taxation_lue():
     """La déclaration (mise en page inconnue) ne livre que son total à payer : rien ne le confirme."""
     d = _dec(a_payer="3.00")
     f = facture_transitaire(
-        id=FT, numero=vs("facture_transitaire.numero", "FT-FICTIF-2", document_id=FT),
+        id=FT,
+        numero=vs("facture_transitaire.numero", "FT-FICTIF-2", document_id=FT),
         refs_mrn=[vs("facture_transitaire.refs_mrn[]", "26FR00000000000001", document_id=FT)],
         lignes=[_ligne(NatureLigne.debours_forfait_petits_envois, "9.00")],
         total_debours=vs("facture_transitaire.total_debours", "9.00", document_id=FT),
@@ -272,8 +325,13 @@ def test_c5_declaration_sans_ligne_de_taxation_lue():
 def test_feuilles_derivees_ramenees_aux_sources():
     a = vs("facture_transitaire.lignes[].montant_ht", "10.00", document_id=FT)
     b = vs("facture_transitaire.lignes[].montant_ht", "5.00", document_id=FT)
-    s = vs("facture_transitaire.total_debours", "15.00", document_id=FT, methode="derive",
-           derivee_de=[a.id, b.id])
+    s = vs(
+        "facture_transitaire.total_debours",
+        "15.00",
+        document_id=FT,
+        methode="derive",
+        derivee_de=[a.id, b.id],
+    )
     index = {a.id: a, b.id: b}
     feuilles = corroboration._feuilles([s], index.get)
     assert {v.id for v in feuilles} == {a.id, b.id}
@@ -287,15 +345,22 @@ def test_feuilles_derivees_ramenees_aux_sources():
 def _total_code(code, montant):
     from controldone.model import TotalTaxeCode
 
-    return TotalTaxeCode(type_taxe=vs("declaration.totaux_par_code[].type_taxe", code, document_id=DEC),
-                         montant=vs("declaration.totaux_par_code[].montant", montant, document_id=DEC))
+    return TotalTaxeCode(
+        type_taxe=vs("declaration.totaux_par_code[].type_taxe", code, document_id=DEC),
+        montant=vs("declaration.totaux_par_code[].montant", montant, document_id=DEC),
+    )
 
 
 def test_identites_des_totaux_par_code():
     """Σ lignes du code = total du code ; Σ totaux par code = total des droits et taxes : deux identités du réseau."""
-    d = _dec(_droit("1", "100.00", "10", "10.00"), _droit("2", "200.00", "10", "20.00"),
-             _tva("1", "110.00", "22.00"), _tva("2", "220.00", "44.00"), total="96.00",
-             totaux_par_code=[_total_code("A00", "30.00"), _total_code("B00", "66.00")])
+    d = _dec(
+        _droit("1", "100.00", "10", "10.00"),
+        _droit("2", "200.00", "10", "20.00"),
+        _tva("1", "110.00", "22.00"),
+        _tva("2", "220.00", "44.00"),
+        total="96.00",
+        totaux_par_code=[_total_code("A00", "30.00"), _total_code("B00", "66.00")],
+    )
     reseau = {i.cle: i for i in corroboration.reseau(d, lambda v: v is not None, contexte([d]).tol)}
     assert reseau["dec:code:A00"].tient and reseau["dec:code:B00"].tient
     assert reseau["dec:codes:total_droits_taxes"].tient
@@ -306,10 +371,15 @@ def test_identites_des_totaux_par_code():
 def test_b2_code_certain_avec_lecture_corroboree():
     """Total A00 imprimé faux (40 au lieu de 30) : les lignes sommées sont confirmées (base × taux, total général) ;
     le total du code est la valeur mise en cause."""
-    d = _dec(_droit("1", "100.00", "10", "10.00"), _droit("2", "200.00", "10", "20.00"),
-             _tva("1", "110.00", "22.00"), _tva("2", "220.00", "44.00"), total="96.00",
-             nombre_articles=vs("declaration.nombre_articles", "2", document_id=DEC),
-             totaux_par_code=[_total_code("A00", "40.00"), _total_code("B00", "66.00")])
+    d = _dec(
+        _droit("1", "100.00", "10", "10.00"),
+        _droit("2", "200.00", "10", "20.00"),
+        _tva("1", "110.00", "22.00"),
+        _tva("2", "220.00", "44.00"),
+        total="96.00",
+        nombre_articles=vs("declaration.nombre_articles", "2", document_id=DEC),
+        totaux_par_code=[_total_code("A00", "40.00"), _total_code("B00", "66.00")],
+    )
     rs = [r for r in b2_sommes_taxes(contexte([d])) if r.sous_controle == "code"]
     assert [r.outcome for r in rs] == [Outcome.ecart_certain, Outcome.conforme]
     assert rs[0].constat.montant_en_jeu == D("10.00")
@@ -321,9 +391,14 @@ def test_total_par_code_deduit_hors_du_reseau_d3710():
 
     b00 = _total_code("B00", "66.00")
     b00.montant = b00.montant.model_copy(update={"regle_derivation": REGLE_TOTAL_CODE_SANS_LIGNE})
-    d = _dec(_droit("1", "100.00", "10", "10.00"), _droit("2", "200.00", "10", "20.00"),
-             _tva("1", "110.00", "22.00"), _tva("2", "220.00", "44.00"), total="96.00",
-             totaux_par_code=[_total_code("A00", "30.00"), b00])
+    d = _dec(
+        _droit("1", "100.00", "10", "10.00"),
+        _droit("2", "200.00", "10", "20.00"),
+        _tva("1", "110.00", "22.00"),
+        _tva("2", "220.00", "44.00"),
+        total="96.00",
+        totaux_par_code=[_total_code("A00", "30.00"), b00],
+    )
     reseau = {i.cle for i in corroboration.reseau(d, lambda v: v is not None, contexte([d]).tol)}
     assert "dec:code:A00" in reseau and "dec:code:B00" not in reseau
     assert not any(k.startswith("dec:codes:") for k in reseau)

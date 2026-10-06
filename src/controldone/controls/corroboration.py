@@ -120,7 +120,12 @@ class _Lecteur:
         self._utilisable = utilisable
 
     def lue(self, v: ValeurSourcee | None) -> bool:
-        return v is not None and v.methode is not Methode.derive and not v.est_reconstruite and self._utilisable(v)
+        return (
+            v is not None
+            and v.methode is not Methode.derive
+            and not v.est_reconstruite
+            and self._utilisable(v)
+        )
 
     def num(self, v: ValeurSourcee | None) -> Decimal | None:
         if not self.lue(v):
@@ -176,13 +181,25 @@ def _montant_taxe(t: TaxationDeclaration) -> ValeurSourcee | None:
 
 
 def _somme_identite(
-    cle: str, nature: str, total: ValeurSourcee, v_total: Decimal, ops: Sequence[tuple[ValeurSourcee, Decimal]],
-    tol: _Tol, portee: str | None = None,
+    cle: str,
+    nature: str,
+    total: ValeurSourcee,
+    v_total: Decimal,
+    ops: Sequence[tuple[ValeurSourcee, Decimal]],
+    tol: _Tol,
+    portee: str | None = None,
 ) -> Identite:
     s = sum((x for _, x in ops), _ZERO)
-    return Identite(cle, "somme", nature, total.id, tuple(v.id for v, _ in ops),
-                    abs(v_total - s) <= tol.t_somme(len(ops)), portee,
-                    tuple(v.id for v, x in ops if x == 0) + ((total.id,) if v_total == 0 else ()))
+    return Identite(
+        cle,
+        "somme",
+        nature,
+        total.id,
+        tuple(v.id for v, _ in ops),
+        abs(v_total - s) <= tol.t_somme(len(ops)),
+        portee,
+        tuple(v.id for v, x in ops if x == 0) + ((total.id,) if v_total == 0 else ()),
+    )
 
 
 def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identite]:
@@ -197,8 +214,16 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
             continue
         assert base is not None and t.taux is not None and t.montant is not None
         calcul = b * tx / _CENT if nature is TauxNature.ad_valorem else b * tx
-        out.append(Identite(f"dec:taxe:{i}", "produit", TAXE_LIGNE, t.montant.id, (base.id, t.taux.id),
-                            tol.taxe_ligne_concorde(m, calcul)))
+        out.append(
+            Identite(
+                f"dec:taxe:{i}",
+                "produit",
+                TAXE_LIGNE,
+                t.montant.id,
+                (base.id, t.taux.id),
+                tol.taxe_ligne_concorde(m, calcul),
+            )
+        )
     # Totaux de catégorie imprimés (une ligne sans article, des lignes par article : D-301, D-2210).
     exclus: set[int] = set()
     for code, (i_total, avec) in sorted(totaux_par_categorie(doc, lec.num, tol).items()):
@@ -208,28 +233,54 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
         ops = [(v, lec.num(v)) for v in (_montant_taxe(c.taxations[i]) for i in avec)]
         if total is None or v_total is None or any(x is None for _, x in ops):
             continue
-        out.append(_somme_identite(f"dec:categorie:{code}", "taxes", total, v_total,
-                                   [(v, x) for v, x in ops if v is not None and x is not None], tol))
+        out.append(
+            _somme_identite(
+                f"dec:categorie:{code}",
+                "taxes",
+                total,
+                v_total,
+                [(v, x) for v, x in ops if v is not None and x is not None],
+                tol,
+            )
+        )
     # Totaux imprimés par code (D-3101) : Σ lignes du code = total du code ; Σ totaux par code = total des droits et
     # taxes ou total à payer. Jamais des lignes de taxation.
     # D-3710 : un total déduit (D-3706) n'entre dans aucune identité — il ne corrobore ni les lignes de son code ni
     # le total des droits et taxes (circulaire pour un code admis par cette même somme).
     lus_codes: list[tuple[ValeurSourcee, Decimal]] = []
     for tot in c.totaux_par_code:
-        code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur else ""
+        code = (
+            (tot.type_taxe.valeur or "").strip().upper()
+            if tot.type_taxe is not None and tot.type_taxe.valeur
+            else ""
+        )
         v_total = lec.num(tot.montant)
         if not code or tot.montant is None or v_total is None or tot.deduit:
             lus_codes = []
             break
         lus_codes.append((tot.montant, v_total))
-        du_code = [_montant_taxe(t) for t in c.taxations
-                   if t.type_taxe is not None and (t.type_taxe.valeur or "").strip().upper() == code]
+        du_code = [
+            _montant_taxe(t)
+            for t in c.taxations
+            if t.type_taxe is not None and (t.type_taxe.valeur or "").strip().upper() == code
+        ]
         ops_code = [(v, lec.num(v)) for v in du_code]
         if ops_code and all(v is not None and x is not None for v, x in ops_code):
-            out.append(_somme_identite(f"dec:code:{code}", "taxes", tot.montant, v_total,
-                                       [(v, x) for v, x in ops_code if v is not None and x is not None], tol))
+            out.append(
+                _somme_identite(
+                    f"dec:code:{code}",
+                    "taxes",
+                    tot.montant,
+                    v_total,
+                    [(v, x) for v, x in ops_code if v is not None and x is not None],
+                    tol,
+                )
+            )
     if len(lus_codes) >= 2:
-        for nom_total, total in (("total_droits_taxes", c.total_droits_taxes), ("total_a_payer", c.total_a_payer)):
+        for nom_total, total in (
+            ("total_droits_taxes", c.total_droits_taxes),
+            ("total_a_payer", c.total_a_payer),
+        ):
             v_total = lec.num(total)
             if total is not None and v_total is not None:
                 out.append(_somme_identite(f"dec:codes:{nom_total}", "taxes", total, v_total, lus_codes, tol))
@@ -242,14 +293,23 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
         def autoliquidee(t: TaxationDeclaration) -> bool:
             if t.paiement_normalise is PaiementNormalise.autoliquide:
                 return True
-            return indice and t.categorie is CategorieTaxe.tva and t.paiement_normalise is PaiementNormalise.inconnu
+            return (
+                indice
+                and t.categorie is CategorieTaxe.tva
+                and t.paiement_normalise is PaiementNormalise.inconnu
+            )
 
         tout = [(v, x) for _, v, x in lues if v is not None and x is not None]
-        hors = [(v, x) for i, v, x in lues if v is not None and x is not None and not autoliquidee(c.taxations[i])]
+        hors = [
+            (v, x) for i, v, x in lues if v is not None and x is not None and not autoliquidee(c.taxations[i])
+        ]
         hypotheses = {"incluse": tout}
         if len(hors) != len(tout):
             hypotheses["exclue"] = hors
-        for nom_total, total in (("total_droits_taxes", c.total_droits_taxes), ("total_a_payer", c.total_a_payer)):
+        for nom_total, total in (
+            ("total_droits_taxes", c.total_droits_taxes),
+            ("total_a_payer", c.total_a_payer),
+        ):
             v_total = lec.num(total)
             if total is None or v_total is None:
                 continue
@@ -261,8 +321,16 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
     v_total = lec.num(total)
     arts = [(a.montant_facture_article, lec.num(a.montant_facture_article)) for a in c.articles]
     if total is not None and v_total is not None and arts and all(x is not None for _, x in arts):
-        out.append(_somme_identite("dec:articles", "articles", total, v_total,
-                                   [(v, x) for v, x in arts if v is not None and x is not None], tol))
+        out.append(
+            _somme_identite(
+                "dec:articles",
+                "articles",
+                total,
+                v_total,
+                [(v, x) for v, x in arts if v is not None and x is not None],
+                tol,
+            )
+        )
     # Écho : montant facturé de l'article = valeur statistique ou base ad valorem d'une taxe de l'article.
     bases_par_article: dict[str, list[ValeurSourcee]] = {}
     for t in c.taxations:
@@ -272,21 +340,45 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
         m = lec.num(a.montant_facture_article)
         if m is None or a.montant_facture_article is None:
             continue
-        numero = a.numero_article.valeur.strip() if a.numero_article is not None and a.numero_article.valeur else ""
+        numero = (
+            a.numero_article.valeur.strip()
+            if a.numero_article is not None and a.numero_article.valeur
+            else ""
+        )
         candidats = [a.valeur_statistique, *bases_par_article.get(numero, [])]
         for autre in candidats:
             x = lec.num(autre)
-            if x is not None and autre is not None and x == m and _zones_distinctes(a.montant_facture_article, autre):
-                out.append(Identite(f"dec:echo_article:{k}", "echo", "echo_article", a.montant_facture_article.id,
-                                    (autre.id,), True))
+            if (
+                x is not None
+                and autre is not None
+                and x == m
+                and _zones_distinctes(a.montant_facture_article, autre)
+            ):
+                out.append(
+                    Identite(
+                        f"dec:echo_article:{k}",
+                        "echo",
+                        "echo_article",
+                        a.montant_facture_article.id,
+                        (autre.id,),
+                        True,
+                    )
+                )
                 break
     return out
 
 
 def _reseau_lignes_ft(
-    prefixe: str, lignes: Sequence, total_debours: ValeurSourcee | None, total_ht: ValeurSourcee | None,
-    total_tva: ValeurSourcee | None, total_ttc: ValeurSourcee | None, acomptes: ValeurSourcee | None,
-    net: ValeurSourcee | None, lec: _Lecteur, tol: _Tol,
+    prefixe: str,
+    lignes: Sequence,
+    total_debours: ValeurSourcee | None,
+    total_ht: ValeurSourcee | None,
+    total_tva: ValeurSourcee | None,
+    total_ttc: ValeurSourcee | None,
+    acomptes: ValeurSourcee | None,
+    net: ValeurSourcee | None,
+    lec: _Lecteur,
+    tol: _Tol,
 ) -> list[Identite]:
     out: list[Identite] = []
     hts: list[tuple[object, ValeurSourcee | None, Decimal | None]] = []
@@ -295,12 +387,28 @@ def _reseau_lignes_ft(
         hts.append((lg, lg.montant_ht, ht))
         # Quantité 1 : « 1 × x = x » ne prouve rien (deux lectures du même nombre).
         if q is not None and pu is not None and ht is not None and q != 1:
-            out.append(Identite(f"{prefixe}:ligne:{i}", "produit", LIGNE_FT, lg.montant_ht.id,
-                                (lg.quantite.id, lg.prix_unitaire.id), abs(ht - q * pu) <= tol.t_ligne()))
+            out.append(
+                Identite(
+                    f"{prefixe}:ligne:{i}",
+                    "produit",
+                    LIGNE_FT,
+                    lg.montant_ht.id,
+                    (lg.quantite.id, lg.prix_unitaire.id),
+                    abs(ht - q * pu) <= tol.t_ligne(),
+                )
+            )
         tx, tva = lec.num(lg.taux_tva), lec.num(lg.montant_tva)
         if ht is not None and tx is not None and tva is not None and (tx != 0 or tva != 0):
-            out.append(Identite(f"{prefixe}:tva_ligne:{i}", "produit", TVA_LIGNE, lg.montant_tva.id,
-                                (lg.montant_ht.id, lg.taux_tva.id), abs(tva - ht * tx / _CENT) <= tol.t_ligne()))
+            out.append(
+                Identite(
+                    f"{prefixe}:tva_ligne:{i}",
+                    "produit",
+                    TVA_LIGNE,
+                    lg.montant_tva.id,
+                    (lg.montant_ht.id, lg.taux_tva.id),
+                    abs(tva - ht * tx / _CENT) <= tol.t_ligne(),
+                )
+            )
     complets = bool(hts) and all(x is not None for _, _, x in hts)
     # Σ débours = total des débours : seules les lignes de débours doivent être lues ; une ligne de prestation dont
     # seul le TTC est imprimé (« TVA comprise ») n'entre pas dans cette somme (D-2804).
@@ -310,12 +418,19 @@ def _reseau_lignes_ft(
     tout = debours + prest
     v_td, v_ht, v_tva = lec.num(total_debours), lec.num(total_ht), lec.num(total_tva)
     if debours_lus and debours and total_debours is not None and v_td is not None:
-        out.append(_somme_identite(f"{prefixe}:total_debours", "lignes", total_debours, v_td, debours, tol, "debours"))
+        out.append(
+            _somme_identite(
+                f"{prefixe}:total_debours", "lignes", total_debours, v_td, debours, tol, "debours"
+            )
+        )
     if complets and total_ht is not None and v_ht is not None:
         out.append(_somme_identite(f"{prefixe}:total_ht", "lignes", total_ht, v_ht, tout, tol, "tout"))
         if debours and prest:
-            out.append(_somme_identite(f"{prefixe}:total_ht_prestations", "lignes", total_ht, v_ht, prest, tol,
-                                       "prestations"))
+            out.append(
+                _somme_identite(
+                    f"{prefixe}:total_ht_prestations", "lignes", total_ht, v_ht, prest, tol, "prestations"
+                )
+            )
     # Σ TVA des lignes (lue) ou Σ HT × taux (taux lu) = total TVA : portée « lignes taxables ».
     if complets and total_tva is not None and v_tva is not None:
         tvas = [(lg, lg.montant_tva, lec.num(lg.montant_tva), lec.num(lg.taux_tva)) for lg, _, _ in hts]
@@ -324,26 +439,49 @@ def _reseau_lignes_ft(
         ):
             ops = [(v, x) for _, v, x, _ in tvas if v is not None and x is not None]
             out.append(_somme_identite(f"{prefixe}:tva_lignes", "tva", total_tva, v_tva, ops, tol, "taxable"))
-        taxees = [(v, x, lg.taux_tva, t) for (lg, v, x), (_, _, _, t) in zip(hts, tvas, strict=True)
-                  if t is not None and t != 0 and v is not None and x is not None]
+        taxees = [
+            (v, x, lg.taux_tva, t)
+            for (lg, v, x), (_, _, _, t) in zip(hts, tvas, strict=True)
+            if t is not None and t != 0 and v is not None and x is not None
+        ]
         sans_taux = [lg for lg, _, _, t in tvas if t is None and not lg.nature.est_debours]
         if not sans_taux and (taxees or v_tva == 0):
             s = sum((x * t / _CENT for _, x, _, t in taxees), _ZERO)
             ops_ids = tuple(v.id for v, _, _, _ in taxees) + tuple(tx.id for _, _, tx, _ in taxees)
-            out.append(Identite(f"{prefixe}:tva_base", "somme", "tva", total_tva.id, ops_ids,
-                                abs(v_tva - s) <= tol.t_somme(len(taxees) + 1), "taxable"))
+            out.append(
+                Identite(
+                    f"{prefixe}:tva_base",
+                    "somme",
+                    "tva",
+                    total_tva.id,
+                    ops_ids,
+                    abs(v_tva - s) <= tol.t_somme(len(taxees) + 1),
+                    "taxable",
+                )
+            )
         elif sans_taux and v_tva != 0:
             # D-2804 : taux de ligne non imprimés mais déduits (taux normal selon la nature) : Σ HT lus × taux = total
             # de TVA lu. Membres confirmés : le total et les HT lus (jamais les taux déduits).
             derives = [(lg, v, x, lec.taux(lg.taux_tva)) for lg, v, x in hts]
             if all(t is not None or lg.nature.est_debours for lg, _, _, t in derives):
-                taxees_d = [(v, x, t) for _, v, x, t in derives if t is not None and t != 0 and v is not None
-                            and x is not None]
+                taxees_d = [
+                    (v, x, t)
+                    for _, v, x, t in derives
+                    if t is not None and t != 0 and v is not None and x is not None
+                ]
                 if taxees_d:
                     s = sum((x * t / _CENT for _, x, t in taxees_d), _ZERO)
-                    out.append(Identite(f"{prefixe}:tva_base_taux_deduits", "somme", "tva", total_tva.id,
-                                        tuple(v.id for v, _, _ in taxees_d),
-                                        abs(v_tva - s) <= tol.t_somme(len(taxees_d) + 1), "taxable"))
+                    out.append(
+                        Identite(
+                            f"{prefixe}:tva_base_taux_deduits",
+                            "somme",
+                            "tva",
+                            total_tva.id,
+                            tuple(v.id for v, _, _ in taxees_d),
+                            abs(v_tva - s) <= tol.t_somme(len(taxees_d) + 1),
+                            "taxable",
+                        )
+                    )
     # Aucun débours lu ni total des débours imprimé : la portée « débours » est vide.
     if complets and not debours and (v_td is None or v_td == 0):
         out.append(Identite(f"{prefixe}:sans_debours", "somme", "vide", "", (), True, "debours"))
@@ -351,29 +489,65 @@ def _reseau_lignes_ft(
     # couvre toutes les lignes (portée « tout »).
     ttcs = [(getattr(lg, "montant_ttc", None), lec.num(getattr(lg, "montant_ttc", None))) for lg in lignes]
     v_ttc_total = lec.num(total_ttc)
-    if (ttcs and total_ttc is not None and v_ttc_total is not None
-            and all(v is not None and x is not None for v, x in ttcs)):
-        out.append(_somme_identite(f"{prefixe}:ttc_lignes", "lignes", total_ttc, v_ttc_total,
-                                   [(v, x) for v, x in ttcs if v is not None and x is not None], tol, "tout"))
+    if (
+        ttcs
+        and total_ttc is not None
+        and v_ttc_total is not None
+        and all(v is not None and x is not None for v, x in ttcs)
+    ):
+        out.append(
+            _somme_identite(
+                f"{prefixe}:ttc_lignes",
+                "lignes",
+                total_ttc,
+                v_ttc_total,
+                [(v, x) for v, x in ttcs if v is not None and x is not None],
+                tol,
+                "tout",
+            )
+        )
     # Totaux d'en-tête.
     v_ttc = lec.num(total_ttc)
     if v_ttc is not None and v_ht is not None and v_tva is not None:
         assert total_ttc is not None and total_ht is not None and total_tva is not None
         calculs = [v_ht + v_tva]
         ops_ids = (total_ht.id, total_tva.id)
-        out.append(Identite(f"{prefixe}:total_ttc", "somme", "entete", total_ttc.id, ops_ids,
-                            any(abs(v_ttc - c) <= tol.t_somme(2) for c in calculs)))
+        out.append(
+            Identite(
+                f"{prefixe}:total_ttc",
+                "somme",
+                "entete",
+                total_ttc.id,
+                ops_ids,
+                any(abs(v_ttc - c) <= tol.t_somme(2) for c in calculs),
+            )
+        )
         if v_td is not None and total_debours is not None:
-            out.append(Identite(f"{prefixe}:total_ttc_debours", "somme", "entete", total_ttc.id,
-                                (total_ht.id, total_tva.id, total_debours.id),
-                                abs(v_ttc - (v_ht + v_tva + v_td)) <= tol.t_somme(3)))
+            out.append(
+                Identite(
+                    f"{prefixe}:total_ttc_debours",
+                    "somme",
+                    "entete",
+                    total_ttc.id,
+                    (total_ht.id, total_tva.id, total_debours.id),
+                    abs(v_ttc - (v_ht + v_tva + v_td)) <= tol.t_somme(3),
+                )
+            )
     v_net = lec.num(net)
     if v_net is not None and v_ttc is not None:
         assert net is not None and total_ttc is not None
         v_ac = lec.num(acomptes)
         ops = (total_ttc.id,) + ((acomptes.id,) if acomptes is not None and v_ac is not None else ())
-        out.append(Identite(f"{prefixe}:net", "somme", "entete", net.id, ops,
-                            abs(v_net - (v_ttc - abs(v_ac or _ZERO))) <= tol.t_somme(len(ops))))
+        out.append(
+            Identite(
+                f"{prefixe}:net",
+                "somme",
+                "entete",
+                net.id,
+                ops,
+                abs(v_net - (v_ttc - abs(v_ac or _ZERO))) <= tol.t_somme(len(ops)),
+            )
+        )
     return out
 
 
@@ -386,9 +560,16 @@ def _reseau_facture_commerciale(doc: Document, lec: _Lecteur, tol: _Tol) -> list
         lignes.append((lg.montant_ligne, m))
         if q is not None and pu is not None and m is not None and q != 1:
             # Arrondi au centime du produit ; prix unitaires à 4 décimales admis.
-            out.append(Identite(f"fc:ligne:{i}", "produit", LIGNE_FC, lg.montant_ligne.id,
-                                (lg.quantite.id, lg.prix_unitaire.id),
-                                abs(m - q * pu) <= max(tol.t_ligne(), abs(q) * Decimal("0.005"))))
+            out.append(
+                Identite(
+                    f"fc:ligne:{i}",
+                    "produit",
+                    LIGNE_FC,
+                    lg.montant_ligne.id,
+                    (lg.quantite.id, lg.prix_unitaire.id),
+                    abs(m - q * pu) <= max(tol.t_ligne(), abs(q) * Decimal("0.005")),
+                )
+            )
     total, v_total = f.total_facture, lec.num(f.total_facture)
     if total is None or v_total is None or not lignes or any(x is None for _, x in lignes):
         return out
@@ -407,8 +588,11 @@ def _reseau_facture_commerciale(doc: Document, lec: _Lecteur, tol: _Tol) -> list
         if st.type is TypeSousTotal.marchandises and x is not None and st.montant is not None:
             out.append(_somme_identite(f"fc:sous_total:{k}", "lignes", st.montant, x, ops, tol))
             if pieds:
-                out.append(_somme_identite(f"fc:total_sous_total:{k}", "entete", total, v_total,
-                                           [(st.montant, x), *pieds], tol))
+                out.append(
+                    _somme_identite(
+                        f"fc:total_sous_total:{k}", "entete", total, v_total, [(st.montant, x), *pieds], tol
+                    )
+                )
     return out
 
 
@@ -430,7 +614,9 @@ def rangees(doc: Document) -> dict[str, str]:
     return out
 
 
-def reseau(doc: Document, utilisable: Callable[[ValeurSourcee | None], bool], tol: _Tol) -> tuple[Identite, ...]:
+def reseau(
+    doc: Document, utilisable: Callable[[ValeurSourcee | None], bool], tol: _Tol
+) -> tuple[Identite, ...]:
     """Identités arithmétiques imprimées d'un document, sur ses valeurs lues (voir l'en-tête du module)."""
     if doc.champs is None:
         return ()
@@ -439,12 +625,36 @@ def reseau(doc: Document, utilisable: Callable[[ValeurSourcee | None], bool], to
         return tuple(_reseau_declaration(doc, lec, tol))
     if doc.type is TypeDocument.facture_transitaire:
         ft = doc.ft
-        return tuple(_reseau_lignes_ft("ft", ft.lignes, ft.total_debours, ft.total_ht, ft.total_tva, ft.total_ttc,
-                                       ft.acomptes, ft.net_a_payer, lec, tol))
+        return tuple(
+            _reseau_lignes_ft(
+                "ft",
+                ft.lignes,
+                ft.total_debours,
+                ft.total_ht,
+                ft.total_tva,
+                ft.total_ttc,
+                ft.acomptes,
+                ft.net_a_payer,
+                lec,
+                tol,
+            )
+        )
     if doc.type is TypeDocument.avoir:
         av = doc.av
-        return tuple(_reseau_lignes_ft("av", av.lignes, None, av.total_credite_ht, av.total_tva,
-                                       av.total_credite_ttc, None, None, lec, tol))
+        return tuple(
+            _reseau_lignes_ft(
+                "av",
+                av.lignes,
+                None,
+                av.total_credite_ht,
+                av.total_tva,
+                av.total_credite_ttc,
+                None,
+                None,
+                lec,
+                tol,
+            )
+        )
     if doc.type is TypeDocument.facture_commerciale:
         return tuple(_reseau_facture_commerciale(doc, lec, tol))
     return ()
@@ -455,7 +665,9 @@ def reseau(doc: Document, utilisable: Callable[[ValeurSourcee | None], bool], to
 # =====================================================================================================
 
 
-def _feuilles(valeurs: Iterable[ValeurSourcee], index: Callable[[str], ValeurSourcee | None]) -> list[ValeurSourcee]:
+def _feuilles(
+    valeurs: Iterable[ValeurSourcee], index: Callable[[str], ValeurSourcee | None]
+) -> list[ValeurSourcee]:
     """Valeurs clés ramenées à leurs sources lues (une valeur dérivée sans source connue reste une feuille)."""
     out: dict[str, ValeurSourcee] = {}
     pile = list(valeurs)
@@ -465,7 +677,11 @@ def _feuilles(valeurs: Iterable[ValeurSourcee], index: Callable[[str], ValeurSou
         if v.id in vus:
             continue
         vus.add(v.id)
-        sources = [s for s in (index(i) for i in v.derivee_de) if s is not None] if v.methode is Methode.derive else []
+        sources = (
+            [s for s in (index(i) for i in v.derivee_de) if s is not None]
+            if v.methode is Methode.derive
+            else []
+        )
         if sources:
             pile.extend(sources)
         else:
@@ -479,7 +695,9 @@ def _a_confirmer(v: ValeurSourcee) -> bool:
 
 
 def lecture_confirmee(
-    identites: Sequence[Identite], valeur_id: str, exclues: Iterable[Identite] = (),
+    identites: Sequence[Identite],
+    valeur_id: str,
+    exclues: Iterable[Identite] = (),
     rangee_de: dict[str, str] | None = None,
 ) -> bool:
     """La valeur figure dans une identité qui tient, hors identités exclues (contestées) ; ou, pour une valeur
@@ -499,7 +717,9 @@ def _complet(identites: Sequence[Identite], contestee: Identite) -> bool:
     """Complétude des lignes lues d'une somme contestée (facture du transitaire, avoir) : chaque portée de la
     somme est couverte par une **autre** identité de lignes qui tient et qui ne contient pas le total contesté
     (débours : total des débours ; lignes taxables : total de TVA ; toutes les lignes : total HT)."""
-    autres = [i for i in identites if i.tient and i.cle != contestee.cle and contestee.imprime not in i.membres]
+    autres = [
+        i for i in identites if i.tient and i.cle != contestee.cle and contestee.imprime not in i.membres
+    ]
     portees = {i.portee for i in autres if i.portee}
     if contestee.portee == "debours":
         return "tout" in portees
@@ -543,8 +763,10 @@ def evaluer(
         produits = [i for i in contestees if i.genre == "produit"]
         exempts: set[str] = {i.imprime for i in sommes}
         for p in produits:
-            meme_nature = any(i.tient and i.nature == p.nature and i.cle != p.cle and not (i.membres & p.membres)
-                              for i in identites)
+            meme_nature = any(
+                i.tient and i.nature == p.nature and i.cle != p.cle and not (i.membres & p.membres)
+                for i in identites
+            )
             if meme_nature:
                 exempts.update(p.operandes)
         operandes_somme = {o for s in sommes for o in s.operandes}

@@ -515,7 +515,13 @@ ChampsDocument = typing.Annotated[
 
 _CLASSES: dict[TypeDocument, type[Champs]] = {
     c.TYPE: c
-    for c in (ChampsFactureCommerciale, ChampsDeclaration, ChampsFactureTransitaire, ChampsAvoir, ChampsSupport)
+    for c in (
+        ChampsFactureCommerciale,
+        ChampsDeclaration,
+        ChampsFactureTransitaire,
+        ChampsAvoir,
+        ChampsSupport,
+    )
 }
 
 
@@ -618,8 +624,19 @@ def type_valeur_pour(chemin: str) -> TypeValeur:
         return TypeValeur.reference
     if feuille.startswith("masse"):
         return TypeValeur.masse
-    if feuille.startswith(("montant", "total", "prix", "base_montant", "base_droit", "base_tva",
-                           "valeur_statistique", "net_a_payer", "acomptes")):
+    if feuille.startswith(
+        (
+            "montant",
+            "total",
+            "prix",
+            "base_montant",
+            "base_droit",
+            "base_tva",
+            "valeur_statistique",
+            "net_a_payer",
+            "acomptes",
+        )
+    ):
         return TypeValeur.montant
     return TypeValeur.texte
 

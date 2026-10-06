@@ -13,9 +13,15 @@ from controldone.web.i18n import N_, traduire
 
 __all__ = ["ETAPES", "etat_traitement"]
 
-ETAPES = (("recu", N_("Reçu")), ("pages", N_("Lecture des pages")), ("classement", N_("Classement des documents")),
-          ("extraction", N_("Extraction des valeurs")), ("regroupement", N_("Regroupement en dossiers")),
-          ("controles", N_("Contrôles")), ("termine", N_("Terminé")))
+ETAPES = (
+    ("recu", N_("Reçu")),
+    ("pages", N_("Lecture des pages")),
+    ("classement", N_("Classement des documents")),
+    ("extraction", N_("Extraction des valeurs")),
+    ("regroupement", N_("Regroupement en dossiers")),
+    ("controles", N_("Contrôles")),
+    ("termine", N_("Terminé")),
+)
 _RANG = {code: i for i, (code, _l) in enumerate(ETAPES)}
 #: Anciennes valeurs (worker sans étapes fines) : « lecture » couvre tout le pipeline.
 _ALIAS = {"lecture": "pages"}
@@ -91,10 +97,20 @@ def etat_traitement(lot_statut: str, job: Any, langue: str | None = None) -> dic
     else:
         texte = traduire("Étape en cours : {etape}.", langue, etape=libelle_t.lower())
         if compteur:
-            texte = traduire("Étape en cours : {etape} ({compteur}).", langue, etape=libelle_t.lower(),
-                             compteur=compteur)
+            texte = traduire(
+                "Étape en cours : {etape} ({compteur}).", langue, etape=libelle_t.lower(), compteur=compteur
+            )
         if detail_t:
             texte += " " + detail_t
-    return {"etape": code, "libelle": libelle_t, "rang": rang, "fini": code in ("termine", "erreur"),
-            "erreur": code == "erreur", "pourcentage": 100 if code == "erreur" else _pourcentage(rang, fait, total),
-            "detail": detail_t, "fait": fait, "total": total, "texte": texte}
+    return {
+        "etape": code,
+        "libelle": libelle_t,
+        "rang": rang,
+        "fini": code in ("termine", "erreur"),
+        "erreur": code == "erreur",
+        "pourcentage": 100 if code == "erreur" else _pourcentage(rang, fait, total),
+        "detail": detail_t,
+        "fait": fait,
+        "total": total,
+        "texte": texte,
+    }

@@ -101,7 +101,9 @@ class Database:
         self.url = url or url_par_defaut()
         self.engine = creer_moteur(self.url, immediat=True, echo=echo)
         self.est_sqlite = self.engine.dialect.name == "sqlite"
-        self.engine_lecture = creer_moteur(self.url, immediat=False, echo=echo) if self.est_sqlite else self.engine
+        self.engine_lecture = (
+            creer_moteur(self.url, immediat=False, echo=echo) if self.est_sqlite else self.engine
+        )
         self._fabrique = sessionmaker(self.engine, expire_on_commit=False)
         self._fabrique_lecture = sessionmaker(self.engine_lecture, expire_on_commit=False)
 
@@ -150,17 +152,29 @@ class Database:
             if mode_execution() in ("dev", "test") or env("CONTROLDONE_MIGRATION_AUTO") == "1":
                 self.migrer()
             else:
-                raise MigrationEnAttente("schéma de la base à migrer : " + ", ".join(
-                    f"{m.version:04d} {m.nom}" for m in attente) + " — sauvegarder puis exécuter « controldone "
-                    "migrer » (docker compose : service « migrer », docs/EXPLOITATION.md § migrations)")
+                raise MigrationEnAttente(
+                    "schéma de la base à migrer : "
+                    + ", ".join(f"{m.version:04d} {m.nom}" for m in attente)
+                    + " — sauvegarder puis exécuter « controldone "
+                    "migrer » (docker compose : service « migrer », docs/EXPLOITATION.md § migrations)"
+                )
         manquantes = self.colonnes_manquantes()
         if manquantes:
-            raise SchemaPerime("schéma de la base périmé : colonnes manquantes " + ", ".join(manquantes[:20])
-                               + (" …" if len(manquantes) > 20 else "")
-                               + " — appliquer la migration de la version (docs/EXPLOITATION.md, schéma)")
+            raise SchemaPerime(
+                "schéma de la base périmé : colonnes manquantes "
+                + ", ".join(manquantes[:20])
+                + (" …" if len(manquantes) > 20 else "")
+                + " — appliquer la migration de la version (docs/EXPLOITATION.md, schéma)"
+            )
 
-    def attendre_schema_a_jour(self, *, attente_s: float | None = None, intervalle_s: float = 5.0,
-                               rappel_s: float = 60.0, journal: Callable[[str], None] | None = None) -> None:
+    def attendre_schema_a_jour(
+        self,
+        *,
+        attente_s: float | None = None,
+        intervalle_s: float = 5.0,
+        rappel_s: float = 60.0,
+        journal: Callable[[str], None] | None = None,
+    ) -> None:
         """Démarrage du web et du worker en production (D-4102) : comme ``exiger_schema_a_jour``, mais une
         **migration en attente** fait attendre le processus (au plus ``attente_s`` secondes, défaut
         ``CONTROLDONE_MIGRATION_ATTENTE_S``, 600 en production, 0 ailleurs) au lieu de l'arrêter aussitôt :
@@ -185,15 +199,19 @@ class Database:
             try:
                 self.exiger_schema_a_jour()
                 if dernier_rappel is not None and journal:
-                    journal(f"migrations appliquées après {time.monotonic() - debut:.0f} s d'attente : démarrage")
+                    journal(
+                        f"migrations appliquées après {time.monotonic() - debut:.0f} s d'attente : démarrage"
+                    )
                 return
             except MigrationEnAttente as exc:
                 ecoule = time.monotonic() - debut
                 if ecoule >= attente_s:
                     raise MigrationEnAttente(f"{exc} — attente de {attente_s:.0f} s écoulée, arrêt") from None
                 if journal and (dernier_rappel is None or time.monotonic() - dernier_rappel >= rappel_s):
-                    journal(f"{exc} — démarrage suspendu, en attente de la migration "
-                            f"(encore {attente_s - ecoule:.0f} s au plus)")
+                    journal(
+                        f"{exc} — démarrage suspendu, en attente de la migration "
+                        f"(encore {attente_s - ecoule:.0f} s au plus)"
+                    )
                     dernier_rappel = time.monotonic()
                 time.sleep(max(0.01, min(intervalle_s, attente_s - ecoule)))
 

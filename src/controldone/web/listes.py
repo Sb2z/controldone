@@ -30,8 +30,18 @@ from controldone.services.saisie import montant_saisi
 from controldone.web.i18n import N_
 from controldone.web.i18n import traduire as _
 
-__all__ = ["Page", "Param", "Requete", "contient", "decalage", "lire_requete", "montant_dans", "normaliser", "paginer",
-           "trier"]
+__all__ = [
+    "Page",
+    "Param",
+    "Requete",
+    "contient",
+    "decalage",
+    "lire_requete",
+    "montant_dans",
+    "normaliser",
+    "paginer",
+    "trier",
+]
 
 T = TypeVar("T")
 
@@ -78,8 +88,13 @@ class Requete:
             p["page"] = str(self.page)
         for k, v in changes.items():
             p.pop(k, None)
-            if v is not None and v != "" and not (k == "page" and v == 1) and not (k == "tri" and v == self.tri_defaut) \
-                    and not (k == "taille" and v == TAILLE_DEFAUT):
+            if (
+                v is not None
+                and v != ""
+                and not (k == "page" and v == 1)
+                and not (k == "tri" and v == self.tri_defaut)
+                and not (k == "taille" and v == TAILLE_DEFAUT)
+            ):
                 p[k] = str(v)
         return p
 
@@ -129,8 +144,9 @@ def _texte(nom: str, libelle: str, v: str) -> str:
     return v
 
 
-def lire_requete(request: Request, params: dict[str, Param], tris: Sequence[str], tri_defaut: str,
-                 *, ancre: str = "") -> Requete:
+def lire_requete(
+    request: Request, params: dict[str, Param], tris: Sequence[str], tri_defaut: str, *, ancre: str = ""
+) -> Requete:
     """Valide les paramètres GET d'une liste (voir le module)."""
     qp = request.query_params
     filtres: dict[str, Any] = {}
@@ -153,7 +169,9 @@ def lire_requete(request: Request, params: dict[str, Param], tris: Sequence[str]
             try:
                 d = date.fromisoformat(v)
             except ValueError:
-                raise RequeteInvalide(_("{libelle} : date attendue (AAAA-MM-JJ)", libelle=_(spec.libelle))) from None
+                raise RequeteInvalide(
+                    _("{libelle} : date attendue (AAAA-MM-JJ)", libelle=_(spec.libelle))
+                ) from None
             if not 2000 <= d.year <= 2100:
                 raise RequeteInvalide(_("{libelle} : date hors limites", libelle=_(spec.libelle)))
             filtres[nom] = d
@@ -167,14 +185,18 @@ def lire_requete(request: Request, params: dict[str, Param], tris: Sequence[str]
     taille = _entier(qp.get("taille", ""), N_("Taille de page"), 1, max(TAILLES), TAILLE_DEFAUT)
     if taille not in TAILLES:
         raise RequeteInvalide(_("Taille de page : 25, 50 ou 100"))
-    return Requete(filtres=filtres, brut=brut, tri=tri, tri_defaut=tri_defaut, page=page, taille=taille, ancre=ancre)
+    return Requete(
+        filtres=filtres, brut=brut, tri=tri, tri_defaut=tri_defaut, page=page, taille=taille, ancre=ancre
+    )
 
 
 def _entier(v: str, libelle: str, mini: int, maxi: int, defaut: int) -> int:
     v = v.strip()
     if not v:
         return defaut
-    if not (v.isascii() and v.isdigit()) or len(v) > 6:  # « ² » est un chiffre pour isdigit, pas pour int (REV2-05)
+    if (
+        not (v.isascii() and v.isdigit()) or len(v) > 6
+    ):  # « ² » est un chiffre pour isdigit, pas pour int (REV2-05)
         raise RequeteInvalide(_("{libelle} : nombre entier attendu", libelle=_(libelle)))
     n = int(v)
     if not mini <= n <= maxi:
@@ -215,13 +237,21 @@ def paginer(elements: Sequence[T] | None, req: Requete, *, total: int | None = N
     page = min(req.page, pages)
     if total is None:
         debut = (page - 1) * req.taille
-        vue = elements[debut:debut + req.taille]
+        vue = elements[debut : debut + req.taille]
     else:
         debut = (page - 1) * req.taille
         vue = elements
     req.page = page
-    return Page(elements=vue, total=n, page=page, pages=pages, taille=req.taille, debut=debut + 1 if n else 0,
-                fin=debut + len(vue), numeros=_numeros(page, pages))
+    return Page(
+        elements=vue,
+        total=n,
+        page=page,
+        pages=pages,
+        taille=req.taille,
+        debut=debut + 1 if n else 0,
+        fin=debut + len(vue),
+        numeros=_numeros(page, pages),
+    )
 
 
 def decalage(req: Requete, total: int) -> int:

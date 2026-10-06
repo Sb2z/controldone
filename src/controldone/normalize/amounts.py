@@ -55,12 +55,20 @@ def _groupes_milliers_valides(partie_entiere: str, sep: str) -> bool:
         return True
     # groupement indien (lakh / crore) : « 1,23,456 », « 12,34,56,789 » — groupes de 2 chiffres puis un
     # dernier groupe de 3 (D-2006)
-    return (sep == "," and len(groupes) >= 3 and 1 <= len(groupes[0]) <= 2 and groupes[0].isdigit()
-            and all(len(g) == 2 and g.isdigit() for g in groupes[1:-1])
-            and len(groupes[-1]) == 3 and groupes[-1].isdigit())
+    return (
+        sep == ","
+        and len(groupes) >= 3
+        and 1 <= len(groupes[0]) <= 2
+        and groupes[0].isdigit()
+        and all(len(g) == 2 and g.isdigit() for g in groupes[1:-1])
+        and len(groupes[-1]) == 3
+        and groupes[-1].isdigit()
+    )
 
 
-def _lire_noyau(noyau: str, separateur_decimal: str | None, sans_decimales: bool) -> tuple[Decimal, bool] | None:
+def _lire_noyau(
+    noyau: str, separateur_decimal: str | None, sans_decimales: bool
+) -> tuple[Decimal, bool] | None:
     """Convertit une sous-chaîne « chiffres + séparateurs » en Decimal. ``None`` si incohérente."""
     ambigu = False
     groupe_espace = any(c in noyau for c in _SEP_GROUPE)
@@ -130,9 +138,11 @@ def _signe_negatif(avant: str, apres: str) -> bool:
     a, p = avant.rstrip(), apres.lstrip()
     # Parenthèses englobant le nombre (et éventuellement la devise) : « (1 234,56) », « (EUR 12,00) ».
     if "(" in a and ")" in p:
-        entre_avant = a[a.rfind("(") + 1:]
+        entre_avant = a[a.rfind("(") + 1 :]
         entre_apres = p[: p.find(")")]
-        if re.fullmatch(r"[A-Za-z€$£¥₩\s]{0,6}", entre_avant) and re.fullmatch(r"[A-Za-z€$£¥₩\s]{0,6}", entre_apres):
+        if re.fullmatch(r"[A-Za-z€$£¥₩\s]{0,6}", entre_avant) and re.fullmatch(
+            r"[A-Za-z€$£¥₩\s]{0,6}", entre_apres
+        ):
             return True
     # Moins avant : « -1 234 », « - 12 », « -€12 », « EUR -12 » ; pas « 10-20 » (plage).
     m = re.search(r"(^|[^\d])[-−–]\s*[A-Za-z€$£¥₩]{0,4}\s*$", a)
@@ -167,7 +177,7 @@ def parse_nombre(
                 continue
             valeur, ambigu = lu
             debut = m.start() + (len(noyau) - len(essai))
-            negatif = _signe_negatif(texte[:debut], texte[m.end():])
+            negatif = _signe_negatif(texte[:debut], texte[m.end() :])
             return NombreLu(valeur=valeur, negatif=negatif, ambigu=ambigu, texte=essai)
     return None
 

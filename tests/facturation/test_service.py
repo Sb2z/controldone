@@ -17,7 +17,9 @@ from controldone.outbox import FileSortante, StatutAction
 from controldone.storage import facturation as stock
 
 LE = date(2026, 10, 2)
-SIGNE = Consentement(signe=True, signe_par="M. FICTIF", signe_le="2026-10-01", reference_document="accord-FICTIF.pdf")
+SIGNE = Consentement(
+    signe=True, signe_par="M. FICTIF", signe_le="2026-10-01", reference_document="accord-FICTIF.pdf"
+)
 
 
 def test_brouillon_puis_emission_et_depot(service, db, pa, tmp_path):
@@ -39,7 +41,9 @@ def test_brouillon_puis_emission_et_depot(service, db, pa, tmp_path):
     copie = tmp_path / "sorties" / "facture_emise" / "F-2026-0001.pdf.enc"  # chiffrée au repos (D-4106)
     from controldone.storage.traces_envoi import TracesEnvoi
 
-    assert TracesEnvoi.depuis_env(tmp_path / "sorties").lire(copie) == f.pdf and f.pdf not in copie.read_bytes()
+    assert (
+        TracesEnvoi.depuis_env(tmp_path / "sorties").lire(copie) == f.pdf and f.pdf not in copie.read_bytes()
+    )
     assert not (tmp_path / "sorties" / "facture_emise" / "F-2026-0001.pdf").exists()
     assert [s.code for s in stock.statuts_pa(db, facture_id=f.id)] == ["200"]
     # relancer ne crée ni nouveau numéro ni nouveau dépôt
@@ -49,9 +53,15 @@ def test_brouillon_puis_emission_et_depot(service, db, pa, tmp_path):
 def test_brouillon_existant_de_l_agent_repris_avec_tva(service, db):
     from controldone.litiges import LigneFacture, payload_facture
 
-    payload = payload_facture("commission", [LigneFacture("Commission de 20 % sur avoir FICTIF", Decimal("48.00"))],
-                              destinataires=["compta@client-a-fictif.test"], raison_sociale="CLIENT A FICTIF SAS")
-    a = FileSortante(db).proposer("facture_emise", payload, SYSTEME, tenant_id="cli_a", idempotency_key="commission:x")
+    payload = payload_facture(
+        "commission",
+        [LigneFacture("Commission de 20 % sur avoir FICTIF", Decimal("48.00"))],
+        destinataires=["compta@client-a-fictif.test"],
+        raison_sociale="CLIENT A FICTIF SAS",
+    )
+    a = FileSortante(db).proposer(
+        "facture_emise", payload, SYSTEME, tenant_id="cli_a", idempotency_key="commission:x"
+    )
     approuver(db, a.id)
     f = service.emettre(a.id, FONDATEUR, le=LE)
     assert (f.total_ht, f.total_tva, f.total_ttc) == (Decimal("48.00"), Decimal("9.60"), Decimal("57.60"))
@@ -74,7 +84,9 @@ def test_coupon_de_lancement(service, db):
     emises = []
     # D-1313 : remise sans aucun accord de publication (cli_a) ; l'accord, s'il existe, est seulement cité
     for cid, consentement in (("cli_a", None), ("cli_c0", SIGNE), ("cli_c1", SIGNE)):
-        a = service.proposer_diagnostic(cid, FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=consentement)
+        a = service.proposer_diagnostic(
+            cid, FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=consentement
+        )
         fx = a.payload["facturation"]["coupon"]
         assert a.payload["total_ttc"] == "0.00" and fx["accord_publication_condition"] is False
         assert ("consentement" in fx) is (consentement is not None)
@@ -85,7 +97,11 @@ def test_coupon_de_lancement(service, db):
     assert [f.total_ttc for f in emises] == [Decimal("0.00")] * 3
     assert all(b"AllowanceTotalAmount>390.00<" in f.xml.encode() for f in emises)
     us = stock.coupon_utilisations(db, "LANCEMENT-3-DIAGNOSTICS")
-    assert len(us) == 3 and us[0].consentement == {} and us[1].consentement["reference_document"] == "accord-FICTIF.pdf"
+    assert (
+        len(us) == 3
+        and us[0].consentement == {}
+        and us[1].consentement["reference_document"] == "accord-FICTIF.pdf"
+    )
     with pytest.raises(CouponRefuse, match="épuisé"):  # quatrième diagnostic gratuit
         service.proposer_diagnostic("cli_c2", FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=SIGNE)
     with pytest.raises(CouponRefuse):  # même client
@@ -94,8 +110,10 @@ def test_coupon_de_lancement(service, db):
 
 def test_coupon_reverifie_a_l_emission(service, db):
     """Deux brouillons créés avant l'épuisement : le quota est revérifié sous verrou à l'émission."""
-    brouillons = [service.proposer_diagnostic(c, FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=SIGNE)
-                  for c in ("cli_a", "cli_b", "cli_c0", "cli_c1")]
+    brouillons = [
+        service.proposer_diagnostic(c, FONDATEUR, coupon="LANCEMENT-3-DIAGNOSTICS", consentement=SIGNE)
+        for c in ("cli_a", "cli_b", "cli_c0", "cli_c1")
+    ]
     for a in brouillons:
         approuver(db, a.id)
     for a in brouillons[:3]:
@@ -113,7 +131,9 @@ def test_avoir(service, db):
         service.proposer_avoir(f.id, FONDATEUR, motif="")
     with pytest.raises(EmissionRefusee):
         service.proposer_avoir(f.id, FONDATEUR, motif="trop", montant_ht=Decimal("400"))
-    av = service.proposer_avoir(f.id, FONDATEUR, motif="Erreur de quantité FICTIVE", montant_ht=Decimal("90.00"))
+    av = service.proposer_avoir(
+        f.id, FONDATEUR, motif="Erreur de quantité FICTIVE", montant_ht=Decimal("90.00")
+    )
     approuver(db, av.id)
     fa = service.emettre(av.id, FONDATEUR, le=LE)
     assert fa.numero == "AV-2026-0001" and fa.type_code == "381" and fa.facture_origine_id == f.id
@@ -129,13 +149,17 @@ def test_avoir(service, db):
 def test_production_refuse_vendeur_incomplet(db, catalogue, pa, bouchon):
     from controldone.facturation.offres import Vendeur
 
-    prod = ServiceFacturation(db, catalogue=replace(catalogue, vendeur=Vendeur()), pa=pa, paiement=bouchon, prod=True)
+    prod = ServiceFacturation(
+        db, catalogue=replace(catalogue, vendeur=Vendeur()), pa=pa, paiement=bouchon, prod=True
+    )
     a = prod.proposer_diagnostic("cli_a", FONDATEUR)
     approuver(db, a.id)
     with pytest.raises(EmissionRefusee, match="incomplète"):
         prod.emettre(a.id, FONDATEUR, le=LE)
     assert stock.factures(db) == []
-    dev = ServiceFacturation(db, catalogue=replace(catalogue, vendeur=Vendeur()), pa=pa, paiement=bouchon, prod=False)
+    dev = ServiceFacturation(
+        db, catalogue=replace(catalogue, vendeur=Vendeur()), pa=pa, paiement=bouchon, prod=False
+    )
     f = dev.emettre(a.id, FONDATEUR, le=LE)
     assert f.contenu["vendeur_complet"] is False and f.numero == "F-2026-0001"
 

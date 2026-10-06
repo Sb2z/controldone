@@ -65,11 +65,18 @@ LIB_MAISON = motifs(
 LIB_MAITRE = motifs(
     rf"(?:master\s*{_REF}|m(?:awb|bl|b/l)|{_REF}\s*(?:mere|master|madre)|lta\s*mere)\s*{_NO}?\s*:?",
 )
-LIB_TRANSPORT = motifs(rf"{_REF}(?:\s*/\s*{_REF})*\s*{_NO}?\s*:?", r"(?:tracking|shipment|expedition)\s*" + _NO + r"\s*:?",
-                       # « Transport: 999-12345675 », « Frachtbrief: … », « Polizza di carico: … » (D-2010)
-                       r"transport(?:\s*(?:doc(?:ument)?|ref(?:erence)?)\.?)?\s*:",
-                       r"(?:cmr-?\s*)?frachtbrief\s*:?", r"konnossement\s*:?", r"polizza\s*di\s*carico\s*:?",
-                       r"lettera\s*di\s*vettura(?:\s*aerea)?\s*:?", r"(?:lucht)?vrachtbrief\s*:?", r"cognossement\s*:?")
+LIB_TRANSPORT = motifs(
+    rf"{_REF}(?:\s*/\s*{_REF})*\s*{_NO}?\s*:?",
+    r"(?:tracking|shipment|expedition)\s*" + _NO + r"\s*:?",
+    # « Transport: 999-12345675 », « Frachtbrief: … », « Polizza di carico: … » (D-2010)
+    r"transport(?:\s*(?:doc(?:ument)?|ref(?:erence)?)\.?)?\s*:",
+    r"(?:cmr-?\s*)?frachtbrief\s*:?",
+    r"konnossement\s*:?",
+    r"polizza\s*di\s*carico\s*:?",
+    r"lettera\s*di\s*vettura(?:\s*aerea)?\s*:?",
+    r"(?:lucht)?vrachtbrief\s*:?",
+    r"cognossement\s*:?",
+)
 _TITRE_TRANSPORT = re.compile(
     r"^(?:air\s*waybill|bill of lading|sea\s*waybill|lettre de transport|lta\b|connaissement|conocimiento|"
     r"guia aerea|cmr\b|lettre de voiture|house air waybill|master air waybill)"
@@ -81,31 +88,39 @@ LIB_FIN_PAVE = motifs(
 )
 LIB_COLIS = motifs(
     r"(?:total\s*)?(?:number|no\.?|nbr|nb)\s*of\s*(?:packages|pkgs|pieces|cartons|parcels)\s*:?",
-    r"(?:total\s*)?(?:packages|pkgs|pieces|colis|cartons)\s*:", r"total\s*(?:packages|pkgs|pieces|colis)\s*:?",
-    r"(?:nombre|nb|nbre)\s*(?:total\s*)?(?:de\s*)?colis\s*:?", r"(?:numero|n\.?o|cantidad|total)\s*(?:de\s*)?bultos\s*:?",
+    r"(?:total\s*)?(?:packages|pkgs|pieces|colis|cartons)\s*:",
+    r"total\s*(?:packages|pkgs|pieces|colis)\s*:?",
+    r"(?:nombre|nb|nbre)\s*(?:total\s*)?(?:de\s*)?colis\s*:?",
+    r"(?:numero|n\.?o|cantidad|total)\s*(?:de\s*)?bultos\s*:?",
     r"bultos\s*:",
     # « Packages / colis: 60 », « Packstücke: 3 », « Colli: 4 » (D-2010)
     r"(?:packages|pkgs|colis|colli|bultos|packstucke|pakketten|kolli)(?:\s*/\s*(?:packages|pkgs|colis|colli|bultos|"
     r"packstucke|pakketten|kolli))+\s*:",
-    r"(?:anzahl\s*)?packstucke\s*:", r"(?:numero\s*)?colli\s*:", r"(?:aantal\s*)?colli\s*:",
+    r"(?:anzahl\s*)?packstucke\s*:",
+    r"(?:numero\s*)?colli\s*:",
+    r"(?:aantal\s*)?colli\s*:",
 )
 LIB_BRUT = motifs(
-    r"(?:total\s*)?gross\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?", r"(?:total\s*)?poids\s*brut(?:\s*total)?\s*:?",
+    r"(?:total\s*)?gross\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?",
+    r"(?:total\s*)?poids\s*brut(?:\s*total)?\s*:?",
     r"(?:total\s*)?peso\s*bruto(?:\s*total)?\s*:?",
 )
 LIB_NET = motifs(
-    r"(?:total\s*)?net\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?", r"(?:total\s*)?poids\s*net(?:\s*total)?\s*:?",
+    r"(?:total\s*)?net\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?",
+    r"(?:total\s*)?poids\s*net(?:\s*total)?\s*:?",
     r"(?:total\s*)?peso\s*neto(?:\s*total)?\s*:?",
 )
 LIB_TAXABLE = motifs(
     r"(?:total\s*)?(?:chargeable|taxable)\s*(?:weight|wt)\.?(?:\s*\(?kgs?\)?)?\s*:?",
-    r"(?:total\s*)?poids\s*taxable\s*:?", r"(?:total\s*)?peso\s*(?:tasable|facturable)\s*:?",
+    r"(?:total\s*)?poids\s*taxable\s*:?",
+    r"(?:total\s*)?peso\s*(?:tasable|facturable)\s*:?",
 )
 _FACT = r"(?:invoice|facture|factura|rechnung|fattura|factuur)"
 LIB_FACTURE = motifs(
     # « Ref. invoice / facture: … », « Ref. Rechnung: … » (D-2010)
     rf"ref(?:erence|\.)?\s*{_FACT}(?:\s*/?\s*{_FACT})*\s*(?:{_NO})?\s*:",
-    rf"(?:handels)?rechnung\s*(?:{_NO}|nummer)\s*:?", rf"fattura\s*(?:{_NO}|n\.)\s*:?",
+    rf"(?:handels)?rechnung\s*(?:{_NO}|nummer)\s*:?",
+    rf"fattura\s*(?:{_NO}|n\.)\s*:?",
     r"factuur\s*-?\s*(?:nummer|nr\.?)\s*:?",
     rf"(?:commercial\s*|supplier\s*)?invoice\s*(?:{_NO}|ref(?:erence)?\.?)\s*:?",
     rf"(?:notre\s*|votre\s*)?facture(?:\s*(?:commerciale|fournisseur))?\s*(?:{_NO}|ref\.?)\s*:?",
@@ -114,14 +129,62 @@ LIB_FACTURE = motifs(
     r"ref\.\s*",
 )
 VOCAB_TABLEAU: dict[str, list[str]] = {
-    "ref": ["b/l no", "b/l", "awb no", "awb", "lta", "lta no", "n° lta", "bl no", "awb/bl", "hawb", "mawb",
-            "connaissement", "conocimiento", "guia", "cmr", "waybill no", "air waybill no", "bill of lading no"],
-    "colis": ["pieces", "pcs", "packages", "pkgs", "colis", "nb colis", "no. of pieces", "bultos", "number of packages",
-              "cartons", "qty pkgs"],
-    "masse_brute": ["gross weight (kg)", "gross weight", "gross wt", "gross kg", "poids brut (kg)", "poids brut",
-                    "peso bruto", "peso bruto (kg)", "g.w", "g.w. (kg)", "gross weight kg"],
-    "masse_taxable": ["chargeable weight (kg)", "chargeable weight", "chargeable wt", "poids taxable (kg)",
-                      "poids taxable", "peso tasable", "taxable weight", "chargeable kg"],
+    "ref": [
+        "b/l no",
+        "b/l",
+        "awb no",
+        "awb",
+        "lta",
+        "lta no",
+        "n° lta",
+        "bl no",
+        "awb/bl",
+        "hawb",
+        "mawb",
+        "connaissement",
+        "conocimiento",
+        "guia",
+        "cmr",
+        "waybill no",
+        "air waybill no",
+        "bill of lading no",
+    ],
+    "colis": [
+        "pieces",
+        "pcs",
+        "packages",
+        "pkgs",
+        "colis",
+        "nb colis",
+        "no. of pieces",
+        "bultos",
+        "number of packages",
+        "cartons",
+        "qty pkgs",
+    ],
+    "masse_brute": [
+        "gross weight (kg)",
+        "gross weight",
+        "gross wt",
+        "gross kg",
+        "poids brut (kg)",
+        "poids brut",
+        "peso bruto",
+        "peso bruto (kg)",
+        "g.w",
+        "g.w. (kg)",
+        "gross weight kg",
+    ],
+    "masse_taxable": [
+        "chargeable weight (kg)",
+        "chargeable weight",
+        "chargeable wt",
+        "poids taxable (kg)",
+        "poids taxable",
+        "peso tasable",
+        "taxable weight",
+        "chargeable kg",
+    ],
     "masse_nette": ["net weight (kg)", "net weight", "net kg", "poids net", "peso neto", "n.w"],
     "date": ["date", "fecha", "date of issue"],
 }
@@ -129,14 +192,50 @@ VOCAB_TABLEAU: dict[str, list[str]] = {
 
 #: Tableau des articles d'une liste de colisage : masses par ligne et ligne de total (D-2010).
 VOCAB_COLISAGE: dict[str, list[str]] = {
-    "masse_brute": ["gross kg", "gross weight", "gross weight (kg)", "gross wt", "g.w", "brutto kg", "bruttogewicht",
-                    "bruto kg", "brutogewicht", "lordo kg", "peso lordo", "brut kg", "poids brut", "peso bruto",
-                    "peso bruto kg"],
-    "masse_nette": ["net kg", "net weight", "net weight (kg)", "n.w", "netto kg", "nettogewicht", "neto kg",
-                    "peso netto", "poids net", "peso neto", "peso neto kg"],
+    "masse_brute": [
+        "gross kg",
+        "gross weight",
+        "gross weight (kg)",
+        "gross wt",
+        "g.w",
+        "brutto kg",
+        "bruttogewicht",
+        "bruto kg",
+        "brutogewicht",
+        "lordo kg",
+        "peso lordo",
+        "brut kg",
+        "poids brut",
+        "peso bruto",
+        "peso bruto kg",
+    ],
+    "masse_nette": [
+        "net kg",
+        "net weight",
+        "net weight (kg)",
+        "n.w",
+        "netto kg",
+        "nettogewicht",
+        "neto kg",
+        "peso netto",
+        "poids net",
+        "peso neto",
+        "peso neto kg",
+    ],
     "quantite": ["qty", "quantity", "menge", "q.ta", "quantita", "aantal", "cantidad", "qte", "quantite"],
-    "article": ["item", "description", "#", "artikel", "articolo", "descrizione", "bezeichnung", "omschrijving",
-                "descripcion", "designation", "article"],
+    "article": [
+        "item",
+        "description",
+        "#",
+        "artikel",
+        "articolo",
+        "descrizione",
+        "bezeichnung",
+        "omschrijving",
+        "descripcion",
+        "designation",
+        "article",
+    ],
 }
 _LIGNE_TOTAL = re.compile(r"^(?:total(?:e|es)?|summe|gesamt|totaal|sum)\b")
 
@@ -149,7 +248,7 @@ def _nombre_colonne(mots: Sequence[Mot], col) -> tuple[list[Mot], bool] | None:
         return None
     centre = (col.x0 + col.x1) / 2
     meilleur = min(nb, key=lambda n: abs((mots[n.i].x0 + mots[n.j - 1].x1) / 2 - centre))
-    return list(mots[meilleur.i:meilleur.j]), len(nb) > 1
+    return list(mots[meilleur.i : meilleur.j]), len(nb) > 1
 
 
 def _separateur_colonne(nombres: list[tuple[list[Mot], bool]], vue: VueDocument) -> tuple[str | None, bool]:
@@ -185,7 +284,7 @@ def _total_colisage(vue: VueDocument) -> dict[str, tuple[Lecture, bool, str | No
             par_col = {c.type: c for c in cols}
             lignes_tab: list[tuple[VueLigne, dict[str, list[Mot]]]] = []
             total = None
-            for li2 in p.lignes[k + 1:k + 60]:
+            for li2 in p.lignes[k + 1 : k + 60]:
                 cell = attribuer(_nettoyer(li2.mots), cols, tableur=p.tableur)
                 if any(_LIGNE_TOTAL.match(s.cle.lstrip("|[]!. ")) for s in li2.segments):
                     total = (li2, cell)
@@ -205,10 +304,18 @@ def _total_colisage(vue: VueDocument) -> dict[str, tuple[Lecture, bool, str | No
                 ms = n_t[0]
                 lec = lecture_mots(ms, p, li_t)
                 tot = parse_weight_kg(texte_nombre(lec.texte), separateur_decimal=sep)
-                vals = [parse_weight_kg(texte_nombre(" ".join(m.texte for m in n[0])), separateur_decimal=sep)
-                        for _l, n in lus if n is not None]
-                ok = (tot is not None and vals and None not in vals and not any(n[1] for _l, n in lus if n is not None)
-                      and abs(sum(vals, Decimal(0)) - tot) <= Decimal("0.0015"))  # type: ignore[arg-type]
+                vals = [
+                    parse_weight_kg(texte_nombre(" ".join(m.texte for m in n[0])), separateur_decimal=sep)
+                    for _l, n in lus
+                    if n is not None
+                ]
+                ok = (
+                    tot is not None
+                    and vals
+                    and None not in vals
+                    and not any(n[1] for _l, n in lus if n is not None)
+                    and abs(sum(vals, Decimal(0)) - tot) <= Decimal("0.0015")
+                )  # type: ignore[arg-type]
                 out[typ] = (lec, bool(ok), sep, presume)
             return out
     return out
@@ -223,10 +330,13 @@ class ExtracteurSupport:
 
     def supports(self, document: Document, pages: Sequence[Page]) -> bool:
         t = getattr(document.type, "value", document.type)
-        return t == TypeDocument.document_support.value and any((getattr(p, "texte", "") or "").strip()
-                                                                  for p in pages)
+        return t == TypeDocument.document_support.value and any(
+            (getattr(p, "texte", "") or "").strip() for p in pages
+        )
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         choisies = pages_du_document(document, pages, context.options)
         vue = vue_document(choisies, separateur_decimal=context.separateur_decimal)
         champs = extraire_support(vue, document_id=document.id, sous_type=document.sous_type, ids=context.ids)
@@ -240,7 +350,9 @@ def _accepte_ref(mots: Sequence[Mot]) -> tuple[int, int] | None:
         t = m.texte.strip(":;,|")
         if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9\-/.]{5,}", t) and len(re.sub(r"\D", "", t)) >= 5:
             j = k + 1
-            while j < len(mots) and re.fullmatch(r"\d{3,5}", mots[j].texte) and len(re.sub(r"\D", "", t)) < 11:
+            while (
+                j < len(mots) and re.fullmatch(r"\d{3,5}", mots[j].texte) and len(re.sub(r"\D", "", t)) < 11
+            ):
                 t += mots[j].texte
                 j += 1
             return k, j
@@ -256,7 +368,9 @@ def _conf_ref(lec: Lecture) -> float:
     return c
 
 
-def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | None = None, ids=None) -> ChampsSupport:
+def extraire_support(
+    vue: VueDocument, *, document_id: str, sous_type: str | None = None, ids=None
+) -> ChampsSupport:
     fab = Fabrique(TypeDocument.document_support, document_id, INFO, vue, ids)
     ch = ChampsSupport()
     textuel = sous_type in SOUS_TYPES_TEXTUELS
@@ -274,8 +388,7 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
     if ch.ref_transport_maitre is None:
         # référence sans précision (titre, tableau, libellé « AWB / B/L No. ») : rangée en « maître »,
         # sauf si c'est la référence maison déjà lue
-        maison = norm_alnum(ch.ref_transport_maison.valeur_brute) \
-            if ch.ref_transport_maison else None
+        maison = norm_alnum(ch.ref_transport_maison.valeur_brute) if ch.ref_transport_maison else None
         candidats = [tab.get("ref"), _ref_titre(vue)]
         for t in chercher(vue, LIB_TRANSPORT):
             candidats.append(valeur_apres(vue, t, _accepte_ref))
@@ -285,8 +398,12 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
                 break
     # masses et colis : tableau d'en-tête, sinon libellés
     tot_colisage = _total_colisage(vue) if not tab else {}
-    for chemin, libs, acc in (("nombre_colis", LIB_COLIS, accepte_entier), ("masse_brute", LIB_BRUT, None),
-                              ("masse_taxable", LIB_TAXABLE, None), ("masse_nette", LIB_NET, None)):
+    for chemin, libs, acc in (
+        ("nombre_colis", LIB_COLIS, accepte_entier),
+        ("masse_brute", LIB_BRUT, None),
+        ("masse_taxable", LIB_TAXABLE, None),
+        ("masse_nette", LIB_NET, None),
+    ):
         lec = tab.get(chemin)
         if lec is None:
             lec = _premier(vue, libs, acc or accepte_masse(vue))
@@ -307,10 +424,17 @@ def extraire_support(vue: VueDocument, *, document_id: str, sous_type: str | Non
             conf = min(conf, 0.7)
         if lec.methode is Methode.ocr and re.search(r"\d{7,}", lec.texte):
             conf = min(conf, 0.4)  # séparateurs perdus par l'OCR (« 2739523277 »)
-        if recoupe is not None:  # total d'un tableau de colisage : sûr seulement si la somme des lignes le redonne
-            conf = max(conf, 0.95 if lec.methode is not Methode.ocr else 0.9) if recoupe and not presume \
+        if (
+            recoupe is not None
+        ):  # total d'un tableau de colisage : sûr seulement si la somme des lignes le redonne
+            conf = (
+                max(conf, 0.95 if lec.methode is not Methode.ocr else 0.9)
+                if recoupe and not presume
                 else min(conf, 0.85)
-        setattr(ch, chemin, fab.valeur(chemin, lec, type_valeur=TypeValeur.masse, separateur=sep, confiance=conf))
+            )
+        setattr(
+            ch, chemin, fab.valeur(chemin, lec, type_valeur=TypeValeur.masse, separateur=sep, confiance=conf)
+        )
     _recouper_masses(ch)
     _parties(vue, fab, ch)
     return ch
@@ -373,7 +497,9 @@ def _tableau(vue: VueDocument) -> dict[str, Lecture]:
             types = {c.type for c in cols}
             # tableau « une ligne de valeurs » d'un titre de transport (n° | colis | poids | date) ; le
             # tableau des articles d'une liste de colisage (poids par ligne) n'en est pas un
-            if not ({"colis", "masse_taxable", "ref"} & types) or not ({"colis", "masse_brute", "masse_taxable"} & types):
+            if not ({"colis", "masse_taxable", "ref"} & types) or not (
+                {"colis", "masse_brute", "masse_taxable"} & types
+            ):
                 continue
             suivante = p.lignes[k + 1]
             mots = _nettoyer(suivante.mots)
@@ -386,15 +512,15 @@ def _tableau(vue: VueDocument) -> dict[str, Lecture]:
                 if typ == "ref":
                     r = _accepte_ref(ms)
                     if r is not None:
-                        out["ref"] = lecture_mots(ms[r[0]:r[1]], p, suivante)
+                        out["ref"] = lecture_mots(ms[r[0] : r[1]], p, suivante)
                 elif typ == "colis":
                     nb = nombres_dans(ms)
                     if nb and re.fullmatch(r"\d{1,6}", nb[0].texte.replace(",", "").replace(" ", "")):
-                        out["nombre_colis"] = lecture_mots(ms[nb[0].i:nb[0].j], p, suivante)
+                        out["nombre_colis"] = lecture_mots(ms[nb[0].i : nb[0].j], p, suivante)
                 elif typ in ("masse_brute", "masse_taxable", "masse_nette"):
                     nb = [n for n in nombres_dans(ms) if not n.tronque]
                     if nb:
-                        out[typ] = lecture_mots(ms[nb[0].i:nb[0].j], p, suivante)
+                        out[typ] = lecture_mots(ms[nb[0].i : nb[0].j], p, suivante)
             if out:
                 return out
     return out
@@ -422,8 +548,11 @@ def _refs_facture(vue: VueDocument, fab: Fabrique, ch: ChampsSupport) -> None:
 def _accepte_ref_facture(mots: Sequence[Mot]) -> tuple[int, int] | None:
     # numéro en deux mots : préfixe de 2 à 4 capitales puis partie chiffrée (« FT 4800/2026 », D-2010),
     # éventuellement préfixée de lettres (« FT PIC2026/8089 », D-2510)
-    if len(mots) >= 2 and re.fullmatch(r"[A-Z]{2,4}", mots[0].texte) and re.fullmatch(
-            r"[A-Z]{0,4}\d[A-Za-z0-9/\-_.]*\d", mots[1].texte.strip(":;,()")):
+    if (
+        len(mots) >= 2
+        and re.fullmatch(r"[A-Z]{2,4}", mots[0].texte)
+        and re.fullmatch(r"[A-Z]{0,4}\d[A-Za-z0-9/\-_.]*\d", mots[1].texte.strip(":;,()"))
+    ):
         return 0, 2
     for k, m in enumerate(mots[:2]):
         t = m.texte.strip(":;,.()")
@@ -447,11 +576,10 @@ def _parties(vue: VueDocument, fab: Fabrique, ch: ChampsSupport) -> None:
             for li, ms in lignes:
                 r = lire_tva_mots(ms)
                 if r is not None:
-                    lec = lecture_mots(ms[r[0]:r[1]], vue.page(li.page), li)
+                    lec = lecture_mots(ms[r[0] : r[1]], vue.page(li.page), li)
                     conf = confiance_mots(lec)
                     if r[2].startswith("FR") and not tva_fr_valide(r[2]):
                         conf = min(conf, 0.5)
                     getattr(ch, partie).tva = fab.valeur(f"{partie}.tva", lec, confiance=conf)
                     break
             break
-

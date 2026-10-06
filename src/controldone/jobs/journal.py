@@ -14,10 +14,27 @@ from typing import Any
 
 __all__ = ["CHAMPS_AUTORISES", "FormateurJSON", "configurer_journaux", "evenement"]
 
-CHAMPS_AUTORISES = frozenset({
-    "event", "job_id", "kind", "tenant_id", "worker_id", "attempt", "statut", "duree_ms", "erreur",
-    "lot_id", "dossier_id", "dossiers", "constats", "cout_eur", "seuil", "nombre", "signal",
-})
+CHAMPS_AUTORISES = frozenset(
+    {
+        "event",
+        "job_id",
+        "kind",
+        "tenant_id",
+        "worker_id",
+        "attempt",
+        "statut",
+        "duree_ms",
+        "erreur",
+        "lot_id",
+        "dossier_id",
+        "dossiers",
+        "constats",
+        "cout_eur",
+        "seuil",
+        "nombre",
+        "signal",
+    }
+)
 
 
 class FormateurJSON(logging.Formatter):

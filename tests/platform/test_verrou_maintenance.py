@@ -22,7 +22,10 @@ def test_verrou_exclusif_et_libere(tmp_path):
         with pytest.raises(VerrouOccupe, match="sauvegarde en cours"), verrou_maintenance(tmp_path, "purge"):
             pass
         debut = time.monotonic()
-        with pytest.raises(VerrouOccupe), verrou_maintenance(tmp_path, "purge", attente_s=0.3, intervalle_s=0.05):
+        with (
+            pytest.raises(VerrouOccupe),
+            verrou_maintenance(tmp_path, "purge", attente_s=0.3, intervalle_s=0.05),
+        ):
             pass
         assert time.monotonic() - debut >= 0.25
     with verrou_maintenance(tmp_path, "purge"):  # libéré à la sortie
@@ -87,8 +90,12 @@ def test_sauvegarde_attend_puis_echoue_si_le_verrou_reste_pris(monde, tmp_path, 
 
 def test_restauration_refusee_pendant_une_purge(monde, tmp_path, monkeypatch):
     data_dir = tmp_path / "var"
-    archive = sv.sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sv",
-                             [os.environ["CONTROLDONE_MASTER_KEY"].encode()])
+    archive = sv.sauvegarder(
+        monde.db.chemin_sqlite(),
+        monde.vault.racine,
+        tmp_path / "sv",
+        [os.environ["CONTROLDONE_MASTER_KEY"].encode()],
+    )
     monkeypatch.setattr(sv, "ATTENTE_RESTAURATION_S", 0.0)
     reset_settings()
     try:
@@ -101,8 +108,12 @@ def test_restauration_refusee_pendant_une_purge(monde, tmp_path, monkeypatch):
 
 def test_restauration_dans_le_repertoire_de_donnees_tolere_le_verrou(monde, tmp_path, monkeypatch):
     """La cible peut être le répertoire de données lui-même (seul fichier présent : le verrou)."""
-    archive = sv.sauvegarder(monde.db.chemin_sqlite(), monde.vault.racine, tmp_path / "sv",
-                             [os.environ["CONTROLDONE_MASTER_KEY"].encode()])
+    archive = sv.sauvegarder(
+        monde.db.chemin_sqlite(),
+        monde.vault.racine,
+        tmp_path / "sv",
+        [os.environ["CONTROLDONE_MASTER_KEY"].encode()],
+    )
     cible = tmp_path / "donnees"
     monkeypatch.setenv("CONTROLDONE_DATA_DIR", str(cible))
     reset_settings()

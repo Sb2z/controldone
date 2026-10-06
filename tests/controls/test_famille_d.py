@@ -39,14 +39,17 @@ def ligne(nature, montant, *, libelle=None, fid="doc_ft1", confiance=0.99, **kw)
         return vs(f"facture_transitaire.lignes[].{nom}", val, document_id=fid, confiance=confiance)
 
     return LigneFactureTransitaire(
-        libelle=v("libelle", libelle or nature.value.replace("_", " ")), nature=nature,
-        montant_ht=v("montant_ht", montant), **{k: v(k, x) for k, x in kw.items()},
+        libelle=v("libelle", libelle or nature.value.replace("_", " ")),
+        nature=nature,
+        montant_ht=v("montant_ht", montant),
+        **{k: v(k, x) for k, x in kw.items()},
     )
 
 
 def ft(*lignes, fid="doc_ft1", date="2026-09-15", **totaux):
     return facture_transitaire(
-        id=fid, numero=vs("facture_transitaire.numero", "FT-FICTIF-001", document_id=fid),
+        id=fid,
+        numero=vs("facture_transitaire.numero", "FT-FICTIF-001", document_id=fid),
         date=vs("facture_transitaire.date", date, document_id=fid),
         emetteur=Partie(tva=vs("facture_transitaire.emetteur.tva", TVA_TRANSITAIRE, document_id=fid)),
         lignes=list(lignes),
@@ -59,18 +62,35 @@ def poste(code, nature, mode=ModePoste.forfait, prix=None, **kw):
 
 
 def grille(*postes, hors=PrestationsHorsGrille.interdites, statut=StatutGrille.validee):
-    return GrilleTarifaire(transitaire_id="tra_1", reference="DEV-FICTIF-2026", statut=statut, postes=list(postes),
-                           prestations_hors_grille=hors)
+    return GrilleTarifaire(
+        transitaire_id="tra_1",
+        reference="DEV-FICTIF-2026",
+        statut=statut,
+        postes=list(postes),
+        prestations_hors_grille=hors,
+    )
 
 
 POSTES = (
     poste("DEDOU", N.frais_dedouanement, prix="50.00", libelles_reconnus=["dédouanement import"], inclus=5),
     poste("LIGNE", N.frais_ligne_supplementaire, ModePoste.unitaire, prix="5.00", unite_base="article"),
-    poste("FAF", N.frais_avance_fonds, ModePoste.pourcentage, pourcentage=D("2.5"), minimum=D("15.00"),
-          base_pourcentage=BasePourcentage.debours_total),
+    poste(
+        "FAF",
+        N.frais_avance_fonds,
+        ModePoste.pourcentage,
+        pourcentage=D("2.5"),
+        minimum=D("15.00"),
+        base_pourcentage=BasePourcentage.debours_total,
+    ),
     poste("MAG", N.magasinage, ModePoste.par_jour, prix="12.00", franchise_jours=3),
-    poste("CARB", N.surcharge, ModePoste.pourcentage, pourcentage=D("10"), base_pourcentage=BasePourcentage.autre,
-          libelles_reconnus=["surcharge carburant"]),
+    poste(
+        "CARB",
+        N.surcharge,
+        ModePoste.pourcentage,
+        pourcentage=D("10"),
+        base_pourcentage=BasePourcentage.autre,
+        libelles_reconnus=["surcharge carburant"],
+    ),
     poste("TRANS", N.transport, ModePoste.forfait, prix="200.00"),
     poste("DOSSIER", N.autre_prestation, prix="20.00", libelles_reconnus=["frais de dossier"]),
 )
@@ -138,11 +158,22 @@ def test_sans_facture_transitaire():
 
 
 def test_d1_conforme_et_arrondi():
-    f = ft(ligne(N.frais_dedouanement, "50.00", quantite="1", prix_unitaire="50.00", taux_tva="20",
-                 montant_tva="10.00"),
-           ligne(N.transport, "33.33", quantite="3", prix_unitaire="11.11"),
-           ligne(N.debours_droits, "100.00"),
-           total_debours="100.00", total_ht="183.34", total_tva="10.00", total_ttc="193.34")
+    f = ft(
+        ligne(
+            N.frais_dedouanement,
+            "50.00",
+            quantite="1",
+            prix_unitaire="50.00",
+            taux_tva="20",
+            montant_tva="10.00",
+        ),
+        ligne(N.transport, "33.33", quantite="3", prix_unitaire="11.11"),
+        ligne(N.debours_droits, "100.00"),
+        total_debours="100.00",
+        total_ht="183.34",
+        total_tva="10.00",
+        total_ttc="193.34",
+    )
     rs = d1_arithmetique(contexte([f]))
     assert {r.sous_controle for r in rs} == {"ligne", "tva_ligne", "total_debours", "total_ht", "total_ttc"}
     assert all(r.outcome is Outcome.conforme for r in rs)  # 0,01 d'arrondi sous T_SOMME(3)
@@ -150,8 +181,14 @@ def test_d1_conforme_et_arrondi():
 
 def test_d1_total_ht_superieur_a_la_somme():
     # D-4202 : débours prouvés complets (total des débours imprimé) et prestations (TVA de chaque ligne).
-    f = ft(ligne(N.frais_dedouanement, "50.00", taux_tva="20", montant_tva="10.00"), ligne(N.debours_droits, "100.00"),
-           total_debours="100.00", total_ht="155.00", total_tva="10.00", total_ttc="165.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "50.00", taux_tva="20", montant_tva="10.00"),
+        ligne(N.debours_droits, "100.00"),
+        total_debours="100.00",
+        total_ht="155.00",
+        total_tva="10.00",
+        total_ttc="165.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     c = r.constat
     assert r.outcome is Outcome.ecart_certain and c.montant_en_jeu == D("5.00")
@@ -169,34 +206,57 @@ def test_d1_total_ht_lignes_non_prouvees_completes():
 
 def test_d1_total_ht_prouve_par_le_ttc():
     # TTC imprimé = somme des lignes + TVA : les lignes sont complètes, le total HT est la valeur isolée.
-    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00",
-           total_tva="10.00", total_ttc="160.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "50.00"),
+        ligne(N.debours_droits, "100.00"),
+        total_ht="155.00",
+        total_tva="10.00",
+        total_ttc="160.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.outcome is Outcome.ecart_certain
 
 
 def test_d1_total_prouve_seulement_par_un_total_imprime():
     # Un total TTC déduit ne prouve rien (D-4202).
-    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00",
-           total_tva="10.00", total_ttc="160.00")
-    f.ft.total_ttc = f.ft.total_ttc.model_copy(update={"methode": Methode.derive, "regle_derivation": "ht + tva"})
+    f = ft(
+        ligne(N.frais_dedouanement, "50.00"),
+        ligne(N.debours_droits, "100.00"),
+        total_ht="155.00",
+        total_tva="10.00",
+        total_ttc="160.00",
+    )
+    f.ft.total_ttc = f.ft.total_ttc.model_copy(
+        update={"methode": Methode.derive, "regle_derivation": "ht + tva"}
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.outcome is Outcome.a_verifier
 
 
 def test_d1_total_debours_nature_de_ligne_ambigue():
     # D-4203 : l'écart du total des débours est le montant d'une ligne lue comme prestation (libellé mal lu).
-    f = ft(ligne(N.debours_droits, "100.00"), ligne(N.autre_prestation, "80.00", libelle="TVA al'imp FICTIF"),
-           ligne(N.transport, "50.00", taux_tva="20", montant_tva="10.00"),
-           total_debours="180.00", total_ht="230.00", total_tva="10.00", total_ttc="240.00")
+    f = ft(
+        ligne(N.debours_droits, "100.00"),
+        ligne(N.autre_prestation, "80.00", libelle="TVA al'imp FICTIF"),
+        ligne(N.transport, "50.00", taux_tva="20", montant_tva="10.00"),
+        total_debours="180.00",
+        total_ht="230.00",
+        total_tva="10.00",
+        total_ttc="240.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_debours")
     assert r.outcome is Outcome.non_verifiable and r.details["explications"] == ["nature_de_ligne"]
 
 
 def test_d1_ttc_avec_total_des_debours_hors_ht():
     # D-4204 : TTC = HT des prestations + TVA + total des débours imprimé, lignes de débours non toutes lues.
-    f = ft(ligne(N.transport, "50.00", taux_tva="20", montant_tva="10.00"), total_debours="300.00",
-           total_ht="50.00", total_tva="10.00", total_ttc="360.00")
+    f = ft(
+        ligne(N.transport, "50.00", taux_tva="20", montant_tva="10.00"),
+        total_debours="300.00",
+        total_ht="50.00",
+        total_tva="10.00",
+        total_ttc="360.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ttc")
     assert r.outcome is Outcome.conforme
 
@@ -209,11 +269,17 @@ def test_d1_tva_ligne_colonne_ttc():
 
 
 def test_d1_ligne_colonne_ttc_ou_quantite_du_libelle():
-    f = ft(ligne(N.transport, "36.00", quantite="1", prix_unitaire="30.00", taux_tva="20"),
-           ligne(N.manutention, "15.00", quantite="2", prix_unitaire="3.00", libelle="Manutention 5 colis FICTIF"))
+    f = ft(
+        ligne(N.transport, "36.00", quantite="1", prix_unitaire="30.00", taux_tva="20"),
+        ligne(
+            N.manutention, "15.00", quantite="2", prix_unitaire="3.00", libelle="Manutention 5 colis FICTIF"
+        ),
+    )
     rs = [r for r in d1_arithmetique(contexte([f])) if r.sous_controle == "ligne"]
     assert [r.outcome for r in rs] == [Outcome.non_verifiable, Outcome.non_verifiable]
-    assert rs[0].details["explications"] == ["colonne_ttc"] and rs[1].details["explications"] == ["quantite_libelle"]
+    assert rs[0].details["explications"] == ["colonne_ttc"] and rs[1].details["explications"] == [
+        "quantite_libelle"
+    ]
 
 
 def test_d1_ligne_de_debours_non_jugee():
@@ -224,8 +290,13 @@ def test_d1_ligne_de_debours_non_jugee():
 
 
 def test_d1_total_ht_presentation_sans_debours():
-    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="50.00",
-           total_tva="10.00", total_ttc="160.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "50.00"),
+        ligne(N.debours_droits, "100.00"),
+        total_ht="50.00",
+        total_tva="10.00",
+        total_ttc="160.00",
+    )
     rs = d1_arithmetique(contexte([f]))
     assert all(r.outcome is Outcome.conforme for r in rs)
 
@@ -240,8 +311,14 @@ def test_d1_ligne_et_total_inferieur_sans_montant():
 
 
 def test_d1_net_a_payer_et_sous_seuil():
-    f = ft(ligne(N.transport, "100.00"), total_ht="100.00", total_tva="20.00", total_ttc="120.00",
-           acomptes="50.00", net_a_payer="70.50")
+    f = ft(
+        ligne(N.transport, "100.00"),
+        total_ht="100.00",
+        total_tva="20.00",
+        total_ttc="120.00",
+        acomptes="50.00",
+        net_a_payer="70.50",
+    )
     rs = {r.sous_controle: r for r in d1_arithmetique(contexte([f]))}
     c = rs["net_a_payer"].constat
     assert c.niveau is Niveau.a_verifier and RaisonCode.ecart_sous_seuil in c.raisons
@@ -263,14 +340,18 @@ def test_rapprochement_par_nature_puis_libelle():
     assert p.code_poste == "DOSSIER" and not amb
     p, amb = rapprocher_poste(g, ligne(N.manutention, "20.00", libelle="Manutention"))
     assert p is None and not amb
-    g2 = grille(poste("D1", N.frais_dedouanement, prix="50.00", libelles_reconnus=["import"]),
-                poste("D2", N.frais_dedouanement, prix="70.00", libelles_reconnus=["export"]))
+    g2 = grille(
+        poste("D1", N.frais_dedouanement, prix="50.00", libelles_reconnus=["import"]),
+        poste("D2", N.frais_dedouanement, prix="70.00", libelles_reconnus=["export"]),
+    )
     assert rapprocher_poste(g2, ligne(N.frais_dedouanement, "50.00", libelle="Dédouanement"))[1] is True
 
 
 def test_ligne_ambigue_a_verifier():
-    g = grille(poste("D1", N.frais_dedouanement, prix="50.00", libelles_reconnus=["import"]),
-               poste("D2", N.frais_dedouanement, prix="70.00", libelles_reconnus=["export"]))
+    g = grille(
+        poste("D1", N.frais_dedouanement, prix="50.00", libelles_reconnus=["import"]),
+        poste("D2", N.frais_dedouanement, prix="70.00", libelles_reconnus=["export"]),
+    )
     r = un(run([ft(ligne(N.frais_dedouanement, "90.00", libelle="Dédouanement"))], g=g), "D3")
     assert r.outcome is Outcome.a_verifier and RaisonCode.confiance_insuffisante in r.constat.raisons
     assert r.constat.montant_en_jeu is None
@@ -324,12 +405,17 @@ def test_d3_unitaire_et_quantite_absente():
 
 
 def _dec(montant):
-    return declaration(id="doc_dec1", taxations=[taxation("doc_dec1", categorie=CategorieTaxe.droit, montant=montant)])
+    return declaration(
+        id="doc_dec1", taxations=[taxation("doc_dec1", categorie=CategorieTaxe.droit, montant=montant)]
+    )
 
 
 def test_d4_faf_contre_grille():
-    f = ft(ligne(N.debours_droits, "1000.00"), ligne(N.frais_avance_fonds, "30.00", libelle="Avance de fonds"),
-           total_debours="1000.00")
+    f = ft(
+        ligne(N.debours_droits, "1000.00"),
+        ligne(N.frais_avance_fonds, "30.00", libelle="Avance de fonds"),
+        total_debours="1000.00",
+    )
     rs = run([_dec("1000.00"), f], controles=["C1", "C5", "C6", "D4"])
     r = un(rs, "D4")
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("5.00")
@@ -358,7 +444,9 @@ def test_d4_faf_sur_debours_sans_declaration():
 
 
 def test_d5_ligne_en_double():
-    f = ft(ligne(N.transport, "200.00", libelle="Livraison"), ligne(N.transport, "200.00", libelle="LIVRAISON"))
+    f = ft(
+        ligne(N.transport, "200.00", libelle="Livraison"), ligne(N.transport, "200.00", libelle="LIVRAISON")
+    )
     rs = run([f])
     r = un(rs, "D5")
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("200.00")
@@ -375,8 +463,10 @@ def test_d5_poste_a_quantite_multiple_a_verifier():
 
 
 def test_d5_references_differentes_pas_un_doublon():
-    f = ft(ligne(N.transport, "200.00", ref_transport="999-11112222"),
-           ligne(N.transport, "200.00", ref_transport="999-33334444"))
+    f = ft(
+        ligne(N.transport, "200.00", ref_transport="999-11112222"),
+        ligne(N.transport, "200.00", ref_transport="999-33334444"),
+    )
     assert un(run([f]), "D5").outcome is Outcome.conforme
 
 
@@ -384,8 +474,16 @@ def test_d5_references_differentes_pas_un_doublon():
 
 
 def test_d6_magasinage_franchise():
-    f = ft(ligne(N.magasinage, "120.00", libelle="Magasinage", date_debut="2026-09-01", date_fin="2026-09-10",
-                 quantite="10"))
+    f = ft(
+        ligne(
+            N.magasinage,
+            "120.00",
+            libelle="Magasinage",
+            date_debut="2026-09-01",
+            date_fin="2026-09-10",
+            quantite="10",
+        )
+    )
     rs = run([f])
     r = un(rs, "D6")
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("36.00")
@@ -464,8 +562,12 @@ def _dec_articles(n=None, articles=0):
     d = declaration(id="doc_dec1")
     if n is not None:
         d.dec.nombre_articles = vs("declaration.nombre_articles", str(n), document_id="doc_dec1")
-    d.dec.articles = [ArticleDeclaration(numero_article=vs("declaration.articles[].numero_article", str(i + 1),
-                                                           document_id="doc_dec1")) for i in range(articles)]
+    d.dec.articles = [
+        ArticleDeclaration(
+            numero_article=vs("declaration.articles[].numero_article", str(i + 1), document_id="doc_dec1")
+        )
+        for i in range(articles)
+    ]
     return d
 
 
@@ -490,27 +592,40 @@ def test_d9_articles_comptes_a_verifier_et_sans_declaration():
 def test_d1_total_superieur_a_la_somme_lue_sous_le_seuil_d3703():
     # Scan : lignes lues sous C_MIN_CERTAIN, total HT imprimé supérieur à leur somme -> des lignes non lues
     # expliquent l'écart : non vérifiable (et non « à vérifier »).
-    f = ft(ligne(N.frais_dedouanement, "50.00", confiance=0.80), ligne(N.debours_droits, "100.00", confiance=0.80),
-           total_ht="455.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "50.00", confiance=0.80),
+        ligne(N.debours_droits, "100.00", confiance=0.80),
+        total_ht="455.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.confiance_insuffisante
     assert r.details["motif"] == "lignes_possiblement_non_lues"
     # écart de sens contraire (total inférieur) : une ligne non lue ne l'explique pas -> constat conservé
-    f = ft(ligne(N.frais_dedouanement, "50.00", confiance=0.80), ligne(N.debours_droits, "100.00", confiance=0.80),
-           total_ht="120.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "50.00", confiance=0.80),
+        ligne(N.debours_droits, "100.00", confiance=0.80),
+        total_ht="120.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.outcome is Outcome.a_verifier
 
 
 def test_d1_total_ht_avant_remise_en_ligne_negative():
     # D-4204 : total HT imprimé avant la remise portée en ligne négative : présentation, pas une erreur.
-    f = ft(ligne(N.frais_dedouanement, "100.00", taux_tva="20", montant_tva="20.00"),
-           ligne(N.autre_prestation, "-10.00", libelle="Remise FICTIF"), total_ht="100.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "100.00", taux_tva="20", montant_tva="20.00"),
+        ligne(N.autre_prestation, "-10.00", libelle="Remise FICTIF"),
+        total_ht="100.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.outcome is Outcome.conforme
     # Une présentation qui ne redonne pas le total exactement ne sert jamais de référence au montant.
-    f = ft(ligne(N.frais_dedouanement, "100.00", taux_tva="20", montant_tva="18.00"),
-           ligne(N.autre_prestation, "-10.00", libelle="Remise FICTIF", taux_tva="20", montant_tva="-2.00"),
-           total_ht="115.00", total_tva="18.00", total_ttc="133.00")
+    f = ft(
+        ligne(N.frais_dedouanement, "100.00", taux_tva="20", montant_tva="18.00"),
+        ligne(N.autre_prestation, "-10.00", libelle="Remise FICTIF", taux_tva="20", montant_tva="-2.00"),
+        total_ht="115.00",
+        total_tva="18.00",
+        total_ttc="133.00",
+    )
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     assert r.ecart == D("25.00")

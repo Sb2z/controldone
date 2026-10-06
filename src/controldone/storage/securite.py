@@ -121,14 +121,24 @@ class LigneDebit:
     expire: float
 
 
-def _jetons_courants(ligne: CompteurDebit | None, capacite: float, par_seconde: float, maintenant: float) -> float:
+def _jetons_courants(
+    ligne: CompteurDebit | None, capacite: float, par_seconde: float, maintenant: float
+) -> float:
     if ligne is None or ligne.expire <= maintenant:
         return capacite
     return min(capacite, ligne.jetons + max(0.0, maintenant - ligne.maj) * par_seconde)
 
 
-def _ecrire(s, ligne: CompteurDebit | None, cle: str, portee: str, jetons: float, capacite: float,
-            par_seconde: float, maintenant: float) -> None:
+def _ecrire(
+    s,
+    ligne: CompteurDebit | None,
+    cle: str,
+    portee: str,
+    jetons: float,
+    capacite: float,
+    par_seconde: float,
+    maintenant: float,
+) -> None:
     expire = maintenant + max(0.0, capacite - jetons) / par_seconde
     if ligne is None:
         s.add(CompteurDebit(cle=cle, portee=portee, jetons=jetons, maj=maintenant, expire=expire))
@@ -136,15 +146,25 @@ def _ecrire(s, ligne: CompteurDebit | None, cle: str, portee: str, jetons: float
         ligne.jetons, ligne.maj, ligne.expire = jetons, maintenant, expire
 
 
-def _modifier(db: Database, cle: str, portee: str, capacite: float, par_seconde: float, maintenant: float,
-              delta: float, *, conditionnel: bool) -> tuple[bool, float]:
+def _modifier(
+    db: Database,
+    cle: str,
+    portee: str,
+    capacite: float,
+    par_seconde: float,
+    maintenant: float,
+    delta: float,
+    *,
+    conditionnel: bool,
+) -> tuple[bool, float]:
     """Ajoute ``delta`` jetons (négatif : consommation) au seau, de façon atomique. ``conditionnel`` : refus (et
     aucune écriture) si le seau n'a pas assez de jetons."""
     for essai in range(3):
         try:
             with db.transaction_systeme() as s:
-                ligne = s.execute(select(CompteurDebit).where(CompteurDebit.cle == cle)
-                                  .with_for_update()).scalar_one_or_none()
+                ligne = s.execute(
+                    select(CompteurDebit).where(CompteurDebit.cle == cle).with_for_update()
+                ).scalar_one_or_none()
                 jetons = _jetons_courants(ligne, capacite, par_seconde, maintenant)
                 if conditionnel and jetons + delta < 0:
                     return False, jetons
@@ -159,14 +179,30 @@ def _modifier(db: Database, cle: str, portee: str, capacite: float, par_seconde:
     raise AssertionError("inatteignable")
 
 
-def consommer_jetons(db: Database, cle: str, *, portee: str, capacite: float, par_seconde: float, cout: float,
-                     maintenant: float) -> tuple[bool, float]:
+def consommer_jetons(
+    db: Database,
+    cle: str,
+    *,
+    portee: str,
+    capacite: float,
+    par_seconde: float,
+    cout: float,
+    maintenant: float,
+) -> tuple[bool, float]:
     """``(autorisé, jetons restants)`` ; consomme ``cout`` jetons si le seau en a assez."""
     return _modifier(db, cle, portee, capacite, par_seconde, maintenant, -cout, conditionnel=True)
 
 
-def crediter_jetons(db: Database, cle: str, *, portee: str, capacite: float, par_seconde: float, cout: float,
-                    maintenant: float) -> None:
+def crediter_jetons(
+    db: Database,
+    cle: str,
+    *,
+    portee: str,
+    capacite: float,
+    par_seconde: float,
+    cout: float,
+    maintenant: float,
+) -> None:
     """Rend ``cout`` jetons (sans dépasser la capacité) — ex. connexion réussie."""
     _modifier(db, cle, portee, capacite, par_seconde, maintenant, cout, conditionnel=False)
 
@@ -177,14 +213,24 @@ def _lecture(db: Database):
     return db.session(lecture=True)
 
 
-def jetons_disponibles(db: Database, cle: str, *, capacite: float, par_seconde: float, maintenant: float) -> float:
+def jetons_disponibles(
+    db: Database, cle: str, *, capacite: float, par_seconde: float, maintenant: float
+) -> float:
     with _lecture(db) as s:
         ligne = s.get(CompteurDebit, cle)
         return _jetons_courants(ligne, capacite, par_seconde, maintenant)
 
 
-def effacer_debit(db: Database, *, cles: list[str] | None = None, portee: str | None = None, tout: bool = False,
-                  acteur: str = "systeme", motif: str = "", journal: bool = True) -> int:
+def effacer_debit(
+    db: Database,
+    *,
+    cles: list[str] | None = None,
+    portee: str | None = None,
+    tout: bool = False,
+    acteur: str = "systeme",
+    motif: str = "",
+    journal: bool = True,
+) -> int:
     """Supprime des seaux (remise à zéro du compteur : déblocage). Journalisé dans le journal d'audit (sauf
     ``journal=False`` : remise à zéro automatique après une connexion réussie). Renvoie le nombre de lignes."""
     if not (cles or portee or tout):
@@ -198,17 +244,32 @@ def effacer_debit(db: Database, *, cles: list[str] | None = None, portee: str | 
         n = s.execute(req).rowcount or 0
         if not journal:
             return n
-        journaliser(s, actor=acteur, role="systeme", action="debit_effacer", target="debit_compteurs",
-                    details={"portee": portee or "", "cles": len(cles or []), "tout": tout, "lignes": n,
-                             "motif": motif[:200]})
+        journaliser(
+            s,
+            actor=acteur,
+            role="systeme",
+            action="debit_effacer",
+            target="debit_compteurs",
+            details={
+                "portee": portee or "",
+                "cles": len(cles or []),
+                "tout": tout,
+                "lignes": n,
+                "motif": motif[:200],
+            },
+        )
         return n
 
 
 def lister_debit(db: Database, *, maintenant: float, limite: int = 200) -> list[LigneDebit]:
     """Seaux non expirés, les plus vides d'abord."""
     with _lecture(db) as s:
-        lignes = s.execute(select(CompteurDebit).where(CompteurDebit.expire > maintenant)
-                           .order_by(CompteurDebit.jetons, CompteurDebit.cle).limit(limite)).scalars()
+        lignes = s.execute(
+            select(CompteurDebit)
+            .where(CompteurDebit.expire > maintenant)
+            .order_by(CompteurDebit.jetons, CompteurDebit.cle)
+            .limit(limite)
+        ).scalars()
         return [LigneDebit(x.cle, x.portee, x.jetons, x.expire) for x in lignes]
 
 
@@ -251,7 +312,9 @@ def revoquer_sessions_utilisateur(db: Database, user_id: str, *, apres: float, e
     """Toute session de ``user_id`` commencée strictement avant ``apres`` est révoquée."""
     _poser_revocation(db, f"user:{user_id}"[:120], apres, expire)
     with db.transaction_systeme() as s:
-        s.execute(delete(SessionOuverte).where(SessionOuverte.user_id == user_id, SessionOuverte.debut < apres))
+        s.execute(
+            delete(SessionOuverte).where(SessionOuverte.user_id == user_id, SessionOuverte.debut < apres)
+        )
 
 
 def session_revoquee(db: Database, *, sid: str, user_id: str, debut: float) -> bool:
@@ -267,7 +330,9 @@ def purger_revocations(db: Database, *, maintenant: float) -> int:
     """Révocations devenues sans objet et sessions actives expirées."""
     with db.transaction_systeme() as s:
         n = s.execute(delete(RevocationSession).where(RevocationSession.expire <= maintenant)).rowcount or 0
-        return n + (s.execute(delete(SessionOuverte).where(SessionOuverte.expire <= maintenant)).rowcount or 0)
+        return n + (
+            s.execute(delete(SessionOuverte).where(SessionOuverte.expire <= maintenant)).rowcount or 0
+        )
 
 
 # --- sessions actives (D-3603) ------------------------------------------------------------------------------------
@@ -286,10 +351,25 @@ class SessionActive:
     courante: bool = False
 
 
-_NAVIGATEURS = (("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"),
-                ("Chromium/", "Chromium"), ("Safari/", "Safari"), ("curl/", "curl"))
-_SYSTEMES = (("Windows", "Windows"), ("Android", "Android"), ("iPhone", "iOS"), ("iPad", "iOS"),
-             ("Mac OS X", "macOS"), ("Macintosh", "macOS"), ("CrOS", "ChromeOS"), ("Linux", "Linux"))
+_NAVIGATEURS = (
+    ("Edg/", "Edge"),
+    ("OPR/", "Opera"),
+    ("Firefox/", "Firefox"),
+    ("Chrome/", "Chrome"),
+    ("Chromium/", "Chromium"),
+    ("Safari/", "Safari"),
+    ("curl/", "curl"),
+)
+_SYSTEMES = (
+    ("Windows", "Windows"),
+    ("Android", "Android"),
+    ("iPhone", "iOS"),
+    ("iPad", "iOS"),
+    ("Mac OS X", "macOS"),
+    ("Macintosh", "macOS"),
+    ("CrOS", "ChromeOS"),
+    ("Linux", "Linux"),
+)
 
 
 def reduire_appareil(user_agent: str | None) -> str:
@@ -310,16 +390,34 @@ def reduire_reseau(ip: str | None) -> str:
     return str(ipaddress.ip_network(f"{adresse}/{prefixe}", strict=False))
 
 
-def enregistrer_session(db: Database, *, sid: str, user_id: str, debut: float, vu: float, expire: float,
-                        appareil: str = "", reseau: str = "") -> None:
+def enregistrer_session(
+    db: Database,
+    *,
+    sid: str,
+    user_id: str,
+    debut: float,
+    vu: float,
+    expire: float,
+    appareil: str = "",
+    reseau: str = "",
+) -> None:
     """Nouvelle session (connexion réussie)."""
     for essai in range(3):
         try:
             with db.transaction_systeme() as s:
                 ligne = s.get(SessionOuverte, sid[:64])
                 if ligne is None:
-                    s.add(SessionOuverte(sid=sid[:64], user_id=user_id[:64], debut=debut, vu=vu, expire=expire,
-                                         appareil=appareil[:80], reseau=reseau[:64]))
+                    s.add(
+                        SessionOuverte(
+                            sid=sid[:64],
+                            user_id=user_id[:64],
+                            debut=debut,
+                            vu=vu,
+                            expire=expire,
+                            appareil=appareil[:80],
+                            reseau=reseau[:64],
+                        )
+                    )
                 else:
                     ligne.vu, ligne.expire = vu, expire
                 return
@@ -340,19 +438,30 @@ def oublier_session(db: Database, sid: str) -> None:
         s.execute(delete(SessionOuverte).where(SessionOuverte.sid == sid[:64]))
 
 
-def sessions_utilisateur(db: Database, user_id: str, *, maintenant: float, sid_courant: str | None = None,
-                         limite: int = 100) -> list[SessionActive]:
+def sessions_utilisateur(
+    db: Database, user_id: str, *, maintenant: float, sid_courant: str | None = None, limite: int = 100
+) -> list[SessionActive]:
     """Sessions non expirées et non révoquées de ``user_id``, la plus récemment active d'abord."""
     with _lecture(db) as s:
-        lignes = list(s.execute(
-            select(SessionOuverte).where(SessionOuverte.user_id == user_id, SessionOuverte.expire > maintenant)
-            .order_by(SessionOuverte.vu.desc(), SessionOuverte.sid).limit(limite)).scalars())
+        lignes = list(
+            s.execute(
+                select(SessionOuverte)
+                .where(SessionOuverte.user_id == user_id, SessionOuverte.expire > maintenant)
+                .order_by(SessionOuverte.vu.desc(), SessionOuverte.sid)
+                .limit(limite)
+            ).scalars()
+        )
         cles = [f"user:{user_id}"[:120]] + [f"sid:{x.sid}"[:120] for x in lignes]
-        revoc = {r.cle: r for r in s.execute(select(RevocationSession).where(RevocationSession.cle.in_(cles)))
-                 .scalars()}
+        revoc = {
+            r.cle: r
+            for r in s.execute(select(RevocationSession).where(RevocationSession.cle.in_(cles))).scalars()
+        }
     coupure = revoc[f"user:{user_id}"[:120]].apres if f"user:{user_id}"[:120] in revoc else float("-inf")
-    return [SessionActive(x.sid, x.debut, x.vu, x.appareil, x.reseau, courante=(x.sid == sid_courant))
-            for x in lignes if f"sid:{x.sid}"[:120] not in revoc and x.debut >= coupure]
+    return [
+        SessionActive(x.sid, x.debut, x.vu, x.appareil, x.reseau, courante=(x.sid == sid_courant))
+        for x in lignes
+        if f"sid:{x.sid}"[:120] not in revoc and x.debut >= coupure
+    ]
 
 
 # --- chiffrement du volume de la base (RS-21, D-3605) -------------------------------------------------------------
@@ -400,7 +509,9 @@ def chiffrement_volume(chemin: Path | str, *, sys_dir: Path | str = "/sys") -> s
     return "non_chiffre"
 
 
-def signaler_volume_non_chiffre(db: Database, *, mode: str | None = None, sys_dir: Path | str = "/sys") -> str:
+def signaler_volume_non_chiffre(
+    db: Database, *, mode: str | None = None, sys_dir: Path | str = "/sys"
+) -> str:
     """Au démarrage du service web (``controldone serve``) en production : la base SQLite vivante contient en
     clair métadonnées, valeurs extraites et constats (RS-21) ; elle doit être sur un volume chiffré (LUKS,
     ``docs/DEPLOIEMENT.md``). Volume identifié comme **non** chiffré : avertissement journalisé et alerte
@@ -423,14 +534,20 @@ def signaler_volume_non_chiffre(db: Database, *, mode: str | None = None, sys_di
         return "declare"
     etat = chiffrement_volume(chemin.parent if not chemin.exists() else chemin, sys_dir=sys_dir)
     if etat == "non_chiffre":
-        log.warning("volume_non_chiffre base=sqlite : la base vivante n'est pas sur un volume chiffré (RS-21)")
+        log.warning(
+            "volume_non_chiffre base=sqlite : la base vivante n'est pas sur un volume chiffré (RS-21)"
+        )
         try:
             from controldone.storage.alertes import emettre_alerte
 
             with db.transaction_systeme() as s:
-                emettre_alerte(s, cle=f"volume_non_chiffre:{datetime.now(UTC):%Y-%m}", kind="volume_non_chiffre",
-                               message="La base de données n'est pas sur un volume chiffré (LUKS) : métadonnées, "
-                                       "valeurs extraites et constats y sont en clair. Voir docs/DEPLOIEMENT.md.")
+                emettre_alerte(
+                    s,
+                    cle=f"volume_non_chiffre:{datetime.now(UTC):%Y-%m}",
+                    kind="volume_non_chiffre",
+                    message="La base de données n'est pas sur un volume chiffré (LUKS) : métadonnées, "
+                    "valeurs extraites et constats y sont en clair. Voir docs/DEPLOIEMENT.md.",
+                )
         except Exception as exc:  # jamais bloquant au démarrage
             log.warning("alerte_volume_impossible erreur=%s", type(exc).__name__)
     elif etat == "inconnu":

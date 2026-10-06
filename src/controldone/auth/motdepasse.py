@@ -5,7 +5,13 @@ from __future__ import annotations
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-__all__ = ["LONGUEUR_MIN", "MotDePasseFaible", "doit_rehacher", "hacher_mot_de_passe", "verifier_mot_de_passe"]
+__all__ = [
+    "LONGUEUR_MIN",
+    "MotDePasseFaible",
+    "doit_rehacher",
+    "hacher_mot_de_passe",
+    "verifier_mot_de_passe",
+]
 
 LONGUEUR_MIN = 12
 _PH = PasswordHasher()

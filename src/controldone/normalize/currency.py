@@ -121,10 +121,29 @@ _AMBIGUS: dict[str, frozenset[str]] = {
     "fr.": frozenset({"CHF"}),
 }
 _DEVISE_DU_PAYS: dict[str, str] = {
-    "US": "USD", "CA": "CAD", "AU": "AUD", "HK": "HKD", "SG": "SGD", "NZ": "NZD", "MX": "MXN",
-    "TW": "TWD", "AR": "ARS", "CL": "CLP", "CO": "COP", "JP": "JPY", "CN": "CNY", "SE": "SEK",
-    "NO": "NOK", "DK": "DKK", "IS": "ISK", "CH": "CHF", "LI": "CHF", "EC": "USD", "SV": "USD",
-    "PA": "USD", "PR": "USD",
+    "US": "USD",
+    "CA": "CAD",
+    "AU": "AUD",
+    "HK": "HKD",
+    "SG": "SGD",
+    "NZ": "NZD",
+    "MX": "MXN",
+    "TW": "TWD",
+    "AR": "ARS",
+    "CL": "CLP",
+    "CO": "COP",
+    "JP": "JPY",
+    "CN": "CNY",
+    "SE": "SEK",
+    "NO": "NOK",
+    "DK": "DKK",
+    "IS": "ISK",
+    "CH": "CHF",
+    "LI": "CHF",
+    "EC": "USD",
+    "SV": "USD",
+    "PA": "USD",
+    "PR": "USD",
 }
 
 _CODE_RE = re.compile(r"(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])")
@@ -174,8 +193,10 @@ def normalize_currency(
         if sym in cle or sym in brut:
             return code
     for sym, candidats in sorted(_AMBIGUS.items(), key=lambda kv: -len(kv[0])):
-        trouve = sym in brut if not sym.isalpha() and not sym.endswith(".") else bool(
-            re.search(rf"(?<![a-z]){re.escape(sym)}(?![a-z])", cle)
+        trouve = (
+            sym in brut
+            if not sym.isalpha() and not sym.endswith(".")
+            else bool(re.search(rf"(?<![a-z]){re.escape(sym)}(?![a-z])", cle))
         )
         if trouve:
             return _lever_ambiguite(candidats, pays_vendeur, codes_iso_page)
@@ -183,7 +204,9 @@ def normalize_currency(
     return DEVISE_INCONNUE if re.fullmatch(r"[A-Za-z]{3}", reste) else None
 
 
-def _lever_ambiguite(candidats: frozenset[str], pays_vendeur: str | None, codes_iso_page: Iterable[str]) -> str:
+def _lever_ambiguite(
+    candidats: frozenset[str], pays_vendeur: str | None, codes_iso_page: Iterable[str]
+) -> str:
     sur_page = {c for c in codes_iso_page if c in candidats}
     if len(sur_page) == 1:
         return next(iter(sur_page))

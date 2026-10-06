@@ -174,7 +174,9 @@ def _libelle_correspond(libelle: str, reconnu: str) -> bool:
     return len(court) >= 4 and f" {court} " in f" {long_} "
 
 
-def rapprocher_poste(grille: GrilleTarifaire, ligne: LigneFactureTransitaire) -> tuple[PosteGrille | None, bool]:
+def rapprocher_poste(
+    grille: GrilleTarifaire, ligne: LigneFactureTransitaire
+) -> tuple[PosteGrille | None, bool]:
     """(poste, ambigu) : par ``nature`` puis libellé (§13). Plusieurs postes possibles -> ambigu."""
     libelle = ligne.libelle.valeur if ligne.libelle is not None and ligne.libelle.valeur else ""
 
@@ -226,7 +228,8 @@ def _route(ligne: LigneFactureTransitaire, poste: PosteGrille | None, ambigu: bo
     if nature in _ROUTE_SPECIALE:
         return _ROUTE_SPECIALE[nature]
     if nature is NatureLigne.frais_ligne_supplementaire and (
-        ambigu or (poste is not None and poste.mode is ModePoste.unitaire and poste.unite_base in (None, "article"))
+        ambigu
+        or (poste is not None and poste.mode is ModePoste.unitaire and poste.unite_base in (None, "article"))
     ):
         return "D9"
     return "D3"
@@ -249,15 +252,20 @@ def lignes_routees(ctx: ControlContext) -> tuple[list[LigneRoutee], list[Documen
     return out, sans_grille
 
 
-def _prealable(ctx: ControlContext, cid: str) -> tuple[list[LigneRoutee], list[ResultatControle]] | list[
-    ResultatControle
-]:
+def _prealable(
+    ctx: ControlContext, cid: str
+) -> tuple[list[LigneRoutee], list[ResultatControle]] | list[ResultatControle]:
     if not ctx.factures_transitaires():
         return [ctx.non_applicable(cid, RaisonCode.facture_transitaire_absente)]
     lignes, sans = lignes_routees(ctx)
     na = [
-        ctx.non_applicable(cid, RaisonCode.aucune_grille_validee, unite=cle_unite(ft=f.id), documents=[f.id],
-                           details={"motif": "aucune grille tarifaire validée pour ce transitaire"})
+        ctx.non_applicable(
+            cid,
+            RaisonCode.aucune_grille_validee,
+            unite=cle_unite(ft=f.id),
+            documents=[f.id],
+            details={"motif": "aucune grille tarifaire validée pour ce transitaire"},
+        )
         for f in sans
     ]
     return lignes, na
@@ -271,16 +279,30 @@ def _montant(ctx: ControlContext, lg: LigneFactureTransitaire) -> ValeurSourcee 
 def _ambigu(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControle:
     v = _montant(ctx, lr.ligne)
     cles = [x for x in (lr.ligne.libelle, v) if x is not None]
-    classement = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=cles,
-                              documents=[lr.facture.id], raisons_supplementaires=[RaisonCode.confiance_insuffisante])
+    classement = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=cles,
+        documents=[lr.facture.id],
+        raisons_supplementaires=[RaisonCode.confiance_insuffisante],
+    )
     libelle = (
         f"La ligne {_libelle_ligne(lr.ligne)} de la facture du transitaire{_par(page_txt(cles))} correspond à "
         f"plusieurs postes de {_ref_grille(lr.grille)} : la comparaison avec le tarif n'a pas pu être faite."
     )
-    return ctx.constat(cid, classement, unite=lr.unite, libelle=libelle, prochaine_action=ACTION_D_AMBIGU,
-                       composante=Composante.prestation, documents=[lr.facture.id],
-                       preuves=[preuve(x, RolePreuve.valeur_b) for x in cles],
-                       details={"grille": lr.grille.id, "motif": "plusieurs_postes"})
+    return ctx.constat(
+        cid,
+        classement,
+        unite=lr.unite,
+        libelle=libelle,
+        prochaine_action=ACTION_D_AMBIGU,
+        composante=Composante.prestation,
+        documents=[lr.facture.id],
+        preuves=[preuve(x, RolePreuve.valeur_b) for x in cles],
+        details={"grille": lr.grille.id, "motif": "plusieurs_postes"},
+    )
 
 
 def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document, ValeurSourcee, Decimal]]:
@@ -294,23 +316,30 @@ def _credits_ligne(ctx: ControlContext, lr: LigneRoutee) -> list[tuple[Document,
     mrn_ligne = mrn_prefixe(lr.ligne.mrn.valeur) if ctx.utilisable(lr.ligne.mrn) and lr.ligne.mrn else None
     # Ligne sans MRN : MRN de l'en-tête de la facture (§12.2) ; référence de transport de la facture (§17.2,
     # troisième palier), D-2206.
-    mrns = (mrn_ligne,) if mrn_ligne else tuple(x.valeur for x in f.ft.refs_mrn if x.valeur and ctx.utilisable(x))
+    mrns = (
+        (mrn_ligne,)
+        if mrn_ligne
+        else tuple(x.valeur for x in f.ft.refs_mrn if x.valeur and ctx.utilisable(x))
+    )
     transports = tuple(x.valeur for x in f.ft.refs_transport if x.valeur and ctx.utilisable(x))
     emetteur = aides.emetteur_de(ctx, f)
     out: list[tuple[Document, ValeurSourcee, Decimal]] = []
     for lc in aides.lignes_credit_du_dossier(ctx):
         if lc.nature is not lr.ligne.nature or not aides.memes_emetteurs(lc.emetteur, emetteur):
             continue
-        palier, _ = choisir_par_paliers(lc, [lr], factures=lambda _x: (num,), mrns=lambda _x: mrns,
-                                        transports=lambda _x: transports)
+        palier, _ = choisir_par_paliers(
+            lc, [lr], factures=lambda _x: (num,), mrns=lambda _x: mrns, transports=lambda _x: transports
+        )
         if not palier:
             continue
         memes = [i for i, lg in enumerate(f.ft.lignes) if lg.nature is lc.nature]
         if len(memes) > 1 and lc.mrns:
             cles = {cle_confusion_ocr(mrn_prefixe(m)) for m in lc.mrns}
             par_mrn = [
-                i for i in memes
-                if ctx.utilisable(f.ft.lignes[i].mrn) and f.ft.lignes[i].mrn is not None
+                i
+                for i in memes
+                if ctx.utilisable(f.ft.lignes[i].mrn)
+                and f.ft.lignes[i].mrn is not None
                 and cle_confusion_ocr(mrn_prefixe(f.ft.lignes[i].mrn.valeur)) in cles
             ]
             memes = par_mrn or memes
@@ -352,25 +381,43 @@ def _comparer_tarif(
         det["avoirs_deduits"] = str(arrondi_centime(credit))
         det["ecart_brut_avant_avoirs"] = str(arrondi_centime(brut))
     commun = dict(
-        unite=lr.unite, entrees={"montant": v}, attendu=arrondi_centime(attendu + deduction), constate=facture,
-        ecart=arrondi_centime(ecart), tolerance=tol, seuil_certitude=seuil, documents=docs, details=det,
+        unite=lr.unite,
+        entrees={"montant": v},
+        attendu=arrondi_centime(attendu + deduction),
+        constate=facture,
+        ecart=arrondi_centime(ecart),
+        tolerance=tol,
+        seuil_certitude=seuil,
+        documents=docs,
+        details=det,
     )
     if ecart <= tol:
         return ctx.conforme(cid, **commun)
     devise = lr.facture.ft.devise
-    if ctx.utilisable(devise) and devise is not None and (devise.valeur or "").strip().upper() not in ("", "EUR"):
+    if (
+        ctx.utilisable(devise)
+        and devise is not None
+        and (devise.valeur or "").strip().upper() not in ("", "EUR")
+    ):
         # Grille en euros, facture dans une autre devise : la comparaison suppose une conversion (D-2213).
         raisons = [*raisons, RaisonCode.devise_incertaine]
     classement = ctx.classify(
-        cid, ecart=ecart, tolerance=tol, seuil_certitude=seuil,
+        cid,
+        ecart=ecart,
+        tolerance=tol,
+        seuil_certitude=seuil,
         valeurs_cles=[*valeurs_cles, *(x for _, x, _ in credits)],
         confusion=[Confusion(v, accepte=lambda x: x - attendu - deduction - credit <= tol), *confusion],
-        documents=docs, montant=ecart, raisons_supplementaires=raisons,
+        documents=docs,
+        montant=ecart,
+        raisons_supplementaires=raisons,
     )
     avoirs_txt = ""
     if credits:
         nums = ", ".join(dict.fromkeys(_numero_avoir(a) for a, _, _ in credits))
-        avoirs_txt = f", après déduction de {format_montant(arrondi_centime(credit))} d'avoir déjà reçu ({nums})"
+        avoirs_txt = (
+            f", après déduction de {format_montant(arrondi_centime(credit))} d'avoir déjà reçu ({nums})"
+        )
     libelle = (
         f"La ligne {_libelle_ligne(lr.ligne)} de {_la_facture(lr.facture)}"
         f"{_par(page_txt([v]))} est facturée {format_montant(facture)} ; {_ref_grille(lr.grille)} prévoit "
@@ -378,11 +425,19 @@ def _comparer_tarif(
         f"{format_montant(arrondi_centime(ecart))} (tolérance appliquée : {format_montant(tol)})."
     )
     return ctx.constat(
-        cid, classement, libelle=libelle, prochaine_action=ACTION_D, montant=ecart,
-        montant_brut=brut if credits else None, composante=Composante.prestation,
-        preuves=[preuve(v, RolePreuve.valeur_b), *(preuve(x, RolePreuve.operande) for x in valeurs_cles if x is not v),
-                 preuve(None, RolePreuve.valeur_a, calcul=calcul_txt),
-                 *(preuve(x, RolePreuve.contexte) for _, x, _ in credits)],
+        cid,
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_D,
+        montant=ecart,
+        montant_brut=brut if credits else None,
+        composante=Composante.prestation,
+        preuves=[
+            preuve(v, RolePreuve.valeur_b),
+            *(preuve(x, RolePreuve.operande) for x in valeurs_cles if x is not v),
+            preuve(None, RolePreuve.valeur_a, calcul=calcul_txt),
+            *(preuve(x, RolePreuve.contexte) for _, x, _ in credits),
+        ],
         **commun,
     )
 
@@ -397,7 +452,9 @@ def _quantite(ctx: ControlContext, lg: LigneFactureTransitaire) -> tuple[Decimal
     return (q, lg.quantite) if q is not None else (Decimal(1), None)
 
 
-def _attendu_simple(ctx: ControlContext, lr: LigneRoutee) -> tuple[Decimal, str, list[ValeurSourcee], list[RaisonCode]] | None:
+def _attendu_simple(
+    ctx: ControlContext, lr: LigneRoutee
+) -> tuple[Decimal, str, list[ValeurSourcee], list[RaisonCode]] | None:
     """Attendu d'un poste ``forfait`` ou ``unitaire`` (D3, D6 hors dates, D7 hors pourcentage)."""
     p = lr.poste
     assert p is not None
@@ -452,24 +509,39 @@ def _d1_resultat(
     ecart = v_imp - calcul
     seuil = ctx.tol.s_arith()
     commun = dict(
-        unite=unite, sous_controle=sous,
+        unite=unite,
+        sous_controle=sous,
         entrees={"imprime": imprime, **{f"operande_{i}": v for i, v in enumerate(operandes)}},
-        attendu=arrondi_centime(calcul), constate=v_imp, ecart=arrondi_centime(ecart), tolerance=tol,
-        seuil_certitude=seuil, documents=[f.id],
+        attendu=arrondi_centime(calcul),
+        constate=v_imp,
+        ecart=arrondi_centime(ecart),
+        tolerance=tol,
+        seuil_certitude=seuil,
+        documents=[f.id],
     )
     if abs(ecart) <= tol:
         return ctx.conforme("D1", **commun)
     if ligne_non_lue and ecart > 0:
         # Les totaux imprimés se confirment entre eux : une ligne non lue explique l'écart (D-706).
-        return ctx.non_verifiable("D1", RaisonCode.valeur_absente, **{
-            **commun, "details": {"motif": "ligne_probablement_non_lue"}})
+        return ctx.non_verifiable(
+            "D1", RaisonCode.valeur_absente, **{**commun, "details": {"motif": "ligne_probablement_non_lue"}}
+        )
     if explications_ligne:
         # D-4203 : l'écart d'une ligne s'explique par une autre lecture de ses colonnes (montant TVA comprise lu
         # comme TVA, quantité imprimée dans le libellé…) : la lecture ne peut pas trancher.
-        return ctx.non_verifiable("D1", RaisonCode.montant_tva_comprise if "colonne_ttc" in explications_ligne
-                                  else RaisonCode.lecture_douteuse, **{
-                                      **commun, "details": {"motif": "lecture_de_ligne_alternative",
-                                                            "explications": list(explications_ligne)}})
+        return ctx.non_verifiable(
+            "D1",
+            RaisonCode.montant_tva_comprise
+            if "colonne_ttc" in explications_ligne
+            else RaisonCode.lecture_douteuse,
+            **{
+                **commun,
+                "details": {
+                    "motif": "lecture_de_ligne_alternative",
+                    "explications": list(explications_ligne),
+                },
+            },
+        )
     montant = ecart if avec_montant and ecart > 0 else None
     # D-4202 : un total imprimé supérieur à la somme des lignes lues n'est un écart certain que si une autre
     # identité imprimée prouve que la lecture des lignes est complète (sinon une ligne non lue l'explique).
@@ -484,21 +556,36 @@ def _d1_resultat(
         return lambda x: any(abs(v_imp - (c - d + x)) <= tol for c in candidats)
 
     classement = ctx.classify(
-        "D1", ecart=ecart, tolerance=tol, seuil_certitude=seuil, valeurs_cles=[imprime, *operandes],
-        confusion=[Confusion(imprime, accepte=lambda x: any(abs(x - c) <= tol for c in candidats)),
-                   *(Confusion(o, accepte=acc_operande(o)) for o in operandes)],
-        documents=[f.id], montant=ecart,
+        "D1",
+        ecart=ecart,
+        tolerance=tol,
+        seuil_certitude=seuil,
+        valeurs_cles=[imprime, *operandes],
+        confusion=[
+            Confusion(imprime, accepte=lambda x: any(abs(x - c) <= tol for c in candidats)),
+            *(Confusion(o, accepte=acc_operande(o)) for o in operandes),
+        ],
+        documents=[f.id],
+        montant=ecart,
     )
-    if (somme_de_lignes and ecart > 0 and classement.niveau is Niveau.a_verifier
-            and set(classement.raisons) & _RAISONS_LECTURE):
+    if (
+        somme_de_lignes
+        and ecart > 0
+        and classement.niveau is Niveau.a_verifier
+        and set(classement.raisons) & _RAISONS_LECTURE
+    ):
         # D-3703 : total imprimé supérieur à la somme des lignes lues, lecture sous le seuil (scan) : des lignes
         # non lues expliquent l'écart dans le sens observé, et aucune identité ne prouve que la lecture est
         # complète (elle aurait rendu le classement certain). Comme D-2307 pour B2/B3.
-        return ctx.non_verifiable("D1", RaisonCode.confiance_insuffisante, **{
-            **commun, "details": {"motif": "lignes_possiblement_non_lues"}})
+        return ctx.non_verifiable(
+            "D1",
+            RaisonCode.confiance_insuffisante,
+            **{**commun, "details": {"motif": "lignes_possiblement_non_lues"}},
+        )
     if structure and classement.niveau is Niveau.ecart_certain:
-        classement = Classement(Niveau.a_verifier,
-                                trier_raisons([*classement.raisons, RaisonCode.structure_non_validee]))
+        classement = Classement(
+            Niveau.a_verifier, trier_raisons([*classement.raisons, RaisonCode.structure_non_validee])
+        )
         commun["details"] = {"structure_non_validee": structure}
     libelle = (
         f"Sur {_la_facture(f)}{_par(page_txt([imprime]))}, {objet} "
@@ -507,16 +594,27 @@ def _d1_resultat(
         f"(tolérance appliquée : {format_montant(tol)})."
     )
     return ctx.constat(
-        "D1", classement, libelle=libelle, prochaine_action=ACTION_D1, montant=montant,
+        "D1",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_D1,
+        montant=montant,
         composante=Composante.prestation if montant is not None else None,
-        preuves=[preuve(imprime, RolePreuve.valeur_b), *(preuve(o, RolePreuve.operande) for o in operandes),
-                 preuve(None, RolePreuve.valeur_a, calcul=calcul_txt)],
+        preuves=[
+            preuve(imprime, RolePreuve.valeur_b),
+            *(preuve(o, RolePreuve.operande) for o in operandes),
+            preuve(None, RolePreuve.valeur_a, calcul=calcul_txt),
+        ],
         **commun,
     )
 
 
 def _tva_confirme_total(
-    ctx: ControlContext, ft, total_ht: Decimal, s_deb: Decimal, s_prest: Decimal,
+    ctx: ControlContext,
+    ft,
+    total_ht: Decimal,
+    s_deb: Decimal,
+    s_prest: Decimal,
     prestations: Sequence[ValeurSourcee],
 ) -> bool:
     """Le total de TVA imprimé correspond au total HT imprimé (prestations taxées à un taux unique) et non à
@@ -525,8 +623,13 @@ def _tva_confirme_total(
     tva = _dec(ctx, ft.total_tva)
     if tva is None or tva <= 0 or not prestations:
         return False
-    taux = {t for lg in ft.lignes if not lg.nature.est_debours
-            for t in [_dec(ctx, lg.taux_tva)] if t is not None and t > 0}
+    taux = {
+        t
+        for lg in ft.lignes
+        if not lg.nature.est_debours
+        for t in [_dec(ctx, lg.taux_tva)]
+        if t is not None and t > 0
+    }
     if len(taux) != 1:
         return False
     r = taux.pop() / _CENT
@@ -537,7 +640,12 @@ def _tva_confirme_total(
 
 
 def _explications_ligne(
-    ctx: ControlContext, lg: LigneFactureTransitaire, q: Decimal, pu: Decimal, m: Decimal, taux_facture: set[Decimal],
+    ctx: ControlContext,
+    lg: LigneFactureTransitaire,
+    q: Decimal,
+    pu: Decimal,
+    m: Decimal,
+    taux_facture: set[Decimal],
 ) -> list[str]:
     """D-4203 : autres lectures des colonnes d'une ligne qui redonnent son montant (``ligne``).
 
@@ -587,8 +695,9 @@ def _imprime(v: ValeurSourcee | None) -> bool:
     return v is not None and v.methode is not Methode.derive and not v.est_reconstruite
 
 
-def _nature_ambigue(ctx: ControlContext, montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]],
-                    ecart: Decimal) -> list[str]:
+def _nature_ambigue(
+    ctx: ControlContext, montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]], ecart: Decimal
+) -> list[str]:
     """D-4203 : écart du total des débours égal au montant d'une ligne lue comme prestation : la nature de cette
     ligne (débours ou prestation, libellé mal lu ou inconnu) explique l'écart."""
     tol = ctx.tol.t_somme(2)
@@ -599,8 +708,15 @@ def _nature_ambigue(ctx: ControlContext, montants: Sequence[tuple[LigneFactureTr
 
 
 def _preuves_lignes_completes(
-    ctx: ControlContext, ft, montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]], s_deb: Decimal,
-    s_prest: Decimal, s_tout: Decimal, v_td: Decimal | None, v_tht: Decimal | None, ttc: Decimal | None,
+    ctx: ControlContext,
+    ft,
+    montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]],
+    s_deb: Decimal,
+    s_prest: Decimal,
+    s_tout: Decimal,
+    v_td: Decimal | None,
+    v_tht: Decimal | None,
+    ttc: Decimal | None,
     tva: Decimal | None,
 ) -> set[str]:
     """D-4202 : identités imprimées qui prouvent que les lignes lues sont complètes.
@@ -613,8 +729,14 @@ def _preuves_lignes_completes(
     tol = ctx.tol
     n = max(1, len(montants))
     preuves: set[str] = set()
-    if (ttc is not None and tva is not None and montants and _imprime(ft.total_ttc) and _imprime(ft.total_tva)
-            and abs(ttc - (s_tout + tva)) <= tol.t_somme(n + 1)):
+    if (
+        ttc is not None
+        and tva is not None
+        and montants
+        and _imprime(ft.total_ttc)
+        and _imprime(ft.total_tva)
+        and abs(ttc - (s_tout + tva)) <= tol.t_somme(n + 1)
+    ):
         preuves.add("ttc")
     if v_tht is not None and montants and _imprime(ft.total_ht) and abs(v_tht - s_tout) <= tol.t_somme(n):
         preuves.add("ht_toutes_lignes")
@@ -624,21 +746,29 @@ def _preuves_lignes_completes(
     debours = [v for lg, v in montants if lg.nature.est_debours]
     td = ft.total_debours
     if (_imprime(td) and v_td is not None and abs(v_td - s_deb) <= tol.t_somme(max(1, len(debours)))) or (
-            td is None and not debours):
+        td is None and not debours
+    ):
         preuves.add("debours")
     prest = [lg for lg, _ in montants if not lg.nature.est_debours]
     if tva is not None and _imprime(ft.total_tva) and tva != 0:
         # TVA imprimée de chaque ligne qui en porte une (débours taxés compris) ; toutes les prestations en portent.
-        tvas = {id(lg): _dec(ctx, lg.montant_tva) for lg, _ in montants
-                if lg.montant_tva is not None and lg.montant_tva.methode is not Methode.derive}
-        if prest and all(tvas.get(id(lg)) is not None for lg in prest) and abs(
-                tva - _somme(t for t in tvas.values() if t is not None)) <= tol.t_somme(max(1, len(tvas))):
+        tvas = {
+            id(lg): _dec(ctx, lg.montant_tva)
+            for lg, _ in montants
+            if lg.montant_tva is not None and lg.montant_tva.methode is not Methode.derive
+        }
+        if (
+            prest
+            and all(tvas.get(id(lg)) is not None for lg in prest)
+            and abs(tva - _somme(t for t in tvas.values() if t is not None)) <= tol.t_somme(max(1, len(tvas)))
+        ):
             preuves.add("prestations")
         taux = {t for lg, _ in montants for t in [_dec(ctx, lg.taux_tva)] if t is not None and t > 0}
         if len(taux) == 1:
             r = taux.pop()
-            base = _somme(v.decimal_signe() for lg, v in montants
-                          if (t := _dec(ctx, lg.taux_tva)) is not None and t > 0)
+            base = _somme(
+                v.decimal_signe() for lg, v in montants if (t := _dec(ctx, lg.taux_tva)) is not None and t > 0
+            )
             if prest and abs(arrondi_centime(r / _CENT * base) - tva) <= tol.t_somme(2):
                 preuves.add("prestations")
     return preuves
@@ -660,31 +790,68 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
             if Methode.derive in (lg.quantite.methode, lg.prix_unitaire.methode):
                 # D-2311 : quantité implicite (« 1 » non imprimé) ou prix déduit : le produit n'est pas imprimé,
                 # il n'y a pas d'identité à vérifier sur cette ligne.
-                out.append(ctx.non_verifiable("D1", RaisonCode.valeur_absente, unite=unite, sous_controle="ligne",
-                                              documents=[f.id], details={"motif": "facteur_non_imprime"}))
+                out.append(
+                    ctx.non_verifiable(
+                        "D1",
+                        RaisonCode.valeur_absente,
+                        unite=unite,
+                        sous_controle="ligne",
+                        documents=[f.id],
+                        details={"motif": "facteur_non_imprime"},
+                    )
+                )
             elif lg.nature.est_debours:
                 # D-4203 : une ligne de débours reproduit un montant de la déclaration (droit, forfait par
                 # article…) ; son produit est celui de la déclaration (G1, B1) et la refacturation est comparée
                 # par les familles C et G. D1 ne juge pas ce produit.
-                out.append(ctx.non_applicable("D1", RaisonCode.couvert_par_autre_controle, unite=unite,
-                                              sous_controle="ligne", documents=[f.id],
-                                              details={"motif": "ligne_de_debours_reproduite"}))
+                out.append(
+                    ctx.non_applicable(
+                        "D1",
+                        RaisonCode.couvert_par_autre_controle,
+                        unite=unite,
+                        sous_controle="ligne",
+                        documents=[f.id],
+                        details={"motif": "ligne_de_debours_reproduite"},
+                    )
+                )
             else:
-                out.append(_d1_resultat(
-                    ctx, f, "ligne", unite, lg.montant_ht, q * pu, [lg.quantite, lg.prix_unitaire], tol.t_ligne(),
-                    f"le montant de la ligne {_libelle_ligne(lg)}",
-                    f"{format_nombre(q)} × {format_montant(pu)}", avec_montant=False, produit=True,
-                    explications_ligne=_explications_ligne(ctx, lg, q, pu, m, taux_facture),
-                ))
+                out.append(
+                    _d1_resultat(
+                        ctx,
+                        f,
+                        "ligne",
+                        unite,
+                        lg.montant_ht,
+                        q * pu,
+                        [lg.quantite, lg.prix_unitaire],
+                        tol.t_ligne(),
+                        f"le montant de la ligne {_libelle_ligne(lg)}",
+                        f"{format_nombre(q)} × {format_montant(pu)}",
+                        avec_montant=False,
+                        produit=True,
+                        explications_ligne=_explications_ligne(ctx, lg, q, pu, m, taux_facture),
+                    )
+                )
         taux, mtva = _dec(ctx, lg.taux_tva), _dec(ctx, lg.montant_tva)
         if m is not None and taux is not None and mtva is not None:
             assert lg.montant_ht is not None and lg.taux_tva is not None and lg.montant_tva is not None
-            out.append(_d1_resultat(
-                ctx, f, "tva_ligne", unite, lg.montant_tva, m * taux / _CENT, [lg.montant_ht, lg.taux_tva],
-                tol.t_ligne(), f"la TVA de la ligne {_libelle_ligne(lg)}",
-                f"{format_montant(m)} × {format_pourcentage(taux)}", avec_montant=False, produit=True,
-                explications_ligne=_explications_tva_ligne(ctx, m, taux, mtva),
-            ))
+            out.append(
+                _d1_resultat(
+                    ctx,
+                    f,
+                    "tva_ligne",
+                    unite,
+                    lg.montant_tva,
+                    m * taux / _CENT,
+                    [lg.montant_ht, lg.taux_tva],
+                    tol.t_ligne(),
+                    f"la TVA de la ligne {_libelle_ligne(lg)}",
+                    f"{format_montant(m)} × {format_pourcentage(taux)}",
+                    avec_montant=False,
+                    produit=True,
+                    explications_ligne=_explications_tva_ligne(ctx, m, taux, mtva),
+                )
+            )
     toutes_lisibles = len(montants) == len([lg for lg in ft.lignes if lg.montant_ht is not None])
     unite_f = cle_unite(ft=f.id)
     debours = [v for lg, v in montants if lg.nature.est_debours]
@@ -700,62 +867,130 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
     # Même écart positif sur deux totaux imprimés indépendants (total des débours et total HT débours
     # compris) : une ligne de débours non lue, pas une erreur d'addition (D-706).
     meme_ecart = (
-        v_td is not None and v_tht is not None and debours
+        v_td is not None
+        and v_tht is not None
+        and debours
         and v_td - s_deb > tol.t_somme(len(debours))
         and abs((v_tht - s_tout) - (v_td - s_deb)) <= tol.t_somme(len(montants))
     )
     ttc, ht, tva = _dec(ctx, ft.total_ttc), _dec(ctx, ft.total_ht), _dec(ctx, ft.total_tva)
-    preuves_lignes = _preuves_lignes_completes(ctx, ft, montants, s_deb, s_prest, s_tout, v_td, v_tht, ttc, tva)
+    preuves_lignes = _preuves_lignes_completes(
+        ctx, ft, montants, s_deb, s_prest, s_tout, v_td, v_tht, ttc, tva
+    )
     if toutes_lisibles and debours and v_td is not None and td is not None:
-        out.append(_d1_resultat(
-            ctx, f, "total_debours", unite_f, td, s_deb, debours, tol.t_somme(len(debours)),
-            "le total des débours imprimé", f"somme des {len(debours)} lignes de débours", avec_montant=True,
-            ligne_non_lue=bool(meme_ecart), somme_de_lignes=True,
-            explications_ligne=_nature_ambigue(ctx, montants, v_td - s_deb),
-            motifs_structure=[] if preuves_lignes & {"ttc", "ht_toutes_lignes", "structure"}
-            else ["debours_non_prouves_complets"],
-        ))
+        out.append(
+            _d1_resultat(
+                ctx,
+                f,
+                "total_debours",
+                unite_f,
+                td,
+                s_deb,
+                debours,
+                tol.t_somme(len(debours)),
+                "le total des débours imprimé",
+                f"somme des {len(debours)} lignes de débours",
+                avec_montant=True,
+                ligne_non_lue=bool(meme_ecart),
+                somme_de_lignes=True,
+                explications_ligne=_nature_ambigue(ctx, montants, v_td - s_deb),
+                motifs_structure=[]
+                if preuves_lignes & {"ttc", "ht_toutes_lignes", "structure"}
+                else ["debours_non_prouves_complets"],
+            )
+        )
     if toutes_lisibles and montants and v_tht is not None and tht is not None:
         alternatives = [s_prest] if debours and prestations else []
         credits = _somme(v.decimal_signe() for _, v in montants if v.decimal_signe() < 0)
         # D-4204 : total HT imprimé avant la remise ou l'avoir porté en ligne négative (présentation « total HT,
         # remise, net HT ») : l'écart égal aux lignes négatives n'est pas une erreur d'addition.
-        presentations = ([s_tout - credits] + ([s_prest - credits] if debours and prestations else [])
-                         if credits < 0 else [])
+        presentations = (
+            [s_tout - credits] + ([s_prest - credits] if debours and prestations else [])
+            if credits < 0
+            else []
+        )
         complet = bool(preuves_lignes & {"ttc", "structure"}) or {"debours", "prestations"} <= preuves_lignes
-        out.append(_d1_resultat(
-            ctx, f, "total_ht", unite_f, tht, s_tout, [v for _, v in montants], tol.t_somme(len(montants)),
-            "le total HT imprimé", f"somme des {len(montants)} montants HT", avec_montant=True,
-            alternatives=alternatives, presentations=presentations,
-            ligne_non_lue=bool(meme_ecart) or _tva_confirme_total(ctx, ft, v_tht, s_deb, s_prest, prestations),
-            somme_de_lignes=True, motifs_structure=[] if complet else ["lignes_non_prouvees_completes"],
-        ))
+        out.append(
+            _d1_resultat(
+                ctx,
+                f,
+                "total_ht",
+                unite_f,
+                tht,
+                s_tout,
+                [v for _, v in montants],
+                tol.t_somme(len(montants)),
+                "le total HT imprimé",
+                f"somme des {len(montants)} montants HT",
+                avec_montant=True,
+                alternatives=alternatives,
+                presentations=presentations,
+                ligne_non_lue=bool(meme_ecart)
+                or _tva_confirme_total(ctx, ft, v_tht, s_deb, s_prest, prestations),
+                somme_de_lignes=True,
+                motifs_structure=[] if complet else ["lignes_non_prouvees_completes"],
+            )
+        )
     if ttc is not None and ht is not None and tva is not None:
         assert ft.total_ttc is not None and ft.total_ht is not None and ft.total_tva is not None
-        alternatives = [ht + tva + s_deb] if debours and toutes_lisibles and abs(ht - s_prest) <= tol.t_somme(
-            max(1, len(prestations))) else []
+        alternatives = (
+            [ht + tva + s_deb]
+            if debours and toutes_lisibles and abs(ht - s_prest) <= tol.t_somme(max(1, len(prestations)))
+            else []
+        )
         # D-4204 : TTC = HT des prestations + TVA + total des débours imprimé (débours hors HT), même quand les
         # lignes de débours ne sont pas toutes lues.
-        pres_ttc = [ht + tva + v_td] if v_td is not None and v_td > 0 and (
-            v_tht is None or abs(v_tht - v_td) > tol.t_somme(2)) else []
-        out.append(_d1_resultat(
-            ctx, f, "total_ttc", unite_f, ft.total_ttc, ht + tva, [ft.total_ht, ft.total_tva], tol.t_somme(2),
-            "le total TTC imprimé", "total HT + total TVA", avec_montant=True, alternatives=alternatives,
-            presentations=pres_ttc,
-        ))
+        pres_ttc = (
+            [ht + tva + v_td]
+            if v_td is not None and v_td > 0 and (v_tht is None or abs(v_tht - v_td) > tol.t_somme(2))
+            else []
+        )
+        out.append(
+            _d1_resultat(
+                ctx,
+                f,
+                "total_ttc",
+                unite_f,
+                ft.total_ttc,
+                ht + tva,
+                [ft.total_ht, ft.total_tva],
+                tol.t_somme(2),
+                "le total TTC imprimé",
+                "total HT + total TVA",
+                avec_montant=True,
+                alternatives=alternatives,
+                presentations=pres_ttc,
+            )
+        )
     net = _dec(ctx, ft.net_a_payer)
     if net is not None and ttc is not None:
-        alternatives_net = [ttc - abs(_dec(ctx, ft.acomptes) or ZERO) + v_td] if (
-            v_td is not None and v_td > 0 and ht is not None and abs(ht - v_td) > tol.t_somme(2)) else []
+        alternatives_net = (
+            [ttc - abs(_dec(ctx, ft.acomptes) or ZERO) + v_td]
+            if (v_td is not None and v_td > 0 and ht is not None and abs(ht - v_td) > tol.t_somme(2))
+            else []
+        )
         assert ft.net_a_payer is not None and ft.total_ttc is not None
         # Un acompte est une déduction, qu'il soit imprimé en positif ou précédé d'un signe moins.
         acompte = abs(_dec(ctx, ft.acomptes) or ZERO)
-        ops = [ft.total_ttc] + ([ft.acomptes] if ft.acomptes is not None and _dec(ctx, ft.acomptes) is not None else [])
-        out.append(_d1_resultat(
-            ctx, f, "net_a_payer", unite_f, ft.net_a_payer, ttc - acompte, ops, tol.t_somme(len(ops)),
-            "le net à payer imprimé", "total TTC − acomptes imprimés", avec_montant=True,
-            presentations=alternatives_net,
-        ))
+        ops = [ft.total_ttc] + (
+            [ft.acomptes] if ft.acomptes is not None and _dec(ctx, ft.acomptes) is not None else []
+        )
+        out.append(
+            _d1_resultat(
+                ctx,
+                f,
+                "net_a_payer",
+                unite_f,
+                ft.net_a_payer,
+                ttc - acompte,
+                ops,
+                tol.t_somme(len(ops)),
+                "le net à payer imprimé",
+                "total TTC − acomptes imprimés",
+                avec_montant=True,
+                presentations=alternatives_net,
+            )
+        )
     return out
 
 
@@ -774,12 +1009,29 @@ def d1_arithmetique(ctx: ControlContext) -> list[ResultatControle]:
     out: list[ResultatControle] = []
     for f in factures:
         if not dossier_principal(ctx, f.id):
-            out.append(ctx.non_applicable("D1", RaisonCode.couvert_par_autre_controle, unite=cle_unite(ft=f.id),
-                                          documents=[f.id], details={"motif": "facture_evaluee_dans_un_autre_dossier"}))
+            out.append(
+                ctx.non_applicable(
+                    "D1",
+                    RaisonCode.couvert_par_autre_controle,
+                    unite=cle_unite(ft=f.id),
+                    documents=[f.id],
+                    details={"motif": "facture_evaluee_dans_un_autre_dossier"},
+                )
+            )
             continue
         rs = _d1_facture(ctx, f)
-        out.extend(rs or [ctx.non_verifiable("D1", RaisonCode.valeur_absente, unite=cle_unite(ft=f.id),
-                                             documents=[f.id], details={"motif": "aucun calcul vérifiable"})])
+        out.extend(
+            rs
+            or [
+                ctx.non_verifiable(
+                    "D1",
+                    RaisonCode.valeur_absente,
+                    unite=cle_unite(ft=f.id),
+                    documents=[f.id],
+                    details={"motif": "aucun calcul vérifiable"},
+                )
+            ]
+        )
     return out
 
 
@@ -797,27 +1049,57 @@ def _hors_grille(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
     interdites = lr.grille.prestations_hors_grille is PrestationsHorsGrille.interdites
     tol, seuil = ctx.tol.t_tarif(), ctx.tol.s_tarif()
     details = {"grille": lr.grille.id, "prestations_hors_grille": lr.grille.prestations_hors_grille.value}
-    commun = dict(unite=lr.unite, entrees={"montant": v}, attendu=ZERO, constate=m, ecart=arrondi_centime(m),
-                  tolerance=tol, seuil_certitude=seuil, documents=[lr.facture.id], details=details)
+    commun = dict(
+        unite=lr.unite,
+        entrees={"montant": v},
+        attendu=ZERO,
+        constate=m,
+        ecart=arrondi_centime(m),
+        tolerance=tol,
+        seuil_certitude=seuil,
+        documents=[lr.facture.id],
+        details=details,
+    )
     if m <= tol:
         return ctx.conforme(cid, **commun)
     if lr.ligne.libelle is None or not lr.ligne.libelle.valeur:
         # D-2306 : sans libellé lu, « aucun poste ne correspond » n'est pas établi (le poste se reconnaît au
         # libellé) : impossible de conclure, jamais conforme (P8).
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={**details, "motif": "libelle_absent"})
+        return ctx.non_verifiable(
+            cid,
+            RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={**details, "motif": "libelle_absent"},
+        )
     if renvoie_a_une_annexe(lr.ligne.libelle.valeur):
         # D-2306 : ligne qui reprend le total d'une annexe (« Suplidos según anexo ») dont le détail n'a pas été
         # ventilé : ce n'est pas une prestation hors grille ; sa nature n'est pas établie.
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={**details, "motif": "renvoi_annexe"})
+        return ctx.non_verifiable(
+            cid,
+            RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={**details, "motif": "renvoi_annexe"},
+        )
     cles = [x for x in (lr.ligne.libelle, v) if x is not None]
     raisons: list[RaisonCode] = []
-    classement = ctx.classify(cid, ecart=m, tolerance=tol, seuil_certitude=seuil, valeurs_cles=cles,
-                              documents=[lr.facture.id], eligible=interdites, montant=m,
-                              raisons_supplementaires=raisons)
-    regle = ("La grille indique que les prestations hors grille ne sont pas prévues." if interdites
-             else "La grille admet des prestations hors grille : la ligne est signalée pour vérification.")
+    classement = ctx.classify(
+        cid,
+        ecart=m,
+        tolerance=tol,
+        seuil_certitude=seuil,
+        valeurs_cles=cles,
+        documents=[lr.facture.id],
+        eligible=interdites,
+        montant=m,
+        raisons_supplementaires=raisons,
+    )
+    regle = (
+        "La grille indique que les prestations hors grille ne sont pas prévues."
+        if interdites
+        else "La grille admet des prestations hors grille : la ligne est signalée pour vérification."
+    )
     libelle = (
         f"La ligne {_libelle_ligne(lr.ligne)} de {_la_facture(lr.facture)}"
         f"{_par(page_txt(cles))}, facturée {format_montant(m)}, ne correspond à aucun poste de "
@@ -825,9 +1107,15 @@ def _hors_grille(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
     )
     tva = _dec(ctx, lr.ligne.montant_tva)
     return ctx.constat(
-        cid, classement, libelle=libelle, prochaine_action=ACTION_D if interdites else ACTION_D_TOLEREE, montant=m,
-        montant_tva_associee=arrondi_centime(tva) if tva else None, composante=Composante.prestation,
-        preuves=[preuve(x, RolePreuve.valeur_b) for x in cles], **commun,
+        cid,
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_D if interdites else ACTION_D_TOLEREE,
+        montant=m,
+        montant_tva_associee=arrondi_centime(tva) if tva else None,
+        composante=Composante.prestation,
+        preuves=[preuve(x, RolePreuve.valeur_b) for x in cles],
+        **commun,
     )
 
 
@@ -859,13 +1147,18 @@ def _copie_de(ctx: ControlContext, lr: LigneRoutee, vues: dict[tuple, int]) -> i
     return None
 
 
-def _hors_grille_une_fois(ctx: ControlContext, cid: str, lr: LigneRoutee, vues: dict[tuple, int]
-                          ) -> ResultatControle:
+def _hors_grille_une_fois(
+    ctx: ControlContext, cid: str, lr: LigneRoutee, vues: dict[tuple, int]
+) -> ResultatControle:
     premiere = _copie_de(ctx, lr, vues)
     if premiere is not None:
-        return ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, unite=lr.unite,
-                                  documents=[lr.facture.id],
-                                  details={"couvert_par": "D5", "copie_de_la_ligne": premiere})
+        return ctx.non_applicable(
+            cid,
+            RaisonCode.couvert_par_autre_controle,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"couvert_par": "D5", "copie_de_la_ligne": premiere},
+        )
     return _hors_grille(ctx, cid, lr)
 
 
@@ -876,7 +1169,8 @@ def d2_hors_grille(ctx: ControlContext) -> list[ResultatControle]:
     deux fois à l'identique n'est relevée qu'une fois (la répétition est l'objet de D5, D-2705)."""
     vues: dict[tuple, int] = {}
     return _par_controle(
-        ctx, "D2", lambda lr: _hors_grille_une_fois(ctx, "D2", lr, vues) if lr.controle == "D2" else None)
+        ctx, "D2", lambda lr: _hors_grille_une_fois(ctx, "D2", lr, vues) if lr.controle == "D2" else None
+    )
 
 
 # =====================================================================================================
@@ -895,8 +1189,13 @@ def _d3_ligne(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatControl
         return _pourcentage(ctx, cid, lr)
     a = _attendu_simple(ctx, lr)
     if a is None:
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={"motif": "prix_du_poste_absent"})
+        return ctx.non_verifiable(
+            cid,
+            RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"motif": "prix_du_poste_absent"},
+        )
     attendu, txt, ops, raisons = a
     return _comparer_tarif(ctx, cid, lr, attendu, txt, valeurs_cles=[v, *ops], raisons=raisons)
 
@@ -926,8 +1225,9 @@ class _Assiette:
     factures: list[Document] = field(default_factory=list)
 
 
-def _assiette(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, base: BasePourcentage | None
-              ) -> _Assiette | None:
+def _assiette(
+    ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, base: BasePourcentage | None
+) -> _Assiette | None:
     """Assiette facturée d'un pourcentage de débours : débours des déclarations de la ligne (MRN cité sur la ligne,
     sinon déclarations couvertes par la facture)."""
     decs = ctx.declarations()
@@ -939,21 +1239,36 @@ def _assiette(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, 
         excedent = _somme(e for e in excedents if e is not None)
         assiette = _somme(assiette_debours(u, base) for u in concernees)
         vals = [x.valeur for u in concernees for x in u.lignes if x.valeur is not None]
-        motifs = ["debours_rattaches_sans_certitude"] if any(u.attribution_incertaine for u in concernees) else []
+        motifs = (
+            ["debours_rattaches_sans_certitude"] if any(u.attribution_incertaine for u in concernees) else []
+        )
         factures = list({x.facture.id: x.facture for u in concernees for x in u.lignes}.values())
         return _Assiette(assiette, excedent, vals, motifs, list(concernees), factures)
     # Pas de déclaration rapprochée : débours de la facture elle-même (même MRN que la ligne s'il est cité),
     # sans correction. Sur une facture qui couvre plusieurs envois, ce choix des débours n'est pas établi
     # (MRN de ligne mal lu, déclaration absente) : jamais certain (D-2703).
     p_ligne = mrn_prefixe(ligne.mrn.valeur) if ligne.mrn is not None and ctx.utilisable(ligne.mrn) else None
-    lignes = [lg for lg in f.ft.lignes if lg.nature.est_debours and (
-        p_ligne is None or lg.mrn is None or not ctx.utilisable(lg.mrn) or mrn_prefixe(lg.mrn.valeur) == p_ligne)]
+    lignes = [
+        lg
+        for lg in f.ft.lignes
+        if lg.nature.est_debours
+        and (
+            p_ligne is None
+            or lg.mrn is None
+            or not ctx.utilisable(lg.mrn)
+            or mrn_prefixe(lg.mrn.valeur) == p_ligne
+        )
+    ]
     if not lignes:
         return None
-    exclure = {
-        BasePourcentage.debours_hors_tva: {NatureLigne.debours_tva},
-        BasePourcentage.droits: {n for n in NatureLigne if n is not NatureLigne.debours_droits},
-    }.get(base, set()) if base is not None else set()
+    exclure = (
+        {
+            BasePourcentage.debours_hors_tva: {NatureLigne.debours_tva},
+            BasePourcentage.droits: {n for n in NatureLigne if n is not NatureLigne.debours_droits},
+        }.get(base, set())
+        if base is not None
+        else set()
+    )
     vals = [v for lg in lignes if lg.nature not in exclure and (v := _montant(ctx, lg)) is not None]
     if any(_dec(ctx, v) is None for v in vals):
         return None
@@ -971,13 +1286,17 @@ def _debours_complets(ctx: ControlContext, f: Document) -> bool:
         vals = [_dec(ctx, _montant(ctx, lg)) for lg in lignes if lg.nature.est_debours]
         if not vals or any(v is None for v in vals):
             return False
-        return abs(_somme(v for v in vals if v is not None) - (_dec(ctx, tot) or ZERO)) <= ctx.tol.t_somme(len(vals))
+        return abs(_somme(v for v in vals if v is not None) - (_dec(ctx, tot) or ZERO)) <= ctx.tol.t_somme(
+            len(vals)
+        )
     ht = f.ft.total_ht
     if ht is not None and not ht.est_reconstruite and _dec(ctx, ht) is not None:
         vals = [_dec(ctx, _montant(ctx, lg)) for lg in lignes]
         if not vals or any(v is None for v in vals):
             return False
-        if abs(_somme(v for v in vals if v is not None) - (_dec(ctx, ht) or ZERO)) > ctx.tol.t_somme(len(vals)):
+        if abs(_somme(v for v in vals if v is not None) - (_dec(ctx, ht) or ZERO)) > ctx.tol.t_somme(
+            len(vals)
+        ):
             return False
         # D-2801 : Σ lignes = total HT prouve que toutes les lignes sont lues, pas qu'une ligne de débours n'a pas été
         # prise pour une prestation (libellé mal lu, nature non reconnue). Le total de TVA imprimé le prouve : une
@@ -995,7 +1314,9 @@ def _tva_concorde(ctx: ControlContext, f: Document) -> bool:
     n = 0
     for lg in f.ft.lignes:
         ht = _dec(ctx, _montant(ctx, lg))
-        taux = lg.taux_tva.decimal_ou_none() if lg.taux_tva is not None and ctx.utilisable(lg.taux_tva) else None
+        taux = (
+            lg.taux_tva.decimal_ou_none() if lg.taux_tva is not None and ctx.utilisable(lg.taux_tva) else None
+        )
         if ht is None or (taux is None and not lg.nature.est_debours):
             return False
         if taux:
@@ -1013,8 +1334,9 @@ _BASES_ALTERNATIVES = (
 )
 
 
-def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire,
-                            factures: Sequence[Document] = ()) -> list[list[Decimal]]:
+def _assiettes_alternatives(
+    ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire, factures: Sequence[Document] = ()
+) -> list[list[Decimal]]:
     """Autres assiettes plausibles d'un FAF, chacune comme liste de bases **par envoi** (D-2213) : débours
     refacturés des unités de la ligne selon chaque composante (avec ou sans l'excédent constaté), montants
     liquidés des déclarations, débours imprimés sur la facture elle-même. Le minimum et le maximum de la
@@ -1050,10 +1372,24 @@ def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactur
     propres = [lg for lg in f.ft.lignes if lg.nature.est_debours and lg.montant_ht is not None]
     if propres and all(_dec(ctx, lg.montant_ht) is not None for lg in propres):
         for exclues in ((), (NatureLigne.debours_tva,)):
-            out.append([_somme(lg.montant_ht.decimal_signe() for lg in propres
-                               if lg.nature not in exclues and lg.montant_ht is not None)])
-        out.append([_somme(lg.montant_ht.decimal_signe() for lg in propres
-                           if lg.nature is NatureLigne.debours_droits and lg.montant_ht is not None)])
+            out.append(
+                [
+                    _somme(
+                        lg.montant_ht.decimal_signe()
+                        for lg in propres
+                        if lg.nature not in exclues and lg.montant_ht is not None
+                    )
+                ]
+            )
+        out.append(
+            [
+                _somme(
+                    lg.montant_ht.decimal_signe()
+                    for lg in propres
+                    if lg.nature is NatureLigne.debours_droits and lg.montant_ht is not None
+                )
+            ]
+        )
     # Total des débours imprimé (D-2703) : il reprend aussi une ligne de débours perdue à la lecture. Débours
     # portés par d'autres factures (facture de débours séparée, D-2801) : leurs totaux imprimés aussi.
     totaux: list[Decimal] = []
@@ -1061,7 +1397,9 @@ def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactur
     tva_complete = True
     for x in {d.id: d for d in (f, *factures)}.values():
         total = _dec(ctx, x.ft.total_debours)
-        if total is None or (x is not f and x.ft.total_debours is not None and x.ft.total_debours.est_reconstruite):
+        if total is None or (
+            x is not f and x.ft.total_debours is not None and x.ft.total_debours.est_reconstruite
+        ):
             continue
         totaux.append(total)
         tva = [_dec(ctx, _montant(ctx, lg)) for lg in x.ft.lignes if lg.nature is NatureLigne.debours_tva]
@@ -1080,14 +1418,23 @@ def _assiettes_alternatives(ctx: ControlContext, f: Document, ligne: LigneFactur
     return out
 
 
-def _faf_explique(ctx: ControlContext, p: PosteGrille, facture: Decimal, attendu: Decimal,
-                  alternatives: Sequence[Sequence[Decimal]]) -> str | None:
+def _faf_explique(
+    ctx: ControlContext,
+    p: PosteGrille,
+    facture: Decimal,
+    attendu: Decimal,
+    alternatives: Sequence[Sequence[Decimal]],
+) -> str | None:
     """Motif quand le FAF facturé est le calcul de la grille sur une autre assiette, avec le minimum ou le maximum
     appliqué par envoi, ou avec un arrondi à l'unité ; ``None`` sinon (D-2213)."""
     tol = ctx.tol.t_tarif()
 
     def egal(x: Decimal) -> bool:
-        return abs(facture - x) <= tol or facture == arrondi_unite(x) or facture == x.to_integral_value(rounding=ROUND_CEILING)
+        return (
+            abs(facture - x) <= tol
+            or facture == arrondi_unite(x)
+            or facture == x.to_integral_value(rounding=ROUND_CEILING)
+        )
 
     if facture != attendu and egal(attendu):
         return "arrondi_a_l_unite"
@@ -1095,8 +1442,11 @@ def _faf_explique(ctx: ControlContext, p: PosteGrille, facture: Decimal, attendu
     for bases in alternatives:
         candidats = [borner(arrondi_centime(p.pourcentage * sum(bases, ZERO) / _CENT), p.minimum, p.maximum)]
         if len(bases) > 1:
-            candidats.append(_somme(borner(arrondi_centime(p.pourcentage * x / _CENT), p.minimum, p.maximum)
-                                    for x in bases))
+            candidats.append(
+                _somme(
+                    borner(arrondi_centime(p.pourcentage * x / _CENT), p.minimum, p.maximum) for x in bases
+                )
+            )
         for c in candidats:
             if c != attendu and egal(c):
                 return "autre_assiette_ou_bornes_par_envoi"
@@ -1110,12 +1460,21 @@ def _borne_faf(p: PosteGrille, base: Decimal) -> Decimal:
 
 def _lignes_faf(ctx: ControlContext, f: Document) -> int:
     """Nombre de lignes de FAF de la facture évaluées dans ce dossier."""
-    return sum(1 for lg in f.ft.lignes
-               if lg.nature is NatureLigne.frais_avance_fonds and ligne_evaluee_ici(ctx, f, lg))
+    return sum(
+        1
+        for lg in f.ft.lignes
+        if lg.nature is NatureLigne.frais_avance_fonds and ligne_evaluee_ici(ctx, f, lg)
+    )
 
 
-def _d4_ambiguites(ctx: ControlContext, lr: LigneRoutee, p: PosteGrille, base: BasePourcentage | None,
-                   a: _Assiette, attendu: Decimal) -> tuple[list[str], list[ValeurSourcee]]:
+def _d4_ambiguites(
+    ctx: ControlContext,
+    lr: LigneRoutee,
+    p: PosteGrille,
+    base: BasePourcentage | None,
+    a: _Assiette,
+    attendu: Decimal,
+) -> tuple[list[str], list[ValeurSourcee]]:
     """Situations où l'assiette (et donc l'attendu, ou le montant de l'écart) dépend d'une convention que les
     documents ne fixent pas (D-2801). Retourne les motifs et les débours TVA comprise de l'assiette (valeurs clés
     même quand l'attendu est borné : leur montant net n'est pas établi).
@@ -1132,7 +1491,9 @@ def _d4_ambiguites(ctx: ControlContext, lr: LigneRoutee, p: PosteGrille, base: B
     motifs: list[str] = []
     tol = ctx.tol.t_tarif()
     decs = {d.id for u in a.unites for d in u.declarations}
-    ventilee = lr.ligne.mrn is not None and ctx.utilisable(lr.ligne.mrn) and bool(mrn_prefixe(lr.ligne.mrn.valeur))
+    ventilee = (
+        lr.ligne.mrn is not None and ctx.utilisable(lr.ligne.mrn) and bool(mrn_prefixe(lr.ligne.mrn.valeur))
+    )
     if len(decs) > 1 and not ventilee:
         if _lignes_faf(ctx, lr.facture) > 1:
             motifs.append("faf_par_envoi_non_ventile")
@@ -1179,26 +1540,49 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
     v = _montant(ctx, lr.ligne)
     assert v is not None
     if p.pourcentage is None:
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={"motif": "pourcentage_du_poste_absent"})
+        return ctx.non_verifiable(
+            cid,
+            RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"motif": "pourcentage_du_poste_absent"},
+        )
     base = p.base_pourcentage
     if base in (None, BasePourcentage.autre, BasePourcentage.valeur_marchandise) and cid == "D7":
         # Surcharge en pourcentage : assiette = lignes de transport de la facture.
-        vals = [lg.montant_ht for lg in lr.facture.ft.lignes if lg.nature is NatureLigne.transport
-                and lg.montant_ht is not None]
+        vals = [
+            lg.montant_ht
+            for lg in lr.facture.ft.lignes
+            if lg.nature is NatureLigne.transport and lg.montant_ht is not None
+        ]
         if not vals or any(_dec(ctx, x) is None for x in vals):
-            return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                      details={"motif": "assiette_de_la_surcharge_absente"})
+            return ctx.non_verifiable(
+                cid,
+                RaisonCode.valeur_absente,
+                unite=lr.unite,
+                documents=[lr.facture.id],
+                details={"motif": "assiette_de_la_surcharge_absente"},
+            )
         assiette, excedent, motifs = _somme(x.decimal_signe() for x in vals), ZERO, []
         a_obj: _Assiette | None = None
     elif base in (BasePourcentage.valeur_marchandise, BasePourcentage.autre):
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={"motif": "assiette_non_calculable"})
+        return ctx.non_verifiable(
+            cid,
+            RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"motif": "assiette_non_calculable"},
+        )
     else:
         a_obj = _assiette(ctx, lr.facture, lr.ligne, base)
         if a_obj is None:
-            return ctx.non_verifiable(cid, RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                      details={"motif": "assiette_non_calculable"})
+            return ctx.non_verifiable(
+                cid,
+                RaisonCode.valeur_absente,
+                unite=lr.unite,
+                documents=[lr.facture.id],
+                details={"motif": "assiette_non_calculable"},
+            )
         assiette, excedent, vals, motifs = a_obj.montant, a_obj.excedent, a_obj.valeurs, a_obj.motifs
     retenue = assiette - excedent
     attendu = borner(arrondi_centime(p.pourcentage * retenue / _CENT), p.minimum, p.maximum)
@@ -1207,20 +1591,32 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
         bornes.append(f"minimum {format_montant(p.minimum)}")
     if p.maximum is not None:
         bornes.append(f"maximum {format_montant(p.maximum)}")
-    calcul_txt = (f"{format_pourcentage(p.pourcentage)} × {format_montant(arrondi_centime(retenue))}"
-                  f"{_par(*bornes)} = {format_montant(attendu)}")
-    details = {"assiette_facturee": str(arrondi_centime(assiette)), "excedent_debours": str(arrondi_centime(excedent))}
+    calcul_txt = (
+        f"{format_pourcentage(p.pourcentage)} × {format_montant(arrondi_centime(retenue))}"
+        f"{_par(*bornes)} = {format_montant(attendu)}"
+    )
+    details = {
+        "assiette_facturee": str(arrondi_centime(assiette)),
+        "excedent_debours": str(arrondi_centime(excedent)),
+    }
     deduction, deduction_txt = ZERO, ""
     if excedent > 0:
         calcul_txt += " (débours retenus : débours refacturés moins l'excédent constaté sur la déclaration)"
         if cid == "D4":
-            c6 = [r for r in ctx.anterieurs("C6", unite=lr.unite)
-                  if r.constat is not None and r.constat.montant_en_jeu is not None and r.constat.montant_en_jeu > 0]
+            c6 = [
+                r
+                for r in ctx.anterieurs("C6", unite=lr.unite)
+                if r.constat is not None
+                and r.constat.montant_en_jeu is not None
+                and r.constat.montant_en_jeu > 0
+            ]
             if c6:
                 assert c6[0].constat is not None and c6[0].constat.montant_en_jeu is not None
                 deduction = c6[0].constat.montant_en_jeu
-                deduction_txt = (f", plus {format_montant(deduction)} déjà relevés sur l'excédent de débours "
-                                 f"par le contrôle C6")
+                deduction_txt = (
+                    f", plus {format_montant(deduction)} déjà relevés sur l'excédent de débours "
+                    f"par le contrôle C6"
+                )
                 details["deduit_c6"] = str(deduction)
     raisons: list[RaisonCode] = []
     cles = [v]
@@ -1236,8 +1632,10 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
     # lignes sont lues, l'attendu n'est pas établi (sauf au maximum de la grille). La preuve est exigée de chaque
     # facture dont viennent les débours de l'assiette (facture de débours séparée de la facture de prestations),
     # pas seulement de la facture qui porte le FAF.
-    factures_assiette = [lr.facture, *(x for x in (a_obj.factures if a_obj is not None else [])
-                                       if x.id != lr.facture.id)]
+    factures_assiette = [
+        lr.facture,
+        *(x for x in (a_obj.factures if a_obj is not None else []) if x.id != lr.facture.id),
+    ]
     incompletes = [x.id for x in factures_assiette if not _debours_complets(ctx, x)]
     if cid == "D4" and (p.maximum is None or attendu < p.maximum) and incompletes:
         raisons.append(RaisonCode.valeur_absente)
@@ -1260,13 +1658,28 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
             raisons.append(RaisonCode.grille_non_attestee)
             details["grille_non_attestee"] = attestation
     if cid == "D4" and v.decimal_signe() - attendu - deduction > ctx.tol.t_tarif():
-        motif = _faf_explique(ctx, p, v.decimal_signe() - deduction, attendu,
-                              _assiettes_alternatives(ctx, lr.facture, lr.ligne, factures_assiette))
+        motif = _faf_explique(
+            ctx,
+            p,
+            v.decimal_signe() - deduction,
+            attendu,
+            _assiettes_alternatives(ctx, lr.facture, lr.ligne, factures_assiette),
+        )
         if motif is not None:
             raisons.append(RaisonCode.assiette_alternative)
             details["assiette_alternative"] = motif
-    return _comparer_tarif(ctx, cid, lr, attendu, calcul_txt, valeurs_cles=cles, deduction=deduction,
-                           deduction_txt=deduction_txt, details=details, raisons=raisons)
+    return _comparer_tarif(
+        ctx,
+        cid,
+        lr,
+        attendu,
+        calcul_txt,
+        valeurs_cles=cles,
+        deduction=deduction,
+        deduction_txt=deduction_txt,
+        details=details,
+        raisons=raisons,
+    )
 
 
 def _d4_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
@@ -1295,9 +1708,14 @@ def d4_faf_grille(ctx: ControlContext) -> list[ResultatControle]:
 
 
 #: Natures facturées par contenant, véhicule ou envoi physique : répétées légitimement pour plusieurs contenants.
-_NATURES_PAR_CONTENANT = frozenset({
-    NatureLigne.transport, NatureLigne.manutention, NatureLigne.magasinage, NatureLigne.surcharge,
-})
+_NATURES_PAR_CONTENANT = frozenset(
+    {
+        NatureLigne.transport,
+        NatureLigne.manutention,
+        NatureLigne.magasinage,
+        NatureLigne.surcharge,
+    }
+)
 
 
 def _ref_ligne(ctx: ControlContext, lg: LigneFactureTransitaire) -> str:
@@ -1305,7 +1723,9 @@ def _ref_ligne(ctx: ControlContext, lg: LigneFactureTransitaire) -> str:
     if lg.mrn is not None and lg.mrn.valeur:
         return "mrn:" + mrn_prefixe(lg.mrn.valeur)
     if lg.ref_transport is not None and lg.ref_transport.valeur:
-        return "transport:" + (norm_ref_transport(lg.ref_transport.valeur) or norm_ref(lg.ref_transport.valeur))
+        return "transport:" + (
+            norm_ref_transport(lg.ref_transport.valeur) or norm_ref(lg.ref_transport.valeur)
+        )
     return ""
 
 
@@ -1314,14 +1734,20 @@ def _envois_de_facture(ctx: ControlContext, f: Document) -> tuple[int, int]:
     lectures d'un même MRN qui ne diffèrent que par des confusions OCR comptent pour un."""
     mrns = {cle_confusion_ocr(mrn_prefixe(v.valeur)) for v in mrns_cites(ctx, f) if v.valeur}
     trs = [v for v in f.ft.refs_transport if v.valeur and ctx.utilisable(v)]
-    trs += [lg.ref_transport for lg in f.ft.lignes if lg.ref_transport is not None and lg.ref_transport.valeur
-            and ctx.utilisable(lg.ref_transport)]
-    transports = {cle_confusion_ocr(norm_ref_transport(v.valeur) or norm_ref(v.valeur)) for v in trs if v.valeur}
+    trs += [
+        lg.ref_transport
+        for lg in f.ft.lignes
+        if lg.ref_transport is not None and lg.ref_transport.valeur and ctx.utilisable(lg.ref_transport)
+    ]
+    transports = {
+        cle_confusion_ocr(norm_ref_transport(v.valeur) or norm_ref(v.valeur)) for v in trs if v.valeur
+    }
     return len(mrns), len(transports)
 
 
-def _d5_motifs(ctx: ControlContext, f: Document, g: Sequence[LigneRoutee], ref: str, copies: int,
-               toutes_refs: int = 0) -> list[str]:
+def _d5_motifs(
+    ctx: ControlContext, f: Document, g: Sequence[LigneRoutee], ref: str, copies: int, toutes_refs: int = 0
+) -> list[str]:
     """Pourquoi des lignes identiques ne prouvent pas une prestation facturée deux fois (D-2212) ; liste vide :
     la répétition est établie.
 
@@ -1346,7 +1772,7 @@ def _d5_motifs(ctx: ControlContext, f: Document, g: Sequence[LigneRoutee], ref: 
         refs = [getattr(lr.ligne, champ) for lr in g]
         if any(v is None or v.confiance < ctx.profil.c_min_certain for v in refs):
             motifs.append("reference_d_envoi_non_etablie")
-    if (plusieurs and motifs and toutes_refs and toutes_refs <= max(n_mrn, n_tr, n_decs)):
+    if plusieurs and motifs and toutes_refs and toutes_refs <= max(n_mrn, n_tr, n_decs):
         # Seulement si la référence commune n'est pas établie : deux lignes qui portent le même MRN lu sûrement
         # restent deux prestations du même envoi.
         motifs.append("une_ligne_par_envoi")
@@ -1389,8 +1815,12 @@ def _libelles_concordants(
         return list(vals)
     textes = {(v.valeur_brute or v.valeur or "").strip() for v in lus}
     zones = {(v.page, v.zone.y0 if v.zone is not None else None) for v in lus}
-    if (len(textes) != 1 or len(next(iter(textes))) < _LONGUEUR_LIBELLE_CONCORDANT or len(zones) != len(lus)
-            or any(v.confiance < C_LIBELLE_CONCORDANT for v in lus)):
+    if (
+        len(textes) != 1
+        or len(next(iter(textes))) < _LONGUEUR_LIBELLE_CONCORDANT
+        or len(zones) != len(lus)
+        or any(v.confiance < C_LIBELLE_CONCORDANT for v in lus)
+    ):
         return list(vals)
     seuil = ctx.profil.c_min_certain
     ids = {v.id for v in lus}
@@ -1420,7 +1850,9 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
             m = _dec(ctx, _montant(ctx, lg))
             if m is None or lg.libelle is None or not lg.libelle.valeur:
                 continue
-            groupes.setdefault((lg.nature.value, _cle(lg.libelle.valeur), m, _ref_ligne(ctx, lg)), []).append(lr)
+            groupes.setdefault((lg.nature.value, _cle(lg.libelle.valeur), m, _ref_ligne(ctx, lg)), []).append(
+                lr
+            )
             k = (lg.nature.value, _cle(lg.libelle.valeur), m)
             sans_ref[k] = sans_ref.get(k, 0) + 1
         doubles = []
@@ -1440,8 +1872,9 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
             m = _montant(ctx, g[0].ligne)
             assert m is not None
             montant = m.decimal_signe() * (copies - 1)
-            multiple = any(lr.poste is not None and lr.poste.mode in (ModePoste.unitaire, ModePoste.par_jour)
-                           for lr in g)
+            multiple = any(
+                lr.poste is not None and lr.poste.mode in (ModePoste.unitaire, ModePoste.par_jour) for lr in g
+            )
             lg0 = g[0].ligne
             assert lg0.libelle is not None
             toutes = sans_ref.get((lg0.nature.value, _cle(lg0.libelle.valeur), m.decimal_signe()), 0)
@@ -1450,8 +1883,14 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
             if motifs:
                 raisons.append(RaisonCode.doublon_non_etabli)
             classement = ctx.classify(
-                "D5", ecart=montant, tolerance=ctx.tol.t_tarif(), seuil_certitude=ctx.tol.s_tarif(),
-                valeurs_cles=cles_d5, documents=[fid], montant=montant, raisons_supplementaires=raisons,
+                "D5",
+                ecart=montant,
+                tolerance=ctx.tol.t_tarif(),
+                seuil_certitude=ctx.tol.s_tarif(),
+                valeurs_cles=cles_d5,
+                documents=[fid],
+                montant=montant,
+                raisons_supplementaires=raisons,
             )
             libelle = (
                 f"{libelle_facture([f])} porte {len(g)} lignes identiques {_libelle_ligne(g[0].ligne)} de "
@@ -1461,14 +1900,28 @@ def d5_ligne_double(ctx: ControlContext) -> list[ResultatControle]:
             details: dict = {"lignes": [lr.index for lr in g], "poste_quantite_multiple": multiple}
             if motifs:
                 details["doublon_non_etabli"] = motifs
-            out.append(ctx.constat(
-                "D5", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_D5, montant=montant,
-                composante=Composante.prestation, documents=[fid],
-                preuves=[preuve(_montant(ctx, lr.ligne), RolePreuve.valeur_b) for lr in g],
-                entrees={f"ligne_{lr.index}": _montant(ctx, lr.ligne) for lr in g if _montant(ctx, lr.ligne)},
-                attendu=m.decimal_signe(), constate=m.decimal_signe() * copies, ecart=arrondi_centime(montant),
-                tolerance=ctx.tol.t_tarif(), seuil_certitude=ctx.tol.s_tarif(), details=details,
-            ))
+            out.append(
+                ctx.constat(
+                    "D5",
+                    classement,
+                    unite=unite,
+                    libelle=libelle,
+                    prochaine_action=ACTION_D5,
+                    montant=montant,
+                    composante=Composante.prestation,
+                    documents=[fid],
+                    preuves=[preuve(_montant(ctx, lr.ligne), RolePreuve.valeur_b) for lr in g],
+                    entrees={
+                        f"ligne_{lr.index}": _montant(ctx, lr.ligne) for lr in g if _montant(ctx, lr.ligne)
+                    },
+                    attendu=m.decimal_signe(),
+                    constate=m.decimal_signe() * copies,
+                    ecart=arrondi_centime(montant),
+                    tolerance=ctx.tol.t_tarif(),
+                    seuil_certitude=ctx.tol.s_tarif(),
+                    details=details,
+                )
+            )
     return out
 
 
@@ -1500,8 +1953,13 @@ def _d6_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
     if p.mode is ModePoste.forfait or p.prix is None:
         a = _attendu_simple(ctx, lr)
         if a is None:
-            return ctx.non_verifiable("D6", RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                      details={"motif": "prix_du_poste_absent"})
+            return ctx.non_verifiable(
+                "D6",
+                RaisonCode.valeur_absente,
+                unite=lr.unite,
+                documents=[lr.facture.id],
+                details={"motif": "prix_du_poste_absent"},
+            )
         attendu, txt, ops, raisons = a
         return _comparer_tarif(ctx, "D6", lr, attendu, txt, valeurs_cles=[v, *ops], raisons=raisons)
     debut, fin = _date(ctx, lg.date_debut), _date(ctx, lg.date_fin)
@@ -1510,23 +1968,43 @@ def _d6_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
         # Sans période lisible : prix unitaire contre quantité facturée (comme D3).
         q = _dec(ctx, lg.quantite)
         if q is None:
-            return ctx.non_verifiable("D6", RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                      details={"motif": "periode_et_quantite_absentes"})
+            return ctx.non_verifiable(
+                "D6",
+                RaisonCode.valeur_absente,
+                unite=lr.unite,
+                documents=[lr.facture.id],
+                details={"motif": "periode_et_quantite_absentes"},
+            )
         assert lg.quantite is not None
         attendu = borner(q * p.prix, p.minimum, p.maximum)
         txt = f"{format_nombre(q)} jour(s) × {format_montant(p.prix)} = {format_montant(arrondi_centime(attendu))}"
-        return _comparer_tarif(ctx, "D6", lr, attendu, txt, valeurs_cles=[v, lg.quantite],
-                               raisons=[RaisonCode.valeur_absente] if franchise else [],
-                               details={"motif": "periode_absente"})
+        return _comparer_tarif(
+            ctx,
+            "D6",
+            lr,
+            attendu,
+            txt,
+            valeurs_cles=[v, lg.quantite],
+            raisons=[RaisonCode.valeur_absente] if franchise else [],
+            details={"motif": "periode_absente"},
+        )
     assert lg.date_debut is not None and lg.date_fin is not None
     jours_periode = (fin - debut).days + 1
     jours = max(0, jours_periode - franchise)
     attendu = borner(jours * p.prix, p.minimum, p.maximum) if jours else ZERO
-    txt = (f"({jours_periode} jour(s) du {debut.strftime('%d/%m/%Y')} au {fin.strftime('%d/%m/%Y')} − "
-           f"{franchise} jour(s) de franchise) × {format_montant(p.prix)} = {format_montant(arrondi_centime(attendu))}")
-    return _comparer_tarif(ctx, "D6", lr, attendu, txt, valeurs_cles=[v, lg.date_debut, lg.date_fin],
-                           details={"jours_periode": jours_periode, "franchise_jours": franchise,
-                                    "jours_attendus": jours})
+    txt = (
+        f"({jours_periode} jour(s) du {debut.strftime('%d/%m/%Y')} au {fin.strftime('%d/%m/%Y')} − "
+        f"{franchise} jour(s) de franchise) × {format_montant(p.prix)} = {format_montant(arrondi_centime(attendu))}"
+    )
+    return _comparer_tarif(
+        ctx,
+        "D6",
+        lr,
+        attendu,
+        txt,
+        valeurs_cles=[v, lg.date_debut, lg.date_fin],
+        details={"jours_periode": jours_periode, "franchise_jours": franchise, "jours_attendus": jours},
+    )
 
 
 @control("D6")
@@ -1571,9 +2049,15 @@ def d8_tva_debours(ctx: ControlContext) -> list[ResultatControle]:
     for f in ctx.factures_transitaires():
         g = grille_pour_facture(ctx, f)
         if g is None:
-            out.append(ctx.non_applicable("D8", RaisonCode.aucune_grille_validee, unite=cle_unite(ft=f.id),
-                                          documents=[f.id],
-                                          details={"motif": "aucune grille tarifaire validée pour ce transitaire"}))
+            out.append(
+                ctx.non_applicable(
+                    "D8",
+                    RaisonCode.aucune_grille_validee,
+                    unite=cle_unite(ft=f.id),
+                    documents=[f.id],
+                    details={"motif": "aucune grille tarifaire validée pour ce transitaire"},
+                )
+            )
             continue
         for i, lg in enumerate(f.ft.lignes):
             if not lg.nature.est_debours or not ligne_evaluee_ici(ctx, f, lg):
@@ -1585,29 +2069,60 @@ def d8_tva_debours(ctx: ControlContext) -> list[ResultatControle]:
                 source = [lg.montant_tva]
             else:
                 taux, ht = _dec(ctx, lg.taux_tva), _dec(ctx, lg.montant_ht)
-                if taux is not None and ht is not None and lg.taux_tva is not None and lg.montant_ht is not None:
+                if (
+                    taux is not None
+                    and ht is not None
+                    and lg.taux_tva is not None
+                    and lg.montant_ht is not None
+                ):
                     tva, source = arrondi_centime(ht * taux / _CENT), [lg.taux_tva, lg.montant_ht]
             if tva is None or tva <= ctx.tol.t_ligne():
-                out.append(ctx.conforme("D8", unite=unite, documents=[f.id],
-                                        entrees={f"tva_{k}": v for k, v in enumerate(source)}))
+                out.append(
+                    ctx.conforme(
+                        "D8",
+                        unite=unite,
+                        documents=[f.id],
+                        entrees={f"tva_{k}": v for k, v in enumerate(source)},
+                    )
+                )
                 continue
             # Toujours a_verifier : la raison point_fiscal est une raison de doute (§13 D8) ; eligible=True
             # évite d'y ajouter « contrôle de signal », sans permettre un ecart_certain.
-            classement = ctx.classify("D8", ecart=tva, tolerance=ctx.tol.t_ligne(), seuil_certitude=None,
-                                      valeurs_cles=source, documents=[f.id], montant=tva, eligible=True,
-                                      raisons_supplementaires=[RaisonCode.point_fiscal])
+            classement = ctx.classify(
+                "D8",
+                ecart=tva,
+                tolerance=ctx.tol.t_ligne(),
+                seuil_certitude=None,
+                valeurs_cles=source,
+                documents=[f.id],
+                montant=tva,
+                eligible=True,
+                raisons_supplementaires=[RaisonCode.point_fiscal],
+            )
             libelle = (
                 f"La ligne de débours {_libelle_ligne(lg)} de "
                 f"{_la_facture(f)}{_par(page_txt(source))} porte "
                 f"{format_montant(tva)} de TVA (montant de TVA facturé sur un débours, indiqué pour information)."
             )
-            out.append(ctx.constat(
-                "D8", classement, unite=unite, libelle=libelle, prochaine_action=ACTION_D8, montant=tva,
-                composante=Composante.tva, documents=[f.id],
-                preuves=[preuve(v, RolePreuve.valeur_b) for v in source],
-                entrees={f"tva_{k}": v for k, v in enumerate(source)}, attendu=ZERO, constate=tva, ecart=tva,
-                tolerance=ctx.tol.t_ligne(), details={"informatif": True},
-            ))
+            out.append(
+                ctx.constat(
+                    "D8",
+                    classement,
+                    unite=unite,
+                    libelle=libelle,
+                    prochaine_action=ACTION_D8,
+                    montant=tva,
+                    composante=Composante.tva,
+                    documents=[f.id],
+                    preuves=[preuve(v, RolePreuve.valeur_b) for v in source],
+                    entrees={f"tva_{k}": v for k, v in enumerate(source)},
+                    attendu=ZERO,
+                    constate=tva,
+                    ecart=tva,
+                    tolerance=ctx.tol.t_ligne(),
+                    details={"informatif": True},
+                )
+            )
     return out
 
 
@@ -1616,9 +2131,9 @@ def d8_tva_debours(ctx: ControlContext) -> list[ResultatControle]:
 # =====================================================================================================
 
 
-def _nombre_articles(ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire) -> tuple[
-    int, list[ValeurSourcee], bool
-] | None:
+def _nombre_articles(
+    ctx: ControlContext, f: Document, ligne: LigneFactureTransitaire
+) -> tuple[int, list[ValeurSourcee], bool] | None:
     """(nombre d'articles des déclarations de la ligne, valeurs, imprimé ?) : déclaration dont la ligne cite
     le MRN, à défaut déclarations couvertes par la facture (le forfait et ses articles inclus s'appliquent
     par déclaration)."""
@@ -1655,18 +2170,29 @@ def _d9_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
     assert v is not None and lr.poste is not None
     p = lr.poste
     if p.prix is None or p.prix == 0:
-        return ctx.non_verifiable("D9", RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={"motif": "prix_du_poste_absent"})
+        return ctx.non_verifiable(
+            "D9",
+            RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"motif": "prix_du_poste_absent"},
+        )
     inclus = p.inclus
     if inclus is None:
-        ded = [x for x in lr.grille.postes if x.nature is NatureLigne.frais_dedouanement and x.inclus is not None]
+        ded = [
+            x for x in lr.grille.postes if x.nature is NatureLigne.frais_dedouanement and x.inclus is not None
+        ]
         inclus = ded[0].inclus if len(ded) == 1 else 0
     assert inclus is not None
     na = _nombre_articles(ctx, lr.facture, lr.ligne)
     if na is None:
-        return ctx.non_verifiable("D9", RaisonCode.document_manquant if not ctx.declarations()
-                                  else RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                  details={"motif": "nombre_articles_absent"})
+        return ctx.non_verifiable(
+            "D9",
+            RaisonCode.document_manquant if not ctx.declarations() else RaisonCode.valeur_absente,
+            unite=lr.unite,
+            documents=[lr.facture.id],
+            details={"motif": "nombre_articles_absent"},
+        )
     n, vals_n, imprime = na
     q = _dec(ctx, lr.ligne.quantite)
     raisons: list[RaisonCode] = [] if imprime else [RaisonCode.total_reconstruit]
@@ -1674,8 +2200,13 @@ def _d9_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
     if q is None:
         q = m / p.prix
         if q != q.to_integral_value():
-            return ctx.non_verifiable("D9", RaisonCode.valeur_absente, unite=lr.unite, documents=[lr.facture.id],
-                                      details={"motif": "quantite_absente"})
+            return ctx.non_verifiable(
+                "D9",
+                RaisonCode.valeur_absente,
+                unite=lr.unite,
+                documents=[lr.facture.id],
+                details={"motif": "quantite_absente"},
+            )
     else:
         assert lr.ligne.quantite is not None
         cles.append(lr.ligne.quantite)
@@ -1683,14 +2214,29 @@ def _d9_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
     ecart = (q - attendu_qte) * p.prix
     tol, seuil = ctx.tol.t_tarif(), ctx.tol.s_tarif()
     docs = [lr.facture.id, *dict.fromkeys(x.document_id for x in vals_n if x.document_id)]
-    commun = dict(unite=lr.unite, entrees={"montant": v, **{f"articles_{k}": x for k, x in enumerate(vals_n)}},
-                  attendu=attendu_qte, constate=q, ecart=arrondi_centime(ecart), tolerance=tol, seuil_certitude=seuil,
-                  documents=docs, details={"grille": lr.grille.id, "poste": p.code_poste, "nombre_articles": n,
-                                           "inclus": inclus})
+    commun = dict(
+        unite=lr.unite,
+        entrees={"montant": v, **{f"articles_{k}": x for k, x in enumerate(vals_n)}},
+        attendu=attendu_qte,
+        constate=q,
+        ecart=arrondi_centime(ecart),
+        tolerance=tol,
+        seuil_certitude=seuil,
+        documents=docs,
+        details={"grille": lr.grille.id, "poste": p.code_poste, "nombre_articles": n, "inclus": inclus},
+    )
     if ecart <= tol:
         return ctx.conforme("D9", **commun)
-    classement = ctx.classify("D9", ecart=ecart, tolerance=tol, seuil_certitude=seuil, valeurs_cles=cles,
-                              documents=docs, montant=ecart, raisons_supplementaires=raisons)
+    classement = ctx.classify(
+        "D9",
+        ecart=ecart,
+        tolerance=tol,
+        seuil_certitude=seuil,
+        valeurs_cles=cles,
+        documents=docs,
+        montant=ecart,
+        raisons_supplementaires=raisons,
+    )
     libelle = (
         f"La ligne {_libelle_ligne(lr.ligne)} de {_la_facture(lr.facture)}"
         f"{_par(page_txt([v]))} facture {format_nombre(q)} article(s) supplémentaire(s) ; la déclaration "
@@ -1700,8 +2246,14 @@ def _d9_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
         f"{format_montant(tol)})."
     )
     return ctx.constat(
-        "D9", classement, libelle=libelle, prochaine_action=ACTION_D, montant=ecart, composante=Composante.prestation,
-        preuves=[preuve(v, RolePreuve.valeur_b), *(preuve(x, RolePreuve.valeur_a) for x in vals_n)], **commun,
+        "D9",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_D,
+        montant=ecart,
+        composante=Composante.prestation,
+        preuves=[preuve(v, RolePreuve.valeur_b), *(preuve(x, RolePreuve.valeur_a) for x in vals_n)],
+        **commun,
     )
 
 

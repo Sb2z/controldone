@@ -27,8 +27,14 @@ class _BaseEnPanne:
 
 
 def _partage(capacite=2, par_seconde=1.0, horloge=None):
-    return LimiteurDebitPartage("connexion_ip", capacite, par_seconde, db=_BaseEnPanne(), sel=b"sel-fictif",
-                                horloge=horloge or _Horloge())
+    return LimiteurDebitPartage(
+        "connexion_ip",
+        capacite,
+        par_seconde,
+        db=_BaseEnPanne(),
+        sel=b"sel-fictif",
+        horloge=horloge or _Horloge(),
+    )
 
 
 class _Releve(logging.Handler):

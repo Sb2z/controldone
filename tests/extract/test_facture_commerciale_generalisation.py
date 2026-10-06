@@ -43,8 +43,14 @@ def _c(x):
     return None if x is None else x.confiance
 
 
-def _tableau(p: fx.PagePdf, y: float, entete: list[tuple[float, str, bool]], lignes: list[list[str]],
-             xs: list[tuple[float, bool]], pas: float = 16) -> float:
+def _tableau(
+    p: fx.PagePdf,
+    y: float,
+    entete: list[tuple[float, str, bool]],
+    lignes: list[list[str]],
+    xs: list[tuple[float, bool]],
+    pas: float = 16,
+) -> float:
     p.ligne(y, entete, taille=8)
     y += pas
     for ln in lignes:
@@ -70,16 +76,39 @@ def pdf_de() -> bytes:
     p.t(42, 154, "4 impasse du Songe, 31999 Nullepart")
     p.t(300, 154, "Zone fictive 2, 31999 Nullepart")
     p.t(42, 166, f"USt-IdNr.: {TVA_CL}")
-    entete = [(42, "Pos", False), (66, "Art.-Nr.", False), (120, "Bezeichnung", False), (250, "Zolltarifnr.", False),
-              (320, "Herkunft", False), (400, "Menge", True), (406, "Einh.", False), (490, "Einzelpreis CHF", True),
-              (560, "Gesamtpreis CHF", True)]
-    xs = [(42, False), (66, False), (120, False), (250, False), (320, False), (400, True), (406, False), (490, True),
-          (560, True)]
-    y = _tableau(p, 200, entete, [
-        ["1", "AW-SCH12", "Schraubstock 125 mm", "8205 70", "CH", "40", "Stück", "86.50", "3'460.00"],
-        ["2", "AW-ZNG8", "Zange 180 mm 18 V", "8203 20", "DE", "1'200", "Stk.", "4.15", "4'980.00"],
-        ["3", "AW-DRT", "Stahldraht verzinkt", "7217 20", "CH", "750", "kg", "2.80", "2'100.00"],
-    ], xs)
+    entete = [
+        (42, "Pos", False),
+        (66, "Art.-Nr.", False),
+        (120, "Bezeichnung", False),
+        (250, "Zolltarifnr.", False),
+        (320, "Herkunft", False),
+        (400, "Menge", True),
+        (406, "Einh.", False),
+        (490, "Einzelpreis CHF", True),
+        (560, "Gesamtpreis CHF", True),
+    ]
+    xs = [
+        (42, False),
+        (66, False),
+        (120, False),
+        (250, False),
+        (320, False),
+        (400, True),
+        (406, False),
+        (490, True),
+        (560, True),
+    ]
+    y = _tableau(
+        p,
+        200,
+        entete,
+        [
+            ["1", "AW-SCH12", "Schraubstock 125 mm", "8205 70", "CH", "40", "Stück", "86.50", "3'460.00"],
+            ["2", "AW-ZNG8", "Zange 180 mm 18 V", "8203 20", "DE", "1'200", "Stk.", "4.15", "4'980.00"],
+            ["3", "AW-DRT", "Stahldraht verzinkt", "7217 20", "CH", "750", "kg", "2.80", "2'100.00"],
+        ],
+        xs,
+    )
     p.t(420, y + 10, "Warenwert")
     p.t(560, y + 10, "10'540.00", droite=True)
     p.t(420, y + 24, "Fracht")
@@ -124,10 +153,17 @@ def test_de_masses_sur_une_ligne_et_colis(de):
 def test_de_lignes(de):
     assert len(de.lignes) == 3
     l0, l1, l2 = de.lignes
-    assert (_v(l0.reference_article), _v(l0.code_marchandise_imprime), _v(l0.pays_origine)) == ("AW-SCH12", "820570",
-                                                                                                "CH")
-    assert (_v(l0.quantite), l0.quantite.unite, _v(l0.prix_unitaire), _v(l0.montant_ligne)) == ("40", "C62", "86.50",
-                                                                                              "3460.00")
+    assert (_v(l0.reference_article), _v(l0.code_marchandise_imprime), _v(l0.pays_origine)) == (
+        "AW-SCH12",
+        "820570",
+        "CH",
+    )
+    assert (_v(l0.quantite), l0.quantite.unite, _v(l0.prix_unitaire), _v(l0.montant_ligne)) == (
+        "40",
+        "C62",
+        "86.50",
+        "3460.00",
+    )
     # « 18 V » de la désignation déborde dans la colonne du code : hors du code
     assert _v(l1.code_marchandise_imprime) == "820320"
     assert (_v(l1.quantite), l1.quantite.unite) == ("1200", "C62")
@@ -151,15 +187,38 @@ def pdf_it() -> bytes:
     p.t(42, 122, "Outils Chimère SARL (FICTIF)")
     p.t(300, 122, "Outils Chimère SARL (FICTIF)")
     p.t(42, 134, f"Partita IVA: {TVA_CL}")
-    entete = [(42, "#", False), (60, "Codice", False), (120, "Descrizione", False), (260, "Voce doganale", False),
-              (340, "Origine", False), (400, "Q.tà", True), (406, "U.M.", False), (510, "Prezzo unit. EUR", True),
-              (565, "Importo EUR", True)]
-    xs = [(42, False), (60, False), (120, False), (260, False), (340, False), (400, True), (406, False), (510, True),
-          (565, True)]
-    y = _tableau(p, 170, entete, [
-        ["1", "OI-VLV", "Valvola in ottone", "8481 80 85", "IT", "200", "pezzi", "12,40", "2.480,00"],
-        ["2", "OI-GRN", "Guarnizioni assortite", "4016 93 00", "IT", "50", "paia", "3,10", "155,00"],
-    ], xs)
+    entete = [
+        (42, "#", False),
+        (60, "Codice", False),
+        (120, "Descrizione", False),
+        (260, "Voce doganale", False),
+        (340, "Origine", False),
+        (400, "Q.tà", True),
+        (406, "U.M.", False),
+        (510, "Prezzo unit. EUR", True),
+        (565, "Importo EUR", True),
+    ]
+    xs = [
+        (42, False),
+        (60, False),
+        (120, False),
+        (260, False),
+        (340, False),
+        (400, True),
+        (406, False),
+        (510, True),
+        (565, True),
+    ]
+    y = _tableau(
+        p,
+        170,
+        entete,
+        [
+            ["1", "OI-VLV", "Valvola in ottone", "8481 80 85", "IT", "200", "pezzi", "12,40", "2.480,00"],
+            ["2", "OI-GRN", "Guarnizioni assortite", "4016 93 00", "IT", "50", "paia", "3,10", "155,00"],
+        ],
+        xs,
+    )
     p.t(300, y + 10, "Totale merce")
     p.t(560, y + 10, "2.635,00", droite=True)
     p.t(300, y + 24, "Imballo")
@@ -211,12 +270,31 @@ def test_nl_libelles_et_colonnes():
     p.t(42, 122, "Outils Chimère SARL (FICTIF)")
     p.t(300, 122, "Outils Chimère SARL (FICTIF)")
     p.t(42, 134, f"Btw-nummer: {TVA_CL}")
-    entete = [(42, "#", False), (60, "Artikelnr.", False), (130, "Omschrijving", False), (260, "GN-code", False),
-              (340, "Oorsprong", False), (420, "Aantal", True), (426, "Eenh.", False), (500, "Prijs USD", True),
-              (560, "Bedrag USD", True)]
-    xs = [(42, False), (60, False), (130, False), (260, False), (340, False), (420, True), (426, False), (500, True),
-          (560, True)]
-    y = _tableau(p, 170, entete, [["1", "FH-LMP", "Tafellamp", "9405.21", "NL", "30", "st.", "18,20", "546,00"]], xs)
+    entete = [
+        (42, "#", False),
+        (60, "Artikelnr.", False),
+        (130, "Omschrijving", False),
+        (260, "GN-code", False),
+        (340, "Oorsprong", False),
+        (420, "Aantal", True),
+        (426, "Eenh.", False),
+        (500, "Prijs USD", True),
+        (560, "Bedrag USD", True),
+    ]
+    xs = [
+        (42, False),
+        (60, False),
+        (130, False),
+        (260, False),
+        (340, False),
+        (420, True),
+        (426, False),
+        (500, True),
+        (560, True),
+    ]
+    y = _tableau(
+        p, 170, entete, [["1", "FH-LMP", "Tafellamp", "9405.21", "NL", "30", "st.", "18,20", "546,00"]], xs
+    )
     p.t(380, y + 10, "Subtotaal")
     p.t(560, y + 10, "546,00", droite=True)
     p.t(380, y + 24, "Vracht")
@@ -234,14 +312,23 @@ def test_nl_libelles_et_colonnes():
     assert _v(c.vendeur.nom) == "Fictieve Handel B.V. (FICTIEF)"
     assert Decimal(_v(c.masse_brute_totale)) == Decimal("51.300")
     (ln,) = c.lignes
-    assert (_v(ln.code_marchandise_imprime), _v(ln.pays_origine), _v(ln.montant_ligne)) == ("940521", "NL", "546.00")
+    assert (_v(ln.code_marchandise_imprime), _v(ln.pays_origine), _v(ln.montant_ligne)) == (
+        "940521",
+        "NL",
+        "546.00",
+    )
 
 
 # --- devises : roupie (groupement indien), yen ambigu, won sans décimales ---------------------------------------
 
 
-def _facture_simple(*, colonnes_montant: tuple[str, str], lignes: list[list[str]], total: tuple[str, str],
-                    origine_doc: str | None = None) -> bytes:
+def _facture_simple(
+    *,
+    colonnes_montant: tuple[str, str],
+    lignes: list[list[str]],
+    total: tuple[str, str],
+    origine_doc: str | None = None,
+) -> bytes:
     p = fx.PagePdf()
     p.t(42, 40, "Notional Exports Pvt Ltd (FICTITIOUS)", taille=12, gras=True)
     p.t(400, 40, "INVOICE", taille=14, gras=True)
@@ -252,12 +339,22 @@ def _facture_simple(*, colonnes_montant: tuple[str, str], lignes: list[list[str]
     p.t(42, 110, "Customer", gras=True)
     p.t(42, 122, "Outils Chimère SARL (FICTIF)")
     p.t(42, 134, f"VAT {TVA_CL}")
-    entete = [(42, "SKU", False), (110, "Item", False), (260, "Tariff no.", False), (420, "Qty", True),
-              (426, "UoM", False), (500, colonnes_montant[0], True), (560, colonnes_montant[1], True)]
+    entete = [
+        (42, "SKU", False),
+        (110, "Item", False),
+        (260, "Tariff no.", False),
+        (420, "Qty", True),
+        (426, "UoM", False),
+        (500, colonnes_montant[0], True),
+        (560, colonnes_montant[1], True),
+    ]
     if origine_doc is None:
         entete.insert(3, (340, "COO", False))
-    xs = [(42, False), (110, False), (260, False)] + ([] if origine_doc else [(340, False)]) + [
-        (420, True), (426, False), (500, True), (560, True)]
+    xs = (
+        [(42, False), (110, False), (260, False)]
+        + ([] if origine_doc else [(340, False)])
+        + [(420, True), (426, False), (500, True), (560, True)]
+    )
     y = _tableau(p, 170, entete, lignes, xs)
     p.t(420, y + 14, total[0], gras=True)
     p.t(560, y + 14, total[1], droite=True, gras=True)
@@ -267,10 +364,16 @@ def _facture_simple(*, colonnes_montant: tuple[str, str], lignes: list[list[str]
 
 
 def test_roupie_groupement_indien_et_devise_du_libelle_de_total():
-    c = _fc(_facture_simple(colonnes_montant=("Price", "Line total"), lignes=[
-        ["NE-TX1", "Cotton shirts", "62052000", "IN", "1,500", "PCS", "82.30", "1,23,450.00"],
-        ["NE-TX2", "Silk scarves", "62141000", "IN", "300", "PCS", "410.00", "1,23,000.00"],
-    ], total=("Total INR", "2,46,450.00")))
+    c = _fc(
+        _facture_simple(
+            colonnes_montant=("Price", "Line total"),
+            lignes=[
+                ["NE-TX1", "Cotton shirts", "62052000", "IN", "1,500", "PCS", "82.30", "1,23,450.00"],
+                ["NE-TX2", "Silk scarves", "62141000", "IN", "300", "PCS", "410.00", "1,23,000.00"],
+            ],
+            total=("Total INR", "2,46,450.00"),
+        )
+    )
     assert _v(c.devise) == "INR" and _c(c.devise) >= 0.9
     assert Decimal(_v(c.total_facture)) == Decimal("246450.00") and _c(c.total_facture) >= 0.95
     assert [_v(x.montant_ligne) for x in c.lignes] == ["123450.00", "123000.00"]
@@ -280,27 +383,46 @@ def test_roupie_groupement_indien_et_devise_du_libelle_de_total():
 
 def test_yen_seul_devise_inconnue_mais_resolue_par_un_code_iso():
     lignes = [["NE-A", "Lens cloth", "63079098", "JP", "10", "PCS", "120", "1,200"]]
-    seul = _fc(_facture_simple(colonnes_montant=("Price", "Line total"), lignes=lignes, total=("Total", "¥1,200")))
+    seul = _fc(
+        _facture_simple(colonnes_montant=("Price", "Line total"), lignes=lignes, total=("Total", "¥1,200"))
+    )
     assert _v(seul.devise) in (None, "inconnue") or _c(seul.devise) < 0.5
-    jpy = _fc(_facture_simple(colonnes_montant=("Price JPY", "Amount JPY"), lignes=lignes, total=("Total", "¥1,200")))
+    jpy = _fc(
+        _facture_simple(
+            colonnes_montant=("Price JPY", "Amount JPY"), lignes=lignes, total=("Total", "¥1,200")
+        )
+    )
     assert _v(jpy.devise) == "JPY" and _c(jpy.devise) >= 0.9
     assert Decimal(_v(jpy.total_facture)) == Decimal("1200")
 
 
 def test_won_sans_decimales():
-    c = _fc(_facture_simple(colonnes_montant=("Price KRW", "Amount KRW"), lignes=[
-        ["NE-K", "Phone case", "42029291", "KR", "500", "PCS", "2,500", "1,250,000"],
-    ], total=("TOTAL KRW", "1,250,000")))
+    c = _fc(
+        _facture_simple(
+            colonnes_montant=("Price KRW", "Amount KRW"),
+            lignes=[
+                ["NE-K", "Phone case", "42029291", "KR", "500", "PCS", "2,500", "1,250,000"],
+            ],
+            total=("TOTAL KRW", "1,250,000"),
+        )
+    )
     assert _v(c.devise) == "KRW"
     assert Decimal(_v(c.total_facture)) == Decimal("1250000")
     assert _v(c.lignes[0].prix_unitaire) == "2500"
 
 
 def test_origine_declaree_pour_toute_la_facture():
-    c = _fc(_facture_simple(colonnes_montant=("Price USD", "Amount USD"), lignes=[
-        ["NE-A", "Cable 5 m", "85444290", "200", "PCS", "1.10", "220.00"],
-        ["NE-B", "Plug", "85366990", "100", "PCS", "0.50", "50.00"],
-    ], total=("TOTAL USD", "270.00"), origine_doc="China (CN)"))
+    c = _fc(
+        _facture_simple(
+            colonnes_montant=("Price USD", "Amount USD"),
+            lignes=[
+                ["NE-A", "Cable 5 m", "85444290", "200", "PCS", "1.10", "220.00"],
+                ["NE-B", "Plug", "85366990", "100", "PCS", "0.50", "50.00"],
+            ],
+            total=("TOTAL USD", "270.00"),
+            origine_doc="China (CN)",
+        )
+    )
     assert [_v(x.pays_origine) for x in c.lignes] == ["CN", "CN"]
     assert all(_c(x.pays_origine) <= 0.85 for x in c.lignes)
 
@@ -315,11 +437,25 @@ def test_liste_colisage_total_du_tableau_et_libelles_bilingues():
     p.t(42, 64, "Ref. invoice / facture: AW-2026-0417 — 2026-09-14")
     p.t(42, 76, "Consignee: Outils Chimère SARL (FICTIF)")
     p.t(42, 88, "Transport: CMR-ZZ-104455")
-    entete = [(42, "#", False), (60, "Artikel", False), (140, "Bezeichnung", False), (400, "Menge", True),
-              (470, "Netto kg", True), (550, "Brutto kg", True)]
+    entete = [
+        (42, "#", False),
+        (60, "Artikel", False),
+        (140, "Bezeichnung", False),
+        (400, "Menge", True),
+        (470, "Netto kg", True),
+        (550, "Brutto kg", True),
+    ]
     xs = [(42, False), (60, False), (140, False), (400, True), (470, True), (550, True)]
-    y = _tableau(p, 120, entete, [["1", "AW-SCH12", "Schraubstock", "40", "1'120,000", "1'190,500"],
-                                  ["2", "AW-DRT", "Stahldraht", "750", "792,400", "856,250"]], xs)
+    y = _tableau(
+        p,
+        120,
+        entete,
+        [
+            ["1", "AW-SCH12", "Schraubstock", "40", "1'120,000", "1'190,500"],
+            ["2", "AW-DRT", "Stahldraht", "750", "792,400", "856,250"],
+        ],
+        xs,
+    )
     p.ligne(y, [(140, "Summe", False), (470, "1'912,400", True), (550, "2'046,750", True)])
     p.t(42, y + 24, "Packages / colis: 14")
     r = fx.extraire(fx.pdf([p]), TypeDocument.document_support, sous_type="liste_colisage")
@@ -342,10 +478,19 @@ def test_avoir_fournisseur_allemand():
     p.t(400, 94, "Ursprungsrechnung: AW-2026-0417")
     p.t(42, 110, "Rechnungsempfänger", gras=True)
     p.t(42, 122, "Outils Chimère SARL (FICTIF)")
-    entete = [(42, "Pos", False), (66, "Art.-Nr.", False), (120, "Bezeichnung", False), (400, "Menge", True),
-              (406, "Einh.", False), (490, "Einzelpreis CHF", True), (560, "Gesamtpreis CHF", True)]
+    entete = [
+        (42, "Pos", False),
+        (66, "Art.-Nr.", False),
+        (120, "Bezeichnung", False),
+        (400, "Menge", True),
+        (406, "Einh.", False),
+        (490, "Einzelpreis CHF", True),
+        (560, "Gesamtpreis CHF", True),
+    ]
     xs = [(42, False), (66, False), (120, False), (400, True), (406, False), (490, True), (560, True)]
-    y = _tableau(p, 150, entete, [["1", "AW-SCH12", "Schraubstock 125 mm", "2", "Stück", "86.50", "173.00"]], xs)
+    y = _tableau(
+        p, 150, entete, [["1", "AW-SCH12", "Schraubstock 125 mm", "2", "Stück", "86.50", "173.00"]], xs
+    )
     p.t(380, y + 14, "Gutschriftsbetrag CHF", gras=True)
     p.t(560, y + 14, "173.00", droite=True)
     p.t(42, y + 40, "Grund: Transportschaden")
@@ -374,8 +519,12 @@ def test_scinder_mots_colles():
 
 
 def test_nettoyer_colonnes_code_devise_et_doublons():
-    cols = [Colonne("numero_ligne", 0.05, 0.07, "NO."), Colonne("numero_ligne", 0.10, 0.18, "ITEM NO."),
-            Colonne("montant", 0.80, 0.86, "Amount"), Colonne("inconnue", 0.87, 0.90, "CNY")]
+    cols = [
+        Colonne("numero_ligne", 0.05, 0.07, "NO."),
+        Colonne("numero_ligne", 0.10, 0.18, "ITEM NO."),
+        Colonne("montant", 0.80, 0.86, "Amount"),
+        Colonne("inconnue", 0.87, 0.90, "CNY"),
+    ]
     out, codes = nettoyer_colonnes(cols)
     assert [c.type for c in out] == ["numero_ligne", "reference_article", "montant"]
     assert codes == ["CNY"] and out[-1].x1 == pytest.approx(0.90) and out[-1].droite == 1.0
@@ -394,6 +543,15 @@ def test_normalisation_groupement_indien_et_unites():
     assert parse_amount("12,34,56,789").valeur == Decimal("123456789")
     assert parse_amount("1,23,4567") is None
     assert parse_amount("1,234,567.00").valeur == Decimal("1234567.00")
-    assert {u: normalize_unit(u).code for u in ("Stück", "pezzi", "paia", "stuks", "Paar", "metre", "litri")} == {
-        "Stück": "C62", "pezzi": "C62", "paia": "PR", "stuks": "C62", "Paar": "PR", "metre": "MTR", "litri": "LTR"}
+    assert {
+        u: normalize_unit(u).code for u in ("Stück", "pezzi", "paia", "stuks", "Paar", "metre", "litri")
+    } == {
+        "Stück": "C62",
+        "pezzi": "C62",
+        "paia": "PR",
+        "stuks": "C62",
+        "Paar": "PR",
+        "metre": "MTR",
+        "litri": "LTR",
+    }
     assert normalize_unit("m3").code == "MTQ" and normalize_unit("m2").code == "MTK"

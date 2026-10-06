@@ -105,13 +105,22 @@ class Worker:
         return self._executer(job)
 
     def _executer(self, job: JobInfo) -> str:
-        champs = {"job_id": job.id, "kind": job.kind, "tenant_id": job.tenant_id, "attempt": job.attempts,
-                  "worker_id": self.worker_id}
+        champs = {
+            "job_id": job.id,
+            "kind": job.kind,
+            "tenant_id": job.tenant_id,
+            "attempt": job.attempts,
+            "worker_id": self.worker_id,
+        }
         evenement(log, "job_debut", **champs)
         fn = self.handlers.get(job.kind)
         if fn is None:
-            statut = self.store.echouer(job.id, self.worker_id, "handler_inconnu", definitif=True,
-                                        now=self.horloge()) or "perdu"
+            statut = (
+                self.store.echouer(
+                    job.id, self.worker_id, "handler_inconnu", definitif=True, now=self.horloge()
+                )
+                or "perdu"
+            )
             METRIQUES.incrementer("jobs_mort", job.kind)
             evenement(log, "job_mort", logging.ERROR, erreur="handler_inconnu", **champs)
             return statut
@@ -129,13 +138,18 @@ class Worker:
                 return False
             with verrou:
                 try:
-                    ok = self.store.prolonger(job.id, self.worker_id, lease_s=self.lease_s, now=self.horloge(),
-                                              tentative=tentative)
+                    ok = self.store.prolonger(
+                        job.id, self.worker_id, lease_s=self.lease_s, now=self.horloge(), tentative=tentative
+                    )
                 except Exception as exc:
                     evenement(log, "battement_echec", logging.WARNING, erreur=type(exc).__name__, **champs)
-                    if time.monotonic() - dernier_ok[0] >= max(self.heartbeat_s, self.lease_s - self.heartbeat_s):
+                    if time.monotonic() - dernier_ok[0] >= max(
+                        self.heartbeat_s, self.lease_s - self.heartbeat_s
+                    ):
                         perdu.set()  # le bail a pu expirer : on cesse d'agir pour ce job
-                        evenement(log, "bail_perdu", logging.WARNING, motif="renouvellement_impossible", **champs)
+                        evenement(
+                            log, "bail_perdu", logging.WARNING, motif="renouvellement_impossible", **champs
+                        )
                         return False
                     return True
                 if ok:
@@ -153,44 +167,88 @@ class Worker:
         fil = threading.Thread(target=coeur, name=f"heartbeat-{job.id}", daemon=True)
         fil.start()
         debut = time.perf_counter()
-        ctx = JobContext(job=job, db=self.db, heartbeat=battre, services=self.services, perdu=perdu,
-                         worker_id=self.worker_id)
+        ctx = JobContext(
+            job=job,
+            db=self.db,
+            heartbeat=battre,
+            services=self.services,
+            perdu=perdu,
+            worker_id=self.worker_id,
+        )
         try:
             resultat = fn(ctx)
         except BailPerdu:
             statut, erreur = "perdu", "bail_perdu"
         except Reporter as exc:  # rien d'anormal : le job repasse en file sans consommer d'essai (D-1321)
             erreur = f"reporte: {str(exc)[:120]}"
-            statut = self.store.reporter(job.id, self.worker_id, str(exc), delai_s=exc.delai_s, now=self.horloge(),
-                                         tentative=tentative) or "perdu"
+            statut = (
+                self.store.reporter(
+                    job.id,
+                    self.worker_id,
+                    str(exc),
+                    delai_s=exc.delai_s,
+                    now=self.horloge(),
+                    tentative=tentative,
+                )
+                or "perdu"
+            )
             statut = "reporte" if statut == "pending" else statut
         except ErreurDefinitive as exc:
-            statut = self.store.echouer(job.id, self.worker_id, _code_erreur(exc), definitif=True,
-                                        now=self.horloge(), tentative=tentative) or "perdu"
+            statut = (
+                self.store.echouer(
+                    job.id,
+                    self.worker_id,
+                    _code_erreur(exc),
+                    definitif=True,
+                    now=self.horloge(),
+                    tentative=tentative,
+                )
+                or "perdu"
+            )
             erreur = _code_erreur(exc)
         except Exception as exc:
-            statut = self.store.echouer(job.id, self.worker_id, _code_erreur(exc), now=self.horloge(),
-                                        tentative=tentative) or "perdu"
+            statut = (
+                self.store.echouer(
+                    job.id, self.worker_id, _code_erreur(exc), now=self.horloge(), tentative=tentative
+                )
+                or "perdu"
+            )
             erreur = _code_erreur(exc)
         else:
             erreur = None
             if perdu.is_set():
                 statut = "perdu"
             else:
-                ok = self.store.terminer(job.id, self.worker_id, resultat if isinstance(resultat, dict) else None,
-                                         now=self.horloge(), tentative=tentative)
+                ok = self.store.terminer(
+                    job.id,
+                    self.worker_id,
+                    resultat if isinstance(resultat, dict) else None,
+                    now=self.horloge(),
+                    tentative=tentative,
+                )
                 statut = "done" if ok else "perdu"
         finally:
             fini.set()
             fil.join(timeout=5)
         duree = time.perf_counter() - debut
         METRIQUES.duree(job.kind, duree)
-        nom = {"done": "jobs_ok", "pending": "jobs_echec", "dead": "jobs_mort",
-               "reporte": "jobs_reportes"}.get(statut, "jobs_bail_perdu")
+        nom = {
+            "done": "jobs_ok",
+            "pending": "jobs_echec",
+            "dead": "jobs_mort",
+            "reporte": "jobs_reportes",
+        }.get(statut, "jobs_bail_perdu")
         METRIQUES.incrementer(nom, job.kind)
-        niveau = (logging.INFO if statut in ("done", "reporte") else logging.ERROR if statut == "dead"
-                  else logging.WARNING)
-        evenement(log, "job_fin", niveau, statut=statut, duree_ms=round(duree * 1000), erreur=erreur, **champs)
+        niveau = (
+            logging.INFO
+            if statut in ("done", "reporte")
+            else logging.ERROR
+            if statut == "dead"
+            else logging.WARNING
+        )
+        evenement(
+            log, "job_fin", niveau, statut=statut, duree_ms=round(duree * 1000), erreur=erreur, **champs
+        )
         return statut
 
     def boucle(self, *, max_jobs: int | None = None) -> int:
@@ -241,12 +299,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         db.attendre_schema_a_jour(journal=_journal_schema)
     except SchemaPerime as exc:
         evenement(log, "schema_perime", logging.CRITICAL)
-        print(f"ControlDOne worker : {exc}", file=sys.stderr, flush=True)  # noms d'étapes ou de colonnes seulement
+        print(
+            f"ControlDOne worker : {exc}", file=sys.stderr, flush=True
+        )  # noms d'étapes ou de colonnes seulement
         db.fermer()
         return 3
-    worker = Worker(db, worker_id=args.worker_id, lease_s=args.lease, poll_s=args.poll,
-                    kinds=args.kinds.split(",") if args.kinds else None,
-                    services={"vault": FileVault.depuis_env()})
+    worker = Worker(
+        db,
+        worker_id=args.worker_id,
+        lease_s=args.lease,
+        poll_s=args.poll,
+        kinds=args.kinds.split(",") if args.kinds else None,
+        services={"vault": FileVault.depuis_env()},
+    )
     worker.installer_signaux()
     if args.once:
         while not worker.arrete and worker.executer_un() is not None:

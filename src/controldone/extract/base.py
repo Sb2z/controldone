@@ -140,7 +140,9 @@ class Extracteur(Protocol):
         """Vrai si l'extracteur sait traiter ce document (type, format, qualité de texte…)."""
         ...
 
-    def extract(self, document: Document, pages: Sequence[Page], context: ExtractionContext) -> ExtractionResult:
+    def extract(
+        self, document: Document, pages: Sequence[Page], context: ExtractionContext
+    ) -> ExtractionResult:
         """Extrait les champs. Ne lève pas pour un document difficile : retourne des champs ``None``
         (illisibles) et des avertissements ; lève seulement en cas d'erreur de programmation."""
         ...
@@ -225,7 +227,9 @@ def fusionner_resultats(
         cout = cout + r.cout
     avert = [a for r in resultats for a in r.avertissements]
     if not utiles:
-        info = resultats[0].extracteur if resultats else ExtracteurInfo(type="derive", id="fusion", version="1")
+        info = (
+            resultats[0].extracteur if resultats else ExtracteurInfo(type="derive", id="fusion", version="1")
+        )
         return ExtractionResult(extracteur=info, champs=None, cout=cout, avertissements=avert)
     utiles = sorted(utiles, key=_priorite_resultat)
     base = utiles[0]

@@ -33,8 +33,16 @@ __all__ = [
 
 MENTION_LIGNE = "à faire vérifier"
 
-_FACTEURS = {None: Decimal(1), "": Decimal(1), "KGM": Decimal(1), "KG": Decimal(1),
-             "TNE": Decimal(1000), "T": Decimal(1000), "GRM": Decimal("0.001"), "G": Decimal("0.001")}
+_FACTEURS = {
+    None: Decimal(1),
+    "": Decimal(1),
+    "KGM": Decimal(1),
+    "KG": Decimal(1),
+    "TNE": Decimal(1000),
+    "T": Decimal(1000),
+    "GRM": Decimal("0.001"),
+    "G": Decimal("0.001"),
+}
 
 
 def masse_kg(v: ValeurSourcee | None) -> Decimal | None:
@@ -113,8 +121,12 @@ def _fournisseurs(documents: Iterable[Document]) -> str | None:
     return " / ".join(noms) if noms else None
 
 
-def selectionner_lignes(dossier: Dossier, documents: Mapping[str, Document] | Iterable[Document], *,
-                        liste: ListeCodesMACF | None = None) -> list[LigneMACF]:
+def selectionner_lignes(
+    dossier: Dossier,
+    documents: Mapping[str, Document] | Iterable[Document],
+    *,
+    liste: ListeCodesMACF | None = None,
+) -> list[LigneMACF]:
     """Lignes MACF d'un dossier (articles des déclarations dont le code imprimé est retenu)."""
     liste = liste or charger_liste()
     docs = list(documents.values()) if isinstance(documents, Mapping) else list(documents)
@@ -131,20 +143,30 @@ def selectionner_lignes(dossier: Dossier, documents: Mapping[str, Document] | It
             corr = liste.classer(code)
             if not corr.retenue:
                 continue
-            lignes.append(LigneMACF(
-                dossier_id=dossier.id, dossier_reference=dossier.reference, declaration_id=d.id,
-                mrn=_txt(dec.mrn), date_acceptation=_date(dec.date_acceptation),
-                numero_article=_txt(art.numero_article), code_imprime=code, description=_txt(art.description),
-                statut_code=corr.statut, code_liste=corr.entree.code if corr.entree else None,
-                secteur=corr.secteur.id if corr.secteur else None,
-                secteur_libelle=corr.secteur.libelle if corr.secteur else None,
-                hors_cumul_50t=bool(corr.secteur and corr.secteur.hors_cumul_50t),
-                pays_origine=(art.pays_origine.valeur if art.pays_origine else None),
-                masse_nette_kg=masse_kg(art.masse_nette), masse_nette_brut=_txt(art.masse_nette),
-                fournisseur=fournisseur, installation=None,
-                page=(art.code_marchandise.page if art.code_marchandise else None),
-                motif=corr.motif,
-            ))
+            lignes.append(
+                LigneMACF(
+                    dossier_id=dossier.id,
+                    dossier_reference=dossier.reference,
+                    declaration_id=d.id,
+                    mrn=_txt(dec.mrn),
+                    date_acceptation=_date(dec.date_acceptation),
+                    numero_article=_txt(art.numero_article),
+                    code_imprime=code,
+                    description=_txt(art.description),
+                    statut_code=corr.statut,
+                    code_liste=corr.entree.code if corr.entree else None,
+                    secteur=corr.secteur.id if corr.secteur else None,
+                    secteur_libelle=corr.secteur.libelle if corr.secteur else None,
+                    hors_cumul_50t=bool(corr.secteur and corr.secteur.hors_cumul_50t),
+                    pays_origine=(art.pays_origine.valeur if art.pays_origine else None),
+                    masse_nette_kg=masse_kg(art.masse_nette),
+                    masse_nette_brut=_txt(art.masse_nette),
+                    fournisseur=fournisseur,
+                    installation=None,
+                    page=(art.code_marchandise.page if art.code_marchandise else None),
+                    motif=corr.motif,
+                )
+            )
     return lignes
 
 

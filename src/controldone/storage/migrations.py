@@ -147,12 +147,24 @@ def _m0005_langue_utilisateur(conn: Connection) -> None:
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "socle", "tables manquantes (débit, sessions, facturation, notifications)", _m0001_socle),
     Migration(2, "index_journal_taches", "index du journal et des tâches", _m0002_index_journal_taches),
-    Migration(3, "alertes_notifiees", "colonne alertes.notifiee_le et table notifications_alertes",
-              _m0003_alertes_notifiees),
-    Migration(4, "sessions_actives", "table sessions_actives (sessions ouvertes par compte, D-3603)",
-              _m0004_sessions_actives),
-    Migration(5, "langue_utilisateur", "colonne users.langue (langue de l'interface par compte)",
-              _m0005_langue_utilisateur),
+    Migration(
+        3,
+        "alertes_notifiees",
+        "colonne alertes.notifiee_le et table notifications_alertes",
+        _m0003_alertes_notifiees,
+    ),
+    Migration(
+        4,
+        "sessions_actives",
+        "table sessions_actives (sessions ouvertes par compte, D-3603)",
+        _m0004_sessions_actives,
+    ),
+    Migration(
+        5,
+        "langue_utilisateur",
+        "colonne users.langue (langue de l'interface par compte)",
+        _m0005_langue_utilisateur,
+    ),
 )
 
 
@@ -178,7 +190,9 @@ def base_neuve(engine: Engine) -> bool:
 
 
 def _inscrire(conn: Connection, m: Migration) -> None:
-    conn.execute(SchemaVersion.__table__.insert().values(version=m.version, nom=m.nom, applique_le=maintenant()))
+    conn.execute(
+        SchemaVersion.__table__.insert().values(version=m.version, nom=m.nom, applique_le=maintenant())
+    )
 
 
 def inscrire_toutes(engine: Engine) -> None:
@@ -201,7 +215,9 @@ def appliquer(engine: Engine, *, journal: Callable[[str], None] | None = None) -
             with engine.begin() as conn:
                 if conn.dialect.name == "postgresql":
                     conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _VERROU_PG})
-                if m.version in versions_appliquees(conn):  # appliquée par un autre processus pendant l'attente
+                if m.version in versions_appliquees(
+                    conn
+                ):  # appliquée par un autre processus pendant l'attente
                     continue
                 m.executer(conn)
                 _inscrire(conn, m)

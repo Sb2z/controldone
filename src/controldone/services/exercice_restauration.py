@@ -69,7 +69,10 @@ class ResultatExercice:
         sortie += [f"  [ok] {nom:44s} {duree:7.2f} s  {detail}" for nom, duree, detail in self.etapes]
         total = sum(d for _, d, _ in self.etapes)
         restauration = sum(d for n, d, _ in self.etapes if n.startswith(("restauration", "démarrage du web")))
-        sortie += ["", f"  durée totale {total:.1f} s ; restauration + contrôle + démarrage du web {restauration:.1f} s"]
+        sortie += [
+            "",
+            f"  durée totale {total:.1f} s ; restauration + contrôle + démarrage du web {restauration:.1f} s",
+        ]
         sortie.append("  RÉSULTAT : " + ("CONFORME" if self.ok else f"EN ÉCHEC — {self.echec}"))
         return sortie
 
@@ -79,31 +82,52 @@ def _verifier(condition: bool, message: str) -> None:
         raise EchecExercice(message)
 
 
-def _environnement(travail: Path, donnees: Path, base: Path | str, cle: str, secret_session: str,
-                   pg_serveur: str | None = None) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("CONTROLDONE_", "BACKUP_")) and k not in ("ANTHROPIC_API_KEY",)}
-    env.update({
-        "CONTROLDONE_ENV": "dev",
-        "CONTROLDONE_ENV_FILE": str(travail / "aucun.env"),  # aucun .env du poste n'est lu
-        "CONTROLDONE_MASTER_KEY": cle,
-        "CONTROLDONE_SECRET_KEY": secret_session,
-        "CONTROLDONE_DATA_DIR": str(donnees),
-        "CONTROLDONE_DATABASE_URL": base if isinstance(base, str) else f"sqlite:///{base}",
-        "CONTROLDONE_TMP_DIR": str(travail / "tmp"),
-        "PYTHONPATH": os.pathsep.join(filter(None, [str(RACINE_DEPOT / "src"), os.environ.get("PYTHONPATH")])),
-    })
+def _environnement(
+    travail: Path,
+    donnees: Path,
+    base: Path | str,
+    cle: str,
+    secret_session: str,
+    pg_serveur: str | None = None,
+) -> dict[str, str]:
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("CONTROLDONE_", "BACKUP_")) and k not in ("ANTHROPIC_API_KEY",)
+    }
+    env.update(
+        {
+            "CONTROLDONE_ENV": "dev",
+            "CONTROLDONE_ENV_FILE": str(travail / "aucun.env"),  # aucun .env du poste n'est lu
+            "CONTROLDONE_MASTER_KEY": cle,
+            "CONTROLDONE_SECRET_KEY": secret_session,
+            "CONTROLDONE_DATA_DIR": str(donnees),
+            "CONTROLDONE_DATABASE_URL": base if isinstance(base, str) else f"sqlite:///{base}",
+            "CONTROLDONE_TMP_DIR": str(travail / "tmp"),
+            "PYTHONPATH": os.pathsep.join(
+                filter(None, [str(RACINE_DEPOT / "src"), os.environ.get("PYTHONPATH")])
+            ),
+        }
+    )
     if pg_serveur:  # vérification profonde : chargement d'essai du dump dans une base jetable
         env["BACKUP_PG_VERIFICATION_URL"] = pg_serveur
     return env
 
 
 def _cli(env: dict[str, str], travail: Path, *args: str, timeout: float = 300) -> str:
-    p = subprocess.run([sys.executable, "-m", "controldone.cli", *args], env=env, cwd=travail, capture_output=True,
-                       text=True, timeout=timeout)
+    p = subprocess.run(
+        [sys.executable, "-m", "controldone.cli", *args],
+        env=env,
+        cwd=travail,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
     if p.returncode != 0:
-        raise EchecExercice(f"controldone {' '.join(args[:2])} : code {p.returncode} — "
-                            f"{(p.stderr or p.stdout).strip()[-600:]}")
+        raise EchecExercice(
+            f"controldone {' '.join(args[:2])} : code {p.returncode} — "
+            f"{(p.stderr or p.stdout).strip()[-600:]}"
+        )
     return p.stdout
 
 
@@ -115,13 +139,20 @@ def _identifiants(sortie: str) -> dict[str, str]:
 
     m = re.search(rf"^\s+{re.escape(EMAIL_CLIENT)}\s+(\S+)\s", sortie, re.M)
     _verifier(m is not None, f"init-demo : compte {EMAIL_CLIENT} introuvable")
-    return {"fondateur_email": champ("adresse"), "fondateur_mdp": champ("mot de passe"),
-            "totp": champ("secret TOTP"), "client_mdp": m.group(1)}  # type: ignore[union-attr]
+    return {
+        "fondateur_email": champ("adresse"),
+        "fondateur_mdp": champ("mot de passe"),
+        "totp": champ("secret TOTP"),
+        "client_mdp": m.group(1),
+    }  # type: ignore[union-attr]
 
 
 def _empreintes_arbre(racine: Path) -> dict[str, str]:
-    return {p.relative_to(racine).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(racine.rglob("*")) if p.is_file() and not p.name.startswith(".tmp-")}
+    return {
+        p.relative_to(racine).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(racine.rglob("*"))
+        if p.is_file() and not p.name.startswith(".tmp-")
+    }
 
 
 def _port_libre() -> int:
@@ -142,20 +173,41 @@ def _parcours_web(url: str, ids: dict[str, str]) -> str:
     from controldone.auth import code_totp
 
     with httpx.Client(base_url=url, timeout=30, follow_redirects=False) as c:
-        r = c.post("/connexion", data={"csrf": _jeton(c.get("/connexion").text), "email": ids["fondateur_email"],
-                                       "mot_de_passe": ids["fondateur_mdp"]})
-        _verifier(r.status_code == 303 and r.headers.get("location") == "/connexion/totp",
-                  f"connexion du fondateur : {r.status_code}")
-        r = c.post("/connexion/totp", data={"csrf": _jeton(c.get("/connexion/totp").text),
-                                            "code": code_totp(ids["totp"])})
-        _verifier(r.status_code == 303 and r.headers.get("location") == "/admin",
-                  f"second facteur du fondateur (secret TOTP chiffré) : {r.status_code}")
+        r = c.post(
+            "/connexion",
+            data={
+                "csrf": _jeton(c.get("/connexion").text),
+                "email": ids["fondateur_email"],
+                "mot_de_passe": ids["fondateur_mdp"],
+            },
+        )
+        _verifier(
+            r.status_code == 303 and r.headers.get("location") == "/connexion/totp",
+            f"connexion du fondateur : {r.status_code}",
+        )
+        r = c.post(
+            "/connexion/totp",
+            data={"csrf": _jeton(c.get("/connexion/totp").text), "code": code_totp(ids["totp"])},
+        )
+        _verifier(
+            r.status_code == 303 and r.headers.get("location") == "/admin",
+            f"second facteur du fondateur (secret TOTP chiffré) : {r.status_code}",
+        )
         r = c.get("/admin")
         _verifier(r.status_code == 200, f"/admin : {r.status_code}")
     with httpx.Client(base_url=url, timeout=60, follow_redirects=False) as c:
-        r = c.post("/connexion", data={"csrf": _jeton(c.get("/connexion").text), "email": EMAIL_CLIENT,
-                                       "mot_de_passe": ids["client_mdp"]})
-        _verifier(r.status_code == 303 and r.headers.get("location") == "/espace", f"connexion client : {r.status_code}")
+        r = c.post(
+            "/connexion",
+            data={
+                "csrf": _jeton(c.get("/connexion").text),
+                "email": EMAIL_CLIENT,
+                "mot_de_passe": ids["client_mdp"],
+            },
+        )
+        _verifier(
+            r.status_code == 303 and r.headers.get("location") == "/espace",
+            f"connexion client : {r.status_code}",
+        )
         r = c.get("/espace/dossiers")
         _verifier(r.status_code == 200, f"/espace/dossiers : {r.status_code}")
         page = c.get("/espace/rapports")
@@ -166,7 +218,9 @@ def _parcours_web(url: str, ids: dict[str, str]) -> str:
         html = c.get(f"/espace/rapports/{action}/html")
         _verifier(html.status_code == 200 and "FICTIF" in html.text, f"rapport HTML : {html.status_code}")
         pdf = c.get(f"/espace/rapports/{action}/pdf")
-        _verifier(pdf.status_code == 200 and pdf.content.startswith(b"%PDF"), f"rapport PDF : {pdf.status_code}")
+        _verifier(
+            pdf.status_code == 200 and pdf.content.startswith(b"%PDF"), f"rapport PDF : {pdf.status_code}"
+        )
     return f"fondateur + TOTP, /admin, client, rapport {action} (HTML {len(html.content)} o, PDF {len(pdf.content)} o)"
 
 
@@ -175,15 +229,30 @@ def _demarrer_web(env: dict[str, str], travail: Path, journal: Path) -> tuple[su
 
     port = _port_libre()
     with journal.open("wb") as sortie:
-        proc = subprocess.Popen([sys.executable, "-m", "controldone.cli", "serve", "--host", "127.0.0.1",
-                                 "--port", str(port), "--sans-worker"], env=env, cwd=travail, stdout=sortie,
-                                stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "controldone.cli",
+                "serve",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+                "--sans-worker",
+            ],
+            env=env,
+            cwd=travail,
+            stdout=sortie,
+            stderr=subprocess.STDOUT,
+        )
     url = f"http://127.0.0.1:{port}"
     fin = time.monotonic() + 90
     while time.monotonic() < fin:
         if proc.poll() is not None:
-            raise EchecExercice(f"le web s'est arrêté (code {proc.returncode}) : "
-                                f"{journal.read_text(errors='replace')[-600:]}")
+            raise EchecExercice(
+                f"le web s'est arrêté (code {proc.returncode}) : {journal.read_text(errors='replace')[-600:]}"
+            )
         try:
             if httpx.get(url + "/sante", timeout=2).status_code == 200:
                 return proc, url
@@ -200,8 +269,9 @@ def _interdit(chemin: Path) -> bool:
     return c == demo_web or c.is_relative_to(demo_web) or demo_web.is_relative_to(c)
 
 
-def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = None,
-                      pg_serveur: str | None = None) -> ResultatExercice:
+def executer_exercice(
+    travail: Path, *, journal: Callable[[str], None] | None = None, pg_serveur: str | None = None
+) -> ResultatExercice:
     """Déroule l'exercice dans ``travail`` (vide ou absent) ; ``pg_serveur`` : sur PostgreSQL (serveur jetable)."""
     import secrets
 
@@ -234,7 +304,9 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
         try:
             urls["source"] = base_source = creer_base_pg(pg_serveur, bases_pg["source"])
         except Exception as exc:
-            res.echec = f"serveur PostgreSQL de l'exercice injoignable : {type(exc).__name__}: {str(exc)[:300]}"
+            res.echec = (
+                f"serveur PostgreSQL de l'exercice injoignable : {type(exc).__name__}: {str(exc)[:300]}"
+            )
             return res
     env_source = _environnement(travail, source, base_source, cle, secret_session, pg_serveur)
 
@@ -250,10 +322,14 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
 
     etat: dict[str, Any] = {}
     try:
+
         def init() -> str:
             etat["ids"] = _identifiants(_cli(env_source, travail, "init-demo"))
-            _verifier(not (source / "dev_master.key").exists(), "clé de développement écrite dans les données")
+            _verifier(
+                not (source / "dev_master.key").exists(), "clé de développement écrite dans les données"
+            )
             return "2 clients fictifs, fondateur avec TOTP" + (" — PostgreSQL" if pg_serveur else "")
+
         etape("base de démonstration (init-demo)", init)
 
         def empreintes() -> str:
@@ -262,30 +338,45 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
             etat["sorties"] = _empreintes_arbre(source / "outbox_envoyee")
             _verifier(etat["base"]["integrite"] == "ok", "base source corrompue")
             _verifier(len(etat["coffre"]) > 0 and len(etat["sorties"]) > 0, "coffre ou traces d'envoi vides")
-            return (f"{len(etat['base']['tables'])} tables, {sum(etat['base']['tables'].values())} lignes, "
-                    f"{len(etat['coffre'])} objets du coffre, {len(etat['sorties'])} traces d'envoi")
+            return (
+                f"{len(etat['base']['tables'])} tables, {sum(etat['base']['tables'].values())} lignes, "
+                f"{len(etat['coffre'])} objets du coffre, {len(etat['sorties'])} traces d'envoi"
+            )
+
         etape("empreintes de la source", empreintes)
 
         def sauvegarde() -> str:
-            _cli(env_source, travail, "sauvegarde", "sauvegarder", "--destination", str(sauvegardes),
-                 "--verification-profonde")
+            _cli(
+                env_source,
+                travail,
+                "sauvegarde",
+                "sauvegarder",
+                "--destination",
+                str(sauvegardes),
+                "--verification-profonde",
+            )
             archives = sorted(sauvegardes.glob("controldone-*.tar.gz.enc"))
             _verifier(len(archives) == 1, f"{len(archives)} archive(s) au lieu d'une")
             _verifier(Path(str(archives[0]) + ".sha256").is_file(), "empreinte .sha256 absente")
             etat["archive"] = archives[0]
             return f"{archives[0].name} ({archives[0].stat().st_size} octets), relue et restaurée à l'essai"
+
         etape("sauvegarde chiffrée + vérification profonde", sauvegarde)
 
         def negatifs() -> str:
             archive: Path = etat["archive"]
             brut = archive.read_bytes()
-            _verifier(cle.encode() not in brut and b"SQLite format" not in brut and b"PGDMP" not in brut,
-                      "clé ou base en clair dans l'archive")
+            _verifier(
+                cle.encode() not in brut and b"SQLite format" not in brut and b"PGDMP" not in brut,
+                "clé ou base en clair dans l'archive",
+            )
             r = verifier(archive, [cle.encode()])
             _verifier(r.ok and r.manifeste is not None, f"vérification : {r.problemes}")
             noms = set(r.manifeste["fichiers"]) | {MANIFESTE}  # type: ignore[index]
-            _verifier(not any(n.endswith((".key", ".env")) or "identifiants" in n for n in noms),
-                      "fichier de clé ou d'identifiants dans l'archive")
+            _verifier(
+                not any(n.endswith((".key", ".env")) or "identifiants" in n for n in noms),
+                "fichier de clé ou d'identifiants dans l'archive",
+            )
             _verifier(not verifier(archive, [Fernet.generate_key()]).ok, "archive lisible avec une autre clé")
             alteree = travail / "alteree.tar.gz.enc"
             octets = bytearray(brut)
@@ -294,6 +385,7 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
             _verifier(not verifier(alteree, [cle.encode()]).ok, "archive altérée acceptée")
             alteree.unlink()
             return f"{r.fichiers} fichiers conformes au manifeste ; autre clé et octet altéré refusés"
+
         etape("contrôles négatifs (clé, altération)", negatifs)
 
         def effacer() -> str:
@@ -303,6 +395,7 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
                 supprimer_base_pg(pg_serveur, bases_pg["source"])
                 return "source supprimée (fichiers et base PostgreSQL)"
             return "source supprimée"
+
         etape("effacement de la source", effacer)
 
         base_restauree: Path | str = restauree / "base" / "controldone.db"
@@ -312,26 +405,47 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
 
         def restaurer() -> str:
             options = ["--base-cible", urls["restauree"]] if pg_serveur else []
-            sortie = _cli(env_restauree, travail, "sauvegarde", "restaurer", str(etat["archive"]), str(restauree),
-                          *options, "--controler")
+            sortie = _cli(
+                env_restauree,
+                travail,
+                "sauvegarde",
+                "restaurer",
+                str(etat["archive"]),
+                str(restauree),
+                *options,
+                "--controler",
+            )
             _verifier("CONFORME" in sortie, f"contrôle de la restauration : {sortie[-400:]}")
-            return ("pg_restore dans une base vide, " if pg_serveur else "") + \
-                "déchiffrée, manifeste, intégrité, coffre déchiffré, audit"
+            return (
+                "pg_restore dans une base vide, " if pg_serveur else ""
+            ) + "déchiffrée, manifeste, intégrité, coffre déchiffré, audit"
+
         etape("restauration dans un nouvel endroit", restaurer)
 
         def comparer() -> str:
             apres = etat_base("restauree", restauree / "base" / "controldone.db")
-            ecarts = {t: (n, apres["tables"].get(t)) for t, n in etat["base"]["tables"].items()
-                      if apres["tables"].get(t) != n}
-            _verifier(not ecarts and set(apres["tables"]) == set(etat["base"]["tables"]),
-                      f"lignes par table différentes : {ecarts}")
+            ecarts = {
+                t: (n, apres["tables"].get(t))
+                for t, n in etat["base"]["tables"].items()
+                if apres["tables"].get(t) != n
+            }
+            _verifier(
+                not ecarts and set(apres["tables"]) == set(etat["base"]["tables"]),
+                f"lignes par table différentes : {ecarts}",
+            )
             _verifier(apres["audit"] == etat["base"]["audit"], "tête de la chaîne d'audit différente")
             _verifier(_empreintes_arbre(restauree / "coffre") == etat["coffre"], "coffre restauré différent")
-            _verifier(_empreintes_arbre(restauree / "outbox_envoyee") == etat["sorties"], "traces d'envoi différentes")
+            _verifier(
+                _empreintes_arbre(restauree / "outbox_envoyee") == etat["sorties"],
+                "traces d'envoi différentes",
+            )
             rapport = controler(restauree, [cle.encode()], base_url=urls.get("restauree"))
             _verifier(rapport.ok, f"contrôle : {rapport.problemes}")
-            return (f"{len(apres['tables'])} tables identiques, audit {apres['audit']['entrees']} entrées, "
-                    f"{rapport.objets_coffre} objets déchiffrés, {rapport.references} références présentes")
+            return (
+                f"{len(apres['tables'])} tables identiques, audit {apres['audit']['entrees']} entrées, "
+                f"{rapport.objets_coffre} objets déchiffrés, {rapport.references} références présentes"
+            )
+
         etape("restauration : comparaison avec la source", comparer)
 
         def web() -> str:
@@ -339,6 +453,7 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
             etat["web"] = proc
             etat["url"] = url
             return url
+
         etape("démarrage du web sur les données restaurées", web)
         etape("parcours web (connexion, rapport)", lambda: _parcours_web(etat["url"], etat["ids"]))
     except (EchecExercice, subprocess.TimeoutExpired, OSError) as exc:
@@ -363,17 +478,25 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="controldone sauvegarde exercice",
-                                 description="Exercice de restauration de bout en bout sur une base fictive.")
+    ap = argparse.ArgumentParser(
+        prog="controldone sauvegarde exercice",
+        description="Exercice de restauration de bout en bout sur une base fictive.",
+    )
     ap.add_argument("--repertoire", default=None, help="répertoire de travail (vide) ; défaut : temporaire")
     ap.add_argument("--garder", action="store_true", help="ne pas effacer le répertoire de travail")
-    ap.add_argument("--postgres", default=os.environ.get("CONTROLDONE_EXERCICE_PG_URL") or None,
-                    help="URL d'un serveur PostgreSQL JETABLE (droit CREATEDB) : exercice sur PostgreSQL")
+    ap.add_argument(
+        "--postgres",
+        default=os.environ.get("CONTROLDONE_EXERCICE_PG_URL") or None,
+        help="URL d'un serveur PostgreSQL JETABLE (droit CREATEDB) : exercice sur PostgreSQL",
+    )
     args = ap.parse_args(argv)
     if args.repertoire:
         travail = Path(args.repertoire)
         if _interdit(travail) or (travail.exists() and (not travail.is_dir() or any(travail.iterdir()))):
-            print(f"répertoire de travail refusé (doit être vide, hors var/demo_web) : {travail}", file=sys.stderr)
+            print(
+                f"répertoire de travail refusé (doit être vide, hors var/demo_web) : {travail}",
+                file=sys.stderr,
+            )
             return 2
     else:
         travail = Path(tempfile.mkdtemp(prefix="cd-exercice-restauration-"))

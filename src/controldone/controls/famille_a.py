@@ -103,7 +103,9 @@ __all__ = [
 
 # --- Gabarits de « prochaine action » (testés contre les formulations interdites) ---------------------
 
-ACTION_A1 = "Vérifier quelle entité du groupe est l'acheteur et l'importateur de cet envoi, et le faire confirmer."
+ACTION_A1 = (
+    "Vérifier quelle entité du groupe est l'acheteur et l'importateur de cet envoi, et le faire confirmer."
+)
 ACTION_A2 = "Vérifier que la déclaration se rapporte bien à cette facture commerciale (référence citée)."
 ACTION_A3 = "Vérifier auprès du déclarant la devise de facturation reprise sur la déclaration."
 ACTION_A4 = "Demander au déclarant l'explication de l'écart entre le montant facturé déclaré et la facture commerciale."
@@ -112,7 +114,9 @@ ACTION_A4_PIED = (
     "le montant déclaré. " + PHRASE_RENVOI
 )
 ACTION_A5 = "Demander au déclarant l'explication de l'écart entre le montant déclaré en euros et la conversion au taux imprimé."
-ACTION_A6 = "Demander au déclarant de vérifier la conversion en euros du montant facturé repris sur la déclaration."
+ACTION_A6 = (
+    "Demander au déclarant de vérifier la conversion en euros du montant facturé repris sur la déclaration."
+)
 ACTION_A7 = "Vérifier la conversion en euros du montant facturé : l'ordre de grandeur ne correspond pas."
 ACTION_A8 = "Signaler cette différence d'Incoterm au déclarant. " + PHRASE_RENVOI
 ACTION_A9 = "Vérifier les quantités reprises sur la déclaration avec la facture commerciale."
@@ -121,15 +125,32 @@ ACTION_A11 = "Vérifier le nombre de colis repris sur la déclaration avec la fa
 ACTION_A14 = "Vérifier la date de la facture commerciale et celle de la déclaration."
 ACTION_A15 = "Vérifier que les articles déclarés correspondent aux références de la facture commerciale."
 #: A12, A13 : la phrase de renvoi figure dans le libellé ; l'action oriente vers un professionnel.
-ACTION_RENVOI = "Transmettre ce point, avec les deux documents, à un représentant en douane enregistré ou à un avocat."
+ACTION_RENVOI = (
+    "Transmettre ce point, avec les deux documents, à un représentant en douane enregistré ou à un avocat."
+)
 
 _DEUX_PIEDS = (TypeSousTotal.fret, TypeSousTotal.assurance, TypeSousTotal.emballage, TypeSousTotal.remise)
 _MAX_LIGNES_PIED = 12
 _CODES_FACTURE = ("380", "325", "935")
 _UNITES_LIB = {
-    "C62": "pièces", "PR": "paires", "SET": "jeux", "DZN": "douzaines", "KGM": "kg", "GRM": "g", "TNE": "t",
-    "LTR": "l", "MLT": "ml", "MTR": "m", "MTK": "m²", "MTQ": "m³", "CMT": "cm", "CT": "cartons", "BX": "boîtes",
-    "PK": "paquets", "RO": "rouleaux", "KWH": "kWh",
+    "C62": "pièces",
+    "PR": "paires",
+    "SET": "jeux",
+    "DZN": "douzaines",
+    "KGM": "kg",
+    "GRM": "g",
+    "TNE": "t",
+    "LTR": "l",
+    "MLT": "ml",
+    "MTR": "m",
+    "MTK": "m²",
+    "MTQ": "m³",
+    "CMT": "cm",
+    "CT": "cartons",
+    "BX": "boîtes",
+    "PK": "paquets",
+    "RO": "rouleaux",
+    "KWH": "kWh",
 }
 _RE_ISO = re.compile(r"^[A-Z]{3}$")
 
@@ -219,7 +240,9 @@ def _par_couple(
     out: list[ResultatControle] = []
     for c in couples(ctx):
         if not c.fcs or not c.decs:
-            out.append(ctx.non_verifiable(cid, RaisonCode.document_manquant, unite=c.unite, documents=c.doc_ids))
+            out.append(
+                ctx.non_verifiable(cid, RaisonCode.document_manquant, unite=c.unite, documents=c.doc_ids)
+            )
             continue
         out.extend(fn(ctx, c))
     return out
@@ -254,18 +277,28 @@ def _ref_fc(fc: Document, v: ValeurSourcee | None = None) -> str:
 
 
 def _ref_dec(dec: Document, v: ValeurSourcee | None = None) -> str:
-    morceaux = [x for x in (f"MRN {_mrn(dec)}" if _mrn(dec) else None,
-                            f"page {v.page}" if v is not None and v.page else None) if x]
+    morceaux = [
+        x
+        for x in (
+            f"MRN {_mrn(dec)}" if _mrn(dec) else None,
+            f"page {v.page}" if v is not None and v.page else None,
+        )
+        if x
+    ]
     return "la déclaration" + (f" ({', '.join(morceaux)})" if morceaux else "")
 
 
-def _vals_par_document(docs: Sequence[Document], vals: Sequence[ValeurSourcee | None]) -> list[ValeurSourcee | None]:
+def _vals_par_document(
+    docs: Sequence[Document], vals: Sequence[ValeurSourcee | None]
+) -> list[ValeurSourcee | None]:
     """Une valeur (ou ``None``) par document, pour citer sa page.
 
     Les valeurs peuvent être une par document (totaux) ou plusieurs par document (valeurs par article, quand
     le total n'est pas lu) : on rattache alors à chaque document sa première valeur (A10, A11)."""
     vals = list(vals)
-    if len(vals) == len(docs) and all(v is None or v.document_id in (None, d.id) for d, v in zip(docs, vals, strict=True)):
+    if len(vals) == len(docs) and all(
+        v is None or v.document_id in (None, d.id) for d, v in zip(docs, vals, strict=True)
+    ):
         return vals
     if len(vals) <= len(docs) and all(v is None or v.document_id is None for v in vals):
         return vals + [None] * (len(docs) - len(vals))
@@ -338,7 +371,9 @@ def _lire_somme(
     return lues, total
 
 
-def _confusions_somme(valeurs: Sequence[ValeurSourcee], accepte_total: Callable[[Decimal], bool]) -> list[Confusion]:
+def _confusions_somme(
+    valeurs: Sequence[ValeurSourcee], accepte_total: Callable[[Decimal], bool]
+) -> list[Confusion]:
     """Test de confusion (§8.5.4) sur chaque terme d'une somme : la variante lue remplace le terme."""
     total = sum((v.decimal_signe() for v in valeurs), Decimal(0))
     out = []
@@ -415,7 +450,9 @@ class Devises:
 
 
 def _devises(ctx: ControlContext, c: Couple) -> Devises:
-    def cote(vals: list[ValeurSourcee | None]) -> tuple[str | None, bool, ValeurSourcee | None, list[ValeurSourcee]]:
+    def cote(
+        vals: list[ValeurSourcee | None],
+    ) -> tuple[str | None, bool, ValeurSourcee | None, list[ValeurSourcee]]:
         codes, lisibles, illisible = set(), [], None
         for v in vals:
             code = _code_devise(ctx, v)
@@ -541,7 +578,9 @@ def _taux(ctx: ControlContext, c: Couple, devise: str | None) -> Taux:
 # --- Explications (condition 7 de §8.5.1) ---------------------------------------------------------------
 
 
-def _explication_version(ctx: ControlContext, c: Couple, accepte: Callable[[Decimal], bool]) -> RaisonCode | None:
+def _explication_version(
+    ctx: ControlContext, c: Couple, accepte: Callable[[Decimal], bool]
+) -> RaisonCode | None:
     """Une autre version (rectificative ou initiale) du même MRN dont le montant concorde : ``a_verifier``."""
     if len(c.decs) != 1:
         return None
@@ -567,7 +606,10 @@ def _lignes_pied(ctx: ControlContext, c: Couple) -> list[tuple[ValeurSourcee, in
 
 
 def _explique_par_pied(
-    pieds: Sequence[tuple[ValeurSourcee, int]], ecart: Decimal, tolerance: Decimal, facteur: Decimal = Decimal(1)
+    pieds: Sequence[tuple[ValeurSourcee, int]],
+    ecart: Decimal,
+    tolerance: Decimal,
+    facteur: Decimal = Decimal(1),
 ) -> list[ValeurSourcee]:
     """Lignes de pied dont la somme égale ``|écart|`` dans la tolérance (A4 ; A5 avec ``facteur`` = EUR par
     unité de devise de la facture, la somme convertie arrondie au centime, D-2202). Deux lectures : montants
@@ -600,7 +642,11 @@ def _a1(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     cid, unite = "A1", c.unite
     commun = dict(unite=unite, documents=c.doc_ids)
     if not ctx.entites:
-        return [ctx.non_verifiable(cid, RaisonCode.valeur_absente, details={"motif": "aucune_entite_client"}, **commun)]
+        return [
+            ctx.non_verifiable(
+                cid, RaisonCode.valeur_absente, details={"motif": "aucune_entite_client"}, **commun
+            )
+        ]
     imports = [dec.dec.importateur.tva for dec in c.decs]
     for v in imports:
         if not ctx.utilisable(v):
@@ -616,24 +662,48 @@ def _a1(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     valeurs_cles = [v for v in v_fc if v is not None] + tva_imp
     preuves = [preuve(v, RolePreuve.valeur_a) for v in v_fc if v is not None]
     preuves += [preuve(v, RolePreuve.valeur_b) for v in tva_imp]
-    ref_f, ref_d = _refs_fc(c.fcs, [i.valeur or i.tva_hors_client for i in idents]), _refs_dec(c.decs, tva_imp)
+    ref_f, ref_d = (
+        _refs_fc(c.fcs, [i.valeur or i.tva_hors_client for i in idents]),
+        _refs_dec(c.decs, tva_imp),
+    )
     details = {
-        "entite_facture": sorted(e_f_set), "entite_declaration": sorted(e_d_set),
+        "entite_facture": sorted(e_f_set),
+        "entite_declaration": sorted(e_d_set),
         "methode_facture": [i.methode for i in idents],
     }
 
     def constat(libelle: str, raisons: Iterable[RaisonCode] = ()) -> list[ResultatControle]:
-        cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=valeurs_cles,
-                          documents=c.doc_ids, raisons_supplementaires=list(raisons))
-        return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A1, preuves=preuves,
-                            entrees={f"tva_importateur_{i}": v for i, v in enumerate(tva_imp)},
-                            attendu=",".join(sorted(e_f_set)) or None, constate=",".join(sorted(e_d_set)) or None,
-                            details=details, **commun)]
+        cl = ctx.classify(
+            cid,
+            ecart=None,
+            tolerance=None,
+            seuil_certitude=None,
+            valeurs_cles=valeurs_cles,
+            documents=c.doc_ids,
+            raisons_supplementaires=list(raisons),
+        )
+        return [
+            ctx.constat(
+                cid,
+                cl,
+                libelle=libelle,
+                prochaine_action=ACTION_A1,
+                preuves=preuves,
+                entrees={f"tva_importateur_{i}": v for i, v in enumerate(tva_imp)},
+                attendu=",".join(sorted(e_f_set)) or None,
+                constate=",".join(sorted(e_d_set)) or None,
+                details=details,
+                **commun,
+            )
+        ]
 
     # Plusieurs TVA du client sur la déclaration, ou plusieurs entités entre factures / déclarations.
     if len(clients_dec) > 1 or len(e_d_set) > 1 or len(e_f_set) > 1:
-        noms = sorted({e.raison_sociale for e, _ in clients_dec.values()} | {e.raison_sociale for e in e_d_set.values()}
-                      | {e.raison_sociale for e in e_f_set.values()})
+        noms = sorted(
+            {e.raison_sociale for e, _ in clients_dec.values()}
+            | {e.raison_sociale for e in e_d_set.values()}
+            | {e.raison_sociale for e in e_f_set.values()}
+        )
         return constat(
             f"Plusieurs entités du client figurent sur les documents de ce dossier ({', '.join(noms)}) : "
             f"{ref_f} et {ref_d} ne permettent pas de désigner une seule entité.",
@@ -720,51 +790,95 @@ def _a2(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         structuree = any(dec.dec.mrn is not None and dec.dec.mrn.est_structuree for dec in c.decs)
         lus = [v for v in numeros if v is not None]
         if not (autres or structuree) or not lus:
-            return [ctx.non_verifiable(cid, RaisonCode.valeur_absente,
-                                       details={"motif": "aucune_reference_facture"}, **commun)]
-        cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=lus,
-                          documents=c.doc_ids)
+            return [
+                ctx.non_verifiable(
+                    cid, RaisonCode.valeur_absente, details={"motif": "aucune_reference_facture"}, **commun
+                )
+            ]
+        cl = ctx.classify(
+            cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=lus, documents=c.doc_ids
+        )
         nums = ", ".join(f"{v.valeur} (page {v.page})" if v.page else str(v.valeur) for v in lus)
-        cites = ", ".join(dict.fromkeys(
-            " ".join(x for x in ((r.type_code.valeur if r.type_code else None), r.reference.valeur) if x)
-            for r in autres if r.reference is not None))
+        cites = ", ".join(
+            dict.fromkeys(
+                " ".join(x for x in ((r.type_code.valeur if r.type_code else None), r.reference.valeur) if x)
+                for r in autres
+                if r.reference is not None
+            )
+        )
         libelle = (
             f"Le numéro de facture commerciale {nums} n'est pas cité sur {_refs_dec(c.decs)} : aucune référence "
             f"de facture ne figure parmi les documents produits"
             + (f" (documents cités : {cites})." if cites else ".")
         )
-        return [ctx.constat(
-            cid, cl, libelle=libelle, prochaine_action=ACTION_A2,
-            preuves=[preuve(v, RolePreuve.valeur_a) for v in lus]
-            + [preuve(r.reference, RolePreuve.valeur_b) for r in autres if r.reference is not None],
-            entrees=entrees, attendu=",".join(v.valeur or "" for v in lus), constate=cites or "aucune",
-            details={"motif": "aucune_reference_facture"}, **commun,
-        )]
-    absents = [(fc, v) for fc, v in zip(c.fcs, numeros, strict=True)
-               if v is not None and not any(ref_compatibles_ocr(v.valeur, r.valeur) for r in refs)]
+        return [
+            ctx.constat(
+                cid,
+                cl,
+                libelle=libelle,
+                prochaine_action=ACTION_A2,
+                preuves=[preuve(v, RolePreuve.valeur_a) for v in lus]
+                + [preuve(r.reference, RolePreuve.valeur_b) for r in autres if r.reference is not None],
+                entrees=entrees,
+                attendu=",".join(v.valeur or "" for v in lus),
+                constate=cites or "aucune",
+                details={"motif": "aucune_reference_facture"},
+                **commun,
+            )
+        ]
+    absents = [
+        (fc, v)
+        for fc, v in zip(c.fcs, numeros, strict=True)
+        if v is not None and not any(ref_compatibles_ocr(v.valeur, r.valeur) for r in refs)
+    ]
     if not absents:
         return [ctx.conforme(cid, entrees=entrees, **commun)]
     # D-4207 : une référence citée lue par OCR qui ne diffère du numéro que d'un ou deux caractères en est
     # probablement une autre lecture : la lecture ne permet pas de conclure.
-    proches = {id(v): r.valeur for _, v in absents for r in refs
-               if (v.methode is Methode.ocr or r.methode is Methode.ocr) and ref_facture_proches(v.valeur, r.valeur)}
+    proches = {
+        id(v): r.valeur
+        for _, v in absents
+        for r in refs
+        if (v.methode is Methode.ocr or r.methode is Methode.ocr) and ref_facture_proches(v.valeur, r.valeur)
+    }
     if len(proches) == len(absents):
-        return [ctx.non_verifiable(cid, RaisonCode.lecture_douteuse, entrees=entrees,
-                                   details={"motif": "reference_proche", "references": sorted(set(proches.values()))},
-                                   **commun)]
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None,
-                      valeurs_cles=[v for _, v in absents], documents=c.doc_ids)
+        return [
+            ctx.non_verifiable(
+                cid,
+                RaisonCode.lecture_douteuse,
+                entrees=entrees,
+                details={"motif": "reference_proche", "references": sorted(set(proches.values()))},
+                **commun,
+            )
+        ]
+    cl = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=[v for _, v in absents],
+        documents=c.doc_ids,
+    )
     cites = ", ".join(dict.fromkeys(r.valeur or "" for r in refs))
     nums = ", ".join(f"{v.valeur} (page {v.page})" if v.page else str(v.valeur) for _, v in absents)
     libelle = (
         f"Le numéro de facture commerciale {nums} ne figure pas parmi les références de facture citées sur "
         f"{_refs_dec(c.decs, [refs[0]])} : {cites}."
     )
-    return [ctx.constat(
-        cid, cl, libelle=libelle, prochaine_action=ACTION_A2,
-        preuves=[preuve(v, RolePreuve.valeur_a) for _, v in absents] + [preuve(r, RolePreuve.valeur_b) for r in refs],
-        entrees=entrees, attendu=",".join(v.valeur or "" for _, v in absents), constate=cites, **commun,
-    )]
+    return [
+        ctx.constat(
+            cid,
+            cl,
+            libelle=libelle,
+            prochaine_action=ACTION_A2,
+            preuves=[preuve(v, RolePreuve.valeur_a) for _, v in absents]
+            + [preuve(r, RolePreuve.valeur_b) for r in refs],
+            entrees=entrees,
+            attendu=",".join(v.valeur or "" for _, v in absents),
+            constate=cites,
+            **commun,
+        )
+    ]
 
 
 @control("A2")
@@ -843,17 +957,29 @@ def _evaluer_a5(ctx: ControlContext, c: Couple, dv: Devises, m: Montants, t: Tau
         a_att, a_ecart = ecarts[autre]
         if abs(a_ecart) <= tol.t_conversion(m.declare, a_att):
             autre_conforme = True
-    return dict(sens=sens, autre=autre, attendu=attendu, ecart=ecart, t=t_conv,
-                s=tol.s_conversion(m.declare, attendu), conforme=conforme or autre_conforme,
-                sens_conforme=autre if autre_conforme else sens, ecarts=ecarts)
+    return dict(
+        sens=sens,
+        autre=autre,
+        attendu=attendu,
+        ecart=ecart,
+        t=t_conv,
+        s=tol.s_conversion(m.declare, attendu),
+        conforme=conforme or autre_conforme,
+        sens_conforme=autre if autre_conforme else sens,
+        ecarts=ecarts,
+    )
 
 
 def _a3(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     cid = "A3"
     dv = _devises(ctx, c)
-    commun = dict(unite=c.unite, documents=c.doc_ids,
-                  entrees={f"devise_{i}": v for i, v in enumerate(dv.valeurs)},
-                  attendu=dv.fc, constate=dv.dec)
+    commun = dict(
+        unite=c.unite,
+        documents=c.doc_ids,
+        entrees={f"devise_{i}": v for i, v in enumerate(dv.valeurs)},
+        attendu=dv.fc,
+        constate=dv.dec,
+    )
     if dv.situation == "incertaine":
         return [ctx.non_verifiable(cid, dv.raison_illisible or RaisonCode.valeur_absente, **commun)]
     if dv.situation == "meme":
@@ -861,10 +987,18 @@ def _a3(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if dv.situation == "converti":
         m = _montants(ctx, c)
         t = _taux(ctx, c, dv.fc)
-        if not isinstance(m, RaisonCode) and t.exploitable and not _a6_declenche(ctx, c, dv, m, t) \
-                and _evaluer_a5(ctx, c, dv, m, t)["conforme"]:
+        if (
+            not isinstance(m, RaisonCode)
+            and t.exploitable
+            and not _a6_declenche(ctx, c, dv, m, t)
+            and _evaluer_a5(ctx, c, dv, m, t)["conforme"]
+        ):
             return [ctx.conforme(cid, raison_code=RaisonCode.montant_converti, **commun)]
-        return [ctx.non_applicable(cid, RaisonCode.montant_converti, details={"couvert_par": "A5, A6, A7"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.montant_converti, details={"couvert_par": "A5, A6, A7"}, **commun
+            )
+        ]
     # multiples ou differente : constat
     raisons = [] if dv.iso_lus else [RaisonCode.devise_incertaine]
     if dv.situation == "multiples":
@@ -880,9 +1014,18 @@ def _a3(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
             f"{_maj(_refs_fc(c.fcs, dv.fc_vals))} est libellée en {dv.fc} ; {_refs_dec(c.decs, dv.dec_vals)} "
             f"indique comme devise de facturation {dv.dec}."
         )
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=dv.valeurs,
-                      documents=c.doc_ids, raisons_supplementaires=raisons)
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in dv.fc_vals] + [preuve(v, RolePreuve.valeur_b) for v in dv.dec_vals]
+    cl = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=dv.valeurs,
+        documents=c.doc_ids,
+        raisons_supplementaires=raisons,
+    )
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in dv.fc_vals] + [
+        preuve(v, RolePreuve.valeur_b) for v in dv.dec_vals
+    ]
     return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A3, preuves=preuves, **commun)]
 
 
@@ -913,38 +1056,61 @@ def _perimetre_non_etabli(ctx: ControlContext, c: Couple, declare: Decimal, refe
        facture commerciale peut être répartie sur une déclaration absente ou non lue ; ou une déclaration d'un
        autre dossier cite une facture du couple."""
     motifs: list[str] = []
-    if declare < 0 or any(x is not None and _decimal(x) is not None and (_decimal(x) or 0) < 0
-                          for x in (fc.fc.total_facture for fc in c.fcs)):
+    if declare < 0 or any(
+        x is not None and _decimal(x) is not None and (_decimal(x) or 0) < 0
+        for x in (fc.fc.total_facture for fc in c.fcs)
+    ):
         # Facture commerciale (pas un avoir) ou montant déclaré négatif : signe lu (tiret, trait de tableau).
         motifs.append("montant_negatif_lu")
     for fc in c.fcs:
         tot = fc.fc.total_facture
-        pages = [lg.montant_ligne.page for lg in fc.fc.lignes if lg.montant_ligne is not None and lg.montant_ligne.page]
+        pages = [
+            lg.montant_ligne.page
+            for lg in fc.fc.lignes
+            if lg.montant_ligne is not None and lg.montant_ligne.page
+        ]
         if tot is not None and tot.page and pages and max(pages) > tot.page:
             # Total lu sur une page qui précède des lignes de la même facture : total de page ou report.
             motifs.append("total_lu_avant_des_lignes")
             break
     # Tolérance relative stricte sur le montant déclaré (pas celle de la comparaison, proportionnelle au plus grand
     # des deux montants) : l'échelle est seule en cause, les chiffres doivent concorder.
-    if reference != 0 and declare != 0 and any(
-        abs(declare - reference * k) <= max(Decimal("0.01"), abs(declare) / 2000) for k in _PUISSANCES_DE_DIX
+    if (
+        reference != 0
+        and declare != 0
+        and any(
+            abs(declare - reference * k) <= max(Decimal("0.01"), abs(declare) / 2000)
+            for k in _PUISSANCES_DE_DIX
+        )
     ):
         motifs.append("facteur_puissance_de_dix")
-    numeros = [fc.fc.numero.valeur for fc in c.fcs
-               if fc.fc.numero is not None and fc.fc.numero.valeur and ctx.utilisable(fc.fc.numero)]
+    numeros = [
+        fc.fc.numero.valeur
+        for fc in c.fcs
+        if fc.fc.numero is not None and fc.fc.numero.valeur and ctx.utilisable(fc.fc.numero)
+    ]
     if declare > reference:
         cites: list[ValeurSourcee] = []
         for dec in c.decs:
-            cites += [r.reference for r in dec.dec.documents_references
-                      if r.type_code is not None and r.type_code.valeur and _est_ref_facture(r.type_code)
-                      and r.reference is not None and ctx.utilisable(r.reference)]
+            cites += [
+                r.reference
+                for r in dec.dec.documents_references
+                if r.type_code is not None
+                and r.type_code.valeur
+                and _est_ref_facture(r.type_code)
+                and r.reference is not None
+                and ctx.utilisable(r.reference)
+            ]
             cites += [v for art in dec.dec.articles for v in art.references_facture if ctx.utilisable(v)]
         if any(not any(ref_compatibles(n, v.valeur) for n in numeros) for v in cites if v.valeur):
             motifs.append("facture_citee_absente")
     elif declare < reference:
         couple = {cle_confusion_ocr(d.dec.mrn_prefixe) for d in c.decs if d.dec.mrn_prefixe}
-        connus = {cle_confusion_ocr(d.dec.mrn_prefixe) for d in ctx.declarations(dernieres_versions=False)
-                  if d.dec.mrn_prefixe}
+        connus = {
+            cle_confusion_ocr(d.dec.mrn_prefixe)
+            for d in ctx.declarations(dernieres_versions=False)
+            if d.dec.mrn_prefixe
+        }
         ailleurs = [x.doc for x in documents_autres(ctx, TypeDocument.declaration)]
         connus |= {cle_confusion_ocr(d.dec.mrn_prefixe) for d in ailleurs if d.dec.mrn_prefixe}
         for ft in ctx.factures_transitaires():
@@ -953,7 +1119,11 @@ def _perimetre_non_etabli(ctx: ControlContext, c: Couple, declare: Decimal, refe
                 motifs.append("declaration_citee_absente")
                 break
         for d in ailleurs:
-            refs = [r.reference for r in d.dec.documents_references if r.reference is not None and r.reference.valeur]
+            refs = [
+                r.reference
+                for r in d.dec.documents_references
+                if r.reference is not None and r.reference.valeur
+            ]
             refs += [v for art in d.dec.articles for v in art.references_facture if v.valeur]
             if any(ref_compatibles(n, v.valeur) for n in numeros for v in refs):
                 motifs.append("facture_declaree_ailleurs")
@@ -983,27 +1153,55 @@ def _a4_allocations(ctx: ControlContext, c: Couple, dv: Devises) -> list[Resulta
         declare = v.decimal_signe()
         ecart = declare - a.montant_alloue
         t, s = tol.t_valeur(a.montant_alloue, declare), tol.s_valeur(a.montant_alloue, declare)
-        commun.update(attendu=a.montant_alloue, constate=declare, ecart=ecart, tolerance=t, seuil_certitude=s,
-                      entrees={"montant_declare": v})
+        commun.update(
+            attendu=a.montant_alloue,
+            constate=declare,
+            ecart=ecart,
+            tolerance=t,
+            seuil_certitude=s,
+            entrees={"montant_declare": v},
+        )
         if abs(ecart) <= t:
             out.append(ctx.conforme("A4", **commun))
             continue
-        cl = ctx.classify("A4", ecart=ecart, tolerance=t, seuil_certitude=s, valeurs_cles=[v],
-                          documents=[fc.id, dec.id], allocations=[a],
-                          confusion=[Confusion(v, autre=a.montant_alloue, tolerance=t)])
+        cl = ctx.classify(
+            "A4",
+            ecart=ecart,
+            tolerance=t,
+            seuil_certitude=s,
+            valeurs_cles=[v],
+            documents=[fc.id, dec.id],
+            allocations=[a],
+            confusion=[Confusion(v, autre=a.montant_alloue, tolerance=t)],
+        )
         taux = _taux(ctx, Couple((fc,), (dec,)), dv.fc)
-        montant = montant_ecart_documentaire(declare, a.montant_alloue, devise=dv.fc, taux_eur_par_devise=taux.eur_par())
+        montant = montant_ecart_documentaire(
+            declare, a.montant_alloue, devise=dv.fc, taux_eur_par_devise=taux.eur_par()
+        )
         libelle = (
             f"{_maj(_ref_dec(dec, v))} indique un montant total facturé de {format_montant(declare, dv.fc)} ; "
             f"le montant de {_ref_fc(fc)} alloué à cette déclaration est de {format_montant(a.montant_alloue, dv.fc)}, "
             f"soit un écart de {format_montant(ecart, dv.fc)}."
         )
-        out.append(ctx.constat(
-            "A4", cl, libelle=libelle, prochaine_action=ACTION_A4, montant=montant, composante=Composante.valeur,
-            preuves=[preuve(v, RolePreuve.valeur_b),
-                     preuve(None, RolePreuve.valeur_a, calcul=f"montant alloué : {format_montant(a.montant_alloue, dv.fc)}")],
-            **commun,
-        ))
+        out.append(
+            ctx.constat(
+                "A4",
+                cl,
+                libelle=libelle,
+                prochaine_action=ACTION_A4,
+                montant=montant,
+                composante=Composante.valeur,
+                preuves=[
+                    preuve(v, RolePreuve.valeur_b),
+                    preuve(
+                        None,
+                        RolePreuve.valeur_a,
+                        calcul=f"montant alloué : {format_montant(a.montant_alloue, dv.fc)}",
+                    ),
+                ],
+                **commun,
+            )
+        )
     return out
 
 
@@ -1014,7 +1212,11 @@ def _a4(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if dv.situation == "converti":
         return [ctx.non_applicable(cid, RaisonCode.montant_converti, details={"couvert_par": "A5"}, **commun)]
     if dv.situation == "differente":
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A3"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A3"}, **commun
+            )
+        ]
     if dv.situation == "multiples":
         return [ctx.non_verifiable(cid, RaisonCode.devise_incertaine, **commun)]
     m = _montants(ctx, c)
@@ -1026,7 +1228,9 @@ def _a4(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     t, s = tol.t_valeur(m.total, m.declare), tol.s_valeur(m.total, m.declare)
     entrees = {f"total_facture_{i}": v for i, v in enumerate(m.fc_vals)}
     entrees.update({f"montant_declare_{i}": v for i, v in enumerate(m.dec_vals)})
-    commun.update(entrees=entrees, attendu=m.total, constate=m.declare, ecart=ecart, tolerance=t, seuil_certitude=s)
+    commun.update(
+        entrees=entrees, attendu=m.total, constate=m.declare, ecart=ecart, tolerance=t, seuil_certitude=s
+    )
     raisons: list[RaisonCode] = []
     details: dict = {}
     taux = _taux(ctx, c, dv.fc)
@@ -1037,7 +1241,7 @@ def _a4(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         if abs(ecart) <= t:
             return [ctx.conforme(cid, details={**details, "hypothese": "meme_devise"}, **commun)]
         if dv.fc not in (None, "EUR") and taux.exploitable:
-            for sens in ([taux.sens] if taux.sens else list(TauxChangeSens)):
+            for sens in [taux.sens] if taux.sens else list(TauxChangeSens):
                 eur = taux.eur_par(sens)
                 assert eur is not None
                 att = arrondi_centime(m.total * eur)
@@ -1061,12 +1265,22 @@ def _a4(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         details["perimetre_non_etabli"] = perimetre
     confusion = _confusions_somme(m.dec_vals, lambda x: abs(x - m.total) <= t)
     confusion += _confusions_somme(m.fc_vals, lambda x: abs(m.declare - x) <= t)
-    cl = ctx.classify(cid, ecart=ecart, tolerance=t, seuil_certitude=s,
-                      valeurs_cles=[*m.fc_vals, *m.dec_vals, *dv.valeurs], confusion=confusion,
-                      documents=c.doc_ids, explication=explication, raisons_supplementaires=raisons)
+    cl = ctx.classify(
+        cid,
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=s,
+        valeurs_cles=[*m.fc_vals, *m.dec_vals, *dv.valeurs],
+        confusion=confusion,
+        documents=c.doc_ids,
+        explication=explication,
+        raisons_supplementaires=raisons,
+    )
     montant = None
     if dv.situation == "meme":
-        montant = montant_ecart_documentaire(m.declare, m.total, devise=devise, taux_eur_par_devise=taux.eur_par())
+        montant = montant_ecart_documentaire(
+            m.declare, m.total, devise=devise, taux_eur_par_devise=taux.eur_par()
+        )
     libelle = (
         f"{_maj(_refs_dec(c.decs, m.dec_vals))} indique un montant total facturé de "
         f"{format_montant(m.declare, dv.dec)} ; {_refs_fc(c.fcs, m.fc_vals)} indique un total de "
@@ -1075,13 +1289,25 @@ def _a4(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if expliquent:
         libelle += (
             " Cet écart correspond à la ou les lignes de pied de la facture : "
-            + ", ".join(f"{format_montant(abs(v.decimal_signe()), dv.fc)} (page {v.page})" for v in expliquent) + "."
+            + ", ".join(
+                f"{format_montant(abs(v.decimal_signe()), dv.fc)} (page {v.page})" for v in expliquent
+            )
+            + "."
         )
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [preuve(v, RolePreuve.valeur_b) for v in m.dec_vals]
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [
+        preuve(v, RolePreuve.valeur_b) for v in m.dec_vals
+    ]
     preuves += [preuve(v, RolePreuve.contexte) for v in expliquent]
     resultat = ctx.constat(
-        cid, cl, libelle=libelle, prochaine_action=ACTION_A4_PIED if expliquent else ACTION_A4, montant=montant,
-        composante=Composante.valeur, preuves=preuves, details=details, **commun,
+        cid,
+        cl,
+        libelle=libelle,
+        prochaine_action=ACTION_A4_PIED if expliquent else ACTION_A4,
+        montant=montant,
+        composante=Composante.valeur,
+        preuves=preuves,
+        details=details,
+        **commun,
     )
     return [resultat, *_a4_allocations(ctx, c, dv)]
 
@@ -1100,27 +1326,53 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         return [ctx.non_verifiable(cid, RaisonCode.devise_incertaine, **commun)]
     if dv.situation != "converti":
         couvert = "A3" if dv.situation == "differente" else "A4"
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": couvert},
-                                   **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": couvert}, **commun
+            )
+        ]
     m = _montants(ctx, c)
     if isinstance(m, RaisonCode):
         return [ctx.non_verifiable(cid, m, **commun)]
     t = _taux(ctx, c, dv.fc)
     if t.motif == "absent":
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle,
-                                   details={"couvert_par": "A7", "motif": "taux_absent"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid,
+                RaisonCode.couvert_par_autre_controle,
+                details={"couvert_par": "A7", "motif": "taux_absent"},
+                **commun,
+            )
+        ]
     if not t.exploitable:
-        return [ctx.non_verifiable(cid, t.raison or RaisonCode.valeur_absente, details={"motif": t.motif}, **commun)]
+        return [
+            ctx.non_verifiable(
+                cid, t.raison or RaisonCode.valeur_absente, details={"motif": t.motif}, **commun
+            )
+        ]
     if _a6_declenche(ctx, c, dv, m, t):
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A6"},
-                                   **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A6"}, **commun
+            )
+        ]
     ev = _evaluer_a5(ctx, c, dv, m, t)
     entrees = {f"total_facture_{i}": v for i, v in enumerate(m.fc_vals)}
     entrees.update({f"montant_declare_{i}": v for i, v in enumerate(m.dec_vals)})
     entrees.update({f"taux_{i}": v for i, v in enumerate(t.valeurs)})
-    details = {"sens": ev["sens_conforme"].value if ev["conforme"] else ev["sens"].value, "sens_lu": t.sens_lu}
-    commun.update(entrees=entrees, attendu=ev["attendu"], constate=m.declare, ecart=arrondi_centime(ev["ecart"]),
-                  tolerance=ev["t"], seuil_certitude=ev["s"], details=details)
+    details = {
+        "sens": ev["sens_conforme"].value if ev["conforme"] else ev["sens"].value,
+        "sens_lu": t.sens_lu,
+    }
+    commun.update(
+        entrees=entrees,
+        attendu=ev["attendu"],
+        constate=m.declare,
+        ecart=arrondi_centime(ev["ecart"]),
+        tolerance=ev["t"],
+        seuil_certitude=ev["s"],
+        details=details,
+    )
     if ev["conforme"]:
         return [ctx.conforme(cid, **commun)]
     sens: TauxChangeSens = ev["sens"]
@@ -1140,11 +1392,14 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         details["perimetre_non_etabli"] = perimetre
     taux_v = t.taux
     confusion = _confusions_somme(m.dec_vals, lambda x: abs(x - attendu) <= t_conv)
-    confusion += _confusions_somme(
-        m.fc_vals, lambda x: abs(m.declare - arrondi_centime(x * eur)) <= t_conv)
+    confusion += _confusions_somme(m.fc_vals, lambda x: abs(m.declare - arrondi_centime(x * eur)) <= t_conv)
     confusion += [
-        Confusion(v, accepte=lambda x: x != 0 and abs(m.declare - arrondi_centime(m.total * eur_par_devise(x, sens)))
-                  <= t_conv)
+        Confusion(
+            v,
+            accepte=lambda x: (
+                x != 0 and abs(m.declare - arrondi_centime(m.total * eur_par_devise(x, sens))) <= t_conv
+            ),
+        )
         for v in t.valeurs
     ]
     # §8.5.1 condition 7 : une ligne de pied (fret, assurance, emballage, remise ; imprimée ou structurée,
@@ -1155,9 +1410,17 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         details["lignes_de_pied"] = [v.id for v in expliquent]
     else:
         explication = _explication_version(ctx, c, lambda d: abs(d - attendu) <= t_conv)
-    cl = ctx.classify(cid, ecart=ev["ecart"], tolerance=t_conv, seuil_certitude=ev["s"],
-                      valeurs_cles=[*m.fc_vals, *m.dec_vals, *t.valeurs, *dv.valeurs], confusion=confusion,
-                      documents=c.doc_ids, explication=explication, raisons_supplementaires=raisons)
+    cl = ctx.classify(
+        cid,
+        ecart=ev["ecart"],
+        tolerance=t_conv,
+        seuil_certitude=ev["s"],
+        valeurs_cles=[*m.fc_vals, *m.dec_vals, *t.valeurs, *dv.valeurs],
+        confusion=confusion,
+        documents=c.doc_ids,
+        explication=explication,
+        raisons_supplementaires=raisons,
+    )
     affichage = Taux(t.valeurs, taux_v, sens, t.sens_lu)
     calcul = f"{format_montant(m.total, dv.fc)} × {affichage.texte(dv.fc)} = {format_montant(attendu, 'EUR')}"
     libelle = (
@@ -1169,15 +1432,29 @@ def _a5(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if expliquent:
         libelle += (
             " Cet écart correspond, au même taux, à la ou les lignes de pied de la facture : "
-            + ", ".join(f"{format_montant(abs(v.decimal_signe()), dv.fc)} (page {v.page})" for v in expliquent) + "."
+            + ", ".join(
+                f"{format_montant(abs(v.decimal_signe()), dv.fc)} (page {v.page})" for v in expliquent
+            )
+            + "."
         )
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [preuve(v, RolePreuve.valeur_b) for v in m.dec_vals]
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [
+        preuve(v, RolePreuve.valeur_b) for v in m.dec_vals
+    ]
     preuves += [preuve(v, RolePreuve.operande) for v in t.valeurs]
     preuves.append(preuve(None, RolePreuve.operande, calcul=calcul))
     preuves += [preuve(v, RolePreuve.contexte) for v in expliquent]
-    return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A4_PIED if expliquent else ACTION_A5,
-                        montant=ev["ecart"],
-                        composante=Composante.valeur, preuves=preuves, **commun)]
+    return [
+        ctx.constat(
+            cid,
+            cl,
+            libelle=libelle,
+            prochaine_action=ACTION_A4_PIED if expliquent else ACTION_A5,
+            montant=ev["ecart"],
+            composante=Composante.valeur,
+            preuves=preuves,
+            **commun,
+        )
+    ]
 
 
 @control("A5")
@@ -1193,8 +1470,14 @@ def _a6(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if dv.situation == "multiples":
         return [ctx.non_verifiable(cid, RaisonCode.devise_incertaine, **commun)]
     if dv.situation != "converti":
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle,
-                                   details={"couvert_par": "A3" if dv.situation == "differente" else "A4"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid,
+                RaisonCode.couvert_par_autre_controle,
+                details={"couvert_par": "A3" if dv.situation == "differente" else "A4"},
+                **commun,
+            )
+        ]
     m = _montants(ctx, c)
     if isinstance(m, RaisonCode):
         return [ctx.non_verifiable(cid, m, **commun)]
@@ -1202,17 +1485,30 @@ def _a6(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     declenche = _a6_declenche(ctx, c, dv, m, t)
     entrees = {f"total_facture_{i}": v for i, v in enumerate(m.fc_vals)}
     entrees.update({f"montant_declare_{i}": v for i, v in enumerate(m.dec_vals)})
-    commun.update(entrees=entrees, attendu=m.total, constate=m.declare, tolerance=ctx.tol.t_valeur(m.total, m.declare))
+    commun.update(
+        entrees=entrees, attendu=m.total, constate=m.declare, tolerance=ctx.tol.t_valeur(m.total, m.declare)
+    )
     if declenche is None:
-        return [ctx.non_verifiable(cid, RaisonCode.valeur_absente, details={"motif": "taux_inconnu"}, **commun)]
+        return [
+            ctx.non_verifiable(cid, RaisonCode.valeur_absente, details={"motif": "taux_inconnu"}, **commun)
+        ]
     if not declenche:
         return [ctx.conforme(cid, **commun)]
     p = ctx.profil
-    devise_sure = all((v.est_structuree or v.confiance >= p.a6_confiance_devise_min) and _iso_lu(v) for v in dv.fc_vals)
+    devise_sure = all(
+        (v.est_structuree or v.confiance >= p.a6_confiance_devise_min) and _iso_lu(v) for v in dv.fc_vals
+    )
     raisons = [] if devise_sure and t.exploitable else [RaisonCode.devise_incertaine]
     valeurs = [*m.fc_vals, *m.dec_vals, *dv.valeurs, *t.valeurs]
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=valeurs,
-                      documents=c.doc_ids, raisons_supplementaires=raisons)
+    cl = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=valeurs,
+        documents=c.doc_ids,
+        raisons_supplementaires=raisons,
+    )
     eur = t.eur_par()
     montant = arrondi_centime(m.declare - m.total * eur) if eur is not None else None
     if t.exploitable:
@@ -1227,9 +1523,20 @@ def _a6(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     preuves = [preuve(v, RolePreuve.valeur_a) for v in [*m.fc_vals, *dv.fc_vals]]
     preuves += [preuve(v, RolePreuve.valeur_b) for v in [*m.dec_vals, *dv.dec_vals]]
     preuves += [preuve(v, RolePreuve.operande) for v in t.valeurs]
-    return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A6, montant=montant,
-                        composante=Composante.valeur, preuves=preuves,
-                        ecart=montant, details={"taux_imprime": t.exploitable}, **commun)]
+    return [
+        ctx.constat(
+            cid,
+            cl,
+            libelle=libelle,
+            prochaine_action=ACTION_A6,
+            montant=montant,
+            composante=Composante.valeur,
+            preuves=preuves,
+            ecart=montant,
+            details={"taux_imprime": t.exploitable},
+            **commun,
+        )
+    ]
 
 
 @control("A6")
@@ -1245,31 +1552,59 @@ def _a7(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if dv.situation == "multiples":
         return [ctx.non_verifiable(cid, RaisonCode.devise_incertaine, **commun)]
     if dv.situation != "converti":
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle,
-                                   details={"couvert_par": "A3" if dv.situation == "differente" else "A4"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid,
+                RaisonCode.couvert_par_autre_controle,
+                details={"couvert_par": "A3" if dv.situation == "differente" else "A4"},
+                **commun,
+            )
+        ]
     m = _montants(ctx, c)
     if isinstance(m, RaisonCode):
         return [ctx.non_verifiable(cid, m, **commun)]
     t = _taux(ctx, c, dv.fc)
     if t.exploitable:
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A5"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A5"}, **commun
+            )
+        ]
     if _a6_declenche(ctx, c, dv, m, t):
-        return [ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A6"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.couvert_par_autre_controle, details={"couvert_par": "A6"}, **commun
+            )
+        ]
     d = _date_acceptation(ctx, c)
     ref = ctx.taux_bce(dv.fc, d) if dv.fc and d else None  # devise par EUR
     if not ref or m.total == 0:
-        return [ctx.non_verifiable(cid, RaisonCode.valeur_absente, details={"motif": "taux_reference_absent"},
-                                   **commun)]
+        return [
+            ctx.non_verifiable(
+                cid, RaisonCode.valeur_absente, details={"motif": "taux_reference_absent"}, **commun
+            )
+        ]
     assert d is not None
     ratio = m.declare * ref / m.total
     bande = ctx.tol.bande_indicative(dv.fc)
     entrees = {f"total_facture_{i}": v for i, v in enumerate(m.fc_vals)}
     entrees.update({f"montant_declare_{i}": v for i, v in enumerate(m.dec_vals)})
-    commun.update(entrees=entrees, constate=ratio.quantize(Decimal("0.0001")), attendu=Decimal(1),
-                  ecart=(ratio - 1).quantize(Decimal("0.0001")), tolerance=bande,
-                  details={"taux_reference": str(ref), "date_reference": d.isoformat()})
-    cl = ctx.classify(cid, ecart=ratio - 1, tolerance=bande, seuil_certitude=None,
-                      valeurs_cles=[*m.fc_vals, *m.dec_vals], documents=c.doc_ids)
+    commun.update(
+        entrees=entrees,
+        constate=ratio.quantize(Decimal("0.0001")),
+        attendu=Decimal(1),
+        ecart=(ratio - 1).quantize(Decimal("0.0001")),
+        tolerance=bande,
+        details={"taux_reference": str(ref), "date_reference": d.isoformat()},
+    )
+    cl = ctx.classify(
+        cid,
+        ecart=ratio - 1,
+        tolerance=bande,
+        seuil_certitude=None,
+        valeurs_cles=[*m.fc_vals, *m.dec_vals],
+        documents=c.doc_ids,
+    )
     if cl.niveau is None:
         return [ctx.conforme(cid, **commun)]
     pct = format_pourcentage((ratio * 100).quantize(Decimal(1)))
@@ -1280,7 +1615,9 @@ def _a7(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         f"déclaré représente {pct} de la contre-valeur du total facture, hors de la fourchette de "
         f"± {format_pourcentage((bande * 100).normalize())}. Aucun montant n'est calculé au taux indicatif."
     )
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [preuve(v, RolePreuve.valeur_b) for v in m.dec_vals]
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in m.fc_vals] + [
+        preuve(v, RolePreuve.valeur_b) for v in m.dec_vals
+    ]
     return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A7, preuves=preuves, **commun)]
 
 
@@ -1317,18 +1654,31 @@ def _a8(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     dvals = [v for v in dv if v is not None]
     codes_f = sorted({_incoterm(ctx, v) or "" for v in fvals})
     codes_d = sorted({_incoterm(ctx, v) or "" for v in dvals})
-    commun.update(attendu=",".join(codes_f), constate=",".join(codes_d),
-                  entrees={**{f"incoterm_facture_{i}": v for i, v in enumerate(fvals)},
-                           **{f"incoterm_declaration_{i}": v for i, v in enumerate(dvals)}})
+    commun.update(
+        attendu=",".join(codes_f),
+        constate=",".join(codes_d),
+        entrees={
+            **{f"incoterm_facture_{i}": v for i, v in enumerate(fvals)},
+            **{f"incoterm_declaration_{i}": v for i, v in enumerate(dvals)},
+        },
+    )
     if codes_f == codes_d and len(codes_f) == 1:
         return [ctx.conforme(cid, **commun)]
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[*fvals, *dvals],
-                      documents=c.doc_ids)
+    cl = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=[*fvals, *dvals],
+        documents=c.doc_ids,
+    )
     libelle = (
         f"{_maj(_refs_fc(c.fcs, fvals))} indique l'Incoterm {', '.join(codes_f)} ; {_refs_dec(c.decs, dvals)} "
         f"indique {', '.join(codes_d)}."
     )
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in fvals] + [preuve(v, RolePreuve.valeur_b) for v in dvals]
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in fvals] + [
+        preuve(v, RolePreuve.valeur_b) for v in dvals
+    ]
     return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A8, preuves=preuves, **commun)]
 
 
@@ -1373,7 +1723,11 @@ def _articles_par_sh6(ctx: ControlContext, c: Couple) -> dict[str, list[tuple[Do
 
 def _article_txt(dec: Document, i: int) -> str:
     art = dec.dec.articles[i]
-    num = art.numero_article.valeur if art.numero_article is not None and art.numero_article.valeur else str(i + 1)
+    num = (
+        art.numero_article.valeur
+        if art.numero_article is not None and art.numero_article.valeur
+        else str(i + 1)
+    )
     return f"article {num}"
 
 
@@ -1390,8 +1744,13 @@ def _code_unite(v: ValeurSourcee) -> str | None:
 
 
 def _comparer_quantites(
-    ctx: ControlContext, c: Couple, unite: str, sous: str, fvals: list[ValeurSourcee | None],
-    dvals: list[ValeurSourcee | None], intro: str,
+    ctx: ControlContext,
+    c: Couple,
+    unite: str,
+    sous: str,
+    fvals: list[ValeurSourcee | None],
+    dvals: list[ValeurSourcee | None],
+    intro: str,
 ) -> ResultatControle:
     cid = "A9"
     commun: dict = dict(unite=unite, sous_controle=sous, documents=c.doc_ids)
@@ -1404,20 +1763,37 @@ def _comparer_quantites(
     (fl, ft), (dl, dt) = f, d
     unites = {_code_unite(v) for v in [*fl, *dl]}
     if len(unites) != 1 or None in unites:
-        return ctx.non_verifiable(cid, RaisonCode.unites_differentes, details={"unites": sorted(u or "?" for u in unites)},
-                                  **commun)
+        return ctx.non_verifiable(
+            cid, RaisonCode.unites_differentes, details={"unites": sorted(u or "?" for u in unites)}, **commun
+        )
     code = unites.pop()
     t = ctx.tol.t_quantite(code, ft, dt)
     ecart = dt - ft
-    commun.update(attendu=ft, constate=dt, ecart=ecart, tolerance=t,
-                  entrees={**{f"quantite_facture_{i}": v for i, v in enumerate(fl)},
-                           **{f"quantite_declaration_{i}": v for i, v in enumerate(dl)}},
-                  details={"unite_quantite": code})
+    commun.update(
+        attendu=ft,
+        constate=dt,
+        ecart=ecart,
+        tolerance=t,
+        entrees={
+            **{f"quantite_facture_{i}": v for i, v in enumerate(fl)},
+            **{f"quantite_declaration_{i}": v for i, v in enumerate(dl)},
+        },
+        details={"unite_quantite": code},
+    )
     if abs(ecart) <= t:
         return ctx.conforme(cid, **commun)
-    confusion = _confusions_somme(dl, lambda x: abs(x - ft) <= t) + _confusions_somme(fl, lambda x: abs(dt - x) <= t)
-    cl = ctx.classify(cid, ecart=ecart, tolerance=t, seuil_certitude=None, valeurs_cles=[*fl, *dl],
-                      confusion=confusion, documents=c.doc_ids)
+    confusion = _confusions_somme(dl, lambda x: abs(x - ft) <= t) + _confusions_somme(
+        fl, lambda x: abs(dt - x) <= t
+    )
+    cl = ctx.classify(
+        cid,
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=None,
+        valeurs_cles=[*fl, *dl],
+        confusion=confusion,
+        documents=c.doc_ids,
+    )
     lib_u = _unite_lib(code)
     libelle = (
         f"{intro}{_refs_fc(c.fcs, fl)} indique une quantité de {format_nombre(ft)} {lib_u} ; "
@@ -1434,13 +1810,21 @@ def _a9(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         out = []
         for code in communs:
             fvals: list[ValeurSourcee | None] = [fc.fc.lignes[i].quantite for fc, i in lignes[code]]
-            dvals: list[ValeurSourcee | None] = [dec.dec.articles[i].quantite_unite_supplementaire
-                                                 for dec, i in articles[code]]
+            dvals: list[ValeurSourcee | None] = [
+                dec.dec.articles[i].quantite_unite_supplementaire for dec, i in articles[code]
+            ]
             arts = ", ".join(_article_txt(dec, i) for dec, i in articles[code])
-            out.append(_comparer_quantites(
-                ctx, c, cle_unite(fc=[d.id for d in c.fcs], dec=[d.id for d in c.decs], sh6=code), "sh6",
-                fvals, dvals, f"Pour le code SH6 {code} ({arts}), ",
-            ))
+            out.append(
+                _comparer_quantites(
+                    ctx,
+                    c,
+                    cle_unite(fc=[d.id for d in c.fcs], dec=[d.id for d in c.decs], sh6=code),
+                    "sh6",
+                    fvals,
+                    dvals,
+                    f"Pour le code SH6 {code} ({arts}), ",
+                )
+            )
         return out
     fvals = [fc.fc.quantite_totale for fc in c.fcs]
     if not all(ctx.utilisable(v) for v in fvals):
@@ -1462,11 +1846,17 @@ def a9_quantites(ctx: ControlContext) -> list[ResultatControle]:
 
 def _supports_ordonnes(ctx: ControlContext) -> list[Document]:
     ordre = {SousTypeSupport.liste_colisage.value: 0, SousTypeSupport.titre_transport.value: 1}
-    sup = [d for d in ctx.supports() if d.type is TypeDocument.document_support and isinstance(d.champs, ChampsSupport)]
+    sup = [
+        d
+        for d in ctx.supports()
+        if d.type is TypeDocument.document_support and isinstance(d.champs, ChampsSupport)
+    ]
     return sorted(sup, key=lambda d: ordre.get(d.sous_type or "", 2))
 
 
-def _valeurs_reference(ctx: ControlContext, c: Couple, champ_fc: str, champ_sup: str) -> list[ValeurSourcee] | None:
+def _valeurs_reference(
+    ctx: ControlContext, c: Couple, champ_fc: str, champ_sup: str
+) -> list[ValeurSourcee] | None:
     """Valeurs de la facture (toutes les factures du couple), à défaut d'un document support (§10 A10, A11)."""
     vals = [getattr(fc.fc, champ_fc) for fc in c.fcs]
     if all(ctx.utilisable(v) for v in vals):
@@ -1505,9 +1895,13 @@ def _source_txt(ctx: ControlContext, vals: Sequence[ValeurSourcee], c: Couple) -
         return _refs_fc(c.fcs, [next((v for v in vals if v.document_id == fc.id), None) for fc in c.fcs])
     v = vals[0]
     doc = ctx.document(v.document_id or "")
-    nom = "la liste de colisage" if doc is not None and doc.sous_type == SousTypeSupport.liste_colisage.value \
-        else "le titre de transport" if doc is not None and doc.sous_type == SousTypeSupport.titre_transport.value \
+    nom = (
+        "la liste de colisage"
+        if doc is not None and doc.sous_type == SousTypeSupport.liste_colisage.value
+        else "le titre de transport"
+        if doc is not None and doc.sous_type == SousTypeSupport.titre_transport.value
         else "le document support"
+    )
     return nom + (f" (page {v.page})" if v.page else "")
 
 
@@ -1520,8 +1914,11 @@ def _nette_superieure_brute(ctx: ControlContext, c: Couple) -> str | None:
                 continue
             n, b = _num(a.masse_nette), _num(a.masse_brute)
             if n is not None and b is not None and n - b > ctx.tol.t_masse(n, b):
-                return a.numero_article.valeur if a.numero_article is not None and a.numero_article.valeur \
+                return (
+                    a.numero_article.valeur
+                    if a.numero_article is not None and a.numero_article.valeur
                     else str(i + 1)
+                )
     return None
 
 
@@ -1544,8 +1941,14 @@ def _a10(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         if sous == "nette" and (art := _nette_superieure_brute(ctx, c)) is not None:
             # D-3106 : une masse nette d'article supérieure à sa masse brute sur la déclaration (relevée par B4) fausse
             # la masse nette déclarée : un second constat A10 sur la masse nette serait le même fait.
-            out.append(ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle,
-                                          details={"couvert_par": "B4 nette_brute", "article": art}, **commun))
+            out.append(
+                ctx.non_applicable(
+                    cid,
+                    RaisonCode.couvert_par_autre_controle,
+                    details={"couvert_par": "B4 nette_brute", "article": art},
+                    **commun,
+                )
+            )
             continue
         fs, ds = _lire_somme(ctx, ref), _lire_somme(ctx, decv)
         if isinstance(fs, RaisonCode) or isinstance(ds, RaisonCode):
@@ -1554,23 +1957,43 @@ def _a10(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         a, b = fs[1], ds[1]
         t = ctx.tol.t_masse(a, b)
         ecart = b - a
-        commun["documents"] = list(dict.fromkeys([*c.doc_ids, *(v.document_id for v in ref if v.document_id)]))
-        commun.update(attendu=a, constate=b, ecart=ecart, tolerance=t,
-                      entrees={**{f"masse_reference_{i}": v for i, v in enumerate(ref)},
-                               **{f"masse_declaration_{i}": v for i, v in enumerate(decv)}})
+        commun["documents"] = list(
+            dict.fromkeys([*c.doc_ids, *(v.document_id for v in ref if v.document_id)])
+        )
+        commun.update(
+            attendu=a,
+            constate=b,
+            ecart=ecart,
+            tolerance=t,
+            entrees={
+                **{f"masse_reference_{i}": v for i, v in enumerate(ref)},
+                **{f"masse_declaration_{i}": v for i, v in enumerate(decv)},
+            },
+        )
         if abs(ecart) <= t:
             out.append(ctx.conforme(cid, **commun))
             continue
         confusion = _confusions_somme(decv, lambda x, a=a, t=t: abs(x - a) <= t)
         confusion += _confusions_somme(ref, lambda x, b=b, t=t: abs(b - x) <= t)
-        cl = ctx.classify(cid, ecart=ecart, tolerance=t, seuil_certitude=None, valeurs_cles=[*ref, *decv],
-                          confusion=confusion, documents=commun["documents"])
+        cl = ctx.classify(
+            cid,
+            ecart=ecart,
+            tolerance=t,
+            seuil_certitude=None,
+            valeurs_cles=[*ref, *decv],
+            confusion=confusion,
+            documents=commun["documents"],
+        )
         libelle = (
             f"{_maj(_source_txt(ctx, ref, c))} indique une {nom} de {format_nombre(a)} kg ; "
             f"{_refs_dec(c.decs, decv)} indique {format_nombre(b)} kg (écart de {format_nombre(ecart)} kg)."
         )
-        preuves = [preuve(v, RolePreuve.valeur_a) for v in ref] + [preuve(v, RolePreuve.valeur_b) for v in decv]
-        out.append(ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A10, preuves=preuves, **commun))
+        preuves = [preuve(v, RolePreuve.valeur_a) for v in ref] + [
+            preuve(v, RolePreuve.valeur_b) for v in decv
+        ]
+        out.append(
+            ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A10, preuves=preuves, **commun)
+        )
     return out
 
 
@@ -1597,14 +2020,30 @@ def _a11(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     t = ctx.tol.t_colis()
     ecart = b - a
     commun["documents"] = list(dict.fromkeys([*c.doc_ids, *(v.document_id for v in ref if v.document_id)]))
-    commun.update(attendu=a, constate=b, ecart=ecart, tolerance=t,
-                  entrees={**{f"colis_reference_{i}": v for i, v in enumerate(ref)},
-                           **{f"colis_declaration_{i}": v for i, v in enumerate(decv)}})
+    commun.update(
+        attendu=a,
+        constate=b,
+        ecart=ecart,
+        tolerance=t,
+        entrees={
+            **{f"colis_reference_{i}": v for i, v in enumerate(ref)},
+            **{f"colis_declaration_{i}": v for i, v in enumerate(decv)},
+        },
+    )
     if abs(ecart) <= t:
         return [ctx.conforme(cid, **commun)]
-    confusion = _confusions_somme(decv, lambda x: abs(x - a) <= t) + _confusions_somme(ref, lambda x: abs(b - x) <= t)
-    cl = ctx.classify(cid, ecart=ecart, tolerance=t, seuil_certitude=None, valeurs_cles=[*ref, *decv],
-                      confusion=confusion, documents=commun["documents"])
+    confusion = _confusions_somme(decv, lambda x: abs(x - a) <= t) + _confusions_somme(
+        ref, lambda x: abs(b - x) <= t
+    )
+    cl = ctx.classify(
+        cid,
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=None,
+        valeurs_cles=[*ref, *decv],
+        confusion=confusion,
+        documents=commun["documents"],
+    )
     libelle = (
         f"{_maj(_source_txt(ctx, ref, c))} indique {format_nombre(a)} colis ; {_refs_dec(c.decs, decv)} "
         f"indique {format_nombre(b)} colis."
@@ -1632,32 +2071,56 @@ def _pays(ctx: ControlContext, v: ValeurSourcee | None) -> str | None:
 
 
 def _comparer_origines(
-    ctx: ControlContext, c: Couple, unite: str, sous: str, lignes: list[tuple[Document, int]],
-    articles: list[tuple[Document, int]], code: str | None,
+    ctx: ControlContext,
+    c: Couple,
+    unite: str,
+    sous: str,
+    lignes: list[tuple[Document, int]],
+    articles: list[tuple[Document, int]],
+    code: str | None,
 ) -> ResultatControle:
     cid = "A12"
     commun: dict = dict(unite=unite, sous_controle=sous, documents=c.doc_ids)
     fvals = [v for fc, i in lignes if (v := fc.fc.lignes[i].pays_origine) is not None and _pays(ctx, v)]
-    dvals = [(dec, i, v) for dec, i in articles if (v := dec.dec.articles[i].pays_origine) is not None and _pays(ctx, v)]
+    dvals = [
+        (dec, i, v)
+        for dec, i in articles
+        if (v := dec.dec.articles[i].pays_origine) is not None and _pays(ctx, v)
+    ]
     if not fvals or not dvals:
         return ctx.non_verifiable(cid, RaisonCode.valeur_absente, **commun)
     of = sorted({_pays(ctx, v) or "" for v in fvals})
     od = sorted({_pays(ctx, v) or "" for _, _, v in dvals})
     # Origine préférentielle et code de préférence : affichés seulement, jamais comparés (§10 A12).
-    pref = sorted({
-        x.valeur or "" for dec, i in articles
-        for x in (dec.dec.articles[i].pays_origine_preferentielle, dec.dec.articles[i].code_preference)
-        if x is not None and x.valeur
-    })
-    commun.update(attendu=",".join(of), constate=",".join(od),
-                  entrees={**{f"origine_facture_{i}": v for i, v in enumerate(fvals)},
-                           **{f"origine_declaration_{i}": v for i, (_, _, v) in enumerate(dvals)}},
-                  details={"sh6": code, "preferentiel_affiche": pref})
+    pref = sorted(
+        {
+            x.valeur or ""
+            for dec, i in articles
+            for x in (dec.dec.articles[i].pays_origine_preferentielle, dec.dec.articles[i].code_preference)
+            if x is not None and x.valeur
+        }
+    )
+    commun.update(
+        attendu=",".join(of),
+        constate=",".join(od),
+        entrees={
+            **{f"origine_facture_{i}": v for i, v in enumerate(fvals)},
+            **{f"origine_declaration_{i}": v for i, (_, _, v) in enumerate(dvals)},
+        },
+        details={"sh6": code, "preferentiel_affiche": pref},
+    )
     if of == od:
         return ctx.conforme(cid, **commun)
     vals_d = [v for _, _, v in dvals]
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[*fvals, *vals_d],
-                      documents=c.doc_ids, renvoi=True)
+    cl = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=[*fvals, *vals_d],
+        documents=c.doc_ids,
+        renvoi=True,
+    )
     arts = ", ".join(dict.fromkeys(_article_txt(dec, i) for dec, i, _ in dvals))
     pour = f" pour le code SH6 {code}" if code else ""
     page_f = f", page {fvals[0].page}" if fvals[0].page else ""
@@ -1666,9 +2129,12 @@ def _comparer_origines(
         f"Le pays d'origine imprimé sur {_refs_fc(c.fcs)} ({', '.join(of)}{page_f}) diffère de celui indiqué sur "
         f"l'{arts} de {_refs_dec(c.decs)} ({', '.join(od)}{page_d}){pour}. {PHRASE_RENVOI}"
     )
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in fvals] + [preuve(v, RolePreuve.valeur_b) for v in vals_d]
-    return ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_RENVOI, preuves=preuves, renvoi=True,
-                       **commun)
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in fvals] + [
+        preuve(v, RolePreuve.valeur_b) for v in vals_d
+    ]
+    return ctx.constat(
+        cid, cl, libelle=libelle, prochaine_action=ACTION_RENVOI, preuves=preuves, renvoi=True, **commun
+    )
 
 
 def _a12(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
@@ -1676,8 +2142,12 @@ def _a12(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     communs = sorted(set(lignes) & set(articles))
     ids_fc, ids_dec = [d.id for d in c.fcs], [d.id for d in c.decs]
     if communs:
-        return [_comparer_origines(ctx, c, cle_unite(fc=ids_fc, dec=ids_dec, sh6=code), "sh6", lignes[code],
-                                   articles[code], code) for code in communs]
+        return [
+            _comparer_origines(
+                ctx, c, cle_unite(fc=ids_fc, dec=ids_dec, sh6=code), "sh6", lignes[code], articles[code], code
+            )
+            for code in communs
+        ]
     toutes_l = [(fc, i) for fc in c.fcs for i in range(len(fc.fc.lignes))]
     tous_a = [(dec, i) for dec in c.decs for i in range(len(dec.dec.articles))]
     return [_comparer_origines(ctx, c, c.unite, "ensemble", toutes_l, tous_a, None)]
@@ -1711,21 +2181,29 @@ class _EcartA13:
         return bool(self.seuls_f and self.seuls_d)
 
     def valeurs(self) -> tuple[list[ValeurSourcee], list[ValeurSourcee]]:
-        return ([v for code in self.seuls_f for v in self.fcodes[code]],
-                [v for code in self.seuls_d for _, _, v in self.dcodes[code]])
+        return (
+            [v for code in self.seuls_f for v in self.fcodes[code]],
+            [v for code in self.seuls_d for _, _, v in self.dcodes[code]],
+        )
 
     def phrase(self) -> str:
         c, phrases = self.couple, []
         if self.seuls_f:
-            lst = ", ".join(f"{self.fcodes[k][0].valeur_brute or self.fcodes[k][0].valeur} "
-                            f"(page {self.fcodes[k][0].page})" for k in self.seuls_f)
+            lst = ", ".join(
+                f"{self.fcodes[k][0].valeur_brute or self.fcodes[k][0].valeur} "
+                f"(page {self.fcodes[k][0].page})"
+                for k in self.seuls_f
+            )
             phrases.append(
                 f"sur {_refs_fc(c.fcs)}, {lst} sans équivalent (comparaison sur 6 chiffres) parmi les codes "
                 f"imprimés sur {_refs_dec(c.decs)}"
             )
         if self.seuls_d:
-            lst = ", ".join(f"{v.valeur_brute or v.valeur} ({_article_txt(dec, i)})"
-                            for k in self.seuls_d for dec, i, v in self.dcodes[k][:1])
+            lst = ", ".join(
+                f"{v.valeur_brute or v.valeur} ({_article_txt(dec, i)})"
+                for k in self.seuls_d
+                for dec, i, v in self.dcodes[k][:1]
+            )
             ref = _refs_dec(c.decs) if len(c.decs) > 1 or self.seuls_f else "la déclaration"
             phrases.append(f"sur {ref}, {lst} sans équivalent parmi les codes imprimés sur {_refs_fc(c.fcs)}")
         return " ; ".join(phrases)
@@ -1742,8 +2220,9 @@ def _a13_couple(ctx: ControlContext, c: Couple) -> ResultatControle | _EcartA13:
                 assert v is not None
                 fcodes.setdefault(code, []).append(v)
     if not fcodes:
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente,
-                                  details={"motif": "la facture ne porte pas de code"}, **commun)
+        return ctx.non_verifiable(
+            cid, RaisonCode.valeur_absente, details={"motif": "la facture ne porte pas de code"}, **commun
+        )
     dcodes: dict[str, list[tuple[Document, int, ValeurSourcee]]] = {}
     for dec in c.decs:
         for i, art in enumerate(dec.dec.articles):
@@ -1752,13 +2231,20 @@ def _a13_couple(ctx: ControlContext, c: Couple) -> ResultatControle | _EcartA13:
                 assert v is not None
                 dcodes.setdefault(code, []).append((dec, i, v))
     if not dcodes:
-        return ctx.non_verifiable(cid, RaisonCode.valeur_absente,
-                                  details={"motif": "la déclaration ne porte pas de code lisible"}, **commun)
+        return ctx.non_verifiable(
+            cid,
+            RaisonCode.valeur_absente,
+            details={"motif": "la déclaration ne porte pas de code lisible"},
+            **commun,
+        )
     seuls_f = sorted(set(fcodes) - set(dcodes))
     seuls_d = sorted(set(dcodes) - set(fcodes))
     if not seuls_f and not seuls_d:
-        commun.update(attendu=",".join(sorted(fcodes)), constate=",".join(sorted(dcodes)),
-                      details={"sh6_facture_seuls": [], "sh6_declaration_seuls": []})
+        commun.update(
+            attendu=",".join(sorted(fcodes)),
+            constate=",".join(sorted(dcodes)),
+            details={"sh6_facture_seuls": [], "sh6_declaration_seuls": []},
+        )
         return ctx.conforme(cid, **commun)
     return _EcartA13(c, seuls_f, seuls_d, fcodes, dcodes)
 
@@ -1771,27 +2257,53 @@ def _a13_dossier(ctx: ControlContext, ecarts: list[_EcartA13]) -> ResultatContro
     vals_f = [v for e in ecarts for v in e.valeurs()[0]]
     vals_d = [v for e in ecarts for v in e.valeurs()[1]]
     douteux = any(codes_confondables(a, b) for e in ecarts for a in e.seuls_f for b in e.seuls_d)
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[*vals_f, *vals_d],
-                      documents=docs, renvoi=True,
-                      raisons_supplementaires=[RaisonCode.lecture_douteuse] if douteux else [])
+    cl = ctx.classify(
+        cid,
+        ecart=None,
+        tolerance=None,
+        seuil_certitude=None,
+        valeurs_cles=[*vals_f, *vals_d],
+        documents=docs,
+        renvoi=True,
+        raisons_supplementaires=[RaisonCode.lecture_douteuse] if douteux else [],
+    )
     seuls_f = sorted({k for e in ecarts for k in e.seuls_f})
     seuls_d = sorted({k for e in ecarts for k in e.seuls_d})
     details = {
         "sh6_facture_seuls": seuls_f,
         "sh6_declaration_seuls": seuls_d,
-        "couples": [{"unite": e.couple.unite, "sh6_facture_seuls": e.seuls_f, "sh6_declaration_seuls": e.seuls_d,
-                     "croise": e.croise} for e in ecarts],
+        "couples": [
+            {
+                "unite": e.couple.unite,
+                "sh6_facture_seuls": e.seuls_f,
+                "sh6_declaration_seuls": e.seuls_d,
+                "croise": e.croise,
+            }
+            for e in ecarts
+        ],
         "a_sens_unique": not any(e.croise for e in ecarts),
     }
     libelle = "Codes marchandise à rapprocher manuellement : " + " ; ".join(e.phrase() for e in ecarts) + "."
     if douteux:
         libelle += " Certains codes ne diffèrent que par des chiffres souvent confondus à la lecture."
     libelle += f" {PHRASE_RENVOI}"
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in vals_f] + [preuve(v, RolePreuve.valeur_b) for v in vals_d]
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in vals_f] + [
+        preuve(v, RolePreuve.valeur_b) for v in vals_d
+    ]
     unite = ecarts[0].couple.unite if len(ecarts) == 1 else "dossier"
-    return ctx.constat(cid, cl, unite=unite, libelle=libelle, prochaine_action=ACTION_RENVOI, preuves=preuves,
-                       renvoi=True, documents=docs, attendu=",".join(sorted({k for e in ecarts for k in e.fcodes})),
-                       constate=",".join(sorted({k for e in ecarts for k in e.dcodes})), details=details)
+    return ctx.constat(
+        cid,
+        cl,
+        unite=unite,
+        libelle=libelle,
+        prochaine_action=ACTION_RENVOI,
+        preuves=preuves,
+        renvoi=True,
+        documents=docs,
+        attendu=",".join(sorted({k for e in ecarts for k in e.fcodes})),
+        constate=",".join(sorted({k for e in ecarts for k in e.dcodes})),
+        details=details,
+    )
 
 
 @control("A13")
@@ -1825,8 +2337,13 @@ def _a14(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         return [ctx.non_applicable(cid, RaisonCode.valeur_absente, details={"motif": "pro_forma"}, **commun)]
     for v in [*(fc.fc.date for fc in fcs), *(dec.dec.date_acceptation for dec in c.decs)]:
         if _date(ctx, v) is None:
-            return [ctx.non_verifiable(cid, ctx.raison_inutilisable(v) if not ctx.utilisable(v)
-                                       else RaisonCode.valeur_absente, **commun)]
+            return [
+                ctx.non_verifiable(
+                    cid,
+                    ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                    **commun,
+                )
+            ]
     anomalies = []
     for fc in fcs:
         vf = fc.fc.date
@@ -1841,15 +2358,29 @@ def _a14(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     if not anomalies:
         return [ctx.conforme(cid, **commun)]
     vals = [x for a in anomalies for x in (a[1], a[4])]
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=vals, documents=c.doc_ids)
+    cl = ctx.classify(
+        cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=vals, documents=c.doc_ids
+    )
     fc, vf, df, dec, vd, dd = anomalies[0]
     libelle = (
         f"{_maj(_ref_dec(dec, vd))} indique une date d'acceptation ({_date_fr(dd)}) antérieure de "
         f"{(df - dd).days} jours à la date de {_ref_fc(fc, vf)} ({_date_fr(df)})."
     )
-    preuves = [preuve(a[1], RolePreuve.valeur_a) for a in anomalies] + [preuve(a[4], RolePreuve.valeur_b) for a in anomalies]
-    return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A14, preuves=preuves,
-                        attendu=df.isoformat(), constate=dd.isoformat(), **commun)]
+    preuves = [preuve(a[1], RolePreuve.valeur_a) for a in anomalies] + [
+        preuve(a[4], RolePreuve.valeur_b) for a in anomalies
+    ]
+    return [
+        ctx.constat(
+            cid,
+            cl,
+            libelle=libelle,
+            prochaine_action=ACTION_A14,
+            preuves=preuves,
+            attendu=df.isoformat(),
+            constate=dd.isoformat(),
+            **commun,
+        )
+    ]
 
 
 @control("A14")
@@ -1894,8 +2425,11 @@ def _a15(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         # Une désignation illisible peut contenir la référence cherchée : on ne conclut pas (D-810).
         return [ctx.non_verifiable(cid, RaisonCode.valeur_absente, **commun)]
     if not refs:
-        return [ctx.non_applicable(cid, RaisonCode.valeur_absente, details={"motif": "aucune_reference_article"},
-                                   **commun)]
+        return [
+            ctx.non_applicable(
+                cid, RaisonCode.valeur_absente, details={"motif": "aucune_reference_article"}, **commun
+            )
+        ]
     cles_d = [norm_ref(v.valeur) for v in designations]
     jetons_d = [_jetons_reference(v.valeur) for v in designations]
     formes = {_forme_reference(v.valeur) for v in refs.values()}
@@ -1906,23 +2440,36 @@ def _a15(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
 
     # Une désignation « contient une référence d'article » si elle cite une référence de la facture ou un mot
     # de même forme (lettres, chiffres, séparateurs) qu'une référence de la facture (D-810).
-    if not all(any(citee(r, i) for r in refs) or any(_forme_reference(j) in formes for j in jetons_d[i])
-               for i in range(len(designations))):
+    if not all(
+        any(citee(r, i) for r in refs) or any(_forme_reference(j) in formes for j in jetons_d[i])
+        for i in range(len(designations))
+    ):
         # Le déclarant ne reprend manifestement pas les références : contrôle sans objet.
-        return [ctx.non_applicable(cid, RaisonCode.controle_signal_seulement,
-                                   details={"motif": "references_non_reprises"}, **commun)]
+        return [
+            ctx.non_applicable(
+                cid,
+                RaisonCode.controle_signal_seulement,
+                details={"motif": "references_non_reprises"},
+                **commun,
+            )
+        ]
     absentes = [v for r, v in refs.items() if not any(citee(r, i) for i in range(len(designations)))]
     commun.update(details={"references": sorted(refs), "absentes": [norm_ref(v.valeur) for v in absentes]})
     if not absentes:
         return [ctx.conforme(cid, **commun)]
-    cl = ctx.classify(cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=absentes,
-                      documents=c.doc_ids)
-    lst = ", ".join(f"{v.valeur_brute or v.valeur} (page {v.page})" if v.page else str(v.valeur) for v in absentes)
+    cl = ctx.classify(
+        cid, ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=absentes, documents=c.doc_ids
+    )
+    lst = ", ".join(
+        f"{v.valeur_brute or v.valeur} (page {v.page})" if v.page else str(v.valeur) for v in absentes
+    )
     libelle = (
         f"Les références d'article {lst} imprimées sur {_refs_fc(c.fcs)} ne figurent dans aucune désignation "
         f"des articles de {_refs_dec(c.decs)}, alors que les autres désignations reprennent les références."
     )
-    preuves = [preuve(v, RolePreuve.valeur_a) for v in absentes] + [preuve(v, RolePreuve.contexte) for v in designations]
+    preuves = [preuve(v, RolePreuve.valeur_a) for v in absentes] + [
+        preuve(v, RolePreuve.contexte) for v in designations
+    ]
     return [ctx.constat(cid, cl, libelle=libelle, prochaine_action=ACTION_A15, preuves=preuves, **commun)]
 
 

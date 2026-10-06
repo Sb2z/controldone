@@ -99,15 +99,23 @@ def _localisation(dec: Document, t: TaxationDeclaration) -> str:
     return f"Au niveau de la déclaration{ref}"
 
 
-def _base_tronquee(ctx: ControlContext, base: ValeurSourcee, v_base: Decimal, v_taux: Decimal, v_montant: Decimal,
-                   nature: TauxNature) -> int | None:
+def _base_tronquee(
+    ctx: ControlContext,
+    base: ValeurSourcee,
+    v_base: Decimal,
+    v_taux: Decimal,
+    v_montant: Decimal,
+    nature: TauxNature,
+) -> int | None:
     """Puissance de dix ``k`` (1 à 6) telle que le montant imprimé soit le produit d'une base dont les chiffres lus
     sont le début : ``base × 10^k ≤ montant / taux ≤ (base + u) × 10^k``, ``u`` étant l'unité du dernier chiffre lu
     (à ``u`` près des deux côtés, et à la tolérance de ligne près). Seulement pour une base lue sous
     ``C_MIN_CERTAIN`` (D-3705). ``None`` sinon."""
     if base.confiance >= ctx.profil.c_min_certain or v_base <= 0 or v_taux <= 0 or v_montant <= 0:
         return None
-    unite_lue = Decimal(1).scaleb(v_base.as_tuple().exponent) if isinstance(v_base.as_tuple().exponent, int) else None
+    unite_lue = (
+        Decimal(1).scaleb(v_base.as_tuple().exponent) if isinstance(v_base.as_tuple().exponent, int) else None
+    )
     if unite_lue is None:
         return None
     tol = ctx.tol.t_taxe_ligne()
@@ -130,18 +138,26 @@ def _b1_ligne(ctx: ControlContext, dec: Document, index: int, t: TaxationDeclara
 
     # Données absentes ou trop douteuses : non vérifiable (P3, P-8), jamais conforme.
     if nature is None:
-        return ctx.non_verifiable("B1", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "B1", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     for v in requis.values():
         if not ctx.utilisable(v):
             return ctx.non_verifiable(
-                "B1", ctx.raison_inutilisable(v), unite=unite, documents=[dec.id], details=details,
+                "B1",
+                ctx.raison_inutilisable(v),
+                unite=unite,
+                documents=[dec.id],
+                details=details,
                 entrees={k: x for k, x in requis.items() if x is not None},
             )
     assert base is not None and t.taux is not None and t.montant is not None
     try:
         v_base, v_taux, v_montant = base.decimal_signe(), t.taux.decimal(), t.montant.decimal_signe()
     except ValueError:
-        return ctx.non_verifiable("B1", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_verifiable(
+            "B1", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
 
     tol = ctx.tol
     calcul = _produit(v_base, v_taux, nature)
@@ -164,8 +180,11 @@ def _b1_ligne(ctx: ControlContext, dec: Document, index: int, t: TaxationDeclara
         # D-3705 : base lue sous le seuil dont les chiffres de tête redonnent le montant à une puissance de dix
         # près (« 30,65 » lu pour 30 651,38) : les décimales perdues interdisent la variante exacte du test de
         # confusion ; la lecture ne permet pas de conclure.
-        return ctx.non_verifiable("B1", RaisonCode.confiance_insuffisante, **{
-            **commun, "details": {**details, "motif": "base_lue_tronquee", "puissance_de_dix": k}})
+        return ctx.non_verifiable(
+            "B1",
+            RaisonCode.confiance_insuffisante,
+            **{**commun, "details": {**details, "motif": "base_lue_tronquee", "puissance_de_dix": k}},
+        )
 
     # Test de confusion (§8.5.4) sur chacune des trois valeurs imprimées.
     confusion = [
@@ -257,7 +276,11 @@ def _articles_tous_lus(dec: Document) -> bool:
         imprime = c.nombre_articles.entier()
     except ValueError:
         return False
-    numeros = {a.numero_article.valeur for a in c.articles if a.numero_article is not None and a.numero_article.valeur}
+    numeros = {
+        a.numero_article.valeur
+        for a in c.articles
+        if a.numero_article is not None and a.numero_article.valeur
+    }
     lus = len(numeros) if numeros else len(c.articles)
     if not c.articles:
         lus = len({t.article.valeur for t in c.taxations if t.article is not None and t.article.valeur})
@@ -273,7 +296,11 @@ def _articles_manquants(dec: Document) -> bool:
         imprime = c.nombre_articles.entier()
     except ValueError:
         return False
-    numeros = {a.numero_article.valeur for a in c.articles if a.numero_article is not None and a.numero_article.valeur}
+    numeros = {
+        a.numero_article.valeur
+        for a in c.articles
+        if a.numero_article is not None and a.numero_article.valeur
+    }
     lus = len(numeros) if numeros else len(c.articles)
     if not c.articles:
         lus = len({t.article.valeur for t in c.taxations if t.article is not None and t.article.valeur})
@@ -290,6 +317,7 @@ def _confusions_somme(
     """Test de confusion (§8.5.4) sur le total imprimé et sur chacune des lignes sommées."""
     out = [Confusion(total, autre=somme, tolerance=tolerance)]
     for v, x in operandes:
+
         def accepte(var: Decimal, x: Decimal = x) -> bool:
             return abs(v_total - (somme - x + var)) <= tolerance
 
@@ -302,7 +330,9 @@ def _confusions_somme(
 # =====================================================================================================
 
 
-def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, lignes: list[int]) -> ResultatControle:
+def _b2_categorie(
+    ctx: ControlContext, dec: Document, code: str, i_total: int, lignes: list[int]
+) -> ResultatControle:
     taxations = dec.dec.taxations
     unite = cle_unite(dec=dec.id, taxe=code)
     details = {"declaration_id": dec.id, "type_taxe": code, "total": i_total, "lignes": lignes}
@@ -311,18 +341,33 @@ def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, l
     for v in [total, *operandes_vs]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
-                "B2", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
-                unite=unite, sous_controle="categorie", documents=[dec.id], details=details,
+                "B2",
+                ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                unite=unite,
+                sous_controle="categorie",
+                documents=[dec.id],
+                details=details,
             )
     assert total is not None
     v_total = _num(total) or _ZERO
     operandes = [(v, _num(v) or _ZERO) for v in operandes_vs if v is not None]
     somme = sum((x for _, x in operandes), _ZERO)
     return _b2_resultat(
-        ctx, dec, unite=unite, sous_controle="categorie", total=total, v_total=v_total, operandes=operandes,
-        somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
+        ctx,
+        dec,
+        unite=unite,
+        sous_controle="categorie",
+        total=total,
+        v_total=v_total,
+        operandes=operandes,
+        somme=somme,
+        details=details,
+        objet=f"le total imprimé de la taxe {code}",
         composante=_COMPOSANTE.get(taxations[i_total].categorie),
-        structure=lambda: motifs_structure_taxes(dec, lignes, _num, ctx.tol, i_total=i_total) + _motif_total_negatif(v_total),
+        structure=lambda: (
+            motifs_structure_taxes(dec, lignes, _num, ctx.tol, i_total=i_total)
+            + _motif_total_negatif(v_total)
+        ),
     )
 
 
@@ -337,8 +382,14 @@ def _lignes_completes(ctx: ControlContext, dec: Document) -> bool:
     if any(x is None for x in montants):
         return False
     tout = sum((x for x in montants if x is not None), _ZERO)
-    hors = sum((x for t, x in zip(c.taxations, montants, strict=True) if x is not None
-                and t.paiement_normalise is not PaiementNormalise.autoliquide), _ZERO)
+    hors = sum(
+        (
+            x
+            for t, x in zip(c.taxations, montants, strict=True)
+            if x is not None and t.paiement_normalise is not PaiementNormalise.autoliquide
+        ),
+        _ZERO,
+    )
     t = ctx.tol.t_somme(len(montants))
     for total in (c.total_droits_taxes, c.total_a_payer):
         vt = _num(total) if ctx.utilisable(total) else None
@@ -356,7 +407,11 @@ def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatCont
     des droits et taxes, ``non_verifiable``."""
     c = dec.dec
     tot = c.totaux_par_code[k]
-    code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur else ""
+    code = (
+        (tot.type_taxe.valeur or "").strip().upper()
+        if tot.type_taxe is not None and tot.type_taxe.valeur
+        else ""
+    )
     if not code or tot.montant is None:
         return None
     unite = cle_unite(dec=dec.id, total_code=code)
@@ -364,15 +419,21 @@ def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatCont
     details: dict = {"declaration_id": dec.id, "type_taxe": code, "total_par_code": k, "lignes": lignes}
     commun_nv = dict(unite=unite, sous_controle="code", documents=[dec.id])
     if not lignes:
-        return ctx.non_verifiable("B2", RaisonCode.valeur_absente, **commun_nv,
-                                  details={**details, "motif": "aucune ligne du code lue"})
+        return ctx.non_verifiable(
+            "B2",
+            RaisonCode.valeur_absente,
+            **commun_nv,
+            details={**details, "motif": "aucune ligne du code lue"},
+        )
     total = tot.montant
     operandes_vs = [montant_taxe(c.taxations[i]) for i in lignes]
     for v in [total, *operandes_vs]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
-                "B2", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
-                **commun_nv, details=details,
+                "B2",
+                ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                **commun_nv,
+                details=details,
             )
     v_total = _num(total) or _ZERO
     operandes = [(v, _num(v) or _ZERO) for v in operandes_vs if v is not None]
@@ -382,8 +443,11 @@ def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatCont
     # Hypothèse « à payer » : une TVA autoliquidée imprime 0 à payer ; le total du code peut reprendre cette colonne.
     a_payer = [c.taxations[i].montant_a_payer for i in lignes]
     concorde: bool | None = None
-    if (abs(ecart) > t_somme and all(ctx.utilisable(v) and _num(v) is not None for v in a_payer)
-            and abs(v_total - sum((_num(v) or _ZERO for v in a_payer), _ZERO)) <= t_somme):
+    if (
+        abs(ecart) > t_somme
+        and all(ctx.utilisable(v) and _num(v) is not None for v in a_payer)
+        and abs(v_total - sum((_num(v) or _ZERO for v in a_payer), _ZERO)) <= t_somme
+    ):
         concorde = True
     if abs(ecart) > t_somme and not concorde:
         complet = _lignes_completes(ctx, dec)
@@ -397,20 +461,40 @@ def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatCont
         manques += _motif_total_negatif(v_total)
         if manques:
             # Sous-contrôle émis seulement quand la lecture peut trancher (D-3102) : sinon impossible de conclure.
-            return ctx.non_verifiable("B2", RaisonCode.structure_non_validee, **commun_nv,
-                                      details={**details, "motif": "structure_non_validee", "structure": manques})
+            return ctx.non_verifiable(
+                "B2",
+                RaisonCode.structure_non_validee,
+                **commun_nv,
+                details={**details, "motif": "structure_non_validee", "structure": manques},
+            )
     # D-3710 : total du code déduit (D-3706) : jamais la valeur comparée d'un écart certain
-    deduit = (lambda: ["total du code déduit (total de catégorie sans code ou code sans ligne lue)"]) \
-        if tot.deduit else None
+    deduit = (
+        (lambda: ["total du code déduit (total de catégorie sans code ou code sans ligne lue)"])
+        if tot.deduit
+        else None
+    )
     return _b2_resultat(
-        ctx, dec, unite=unite, sous_controle="code", total=total, v_total=v_total, operandes=operandes,
-        somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
-        composante=_COMPOSANTE.get(c.taxations[lignes[0]].categorie), concorde=concorde, structure=deduit,
+        ctx,
+        dec,
+        unite=unite,
+        sous_controle="code",
+        total=total,
+        v_total=v_total,
+        operandes=operandes,
+        somme=somme,
+        details=details,
+        objet=f"le total imprimé de la taxe {code}",
+        composante=_COMPOSANTE.get(c.taxations[lignes[0]].categorie),
+        concorde=concorde,
+        structure=deduit,
     )
 
 
 def _couverts_par_total(
-    ctx: ControlContext, dec: Document, par_code: list[ResultatControle], total: ResultatControle | None,
+    ctx: ControlContext,
+    dec: Document,
+    par_code: list[ResultatControle],
+    total: ResultatControle | None,
 ) -> list[ResultatControle]:
     """Un seul constat par fait (D-3102) : quand le total des droits et taxes (B2 au total) présente un écart et
     que les écarts des codes en constat, additionnés, le redonnent, ce sont les mêmes lignes (lues ou imprimées)
@@ -422,14 +506,25 @@ def _couverts_par_total(
     if abs(s - total.ecart) > ctx.tol.t_somme(len(dec.dec.taxations)):
         return par_code
     ids = {r.id for r in constats}
-    return [ctx.non_applicable("B2", RaisonCode.couvert_par_autre_controle, unite=r.unite, sous_controle="code",
-                               documents=[dec.id], details={**r.details, "couvert_par": "B2 total"})
-            if r.id in ids else r for r in par_code]
+    return [
+        ctx.non_applicable(
+            "B2",
+            RaisonCode.couvert_par_autre_controle,
+            unite=r.unite,
+            sous_controle="code",
+            documents=[dec.id],
+            details={**r.details, "couvert_par": "B2 total"},
+        )
+        if r.id in ids
+        else r
+        for r in par_code
+    ]
 
 
 #: Raisons qui disent qu'une lecture ne suffit pas à trancher (D-4208).
-_RAISONS_LECTURE_B2 = frozenset({RaisonCode.confiance_insuffisante, RaisonCode.lecture_non_corroboree,
-                                 RaisonCode.valeur_absente})
+_RAISONS_LECTURE_B2 = frozenset(
+    {RaisonCode.confiance_insuffisante, RaisonCode.lecture_non_corroboree, RaisonCode.valeur_absente}
+)
 
 
 def _motif_ligne_manquante(motif: str) -> bool:
@@ -464,18 +559,30 @@ def _b2_resultat(
     t_somme = tol.t_somme(n)
     ecart = v_total - somme
     commun = dict(
-        unite=unite, sous_controle=sous_controle,
+        unite=unite,
+        sous_controle=sous_controle,
         entrees={"total": total, **{f"ligne_{k}": v for k, (v, _) in enumerate(operandes)}},
-        attendu=arrondi_centime(somme), constate=v_total, ecart=montant_arithmetique(v_total, somme),
-        tolerance=t_somme, seuil_certitude=tol.s_calcul_declaration(), documents=[dec.id], details=details,
+        attendu=arrondi_centime(somme),
+        constate=v_total,
+        ecart=montant_arithmetique(v_total, somme),
+        tolerance=t_somme,
+        seuil_certitude=tol.s_calcul_declaration(),
+        documents=[dec.id],
+        details=details,
     )
     if concorde if concorde is not None else abs(ecart) <= t_somme:
         return ctx.conforme("B2", **commun)
     if ecart > 0 and _articles_manquants(dec):
         # D-2307 : total imprimé supérieur à la somme lue alors que des articles imprimés n'ont pas été lus :
         # leurs lignes manquent à la somme, l'écart n'est pas établi (impossible de conclure, P8).
-        return ctx.non_verifiable("B2", RaisonCode.valeur_absente, unite=unite, sous_controle=sous_controle,
-                                  documents=[dec.id], details={**details, "motif": "articles_non_lus"})
+        return ctx.non_verifiable(
+            "B2",
+            RaisonCode.valeur_absente,
+            unite=unite,
+            sous_controle=sous_controle,
+            documents=[dec.id],
+            details={**details, "motif": "articles_non_lus"},
+        )
     raisons = [] if _articles_tous_lus(dec) else [RaisonCode.valeur_absente]
     # D-2210 : un écart certain repose sur une structure de tableau validée (doublons, couverture des
     # articles, lignes cohérentes, total de catégorie non ambigu).
@@ -484,22 +591,32 @@ def _b2_resultat(
         raisons.append(RaisonCode.structure_non_validee)
         commun["details"] = {**details, "structure_non_validee": motifs}
     classement = ctx.classify(
-        "B2", ecart=ecart, tolerance=t_somme, seuil_certitude=tol.s_calcul_declaration(),
+        "B2",
+        ecart=ecart,
+        tolerance=t_somme,
+        seuil_certitude=tol.s_calcul_declaration(),
         valeurs_cles=[total, *(v for v, _ in operandes)],
         confusion=_confusions_somme(total, v_total, operandes, somme, t_somme),
         raisons_supplementaires=raisons,
     )
-    if (ecart > 0 and classement.niveau is Niveau.a_verifier and any(_motif_ligne_manquante(m) for m in motifs)
-            and set(classement.raisons) & _RAISONS_LECTURE_B2):
+    if (
+        ecart > 0
+        and classement.niveau is Niveau.a_verifier
+        and any(_motif_ligne_manquante(m) for m in motifs)
+        and set(classement.raisons) & _RAISONS_LECTURE_B2
+    ):
         # D-4208 : total imprimé supérieur à la somme lue, structure qui signale des lignes non lues (article ou
         # code sans ligne lue, ligne sans code) et lecture sous le seuil : une ligne non lue explique l'écart dans
         # ce sens (comme D-2307, D-3703) ; impossible de conclure.
-        return ctx.non_verifiable("B2", RaisonCode.structure_non_validee, unite=unite, sous_controle=sous_controle,
-                                  documents=[dec.id], details={**details, "motif": "lignes_possiblement_non_lues",
-                                                               "structure_non_validee": motifs})
-    calcul_txt = (
-        f"somme des {n} montants imprimés = {format_montant(arrondi_centime(somme), 'EUR')}"
-    )
+        return ctx.non_verifiable(
+            "B2",
+            RaisonCode.structure_non_validee,
+            unite=unite,
+            sous_controle=sous_controle,
+            documents=[dec.id],
+            details={**details, "motif": "lignes_possiblement_non_lues", "structure_non_validee": motifs},
+        )
+    calcul_txt = f"somme des {n} montants imprimés = {format_montant(arrondi_centime(somme), 'EUR')}"
     libelle = (
         f"Sur {_ref_declaration(dec, total)}, {objet} ({format_montant(v_total, 'EUR')}) diffère de la "
         f"somme des {n} montants de taxe imprimés ({format_montant(arrondi_centime(somme), 'EUR')})."
@@ -507,8 +624,12 @@ def _b2_resultat(
     if RaisonCode.valeur_absente in raisons:
         libelle += " Le nombre d'articles lus ne correspond pas au nombre d'articles imprimé : une ligne non lue peut expliquer l'écart."
     return ctx.constat(
-        "B2", classement, libelle=libelle, prochaine_action=ACTION_B,
-        montant=montant_arithmetique(v_total, somme), composante=composante,
+        "B2",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_B,
+        montant=montant_arithmetique(v_total, somme),
+        composante=composante,
         preuves=[
             preuve(total, RolePreuve.valeur_b),
             *(preuve(v, RolePreuve.operande) for v, _ in operandes),
@@ -521,19 +642,32 @@ def _b2_resultat(
 def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatControle | None:
     c = dec.dec
     unite = cle_unite(dec=dec.id)
-    totaux = [(nom, v) for nom, v in (("total_droits_taxes", c.total_droits_taxes), ("total_a_payer", c.total_a_payer))
-              if v is not None]
+    totaux = [
+        (nom, v)
+        for nom, v in (("total_droits_taxes", c.total_droits_taxes), ("total_a_payer", c.total_a_payer))
+        if v is not None
+    ]
     indices = [i for i in range(len(c.taxations)) if i not in exclus]
     details: dict = {"declaration_id": dec.id, "lignes": indices}
     if not totaux or not indices:
-        return ctx.non_applicable("B2", RaisonCode.valeur_absente, unite=unite, sous_controle="total",
-                                  documents=[dec.id], details={**details, "motif": "total ou lignes absents"})
+        return ctx.non_applicable(
+            "B2",
+            RaisonCode.valeur_absente,
+            unite=unite,
+            sous_controle="total",
+            documents=[dec.id],
+            details={**details, "motif": "total ou lignes absents"},
+        )
     lignes = [(i, montant_taxe(c.taxations[i])) for i in indices]
     for v in [*(v for _, v in totaux), *(v for _, v in lignes)]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
-                "B2", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
-                unite=unite, sous_controle="total", documents=[dec.id], details=details,
+                "B2",
+                ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                unite=unite,
+                sous_controle="total",
+                documents=[dec.id],
+                details=details,
             )
     tout = [(v, _num(v) or _ZERO) for _, v in lignes if v is not None]
     # TVA autoliquidée : mode de paiement de la ligne, ou, pour une ligne de TVA dont le mode n'est pas lu,
@@ -543,9 +677,13 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
     def autoliquidee(t: TaxationDeclaration) -> bool:
         if t.paiement_normalise is PaiementNormalise.autoliquide:
             return True
-        return indice and t.categorie is CategorieTaxe.tva and t.paiement_normalise is PaiementNormalise.inconnu
+        return (
+            indice and t.categorie is CategorieTaxe.tva and t.paiement_normalise is PaiementNormalise.inconnu
+        )
 
-    hors_autoliq = [(v, _num(v) or _ZERO) for i, v in lignes if v is not None and not autoliquidee(c.taxations[i])]
+    hors_autoliq = [
+        (v, _num(v) or _ZERO) for i, v in lignes if v is not None and not autoliquidee(c.taxations[i])
+    ]
     hypotheses = {"tva_autoliquidee_incluse": tout, "tva_autoliquidee_exclue": hors_autoliq}
     # Conforme si l'un des totaux imprimés concorde avec l'une des deux hypothèses (§11 B2).
     for nom_total, v_tot in totaux:
@@ -554,8 +692,17 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
             s = sum((x for _, x in ops), _ZERO)
             if abs(vt - s) <= ctx.tol.t_somme(len(ops)):
                 return _b2_resultat(
-                    ctx, dec, unite=unite, sous_controle="total", total=v_tot, v_total=vt, operandes=ops, somme=s,
-                    details={**details, "total": nom_total, "hypothese": nom_h}, objet="", composante=None,
+                    ctx,
+                    dec,
+                    unite=unite,
+                    sous_controle="total",
+                    total=v_tot,
+                    v_total=vt,
+                    operandes=ops,
+                    somme=s,
+                    details={**details, "total": nom_total, "hypothese": nom_h},
+                    objet="",
+                    composante=None,
                     concorde=True,
                 )
     # Écart : total de référence = total_droits_taxes s'il est imprimé ; hypothèse la plus proche.
@@ -563,12 +710,26 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
     vt = _num(v_tot) or _ZERO
     nom_h, ops = min(hypotheses.items(), key=lambda kv: (abs(vt - sum((x for _, x in kv[1]), _ZERO)), kv[0]))
     s = sum((x for _, x in ops), _ZERO)
-    objet = ("le montant total des droits et taxes imprimé" if nom_total == "total_droits_taxes"
-             else "le total à payer imprimé")
+    objet = (
+        "le montant total des droits et taxes imprimé"
+        if nom_total == "total_droits_taxes"
+        else "le total à payer imprimé"
+    )
     return _b2_resultat(
-        ctx, dec, unite=unite, sous_controle="total", total=v_tot, v_total=vt, operandes=ops, somme=s,
-        details={**details, "total": nom_total, "hypothese": nom_h}, objet=objet, composante=None,
-        structure=lambda: motifs_structure_taxes(dec, indices, _num, ctx.tol, ecart=vt - s) + _motif_total_negatif(vt),
+        ctx,
+        dec,
+        unite=unite,
+        sous_controle="total",
+        total=v_tot,
+        v_total=vt,
+        operandes=ops,
+        somme=s,
+        details={**details, "total": nom_total, "hypothese": nom_h},
+        objet=objet,
+        composante=None,
+        structure=lambda: (
+            motifs_structure_taxes(dec, indices, _num, ctx.tol, ecart=vt - s) + _motif_total_negatif(vt)
+        ),
     )
 
 
@@ -598,8 +759,11 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
         vus: set[str] = set(totaux)
         par_code: list[ResultatControle] = []
         for k, tot in enumerate(dec.dec.totaux_par_code):
-            code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur \
+            code = (
+                (tot.type_taxe.valeur or "").strip().upper()
+                if tot.type_taxe is not None and tot.type_taxe.valeur
                 else ""
+            )
             if not code or code in vus:
                 continue
             vus.add(code)
@@ -624,28 +788,48 @@ def _b3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     montants = [a.montant_facture_article for a in c.articles]
     presents = [v for v in montants if v is not None]
     if c.montant_total_facture is None or not presents:
-        return ctx.non_applicable("B3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details)
+        return ctx.non_applicable(
+            "B3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id], details=details
+        )
     if len(presents) != len(montants):
-        return ctx.non_verifiable("B3", RaisonCode.valeur_absente, unite=unite, documents=[dec.id],
-                                  details={**details, "articles_sans_montant": len(montants) - len(presents)})
+        return ctx.non_verifiable(
+            "B3",
+            RaisonCode.valeur_absente,
+            unite=unite,
+            documents=[dec.id],
+            details={**details, "articles_sans_montant": len(montants) - len(presents)},
+        )
     for v in [c.montant_total_facture, *presents]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
-                "B3", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
-                unite=unite, documents=[dec.id], details=details,
+                "B3",
+                ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                unite=unite,
+                documents=[dec.id],
+                details=details,
             )
     total = c.montant_total_facture
     v_total = _num(total) or _ZERO
     operandes = [(v, _num(v) or _ZERO) for v in presents]
     somme = sum((x for _, x in operandes), _ZERO)
-    devise = (c.devise_facture.valeur or "").upper() if c.devise_facture is not None and c.devise_facture.valeur else None
+    devise = (
+        (c.devise_facture.valeur or "").upper()
+        if c.devise_facture is not None and c.devise_facture.valeur
+        else None
+    )
     tol = ctx.tol
     t_somme = tol.t_somme(len(operandes))
     ecart = v_total - somme
     commun = dict(
-        unite=unite, entrees={"total": total, **{f"article_{k}": v for k, (v, _) in enumerate(operandes)}},
-        attendu=somme, constate=v_total, ecart=ecart, tolerance=t_somme,
-        seuil_certitude=tol.s_calcul_declaration(), documents=[dec.id], details={**details, "devise": devise},
+        unite=unite,
+        entrees={"total": total, **{f"article_{k}": v for k, (v, _) in enumerate(operandes)}},
+        attendu=somme,
+        constate=v_total,
+        ecart=ecart,
+        tolerance=t_somme,
+        seuil_certitude=tol.s_calcul_declaration(),
+        documents=[dec.id],
+        details={**details, "devise": devise},
     )
     if abs(ecart) <= t_somme:
         return ctx.conforme("B3", **commun)
@@ -663,7 +847,11 @@ def _b3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
         montant, ecart_eur = montant_arithmetique(v_total, somme), ecart
     else:
         taux = _num(c.taux_change) if ctx.utilisable(c.taux_change) else None
-        sens = c.taux_change_sens.valeur if c.taux_change_sens is not None and c.taux_change_sens.valeur else None
+        sens = (
+            c.taux_change_sens.valeur
+            if c.taux_change_sens is not None and c.taux_change_sens.valeur
+            else None
+        )
         if devise and taux and sens in ("eur_par_devise", "devise_par_eur"):
             ecart_eur = ecart * eur_par_devise(taux, sens)
             montant = arrondi_centime(ecart_eur)
@@ -674,7 +862,9 @@ def _b3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
             montant, ecart_eur = None, None
             raisons.append(RaisonCode.devise_incertaine if not devise else RaisonCode.valeur_absente)
     classement = ctx.classify(
-        "B3", ecart=ecart_eur if ecart_eur is not None else ecart, tolerance=None,
+        "B3",
+        ecart=ecart_eur if ecart_eur is not None else ecart,
+        tolerance=None,
         seuil_certitude=tol.s_calcul_declaration() if ecart_eur is not None else None,
         valeurs_cles=valeurs_cles,
         confusion=_confusions_somme(total, v_total, operandes, somme, t_somme),
@@ -689,11 +879,20 @@ def _b3_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
         f"{len(operandes)} articles ({format_montant(somme, unite_dev)})."
     )
     return ctx.constat(
-        "B3", classement, libelle=libelle, prochaine_action=ACTION_B, montant=montant, composante=Composante.valeur,
+        "B3",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_B,
+        montant=montant,
+        composante=Composante.valeur,
         preuves=[
             preuve(total, RolePreuve.valeur_b),
             *(preuve(v, RolePreuve.operande) for v, _ in operandes),
-            preuve(None, RolePreuve.valeur_a, calcul=f"somme des montants des articles = {format_montant(somme, unite_dev)}"),
+            preuve(
+                None,
+                RolePreuve.valeur_a,
+                calcul=f"somme des montants des articles = {format_montant(somme, unite_dev)}",
+            ),
         ],
         **commun,
     )
@@ -724,18 +923,36 @@ def _kg(x: Decimal) -> str:
 
 
 def _b4_nette_brute(
-    ctx: ControlContext, dec: Document, *, unite: str, sous_controle: str, nette: ValeurSourcee,
-    brute: ValeurSourcee, v_nette: Decimal, v_brute: Decimal, sujet: str, operandes: Sequence[ValeurSourcee] = (),
+    ctx: ControlContext,
+    dec: Document,
+    *,
+    unite: str,
+    sous_controle: str,
+    nette: ValeurSourcee,
+    brute: ValeurSourcee,
+    v_nette: Decimal,
+    v_brute: Decimal,
+    sujet: str,
+    operandes: Sequence[ValeurSourcee] = (),
     structure: Callable[[], list[str]] | None = None,
 ) -> ResultatControle:
     tol = ctx.tol
     t = tol.t_masse(v_nette, v_brute)
     ecart = v_nette - v_brute
-    entrees = {"masse_brute": brute, **({f"masse_nette_{k}": v for k, v in enumerate(operandes)} if operandes
-                                       else {"masse_nette": nette})}
+    entrees = {
+        "masse_brute": brute,
+        **({f"masse_nette_{k}": v for k, v in enumerate(operandes)} if operandes else {"masse_nette": nette}),
+    }
     commun = dict(
-        unite=unite, sous_controle=sous_controle, entrees=entrees,
-        attendu=v_brute, constate=v_nette, ecart=ecart, tolerance=t, seuil_certitude=t, documents=[dec.id],
+        unite=unite,
+        sous_controle=sous_controle,
+        entrees=entrees,
+        attendu=v_brute,
+        constate=v_nette,
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=t,
+        documents=[dec.id],
         details={"declaration_id": dec.id},
     )
     if ecart <= t:
@@ -752,8 +969,13 @@ def _b4_nette_brute(
     if motifs:
         commun["details"] = {**commun["details"], "structure_non_validee": motifs}
     classement = ctx.classify(
-        "B4", ecart=ecart, tolerance=t, seuil_certitude=t, valeurs_cles=[nette, brute, *operandes],
-        confusion=confusions, raisons_supplementaires=[RaisonCode.structure_non_validee] if motifs else [],
+        "B4",
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=t,
+        valeurs_cles=[nette, brute, *operandes],
+        confusion=confusions,
+        raisons_supplementaires=[RaisonCode.structure_non_validee] if motifs else [],
     )
     libelle = (
         f"{sujet} de {_ref_declaration(dec, brute)}, la masse nette imprimée ({_kg(v_nette)}) est supérieure à "
@@ -761,7 +983,9 @@ def _b4_nette_brute(
     )
     preuves = [preuve(brute, RolePreuve.valeur_a)]
     preuves += [preuve(v, RolePreuve.operande) for v in operandes] or [preuve(nette, RolePreuve.valeur_b)]
-    return ctx.constat("B4", classement, libelle=libelle, prochaine_action=ACTION_B, preuves=preuves, **commun)
+    return ctx.constat(
+        "B4", classement, libelle=libelle, prochaine_action=ACTION_B, preuves=preuves, **commun
+    )
 
 
 def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle]:
@@ -771,7 +995,11 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
     brutes: list[ValeurSourcee] = []
     excedent_articles = _ZERO  # Σ (nette − brute) des articles déjà constatés (``nette_brute``)
     for i, a in enumerate(c.articles):
-        num = a.numero_article.valeur if a.numero_article is not None and a.numero_article.valeur else str(i + 1)
+        num = (
+            a.numero_article.valeur
+            if a.numero_article is not None and a.numero_article.valeur
+            else str(i + 1)
+        )
         if a.masse_nette is not None:
             nettes.append(a.masse_nette)
         if a.masse_brute is not None:
@@ -781,16 +1009,39 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
         unite = cle_unite(dec=dec.id, art=i)
         if not (ctx.utilisable(a.masse_nette) and ctx.utilisable(a.masse_brute)):
             v = a.masse_nette if not ctx.utilisable(a.masse_nette) else a.masse_brute
-            out.append(ctx.non_verifiable("B4", ctx.raison_inutilisable(v), unite=unite, sous_controle="nette_brute",
-                                          documents=[dec.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "B4",
+                    ctx.raison_inutilisable(v),
+                    unite=unite,
+                    sous_controle="nette_brute",
+                    documents=[dec.id],
+                )
+            )
             continue
         vn, vb = _num(a.masse_nette), _num(a.masse_brute)
         if vn is None or vb is None:
-            out.append(ctx.non_verifiable("B4", RaisonCode.valeur_absente, unite=unite, sous_controle="nette_brute",
-                                          documents=[dec.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "B4",
+                    RaisonCode.valeur_absente,
+                    unite=unite,
+                    sous_controle="nette_brute",
+                    documents=[dec.id],
+                )
+            )
             continue
-        r = _b4_nette_brute(ctx, dec, unite=unite, sous_controle="nette_brute", nette=a.masse_nette,
-                            brute=a.masse_brute, v_nette=vn, v_brute=vb, sujet=f"Sur l'article {num}")
+        r = _b4_nette_brute(
+            ctx,
+            dec,
+            unite=unite,
+            sous_controle="nette_brute",
+            nette=a.masse_nette,
+            brute=a.masse_brute,
+            v_nette=vn,
+            v_brute=vb,
+            sujet=f"Sur l'article {num}",
+        )
         if r.outcome.est_constat:
             excedent_articles += vn - vb
         out.append(r)
@@ -801,8 +1052,15 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
         return out
     if not ctx.utilisable(total) or _num(total) is None:
         for sc in ("nette_total", "somme_brute"):
-            out.append(ctx.non_verifiable("B4", ctx.raison_inutilisable(total), unite=cle_unite(dec=dec.id),
-                                          sous_controle=sc, documents=[dec.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "B4",
+                    ctx.raison_inutilisable(total),
+                    unite=cle_unite(dec=dec.id),
+                    sous_controle=sc,
+                    documents=[dec.id],
+                )
+            )
         return out
     v_total = _num(total) or _ZERO
 
@@ -814,34 +1072,72 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
             if excedent_articles > 0 and reste - v_total <= ctx.tol.t_masse(reste, v_total):
                 # Le dépassement au total n'est que la conséquence des articles déjà constatés : pas de second
                 # constat pour le même fait (D-2201).
-                out.append(ctx.non_applicable(
-                    "B4", RaisonCode.couvert_par_autre_controle, unite=cle_unite(dec=dec.id),
-                    sous_controle="nette_total", documents=[dec.id],
-                    details={"couvert_par": "B4 nette_brute", "declaration_id": dec.id},
-                ))
+                out.append(
+                    ctx.non_applicable(
+                        "B4",
+                        RaisonCode.couvert_par_autre_controle,
+                        unite=cle_unite(dec=dec.id),
+                        sous_controle="nette_total",
+                        documents=[dec.id],
+                        details={"couvert_par": "B4 nette_brute", "declaration_id": dec.id},
+                    )
+                )
             else:
-                out.append(_b4_nette_brute(
-                    ctx, dec, unite=cle_unite(dec=dec.id), sous_controle="nette_total", nette=nettes[0], brute=total,
-                    v_nette=somme_n, v_brute=v_total, sujet="Au total", operandes=nettes,
-                    structure=lambda: motifs_structure_masses(dec, _num, ctx.tol),
-                ))
+                out.append(
+                    _b4_nette_brute(
+                        ctx,
+                        dec,
+                        unite=cle_unite(dec=dec.id),
+                        sous_controle="nette_total",
+                        nette=nettes[0],
+                        brute=total,
+                        v_nette=somme_n,
+                        v_brute=v_total,
+                        sujet="Au total",
+                        operandes=nettes,
+                        structure=lambda: motifs_structure_masses(dec, _num, ctx.tol),
+                    )
+                )
         else:
-            out.append(ctx.non_verifiable("B4", RaisonCode.confiance_insuffisante, unite=cle_unite(dec=dec.id),
-                                          sous_controle="nette_total", documents=[dec.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "B4",
+                    RaisonCode.confiance_insuffisante,
+                    unite=cle_unite(dec=dec.id),
+                    sous_controle="nette_total",
+                    documents=[dec.id],
+                )
+            )
 
     # (b) Σ masses brutes des articles contre la masse brute totale : a_verifier uniquement.
     if len(brutes) == n_art:
         unite = cle_unite(dec=dec.id)
         if not all(ctx.utilisable(v) and _num(v) is not None for v in brutes):
-            out.append(ctx.non_verifiable("B4", RaisonCode.confiance_insuffisante, unite=unite,
-                                          sous_controle="somme_brute", documents=[dec.id]))
+            out.append(
+                ctx.non_verifiable(
+                    "B4",
+                    RaisonCode.confiance_insuffisante,
+                    unite=unite,
+                    sous_controle="somme_brute",
+                    documents=[dec.id],
+                )
+            )
             return out
         somme_b = sum((_num(v) or _ZERO for v in brutes), _ZERO)
         t = ctx.tol.t_masse(v_total, somme_b)
         ecart = somme_b - v_total
-        commun = dict(unite=unite, sous_controle="somme_brute", entrees={"masse_brute_totale": total},
-                      attendu=v_total, constate=somme_b, ecart=ecart, tolerance=t, seuil_certitude=t,
-                      documents=[dec.id], details={"declaration_id": dec.id})
+        commun = dict(
+            unite=unite,
+            sous_controle="somme_brute",
+            entrees={"masse_brute_totale": total},
+            attendu=v_total,
+            constate=somme_b,
+            ecart=ecart,
+            tolerance=t,
+            seuil_certitude=t,
+            documents=[dec.id],
+            details={"declaration_id": dec.id},
+        )
         if abs(ecart) <= t:
             out.append(ctx.conforme("B4", **commun))
         elif ecart < 0 and _articles_manquants(dec):
@@ -855,17 +1151,31 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
             commun["details"] = {"declaration_id": dec.id, "motif": "masses_lues_sous_le_seuil"}
             out.append(ctx.non_verifiable("B4", RaisonCode.confiance_insuffisante, **commun))
         else:
-            classement = ctx.classify("B4", ecart=ecart, tolerance=t, seuil_certitude=t,
-                                      valeurs_cles=[total, *brutes], eligible=False)
+            classement = ctx.classify(
+                "B4",
+                ecart=ecart,
+                tolerance=t,
+                seuil_certitude=t,
+                valeurs_cles=[total, *brutes],
+                eligible=False,
+            )
             libelle = (
                 f"Sur {_ref_declaration(dec, total)}, la masse brute totale imprimée ({_kg(v_total)}) diffère de "
                 f"la somme des masses brutes imprimées sur les {n_art} articles ({_kg(somme_b)})."
             )
-            out.append(ctx.constat(
-                "B4", classement, libelle=libelle, prochaine_action=ACTION_B,
-                preuves=[preuve(total, RolePreuve.valeur_a), *(preuve(v, RolePreuve.operande) for v in brutes)],
-                **commun,
-            ))
+            out.append(
+                ctx.constat(
+                    "B4",
+                    classement,
+                    libelle=libelle,
+                    prochaine_action=ACTION_B,
+                    preuves=[
+                        preuve(total, RolePreuve.valeur_a),
+                        *(preuve(v, RolePreuve.operande) for v in brutes),
+                    ],
+                    **commun,
+                )
+            )
     return out
 
 
@@ -884,8 +1194,18 @@ def b4_masses(ctx: ControlContext) -> list[ResultatControle]:
     out: list[ResultatControle] = []
     for dec in declarations:
         rs = _b4_declaration(ctx, dec)
-        out.extend(rs or [ctx.non_applicable("B4", RaisonCode.valeur_absente, unite=cle_unite(dec=dec.id),
-                                             documents=[dec.id], details={"motif": "aucune masse lue"})])
+        out.extend(
+            rs
+            or [
+                ctx.non_applicable(
+                    "B4",
+                    RaisonCode.valeur_absente,
+                    unite=cle_unite(dec=dec.id),
+                    documents=[dec.id],
+                    details={"motif": "aucune masse lue"},
+                )
+            ]
+        )
     return out
 
 
@@ -907,25 +1227,40 @@ def _b5_declaration(ctx: ControlContext, dec: Document) -> ResultatControle:
     for v in [total, *presents]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
-                "B5", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
-                unite=unite, documents=[dec.id],
+                "B5",
+                ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
+                unite=unite,
+                documents=[dec.id],
             )
     v_total = _num(total) or _ZERO
     somme = sum((_num(v) or _ZERO for v in presents), _ZERO)
     ecart = somme - v_total
     t = ctx.tol.t_colis()
-    commun = dict(unite=unite, entrees={"nombre_colis_total": total}, attendu=v_total, constate=somme, ecart=ecart,
-                  tolerance=t, seuil_certitude=t, documents=[dec.id], details={"declaration_id": dec.id})
+    commun = dict(
+        unite=unite,
+        entrees={"nombre_colis_total": total},
+        attendu=v_total,
+        constate=somme,
+        ecart=ecart,
+        tolerance=t,
+        seuil_certitude=t,
+        documents=[dec.id],
+        details={"declaration_id": dec.id},
+    )
     if abs(ecart) <= t:
         return ctx.conforme("B5", **commun)
-    classement: Classement = ctx.classify("B5", ecart=ecart, tolerance=t, seuil_certitude=t,
-                                          valeurs_cles=[total, *presents])
+    classement: Classement = ctx.classify(
+        "B5", ecart=ecart, tolerance=t, seuil_certitude=t, valeurs_cles=[total, *presents]
+    )
     libelle = (
         f"Sur {_ref_declaration(dec, total)}, le nombre total de colis imprimé ({format_nombre(v_total)}) diffère "
         f"de la somme des nombres de colis imprimés sur les {len(presents)} articles ({format_nombre(somme)})."
     )
     return ctx.constat(
-        "B5", classement, libelle=libelle, prochaine_action=ACTION_B,
+        "B5",
+        classement,
+        libelle=libelle,
+        prochaine_action=ACTION_B,
         preuves=[preuve(total, RolePreuve.valeur_a), *(preuve(v, RolePreuve.operande) for v in presents)],
         **commun,
     )
@@ -939,4 +1274,3 @@ def b5_colis(ctx: ControlContext) -> list[ResultatControle]:
     if not declarations:
         return [ctx.non_verifiable("B5", RaisonCode.document_manquant)]
     return [_b5_declaration(ctx, d) for d in declarations]
-

@@ -55,6 +55,7 @@ def recepteur():
 
 class FauxSMTP:
     envois: list = []  # noqa: RUF012
+
     def __init__(self, hote, port, timeout=None):
         self.hote, self.port, self.etapes = hote, port, []
 
@@ -76,8 +77,14 @@ class FauxSMTP:
 
 def _alerte(db, cle, kind="sauvegarde_echec", quand=NOW, tenant=None):
     with db.transaction_systeme() as s:
-        emettre_alerte(s, cle=cle, kind=kind, message=f"Échec : {SECRET_CLIENT}", tenant_id=tenant,
-                       details={"archive": "controldone-20261006.tar.gz.enc", "client": SECRET_CLIENT})
+        emettre_alerte(
+            s,
+            cle=cle,
+            kind=kind,
+            message=f"Échec : {SECRET_CLIENT}",
+            tenant_id=tenant,
+            details={"archive": "controldone-20261006.tar.gz.enc", "client": SECRET_CLIENT},
+        )
         a = s.query(Alerte).filter_by(cle=cle).one()
         a.cree_le = quand
 
@@ -139,7 +146,10 @@ def test_configuration_complete(monkeypatch):
     cfg = ConfigNotifications.depuis_env()
     assert cfg.actif and [c.nom for c in cfg.canaux] == ["webhook", "courriel"]
     courriel = cfg.canaux[1]
-    assert courriel.port == 587 and courriel.destinataires == ["a@exemple-fictif.test", "b@exemple-fictif.test"]
+    assert courriel.port == 587 and courriel.destinataires == [
+        "a@exemple-fictif.test",
+        "b@exemple-fictif.test",
+    ]
     assert "MDP-FICTIF" not in repr(courriel)
     assert cfg.types == {"sauvegarde_echec", "job_mort"}
 
@@ -159,7 +169,16 @@ def test_webhook_une_par_type_et_par_jour_sans_donnee_client(db, recepteur):
     for chemin, entetes, corps in R.recus:
         assert chemin == "/crochet" and entetes["Content-Type"] == "application/json"
         charge = json.loads(corps)
-        assert set(charge) == {"source", "evenement", "kind", "libelle", "nombre", "horodatage", "lien", "text"}
+        assert set(charge) == {
+            "source",
+            "evenement",
+            "kind",
+            "libelle",
+            "nombre",
+            "horodatage",
+            "lien",
+            "text",
+        }
         assert charge["lien"] == "/admin/alertes"
         texte = corps.decode()
         for interdit in ("FICTIF", "cli_a", "cli_b", "controldone-2026", "Échec"):
@@ -220,7 +239,7 @@ def test_format_texte_pour_ntfy(db, recepteur):
     R, url = recepteur
     _alerte(db, "k1")
     notifier_alertes(db, _cfg(CanalWebhook(url=url, format="texte")), now=NOW)
-    (_, entetes, corps), = R.recus
+    ((_, entetes, corps),) = R.recus
     assert entetes["Content-Type"].startswith("text/plain")
     assert corps.decode().startswith("ControlDOne — Sauvegarde en échec (1)")
 
@@ -235,13 +254,19 @@ def test_redirection_non_suivie(db, recepteur):
 
 def test_courriel_sans_donnee_client(db):
     FauxSMTP.envois = []
-    canal = CanalCourriel(hote="smtp.exemple-fictif.test", port=587, expediteur="alertes@exemple-fictif.test",
-                          destinataires=["fondateur@exemple-fictif.test"], utilisateur="alertes",
-                          mot_de_passe="MDP-FICTIF", fabrique=FauxSMTP)
+    canal = CanalCourriel(
+        hote="smtp.exemple-fictif.test",
+        port=587,
+        expediteur="alertes@exemple-fictif.test",
+        destinataires=["fondateur@exemple-fictif.test"],
+        utilisateur="alertes",
+        mot_de_passe="MDP-FICTIF",
+        fabrique=FauxSMTP,
+    )
     _alerte(db, "k1", kind="sauvegarde_verification_echec")
     rapport = notifier_alertes(db, _cfg(canal), now=NOW)
     assert rapport.envoyees == {"sauvegarde_verification_echec": 1}
-    (etapes, msg), = FauxSMTP.envois
+    ((etapes, msg),) = FauxSMTP.envois
     assert etapes == ["starttls", ("login", "alertes")]
     assert msg["To"] == "fondateur@exemple-fictif.test"
     assert msg["Subject"] == "[ControlDOne] Sauvegarde non conforme (1)"
@@ -257,11 +282,18 @@ def test_un_canal_en_echec_n_empeche_pas_l_autre(db, recepteur):
         def send_message(self, msg):
             raise OSError("relais injoignable")
 
-    courriel = CanalCourriel(hote="smtp.exemple-fictif.test", port=587, expediteur="a@exemple-fictif.test",
-                             destinataires=["b@exemple-fictif.test"], fabrique=SMTPEnPanne)
+    courriel = CanalCourriel(
+        hote="smtp.exemple-fictif.test",
+        port=587,
+        expediteur="a@exemple-fictif.test",
+        destinataires=["b@exemple-fictif.test"],
+        fabrique=SMTPEnPanne,
+    )
     _alerte(db, "k1")
     rapport = notifier_alertes(db, _cfg(courriel, CanalWebhook(url=url)), now=NOW)
-    assert rapport.envoyees == {"sauvegarde_echec": 1} and rapport.echecs == {"sauvegarde_echec": ["courriel"]}
+    assert rapport.envoyees == {"sauvegarde_echec": 1} and rapport.echecs == {
+        "sauvegarde_echec": ["courriel"]
+    }
     assert len(R.recus) == 1 and _etats(db)["sauvegarde_echec:2026-10-06"][0] == "envoyee"
 
 
@@ -269,7 +301,9 @@ def test_types_filtres(db, recepteur):
     R, url = recepteur
     _alerte(db, "k1", kind="cout_ia_alerte")
     _alerte(db, "k2")
-    rapport = notifier_alertes(db, _cfg(CanalWebhook(url=url), types=frozenset({"sauvegarde_echec"})), now=NOW)
+    rapport = notifier_alertes(
+        db, _cfg(CanalWebhook(url=url), types=frozenset({"sauvegarde_echec"})), now=NOW
+    )
     assert rapport.envoyees == {"sauvegarde_echec": 1} and rapport.ecartees == 1 and len(R.recus) == 1
 
 
@@ -305,7 +339,7 @@ def test_ntfy_jeton_priorite_et_url_jamais_affichee(db, recepteur, monkeypatch):
     assert "SUJET-FICTIF" not in repr(cfg) and "JETON_FICTIF" not in repr(cfg)
     _alerte(db, "k1")
     notifier_alertes(db, cfg, now=NOW)
-    (chemin, entetes, _), = R.recus
+    ((chemin, entetes, _),) = R.recus
     assert chemin == "/controldone-SUJET-FICTIF"
     assert entetes["Authorization"] == "Bearer tk_JETON_FICTIF" and entetes["Priority"] == "5"
     reussis, rates = nt.envoyer_essai(cfg, now=NOW, db=db)
@@ -322,8 +356,13 @@ def test_historique_et_etat_des_canaux(db, recepteur):
         def send_message(self, msg):
             raise OSError("relais injoignable")
 
-    courriel = CanalCourriel(hote="smtp.exemple-fictif.test", port=587, expediteur="a@exemple-fictif.test",
-                             destinataires=["b@exemple-fictif.test"], fabrique=SMTPEnPanne)
+    courriel = CanalCourriel(
+        hote="smtp.exemple-fictif.test",
+        port=587,
+        expediteur="a@exemple-fictif.test",
+        destinataires=["b@exemple-fictif.test"],
+        fabrique=SMTPEnPanne,
+    )
     cfg = _cfg(courriel, CanalWebhook(url=url, format="texte"))
     _alerte(db, "k1")
     _alerte(db, "k2", kind="job_mort")
@@ -334,7 +373,9 @@ def test_historique_et_etat_des_canaux(db, recepteur):
     assert h.notifications[0].kind == "essai"
     assert {n.kind for n in h.notifications} == {"essai", "sauvegarde_echec", "job_mort"}
     sauv = next(n for n in h.notifications if n.kind == "sauvegarde_echec")
-    assert sauv.envoyee and sauv.jour == "2026-10-06" and sauv.canaux == {"webhook": "ok", "courriel": "echec"}
+    assert (
+        sauv.envoyee and sauv.jour == "2026-10-06" and sauv.canaux == {"webhook": "ok", "courriel": "echec"}
+    )
     assert h.libelle("sauvegarde_echec") == "Sauvegarde en échec"
     assert h.canaux["courriel"].en_echec and not h.canaux["webhook"].en_echec
     assert h.canaux["webhook"].dernier_succes is not None
@@ -348,8 +389,18 @@ def test_historique_ancien_format_des_canaux(db):
     from controldone.storage.alertes import historique_notifications
 
     with db.transaction_systeme() as s:
-        s.add(NotificationAlerte(cle="job_mort:2026-10-01", kind="job_mort", nombre=2, canaux="webhook",
-                                 statut="envoyee", essais=1, cree_le=NOW, envoyee_le=NOW))
+        s.add(
+            NotificationAlerte(
+                cle="job_mort:2026-10-01",
+                kind="job_mort",
+                nombre=2,
+                canaux="webhook",
+                statut="envoyee",
+                essais=1,
+                cree_le=NOW,
+                envoyee_le=NOW,
+            )
+        )
     with db.transaction_systeme() as s:
         (n,) = historique_notifications(s)
     assert n.canaux == {"webhook": "ok"} and n.jour == "2026-10-01"
@@ -364,9 +415,17 @@ def test_cli_historique(monkeypatch, capsys, tmp_path):
     d = Database(url)
     d.creer_schema()
     with d.transaction_systeme() as s:
-        s.add(NotificationAlerte(cle=f"sauvegarde_echec:{datetime.now(UTC):%Y-%m-%d}", kind="sauvegarde_echec",
-                                 nombre=1, canaux="webhook:echec", statut="echec", essais=2,
-                                 cree_le=datetime.now(UTC)))
+        s.add(
+            NotificationAlerte(
+                cle=f"sauvegarde_echec:{datetime.now(UTC):%Y-%m-%d}",
+                kind="sauvegarde_echec",
+                nombre=1,
+                canaux="webhook:echec",
+                statut="echec",
+                essais=2,
+                cree_le=datetime.now(UTC),
+            )
+        )
     d.fermer()
     assert main(["alertes", "historique"]) == 0
     sortie = capsys.readouterr().out

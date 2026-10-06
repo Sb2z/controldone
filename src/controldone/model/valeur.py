@@ -104,7 +104,11 @@ class ValeurSourcee(Modele):
     @model_validator(mode="after")
     def _regles_provenance(self) -> ValeurSourcee:
         # §6.3 : une valeur llm non ancrée a sa confiance plafonnée à 0,50.
-        if self.methode is Methode.llm and not self.ancree and self.confiance > PLAFOND_CONFIANCE_LLM_NON_ANCREE:
+        if (
+            self.methode is Methode.llm
+            and not self.ancree
+            and self.confiance > PLAFOND_CONFIANCE_LLM_NON_ANCREE
+        ):
             object.__setattr__(self, "confiance", PLAFOND_CONFIANCE_LLM_NON_ANCREE)
         if self.methode is Methode.derive and not self.derivee_de and self.regle_derivation is None:
             raise ValueError("une valeur dérivée doit citer ses sources (derivee_de) ou sa règle")

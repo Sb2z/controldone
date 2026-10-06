@@ -15,9 +15,20 @@ from pathlib import Path
 
 #: Modules dont une branche non testée peut produire un faux constat ou une faille (ordre = priorité d'affichage).
 CRITIQUES = (
-    "controls/", "normalize/", "auth/", "web/securite.py", "web/listes.py", "web/rendu.py", "web/routes_auth.py",
-    "storage/scope.py", "storage/securite.py", "storage/vault.py", "storage/cles.py", "services/saisie.py",
-    "formatage.py", "guardrails.py",
+    "controls/",
+    "normalize/",
+    "auth/",
+    "web/securite.py",
+    "web/listes.py",
+    "web/rendu.py",
+    "web/routes_auth.py",
+    "storage/scope.py",
+    "storage/securite.py",
+    "storage/vault.py",
+    "storage/cles.py",
+    "services/saisie.py",
+    "formatage.py",
+    "guardrails.py",
 )
 
 
@@ -45,19 +56,33 @@ def resumer(donnees: dict, nb_critiques: int = 10) -> tuple[str, float]:
     t = donnees["totals"]
     global_ = t["percent_covered"]
     lignes = ["| Paquet | Lignes | Branches | Total |", "|---|---:|---:|---:|"]
-    for nom, (cl, nl, cb, nb) in sorted(par_paquet.items(), key=lambda kv: taux(kv[1][0] + kv[1][2],
-                                                                                 kv[1][1] + kv[1][3])):
-        lignes.append(f"| `{nom}` | {taux(cl, nl):.1f} % ({cl}/{nl}) | {taux(cb, nb):.1f} % ({cb}/{nb}) | "
-                      f"{taux(cl + cb, nl + nb):.1f} % |")
-    lignes.append(f"| **Total** | {taux(t['covered_lines'], t['num_statements']):.1f} % | "
-                  f"{taux(t.get('covered_branches', 0), t.get('num_branches', 0)):.1f} % | **{global_:.1f} %** |")
-    critiques = sorted(((rel, s) for rel, s in modules if rel.startswith(CRITIQUES) and s["num_statements"] >= 10),
-                       key=lambda m: m[1]["percent_covered"])[:nb_critiques]
-    lignes += ["", f"Modules critiques les moins couverts ({nb_critiques}) :", "",
-               "| Module | Total | Lignes manquantes | Branches partielles |", "|---|---:|---:|---:|"]
+    for nom, (cl, nl, cb, nb) in sorted(
+        par_paquet.items(), key=lambda kv: taux(kv[1][0] + kv[1][2], kv[1][1] + kv[1][3])
+    ):
+        lignes.append(
+            f"| `{nom}` | {taux(cl, nl):.1f} % ({cl}/{nl}) | {taux(cb, nb):.1f} % ({cb}/{nb}) | "
+            f"{taux(cl + cb, nl + nb):.1f} % |"
+        )
+    lignes.append(
+        f"| **Total** | {taux(t['covered_lines'], t['num_statements']):.1f} % | "
+        f"{taux(t.get('covered_branches', 0), t.get('num_branches', 0)):.1f} % | **{global_:.1f} %** |"
+    )
+    critiques = sorted(
+        ((rel, s) for rel, s in modules if rel.startswith(CRITIQUES) and s["num_statements"] >= 10),
+        key=lambda m: m[1]["percent_covered"],
+    )[:nb_critiques]
+    lignes += [
+        "",
+        f"Modules critiques les moins couverts ({nb_critiques}) :",
+        "",
+        "| Module | Total | Lignes manquantes | Branches partielles |",
+        "|---|---:|---:|---:|",
+    ]
     for rel, s in critiques:
-        lignes.append(f"| `{rel}` | {s['percent_covered']:.1f} % | {s['missing_lines']} | "
-                      f"{s.get('num_partial_branches', 0)} |")
+        lignes.append(
+            f"| `{rel}` | {s['percent_covered']:.1f} % | {s['missing_lines']} | "
+            f"{s.get('num_partial_branches', 0)} |"
+        )
     return "\n".join(lignes) + "\n", global_
 
 

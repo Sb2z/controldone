@@ -31,6 +31,11 @@ def executer_agent(ctx: JobContext) -> dict[str, Any]:
         raise ErreurDefinitive("agent inconnu")
     agent = AGENTS[nom]()
     params = dict(ctx.payload.get("params") or {})
-    contexte = ContexteAgent(db=ctx.db, tenant_id=ctx.tenant_id, llm=ctx.services.get("llm", redacteur_par_defaut()),
-                             reseau=bool(ctx.services.get("reseau", reseau_veille())), services=dict(ctx.services))
+    contexte = ContexteAgent(
+        db=ctx.db,
+        tenant_id=ctx.tenant_id,
+        llm=ctx.services.get("llm", redacteur_par_defaut()),
+        reseau=bool(ctx.services.get("reseau", reseau_veille())),
+        services=dict(ctx.services),
+    )
     return agent.executer(contexte, **params).en_dict()

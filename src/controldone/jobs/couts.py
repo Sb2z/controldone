@@ -84,11 +84,18 @@ def llm_desactive(reglages: dict[str, Any] | None) -> bool:
 
 
 def _etat(scope: TenantScope, mois: str) -> EtatPlafond:
-    return EtatPlafond(scope.tenant_id, mois, scope.cout_ia(mois=mois), _plafond(scope),
-                       desactive=llm_desactive(scope.client().reglages))
+    return EtatPlafond(
+        scope.tenant_id,
+        mois,
+        scope.cout_ia(mois=mois),
+        _plafond(scope),
+        desactive=llm_desactive(scope.client().reglages),
+    )
 
 
-def cout_mensuel(tenant: str | TenantScope, *, db: Database | None = None, mois: str | None = None) -> Decimal:
+def cout_mensuel(
+    tenant: str | TenantScope, *, db: Database | None = None, mois: str | None = None
+) -> Decimal:
     """Coût IA du client pour le mois (défaut : mois courant)."""
     mois = mois or mois_courant()
     if isinstance(tenant, TenantScope):
@@ -98,7 +105,9 @@ def cout_mensuel(tenant: str | TenantScope, *, db: Database | None = None, mois:
         return scope.cout_ia(mois=mois)
 
 
-def etat_plafond(tenant: str | TenantScope, *, db: Database | None = None, mois: str | None = None) -> EtatPlafond:
+def etat_plafond(
+    tenant: str | TenantScope, *, db: Database | None = None, mois: str | None = None
+) -> EtatPlafond:
     mois = mois or mois_courant()
     if isinstance(tenant, TenantScope):
         return _etat(tenant, mois)
@@ -107,25 +116,48 @@ def etat_plafond(tenant: str | TenantScope, *, db: Database | None = None, mois:
         return _etat(scope, mois)
 
 
-def enregistrer_cout(scope: TenantScope, *, cout_eur: Decimal, jetons_entree: int = 0, jetons_sortie: int = 0,
-                     modele: str | None = None, dossier_id: str | None = None, lot_id: str | None = None,
-                     execution_id: str | None = None, now: datetime | None = None) -> EtatPlafond:
+def enregistrer_cout(
+    scope: TenantScope,
+    *,
+    cout_eur: Decimal,
+    jetons_entree: int = 0,
+    jetons_sortie: int = 0,
+    modele: str | None = None,
+    dossier_id: str | None = None,
+    lot_id: str | None = None,
+    execution_id: str | None = None,
+    now: datetime | None = None,
+) -> EtatPlafond:
     """Enregistre un coût puis émet les alertes de seuil (80 %, 100 %) une fois par mois."""
     mois = mois_courant(now)
-    scope.enregistrer_usage_ia(cout_eur=Decimal(cout_eur), mois=mois, jetons_entree=jetons_entree,
-                               jetons_sortie=jetons_sortie, modele=modele, dossier_id=dossier_id, lot_id=lot_id,
-                               execution_id=execution_id)
+    scope.enregistrer_usage_ia(
+        cout_eur=Decimal(cout_eur),
+        mois=mois,
+        jetons_entree=jetons_entree,
+        jetons_sortie=jetons_sortie,
+        modele=modele,
+        dossier_id=dossier_id,
+        lot_id=lot_id,
+        execution_id=execution_id,
+    )
     scope.flush()
     etat = _etat(scope, mois)
     details: dict[str, Any] = {"mois": mois, "cout_eur": str(etat.cout), "plafond_eur": str(etat.plafond)}
     if etat.arret:
-        scope.signaler_alerte(cle=f"cout100:{mois}", kind="cout_ia_plafond",
-                              message=f"Plafond IA mensuel atteint ({etat.cout} / {etat.plafond} EUR) : appels au "
-                              "modèle arrêtés pour ce client jusqu'à décision du fondateur.", details=details)
+        scope.signaler_alerte(
+            cle=f"cout100:{mois}",
+            kind="cout_ia_plafond",
+            message=f"Plafond IA mensuel atteint ({etat.cout} / {etat.plafond} EUR) : appels au "
+            "modèle arrêtés pour ce client jusqu'à décision du fondateur.",
+            details=details,
+        )
     if etat.alerte:
-        scope.signaler_alerte(cle=f"cout80:{mois}", kind="cout_ia_alerte",
-                              message=f"80 % du plafond IA mensuel atteint ({etat.cout} / {etat.plafond} EUR).",
-                              details=details)
+        scope.signaler_alerte(
+            cle=f"cout80:{mois}",
+            kind="cout_ia_alerte",
+            message=f"80 % du plafond IA mensuel atteint ({etat.cout} / {etat.plafond} EUR).",
+            details=details,
+        )
     return etat
 
 
@@ -155,6 +187,12 @@ class RegistreCoutsDB:
     def enregistrer(self, entree: Any) -> None:
         self._verifier(entree.client_id)
         with self.db.tenant(self.client_id, Acteur.systeme("couts")) as scope:
-            enregistrer_cout(scope, cout_eur=entree.cout_eur, jetons_entree=entree.jetons_entree,
-                             jetons_sortie=entree.jetons_sortie, modele=entree.modele,
-                             dossier_id=entree.dossier_id, lot_id=entree.lot_id)
+            enregistrer_cout(
+                scope,
+                cout_eur=entree.cout_eur,
+                jetons_entree=entree.jetons_entree,
+                jetons_sortie=entree.jetons_sortie,
+                modele=entree.modele,
+                dossier_id=entree.dossier_id,
+                lot_id=entree.lot_id,
+            )

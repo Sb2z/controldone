@@ -153,8 +153,10 @@ def mentions_obligatoires(f: Facture) -> dict[str, str]:
         "PMD": f.paiement.penalites,
         "PMT": f.paiement.indemnite,
         "AAB": f.paiement.escompte,
-        "REG": (f"{v.raison_sociale} — {v.forme_juridique} — SIREN {v.siren} — {v.rcs}"
-                f"{' — TVA ' + v.tva_intracom if f.tva.tva_applicable else ''}"),
+        "REG": (
+            f"{v.raison_sociale} — {v.forme_juridique} — SIREN {v.siren} — {v.rcs}"
+            f"{' — TVA ' + v.tva_intracom if f.tva.tva_applicable else ''}"
+        ),
         "CAT": "Catégorie de l'opération : prestation de services.",
     }
     if not f.tva.tva_applicable:
@@ -162,4 +164,3 @@ def mentions_obligatoires(f: Facture) -> dict[str, str]:
     elif f.tva.option_debits:
         mentions["TXD"] = "Option pour le paiement de la taxe d'après les débits."
     return mentions
-

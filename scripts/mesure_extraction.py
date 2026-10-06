@@ -51,58 +51,92 @@ if str(RACINE / "src") not in sys.path:
 CHAMPS: dict[str, dict[str, Any]] = {
     "declaration": {
         "scalaires": [
-            ("mrn", "ref", True), ("date_acceptation", "date", True), ("importateur.tva", "ref", True),
-            ("devise_facture", "code", True), ("montant_total_facture", "montant", True),
-            ("taux_change", "decimal", True), ("taux_change_sens", "enum", True), ("incoterm", "code", True),
-            ("nombre_articles", "entier", True), ("total_a_payer", "montant", True),
-            ("documents_references", "refs_docs", True), ("indices_autoliquidation", "bool", True),
-            ("lrn", "ref", False), ("version", "entier", False), ("importateur.nom", "texte", False),
-            ("declarant.tva", "ref", False), ("pays_expedition", "code", False), ("incoterm_lieu", "texte", False),
-            ("masse_brute_totale", "masse", False), ("nombre_colis_total", "entier", False),
+            ("mrn", "ref", True),
+            ("date_acceptation", "date", True),
+            ("importateur.tva", "ref", True),
+            ("devise_facture", "code", True),
+            ("montant_total_facture", "montant", True),
+            ("taux_change", "decimal", True),
+            ("taux_change_sens", "enum", True),
+            ("incoterm", "code", True),
+            ("nombre_articles", "entier", True),
+            ("total_a_payer", "montant", True),
+            ("documents_references", "refs_docs", True),
+            ("indices_autoliquidation", "bool", True),
+            ("lrn", "ref", False),
+            ("version", "entier", False),
+            ("importateur.nom", "texte", False),
+            ("declarant.tva", "ref", False),
+            ("pays_expedition", "code", False),
+            ("incoterm_lieu", "texte", False),
+            ("masse_brute_totale", "masse", False),
+            ("nombre_colis_total", "entier", False),
             ("total_droits_taxes", "montant", False),
         ],
         "listes": {
             "articles": {
                 "cle": ["numero_article"],
                 "champs": [
-                    ("code_marchandise", "code", True), ("pays_origine", "code", True),
-                    ("masse_nette", "masse", True), ("masse_brute", "masse", True),
-                    ("numero_article", "entier", False), ("montant_facture_article", "montant", False),
-                    ("valeur_statistique", "montant", False), ("nombre_colis", "entier", False),
+                    ("code_marchandise", "code", True),
+                    ("pays_origine", "code", True),
+                    ("masse_nette", "masse", True),
+                    ("masse_brute", "masse", True),
+                    ("numero_article", "entier", False),
+                    ("montant_facture_article", "montant", False),
+                    ("valeur_statistique", "montant", False),
+                    ("nombre_colis", "entier", False),
                     ("quantite_unite_supplementaire", "decimal", False),
                 ],
             },
             "taxations": {
                 "cle": ["article", "type_taxe"],
                 "champs": [
-                    ("article", "entier", True), ("type_taxe", "code", True), ("categorie", "enum", True),
-                    ("base_montant", "montant", True), ("base_quantite", "decimal", True),
-                    ("taux", "decimal", True), ("montant", "montant", True),
+                    ("article", "entier", True),
+                    ("type_taxe", "code", True),
+                    ("categorie", "enum", True),
+                    ("base_montant", "montant", True),
+                    ("base_quantite", "decimal", True),
+                    ("taux", "decimal", True),
+                    ("montant", "montant", True),
                     # ``mode_paiement`` n'est pas comparé : la vérité porte la lettre canonique (A/E/G) alors que
                     # certaines éditions impriment un statut chiffré (0/1/7) ; ``paiement_normalise`` fait foi.
-                    ("paiement_normalise", "enum", True), ("taux_nature", "enum", False),
+                    ("paiement_normalise", "enum", True),
+                    ("taux_nature", "enum", False),
                 ],
             },
         },
     },
     "facture_commerciale": {
         "scalaires": [
-            ("numero", "ref", True), ("date", "date", True), ("devise", "code", True),
-            ("total_facture", "montant", True), ("total_imprime", "bool_valeur", True),
-            ("acheteur.tva", "ref", True), ("incoterm", "code", True),
-            ("masse_brute_totale", "masse", True), ("nombre_colis", "entier", True),
-            ("masse_nette_totale", "masse", False), ("ref_transport", "ref", False),
-            ("incoterm_lieu", "texte", False), ("acheteur.nom", "texte", False), ("vendeur.nom", "texte", False),
+            ("numero", "ref", True),
+            ("date", "date", True),
+            ("devise", "code", True),
+            ("total_facture", "montant", True),
+            ("total_imprime", "bool_valeur", True),
+            ("acheteur.tva", "ref", True),
+            ("incoterm", "code", True),
+            ("masse_brute_totale", "masse", True),
+            ("nombre_colis", "entier", True),
+            ("masse_nette_totale", "masse", False),
+            ("ref_transport", "ref", False),
+            ("incoterm_lieu", "texte", False),
+            ("acheteur.nom", "texte", False),
+            ("vendeur.nom", "texte", False),
             ("sous_totaux", "sous_totaux", False),
         ],
         "listes": {
             "lignes": {
                 "cle": ["numero_ligne"],
                 "champs": [
-                    ("code_marchandise_imprime", "code", True), ("quantite", "decimal", True),
-                    ("unite", "code", True), ("montant_ligne", "montant", True), ("pays_origine", "code", True),
-                    ("prix_unitaire", "montant", False), ("masse_nette", "masse", False),
-                    ("masse_brute", "masse", False), ("reference_article", "ref", False),
+                    ("code_marchandise_imprime", "code", True),
+                    ("quantite", "decimal", True),
+                    ("unite", "code", True),
+                    ("montant_ligne", "montant", True),
+                    ("pays_origine", "code", True),
+                    ("prix_unitaire", "montant", False),
+                    ("masse_nette", "masse", False),
+                    ("masse_brute", "masse", False),
+                    ("reference_article", "ref", False),
                 ],
             },
         },
@@ -111,39 +145,62 @@ CHAMPS: dict[str, dict[str, Any]] = {
         # vérité : ``ref_transport`` (maître ou maison), masses et colis des titres de transport et listes de
         # colisage, ``refs_facture`` ; lettres, conditions générales et courriels n'ont que leur sous-type
         "scalaires": [
-            ("ref_transport", "ref_transport_support", True), ("masse_brute", "masse", True),
-            ("nombre_colis", "entier", True), ("masse_taxable", "masse", True), ("refs_facture", "refs", True),
+            ("ref_transport", "ref_transport_support", True),
+            ("masse_brute", "masse", True),
+            ("nombre_colis", "entier", True),
+            ("masse_taxable", "masse", True),
+            ("refs_facture", "refs", True),
         ],
         "listes": {},
     },
     "facture_transitaire": {
         "scalaires": [
-            ("numero", "ref", True), ("date", "date", True), ("emetteur.tva", "ref", True),
-            ("client_facture.tva", "ref", True), ("refs_mrn", "refs", True), ("refs_transport", "refs", True),
-            ("total_debours", "montant", True), ("total_ht", "montant", True), ("total_tva", "montant", True),
+            ("numero", "ref", True),
+            ("date", "date", True),
+            ("emetteur.tva", "ref", True),
+            ("client_facture.tva", "ref", True),
+            ("refs_mrn", "refs", True),
+            ("refs_transport", "refs", True),
+            ("total_debours", "montant", True),
+            ("total_ht", "montant", True),
+            ("total_tva", "montant", True),
             ("total_ttc", "montant", True),
         ],
         "listes": {
             "lignes": {
                 # lignes d'un relevé : l'ordre imprimé (colonnes par nature) n'est pas celui de la vérité
-                "cle": [], "apparier": "contenu",
+                "cle": [],
+                "apparier": "contenu",
                 "champs": [
-                    ("nature", "enum", True), ("libelle", "libelle", True), ("quantite", "decimal", True),
-                    ("prix_unitaire", "montant", True), ("montant_ht", "montant", True),
-                    ("taux_tva", "decimal", True), ("montant_tva", "montant", True), ("mrn", "ref", True),
+                    ("nature", "enum", True),
+                    ("libelle", "libelle", True),
+                    ("quantite", "decimal", True),
+                    ("prix_unitaire", "montant", True),
+                    ("montant_ht", "montant", True),
+                    ("taux_tva", "decimal", True),
+                    ("montant_tva", "montant", True),
+                    ("mrn", "ref", True),
                 ],
             },
         },
     },
     "avoir": {
         "scalaires": [
-            ("numero", "ref", True), ("date", "date", True), ("refs_facture_origine", "refs", True),
+            ("numero", "ref", True),
+            ("date", "date", True),
+            ("refs_facture_origine", "refs", True),
             ("total_credite_ttc", "montant", True),
         ],
-        "listes": {"lignes": {"cle": [], "apparier": "contenu",
-                              "champs": [("nature", "enum", True), ("montant_ht", "montant", True)]}},
+        "listes": {
+            "lignes": {
+                "cle": [],
+                "apparier": "contenu",
+                "champs": [("nature", "enum", True), ("montant_ht", "montant", True)],
+            }
+        },
     },
 }
+
 
 # Valeurs « virtuelles » : champ de vérité porté autrement par le modèle (type, chemin générique) -> lecture.
 def _virtuel_fc_total_imprime(champs: Any, _chemin: str) -> tuple[Any, float | None, str | None]:
@@ -162,8 +219,11 @@ def _virtuel_fc_unite(champs: Any, chemin: str) -> tuple[Any, float | None, str 
 
 
 def _virtuel_fc_sous_totaux(champs: Any, _chemin: str) -> tuple[Any, float | None, str | None]:
-    lus = {st.type.value: st.montant.valeur for st in getattr(champs, "sous_totaux", [])
-           if st.montant is not None and st.montant.valeur is not None and st.type.value != "marchandises"}
+    lus = {
+        st.type.value: st.montant.valeur
+        for st in getattr(champs, "sous_totaux", [])
+        if st.montant is not None and st.montant.valeur is not None and st.type.value != "marchandises"
+    }
     return lus, None, None
 
 
@@ -209,8 +269,9 @@ def egal(genre: str, vrai: Any, lu: Any) -> bool:
     if genre == "sous_totaux":
         # lignes de pied hors marchandises (le sous-total des marchandises n'est pas une charge de pied ; certaines
         # vérités le portent, la lecture ne le compare pas)
-        return ({k: _dec(x) for k, x in (vrai or {}).items() if k != "marchandises"}
-                == {k: _dec(x) for k, x in (lu or {}).items() if k != "marchandises"})
+        return {k: _dec(x) for k, x in (vrai or {}).items() if k != "marchandises"} == {
+            k: _dec(x) for k, x in (lu or {}).items() if k != "marchandises"
+        }
     if vrai is None or vrai == "":
         return lu is None or lu == ""
     if lu is None or lu == "":
@@ -219,7 +280,9 @@ def egal(genre: str, vrai: Any, lu: Any) -> bool:
         a, b = _dec(vrai), _dec(lu)
         if a is None or b is None:
             return False
-        tol = {"montant": Decimal("0.005"), "masse": Decimal("0.0005"), "decimal": Decimal("0.0000005")}[genre]
+        tol = {"montant": Decimal("0.005"), "masse": Decimal("0.0005"), "decimal": Decimal("0.0000005")}[
+            genre
+        ]
         return abs(a - b) <= tol
     if genre == "entier":
         try:
@@ -232,14 +295,16 @@ def egal(genre: str, vrai: Any, lu: Any) -> bool:
         return str(vrai)[:10] == str(lu)[:10]
     if genre == "texte":
         return " ".join(_sans_accents(str(vrai)).casefold().split()) == " ".join(
-            _sans_accents(str(lu)).casefold().split())
+            _sans_accents(str(lu)).casefold().split()
+        )
     if genre in ("bool", "bool_valeur"):
         return bool(vrai) == bool(lu)
     if genre == "sous_totaux":
         # lignes de pied hors marchandises (le sous-total des marchandises n'est pas une charge de pied ; certaines
         # vérités le portent, la lecture ne le compare pas)
-        return ({k: _dec(x) for k, x in (vrai or {}).items() if k != "marchandises"}
-                == {k: _dec(x) for k, x in (lu or {}).items() if k != "marchandises"})
+        return {k: _dec(x) for k, x in (vrai or {}).items() if k != "marchandises"} == {
+            k: _dec(x) for k, x in (lu or {}).items() if k != "marchandises"
+        }
     if genre == "ref_transport_support":  # la vérité est la référence maître OU maison
         return any(_ref(vrai) == _ref(x) for x in (lu if isinstance(lu, list) else [lu]))
     if genre == "libelle":
@@ -296,8 +361,12 @@ def _valeur(champs: Any, chemin: str, *, signe_imprime: bool = True) -> tuple[An
     if hasattr(v, "valeur") and hasattr(v, "confiance"):
         valeur = v.valeur
         signe = getattr(v, "signe_imprime", None)
-        if signe_imprime and valeur is not None and signe is not None \
-                and getattr(signe, "value", signe) == "negatif":
+        if (
+            signe_imprime
+            and valeur is not None
+            and signe is not None
+            and getattr(signe, "value", signe) == "negatif"
+        ):
             valeur = f"-{valeur}"  # la vérité porte le signe imprimé ; le modèle le porte à part (§5.2)
         return valeur, v.confiance, v.valeur_brute
     if hasattr(v, "value"):  # énumération
@@ -309,8 +378,16 @@ def _comparer_doc(type_doc: str, champs: Any, verite: dict, base: dict) -> list[
     spec = CHAMPS[type_doc]
     out: list[Comparaison] = []
 
-    def ajouter(champ: str, chemin: str, genre: str, obl: bool, vrai: Any, lu: Any, conf: float | None,
-                brut: str | None) -> None:
+    def ajouter(
+        champ: str,
+        chemin: str,
+        genre: str,
+        obl: bool,
+        vrai: Any,
+        lu: Any,
+        conf: float | None,
+        brut: str | None,
+    ) -> None:
         if vrai is None and lu is None:
             statut = "absent_ok"
         elif egal(genre, vrai, lu):
@@ -319,8 +396,19 @@ def _comparer_doc(type_doc: str, champs: Any, verite: dict, base: dict) -> list[
             statut = "absent"
         else:
             statut = "faux"
-        out.append(Comparaison(**base, champ=champ, chemin=chemin, obligatoire=obl, vrai=vrai, lu=lu,
-                               confiance=conf, brut=brut, statut=statut))
+        out.append(
+            Comparaison(
+                **base,
+                champ=champ,
+                chemin=chemin,
+                obligatoire=obl,
+                vrai=vrai,
+                lu=lu,
+                confiance=conf,
+                brut=brut,
+                statut=statut,
+            )
+        )
 
     for chemin, genre, obl in spec["scalaires"]:
         if chemin not in verite:
@@ -340,30 +428,61 @@ def _comparer_doc(type_doc: str, champs: Any, verite: dict, base: dict) -> list[
             vrais = {(_ref(x.get("type_code")), _ref(x.get("reference"))) for x in vrai or []}
             lu_txt = sorted(f"{a}:{b}" for a, b in lus)
             statut_ok = lus == vrais
-            out.append(Comparaison(**base, champ=chemin, chemin=chemin, obligatoire=obl,
-                                   vrai=sorted(f"{a}:{b}" for a, b in vrais), lu=lu_txt or None,
-                                   confiance=min(confs) if confs else None, brut=None,
-                                   statut="correct" if statut_ok else ("absent" if not lus else "faux")))
+            out.append(
+                Comparaison(
+                    **base,
+                    champ=chemin,
+                    chemin=chemin,
+                    obligatoire=obl,
+                    vrai=sorted(f"{a}:{b}" for a, b in vrais),
+                    lu=lu_txt or None,
+                    confiance=min(confs) if confs else None,
+                    brut=None,
+                    statut="correct" if statut_ok else ("absent" if not lus else "faux"),
+                )
+            )
             continue
         if genre == "bool":
             liste = getattr(champs, chemin, None) or []
             lu = bool(liste)
             confs = [i.valeur.confiance for i in liste if getattr(i, "valeur", None) is not None]
-            out.append(Comparaison(**base, champ=chemin, chemin=chemin, obligatoire=obl, vrai=bool(vrai), lu=lu,
-                                   confiance=max(confs) if confs else None, brut=None,
-                                   statut="correct" if bool(vrai) == lu else "faux"))
+            out.append(
+                Comparaison(
+                    **base,
+                    champ=chemin,
+                    chemin=chemin,
+                    obligatoire=obl,
+                    vrai=bool(vrai),
+                    lu=lu,
+                    confiance=max(confs) if confs else None,
+                    brut=None,
+                    statut="correct" if bool(vrai) == lu else "faux",
+                )
+            )
             continue
         if genre == "refs":
             liste = getattr(champs, chemin, None) or []
             lus = {_ref(v.valeur) for v in liste if v is not None and v.valeur}
             vrais = {_ref(x) for x in vrai or []}
             confs = [v.confiance for v in liste if v is not None]
-            out.append(Comparaison(**base, champ=chemin, chemin=chemin, obligatoire=obl, vrai=sorted(vrais),
-                                   lu=sorted(lus) or None, confiance=min(confs) if confs else None, brut=None,
-                                   statut="correct" if lus == vrais else ("absent" if not lus else "faux")))
+            out.append(
+                Comparaison(
+                    **base,
+                    champ=chemin,
+                    chemin=chemin,
+                    obligatoire=obl,
+                    vrai=sorted(vrais),
+                    lu=sorted(lus) or None,
+                    confiance=min(confs) if confs else None,
+                    brut=None,
+                    statut="correct" if lus == vrais else ("absent" if not lus else "faux"),
+                )
+            )
             continue
         virtuel = VIRTUELS.get((type_doc, chemin))
-        lu, conf, brut = virtuel(champs, chemin) if virtuel else _valeur(champs, chemin, signe_imprime=type_doc != "avoir")
+        lu, conf, brut = (
+            virtuel(champs, chemin) if virtuel else _valeur(champs, chemin, signe_imprime=type_doc != "avoir")
+        )
         ajouter(chemin, chemin, genre, obl, vrai, lu, conf, brut)
 
     if type_doc == "declaration" and isinstance(verite.get("totaux_par_type"), dict):
@@ -375,17 +494,27 @@ def _comparer_doc(type_doc: str, champs: Any, verite: dict, base: dict) -> list[
                 lus_code[code] = t.montant
         for code, vrai in sorted(verite["totaux_par_type"].items()):
             v = lus_code.get(code)
-            ajouter("totaux_par_code[].montant", f"totaux_par_code[{code}].montant", "montant", False, vrai,
-                    v.valeur if v is not None else None, v.confiance if v is not None else None,
-                    v.valeur_brute if v is not None else None)
+            ajouter(
+                "totaux_par_code[].montant",
+                f"totaux_par_code[{code}].montant",
+                "montant",
+                False,
+                vrai,
+                v.valeur if v is not None else None,
+                v.confiance if v is not None else None,
+                v.valeur_brute if v is not None else None,
+            )
 
     for nom, lspec in spec["listes"].items():
         vrais = verite.get(nom)
         if vrais is None:
             continue
         lus = list(getattr(champs, nom, []) or []) if champs is not None else []
-        paires = (_aligner_contenu(vrais, lus) if lspec.get("apparier") == "contenu"
-                  else _aligner(vrais, lus, lspec["cle"], type_doc, nom))
+        paires = (
+            _aligner_contenu(vrais, lus)
+            if lspec.get("apparier") == "contenu"
+            else _aligner(vrais, lus, lspec["cle"], type_doc, nom)
+        )
         for iv, il in paires:
             v = vrais[iv]
             for sous, genre, obl in lspec["champs"]:
@@ -396,13 +525,27 @@ def _comparer_doc(type_doc: str, champs: Any, verite: dict, base: dict) -> list[
                     ajouter(f"{nom}[].{sous}", chemin, genre, obl, v[sous], None, None, None)
                 else:
                     virtuel = VIRTUELS.get((type_doc, f"{nom}[].{sous}"))
-                    lu, conf, brut = (virtuel(champs, f"{nom}[{il}].{sous}") if virtuel
-                                      else _valeur(champs, f"{nom}[{il}].{sous}", signe_imprime=type_doc != "avoir"))
+                    lu, conf, brut = (
+                        virtuel(champs, f"{nom}[{il}].{sous}")
+                        if virtuel
+                        else _valeur(champs, f"{nom}[{il}].{sous}", signe_imprime=type_doc != "avoir")
+                    )
                     ajouter(f"{nom}[].{sous}", chemin, genre, obl, v[sous], lu, conf, brut)
         en_trop = len(lus) - sum(1 for _iv, il in paires if il is not None)
         if en_trop > 0:
-            out.append(Comparaison(**base, champ=f"{nom}[] (en trop)", chemin=nom, obligatoire=False,
-                                   vrai=len(vrais), lu=len(lus), confiance=None, brut=None, statut="faux"))
+            out.append(
+                Comparaison(
+                    **base,
+                    champ=f"{nom}[] (en trop)",
+                    chemin=nom,
+                    obligatoire=False,
+                    vrai=len(vrais),
+                    lu=len(lus),
+                    confiance=None,
+                    brut=None,
+                    statut="faux",
+                )
+            )
     return out
 
 
@@ -415,8 +558,9 @@ def _cle_lue(element: Any, champs_cle: list[str]) -> tuple:
     return tuple(out)
 
 
-def _aligner(vrais: list[dict], lus: list[Any], champs_cle: list[str], type_doc: str, nom: str
-             ) -> list[tuple[int, int | None]]:
+def _aligner(
+    vrais: list[dict], lus: list[Any], champs_cle: list[str], type_doc: str, nom: str
+) -> list[tuple[int, int | None]]:
     """Paires (index vérité, index lu). Par clé (avec rang d'occurrence) puis par rang pour le reste."""
     libres = set(range(len(lus)))
     paires: dict[int, int] = {}
@@ -444,6 +588,7 @@ def _aligner(vrais: list[dict], lus: list[Any], champs_cle: list[str], type_doc:
 
 def _aligner_contenu(vrais: list[dict], lus: list[Any]) -> list[tuple[int, int | None]]:
     """Appariement glouton par contenu (montant HT, nature, MRN, libellé) puis par rang pour le reste."""
+
     def lu_de(e: Any, nom: str) -> Any:
         v = getattr(e, nom, None)
         return getattr(v, "valeur", getattr(v, "value", v))
@@ -458,7 +603,11 @@ def _aligner_contenu(vrais: list[dict], lus: list[Any]) -> list[tuple[int, int |
                 sc += 2
             if v.get("mrn") and egal("ref", v["mrn"], lu_de(e, "mrn")):
                 sc += 1
-            if v.get("libelle") and lu_de(e, "libelle") and _libelle_compatible(v["libelle"], lu_de(e, "libelle")):
+            if (
+                v.get("libelle")
+                and lu_de(e, "libelle")
+                and _libelle_compatible(v["libelle"], lu_de(e, "libelle"))
+            ):
                 sc += 1
             if sc >= 3:
                 scores.append((-sc, iv, il))
@@ -482,7 +631,9 @@ def _aligner_contenu(vrais: list[dict], lus: list[Any]) -> list[tuple[int, int |
 
 def _groupe(type_doc: str, truth: dict, doc: dict, par: str | None = None) -> str:
     if par:  # --par langue|sous_type|format|degradation|langue+degradation…
-        return "/".join(str(doc.get(k) if k != "template" else doc.get("transitaire_template")) for k in par.split("+"))
+        return "/".join(
+            str(doc.get(k) if k != "template" else doc.get("transitaire_template")) for k in par.split("+")
+        )
     if type_doc == "declaration":
         lay = truth.get("declaration_layout") or doc.get("sous_type") or "?"
     else:
@@ -553,19 +704,35 @@ def mesurer_dossier(args: dict) -> dict:
             if doc["file"] not in pages_par_fichier:
                 import hashlib
 
-                fichier = Fichier(nom_original=chemin.name, chemin_relatif=doc["file"],
-                                  sha256=hashlib.sha256(contenu).hexdigest(), taille=len(contenu), type_mime=mime)
-                pages_par_fichier[doc["file"]] = (fichier, extraire_pages(contenu, fichier=fichier, type_mime=mime,
-                                                                          options=opts))
+                fichier = Fichier(
+                    nom_original=chemin.name,
+                    chemin_relatif=doc["file"],
+                    sha256=hashlib.sha256(contenu).hexdigest(),
+                    taille=len(contenu),
+                    type_mime=mime,
+                )
+                pages_par_fichier[doc["file"]] = (
+                    fichier,
+                    extraire_pages(contenu, fichier=fichier, type_mime=mime, options=opts),
+                )
             fichier, extraites = pages_par_fichier[doc["file"]]
             numeros = set(doc.get("pages") or [])
             sel = [pe for pe in extraites if not numeros or pe.page.numero in numeros]
-            document = Document(type=TypeDocument(type_doc), sous_type=doc.get("sous_type"),
-                                pages=[PageRef(fichier_id=fichier.id, numero=pe.page.numero,
-                                               qualite_texte=pe.page.qualite_texte) for pe in sel])
+            document = Document(
+                type=TypeDocument(type_doc),
+                sous_type=doc.get("sous_type"),
+                pages=[
+                    PageRef(fichier_id=fichier.id, numero=pe.page.numero, qualite_texte=pe.page.qualite_texte)
+                    for pe in sel
+                ],
+            )
             pages = [pe.page for pe in sel]
-            ctx = ExtractionContext(contenu_fichier=contenu, type_mime=mime, ids=IdGenerator.deterministe(1),
-                                    options={"textes_pages": {pe.page.numero: pe.texte for pe in sel}})
+            ctx = ExtractionContext(
+                contenu_fichier=contenu,
+                type_mime=mime,
+                ids=IdGenerator.deterministe(1),
+                options={"textes_pages": {pe.page.numero: pe.texte for pe in sel}},
+            )
             for e in extracteurs:
                 if e.supports(document, pages):
                     r = e.extract(document, pages, ctx)
@@ -586,8 +753,9 @@ def _pct(a: int, b: int) -> str:
     return f"{100 * a / b:6.1f} %" if b else "     — "
 
 
-def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool,
-            cles: Iterable[str] | None = None) -> str:
+def rapport(
+    comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool, cles: Iterable[str] | None = None
+) -> str:
     lignes: list[str] = []
     sel = [c for c in comps if tous or c["obligatoire"] or c["champ"].endswith("(en trop)") is False]
     # 1. par champ
@@ -602,8 +770,10 @@ def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool,
         s = stats[champ]
         n = sum(s.values())
         ok = s["correct"] + s["absent_ok"]
-        lignes.append(f"{champ:44} {'oui' if obligatoire[champ] else '':>6} {n:6d} {_pct(ok, n):>8} "
-                      f"{s['absent']:7d} {s['faux']:6d}")
+        lignes.append(
+            f"{champ:44} {'oui' if obligatoire[champ] else '':>6} {n:6d} {_pct(ok, n):>8} "
+            f"{s['absent']:7d} {s['faux']:6d}"
+        )
     # 2. par groupe (champs obligatoires)
     grp: dict[str, Counter] = defaultdict(Counter)
     docs_grp: dict[str, set] = defaultdict(set)
@@ -618,8 +788,10 @@ def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool,
     for g in sorted(grp):
         s = grp[g]
         n = sum(s.values())
-        lignes.append(f"{g:16} {len(docs_grp[g]):5d} {n:8d} {_pct(s['correct'] + s['absent_ok'], n):>8} "
-                      f"{s['absent']:7d} {s['faux']:6d}")
+        lignes.append(
+            f"{g:16} {len(docs_grp[g]):5d} {n:8d} {_pct(s['correct'] + s['absent_ok'], n):>8} "
+            f"{s['absent']:7d} {s['faux']:6d}"
+        )
     if par_groupe:
         lignes.append("")
         lignes.append("Exactitude par champ et par groupe")
@@ -652,33 +824,48 @@ def rapport(comps: list[dict], *, ecarts: int, par_groupe: bool, tous: bool,
         for g in sorted(grp_cles, key=lambda g: (g == "(tous)", g)):
             s_ = grp_cles[g]
             n = sum(s_.values())
-            lignes.append(f"{g:16} {n:8d} {_pct(s_['correct'] + s_['absent_ok'], n):>8} {s_['absent']:7d} "
-                          f"{s_['faux']:6d}")
+            lignes.append(
+                f"{g:16} {n:8d} {_pct(s_['correct'] + s_['absent_ok'], n):>8} {s_['absent']:7d} "
+                f"{s_['faux']:6d}"
+            )
     # 3. calibration
     lignes.append("")
     lignes.append("Calibration des confiances (valeurs lues, toutes comparaisons)")
     lignes.append(f"{'confiance':12} {'valeurs':>8} {'correctes':>10} {'fausses':>8} {'exact.':>8}")
     tranches = [(0.9, 1.01, "≥ 0,90"), (0.8, 0.9, "0,80–0,90"), (0.5, 0.8, "0,50–0,80"), (0.0, 0.5, "< 0,50")]
     for a, b, nom in tranches:
-        cs = [c for c in comps if c["confiance"] is not None and c["lu"] is not None and a <= c["confiance"] < b
-              and c["statut"] in ("correct", "faux") and not c["champ"].endswith("(en trop)")]
+        cs = [
+            c
+            for c in comps
+            if c["confiance"] is not None
+            and c["lu"] is not None
+            and a <= c["confiance"] < b
+            and c["statut"] in ("correct", "faux")
+            and not c["champ"].endswith("(en trop)")
+        ]
         ok = sum(1 for c in cs if c["statut"] == "correct")
         lignes.append(f"{nom:12} {len(cs):8d} {ok:10d} {len(cs) - ok:8d} {_pct(ok, len(cs)):>8}")
-    hauts = [c for c in comps if c["confiance"] is not None and c["confiance"] >= 0.9 and c["statut"] == "faux"]
+    hauts = [
+        c for c in comps if c["confiance"] is not None and c["confiance"] >= 0.9 and c["statut"] == "faux"
+    ]
     if hauts:
         lignes.append("")
         lignes.append(f"Valeurs fausses de confiance ≥ 0,90 ({len(hauts)}) :")
-        for c in hauts[:max(ecarts, 20)]:
-            lignes.append(f"  {c['dossier']}/{c['doc_id']} [{c['groupe']}] {c['chemin']}: vrai={c['vrai']!r} "
-                          f"lu={c['lu']!r} conf={c['confiance']} brut={c['brut']!r}")
+        for c in hauts[: max(ecarts, 20)]:
+            lignes.append(
+                f"  {c['dossier']}/{c['doc_id']} [{c['groupe']}] {c['chemin']}: vrai={c['vrai']!r} "
+                f"lu={c['lu']!r} conf={c['confiance']} brut={c['brut']!r}"
+            )
     # 4. écarts
     if ecarts:
         lignes.append("")
         faux = [c for c in sel if c["statut"] in ("faux", "absent")]
         lignes.append(f"Écarts ({len(faux)}, {min(ecarts, len(faux))} affichés) :")
         for c in faux[:ecarts]:
-            lignes.append(f"  {c['dossier']}/{c['doc_id']} [{c['groupe']}] {c['chemin']} ({c['statut']}): "
-                          f"vrai={c['vrai']!r} lu={c['lu']!r} conf={c['confiance']} brut={c['brut']!r}")
+            lignes.append(
+                f"  {c['dossier']}/{c['doc_id']} [{c['groupe']}] {c['chemin']} ({c['statut']}): "
+                f"vrai={c['vrai']!r} lu={c['lu']!r} conf={c['confiance']} brut={c['brut']!r}"
+            )
     return "\n".join(lignes)
 
 
@@ -695,16 +882,23 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--type", required=True, choices=sorted(CHAMPS))
     ap.add_argument("--corpus", default=str(RACINE / "bench" / "corpus"))
-    ap.add_argument("--split", default="dev", choices=["dev"], help="seul le split dev est lisible par le moteur")
+    ap.add_argument(
+        "--split", default="dev", choices=["dev"], help="seul le split dev est lisible par le moteur"
+    )
     ap.add_argument("--dossiers", help="liste BX0001,BX0002…")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--groupe", help="filtre de groupe, ex. L3/d2 ou 'L1/*'")
     ap.add_argument("--formats", help="formats de vérité retenus, ex. pdf_natif,pdf_scan")
     ap.add_argument("--degradation", help="dégradations retenues, ex. d0,d1")
-    ap.add_argument("--par", help="clé de groupe : langue, sous_type, format, degradation, template "
-                                  "(combinables : langue+degradation) ; défaut : mise en page/dégradation")
+    ap.add_argument(
+        "--par",
+        help="clé de groupe : langue, sous_type, format, degradation, template "
+        "(combinables : langue+degradation) ; défaut : mise en page/dégradation",
+    )
     ap.add_argument("--extracteur", help="identifiant d'extracteur imposé")
-    ap.add_argument("--cache", default=os.environ.get("CONTROLDONE_PAGES_CACHE_DIR", str(RACINE / "var/cache/pages")))
+    ap.add_argument(
+        "--cache", default=os.environ.get("CONTROLDONE_PAGES_CACHE_DIR", str(RACINE / "var/cache/pages"))
+    )
     ap.add_argument("--sans-ocr", action="store_true")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--ecarts", type=int, default=40, help="nombre d'écarts listés")
@@ -713,10 +907,20 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--json", help="écrire toutes les comparaisons dans ce fichier")
     a = ap.parse_args(list(argv) if argv is not None else None)
     dossiers = _dossiers(Path(a.corpus), a.split, a.dossiers, a.limit)
-    taches = [{"dossier": str(d), "type": a.type, "cache": a.cache, "sans_ocr": a.sans_ocr, "groupe": a.groupe,
-               "formats": set(a.formats.split(",")) if a.formats else None, "extracteur": a.extracteur,
-               "degradation": set(a.degradation.split(",")) if a.degradation else None, "par": a.par}
-              for d in dossiers]
+    taches = [
+        {
+            "dossier": str(d),
+            "type": a.type,
+            "cache": a.cache,
+            "sans_ocr": a.sans_ocr,
+            "groupe": a.groupe,
+            "formats": set(a.formats.split(",")) if a.formats else None,
+            "extracteur": a.extracteur,
+            "degradation": set(a.degradation.split(",")) if a.degradation else None,
+            "par": a.par,
+        }
+        for d in dossiers
+    ]
     t0 = time.perf_counter()
     if a.workers > 1:
         with ProcessPoolExecutor(a.workers) as ex:
@@ -726,9 +930,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     comps = [c for r in resultats for c in r["comparaisons"]]
     erreurs = [e for r in resultats for e in r["erreurs"]]
     durees = [d for r in resultats for d in r["durees"]]
-    print(f"{len(dossiers)} dossiers, {len({(c['dossier'], c['doc_id']) for c in comps})} documents "
-          f"« {a.type} », {len(comps)} comparaisons, {time.perf_counter() - t0:.1f} s"
-          + (f" (extraction moyenne {sum(durees) / len(durees):.2f} s/doc)" if durees else ""))
+    print(
+        f"{len(dossiers)} dossiers, {len({(c['dossier'], c['doc_id']) for c in comps})} documents "
+        f"« {a.type} », {len(comps)} comparaisons, {time.perf_counter() - t0:.1f} s"
+        + (f" (extraction moyenne {sum(durees) / len(durees):.2f} s/doc)" if durees else "")
+    )
     print()
     try:
         from controldone.model.champs import CHAMPS_CLES
