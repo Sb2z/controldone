@@ -121,11 +121,97 @@ def test_worker_refuse_en_production_sans_migration(tmp_path, monkeypatch):
     monkeypatch.setenv("CONTROLDONE_SECRET_KEY", "s" * 40)
     monkeypatch.setenv("CONTROLDONE_DATABASE_URL", url)
     monkeypatch.setenv("CONTROLDONE_TMP_DIR", str(tmp_path / "tmp"))
+    monkeypatch.setenv("CONTROLDONE_MIGRATION_ATTENTE_S", "0")  # pas d'attente du service « migrer » (D-4102)
     reset_settings()
     try:
         assert worker.main(["--once"]) == 3
     finally:
         reset_settings()
+
+
+def test_attente_production_demarre_des_que_la_migration_est_faite(tmp_path, monkeypatch):
+    """D-4102 : en production, une migration en attente fait attendre le démarrage (message clair) au lieu
+    d'une sortie immédiate ; le processus démarre de lui-même dès que « migrer » l'a appliquée."""
+    import threading
+
+    url = f"sqlite:///{tmp_path}/m.db"
+    db = Database(url)
+    db.creer_schema()
+    _vieillir(db)
+    monkeypatch.setenv("CONTROLDONE_ENV", "prod")
+    monkeypatch.delenv("CONTROLDONE_MIGRATION_AUTO", raising=False)
+    messages: list[str] = []
+    autre = Database(url)  # le service ponctuel « migrer », dans un autre processus en production
+    minuteur = threading.Timer(0.3, autre.migrer)
+    minuteur.start()
+    try:
+        db.attendre_schema_a_jour(attente_s=30, intervalle_s=0.05, journal=messages.append)
+    finally:
+        minuteur.join()
+        autre.fermer()
+    _verifier_a_jour(db)
+    assert "controldone migrer" in messages[0] and "démarrage suspendu" in messages[0]
+    assert messages[-1].startswith("migrations appliquées")
+    assert len(messages) == 2  # un message, pas une rafale (rappel toutes les 60 s)
+    db.fermer()
+
+
+def test_attente_production_sort_une_fois_apres_le_delai(tmp_path, monkeypatch):
+    from controldone.storage import MigrationEnAttente
+
+    db = Database(f"sqlite:///{tmp_path}/m.db")
+    db.creer_schema()
+    _vieillir(db)
+    monkeypatch.setenv("CONTROLDONE_ENV", "prod")
+    monkeypatch.delenv("CONTROLDONE_MIGRATION_AUTO", raising=False)
+    messages: list[str] = []
+    with pytest.raises(MigrationEnAttente, match="attente de 0 s écoulée"):
+        db.attendre_schema_a_jour(attente_s=0.2, intervalle_s=0.05, rappel_s=60, journal=messages.append)
+    assert len(messages) == 1 and len(db.migrations_en_attente()) == len(MIGRATIONS)  # rien n'est migré
+    monkeypatch.setenv("CONTROLDONE_MIGRATION_ATTENTE_S", "0")
+    with pytest.raises(MigrationEnAttente):
+        db.attendre_schema_a_jour()  # réglage par l'environnement : sortie immédiate
+    db.fermer()
+
+
+def test_attente_inutile_pour_des_colonnes_sans_migration(tmp_path, monkeypatch):
+    """Colonnes manquantes sans étape en attente : attendre ne réparerait rien, arrêt immédiat."""
+    from controldone.storage import MigrationEnAttente
+
+    db = Database(f"sqlite:///{tmp_path}/m.db")
+    db.creer_schema()
+    with db.engine.begin() as c:
+        c.execute(text('DROP INDEX IF EXISTS "ix_alertes_notifiee_le"'))
+        c.execute(text("ALTER TABLE alertes DROP COLUMN notifiee_le"))
+    monkeypatch.setenv("CONTROLDONE_ENV", "prod")
+    with pytest.raises(SchemaPerime, match="colonnes manquantes") as exc:
+        db.attendre_schema_a_jour(attente_s=30, intervalle_s=0.05)
+    assert not isinstance(exc.value, MigrationEnAttente)
+    db.fermer()
+
+
+def test_defaut_d_attente_selon_le_mode(tmp_path, monkeypatch):
+    """600 s en production (service « migrer » en cours), aucune attente ailleurs (dev/test migrent seuls)."""
+    import time as _time
+
+    db = Database(f"sqlite:///{tmp_path}/m.db")
+    db.creer_schema()
+    _vieillir(db)
+    monkeypatch.setenv("CONTROLDONE_ENV", "prod")
+    monkeypatch.delenv("CONTROLDONE_MIGRATION_ATTENTE_S", raising=False)
+    attentes: list[float] = []
+    monkeypatch.setattr(_time, "sleep", lambda s: (attentes.append(s), (_ for _ in ()).throw(KeyboardInterrupt))[0])
+    with pytest.raises(KeyboardInterrupt):
+        db.attendre_schema_a_jour(intervalle_s=5)
+    assert attentes == [5]
+    monkeypatch.setenv("CONTROLDONE_MIGRATION_ATTENTE_S", "x")  # valeur illisible : défaut prudent (attente)
+    with pytest.raises(KeyboardInterrupt):
+        db.attendre_schema_a_jour(intervalle_s=5)
+    monkeypatch.setenv("CONTROLDONE_ENV", "test")  # hors production : migration au démarrage, aucune attente
+    monkeypatch.delenv("CONTROLDONE_MIGRATION_ATTENTE_S")
+    db.attendre_schema_a_jour()
+    assert db.migrations_en_attente() == []
+    db.fermer()
 
 
 def test_cli_migrer_sauvegarde_avant(tmp_path, monkeypatch, capsys):

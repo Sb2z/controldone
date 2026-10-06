@@ -528,11 +528,94 @@ def _tva_confirme_total(
     return explique and abs(arrondi_centime(r * s_prest) - tva) > tol
 
 
+def _explications_ligne(
+    ctx: ControlContext, lg: LigneFactureTransitaire, q: Decimal, pu: Decimal, m: Decimal, taux_facture: set[Decimal],
+) -> list[str]:
+    """D-4203 : autres lectures des colonnes d'une ligne qui redonnent son montant (``ligne``).
+
+    - ``colonne_ttc`` : le montant lu est le montant TVA comprise (q × pu × (1 + t)) ou le prix lu est TVA
+      comprise (q × pu = m × (1 + t)), pour le taux lu sur la ligne ou, à défaut, un taux lu sur la facture ;
+    - ``quantite_libelle`` : un nombre imprimé dans le libellé (quantité, poids, nombre d'articles) redonne le
+      montant avec le prix lu (tarif au kilo, à l'article…)."""
+    tol = ctx.tol.t_ligne()
+    out: list[str] = []
+    t_ligne = _dec(ctx, lg.taux_tva)
+    taux = {t_ligne} if t_ligne is not None and t_ligne > 0 else set(taux_facture)
+    for t in taux:
+        k = 1 + t / _CENT
+        if abs(m - q * pu * k) <= tol or abs(m * k - q * pu) <= tol:
+            out.append("colonne_ttc")
+            break
+    libelle = lg.libelle.valeur if lg.libelle is not None and lg.libelle.valeur else ""
+    for n in _nombres_libelle(libelle):
+        if n not in (0, q) and pu != 0 and abs(m - n * pu) <= tol:
+            out.append("quantite_libelle")
+            break
+    return out
+
+
+def _nombres_libelle(libelle: str) -> list[Decimal]:
+    """Nombres imprimés dans un libellé (« 12,5 kg », « 3 x », « 2.500 »), virgule ou point décimal."""
+    out: list[Decimal] = []
+    for brut in re.findall(r"\d+(?:[.,]\d+)?", libelle):
+        try:
+            out.append(Decimal(brut.replace(",", ".")))
+        except ArithmeticError:
+            continue
+    return out
+
+
+def _explications_tva_ligne(ctx: ControlContext, m: Decimal, taux: Decimal, mtva: Decimal) -> list[str]:
+    """D-4203 : la TVA lue d'une ligne est son montant TVA comprise (colonne « TTC » lue comme TVA) :
+    ``m × (1 + t)``, ou le montant lui-même sur une ligne à taux nul."""
+    tol = ctx.tol.t_ligne()
+    if mtva != 0 and abs(mtva - m * (1 + taux / _CENT)) <= tol:
+        return ["colonne_ttc"]
+    return []
+
+
+def _preuves_lignes_completes(
+    ctx: ControlContext, ft, montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]], s_deb: Decimal,
+    s_prest: Decimal, s_tout: Decimal, v_td: Decimal | None, v_tht: Decimal | None, ttc: Decimal | None,
+    tva: Decimal | None,
+) -> set[str]:
+    """D-4202 : identités imprimées qui prouvent que les lignes lues sont complètes.
+
+    - ``ttc`` : total TTC = somme des lignes lues + total TVA (toutes les lignes y sont) ;
+    - ``ht_toutes_lignes`` : total HT = somme de toutes les lignes lues (débours compris) ;
+    - ``debours`` : total des débours imprimé = somme des débours lus (ou ni débours ni total) ;
+    - ``prestations`` : total TVA imprimé = somme des TVA imprimées des lignes de prestation (toutes lues), ou
+      taux unique × somme des prestations lues (une prestation taxée non lue changerait la TVA)."""
+    tol = ctx.tol
+    n = max(1, len(montants))
+    preuves: set[str] = set()
+    if ttc is not None and tva is not None and montants and abs(ttc - (s_tout + tva)) <= tol.t_somme(n + 1):
+        preuves.add("ttc")
+    if v_tht is not None and montants and abs(v_tht - s_tout) <= tol.t_somme(n):
+        preuves.add("ht_toutes_lignes")
+    debours = [v for lg, v in montants if lg.nature.est_debours]
+    if (v_td is not None and abs(v_td - s_deb) <= tol.t_somme(max(1, len(debours)))) or (
+            v_td is None and not debours):
+        preuves.add("debours")
+    prest = [lg for lg, _ in montants if not lg.nature.est_debours]
+    if tva is not None and ft.total_tva is not None and ft.total_tva.methode is not Methode.derive and prest:
+        tvas = [_dec(ctx, lg.montant_tva) for lg in prest
+                if lg.montant_tva is not None and lg.montant_tva.methode is not Methode.derive]
+        if len(tvas) == len(prest) and None not in tvas and tva != 0 and abs(
+                tva - _somme(t for t in tvas if t is not None)) <= tol.t_somme(len(tvas)):
+            preuves.add("prestations")
+        taux = {t for lg in prest for t in [_dec(ctx, lg.taux_tva)] if t is not None}
+        if len(taux) == 1 and (r := taux.pop()) > 0 and abs(arrondi_centime(r / _CENT * s_prest) - tva) <= tol.t_somme(2):
+            preuves.add("prestations")
+    return preuves
+
+
 def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
     ft = f.ft
     tol = ctx.tol
     out: list[ResultatControle] = []
     montants: list[tuple[LigneFactureTransitaire, ValeurSourcee]] = []
+    taux_facture = {t for lg in ft.lignes for t in [_dec(ctx, lg.taux_tva)] if t is not None and t > 0}
     for i, lg in enumerate(ft.lignes):
         unite = cle_unite(ft=f.id, ligne=i)
         q, pu, m = _dec(ctx, lg.quantite), _dec(ctx, lg.prix_unitaire), _dec(ctx, lg.montant_ht)
@@ -545,11 +628,19 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
                 # il n'y a pas d'identité à vérifier sur cette ligne.
                 out.append(ctx.non_verifiable("D1", RaisonCode.valeur_absente, unite=unite, sous_controle="ligne",
                                               documents=[f.id], details={"motif": "facteur_non_imprime"}))
+            elif lg.nature.est_debours:
+                # D-4203 : une ligne de débours reproduit un montant de la déclaration (droit, forfait par
+                # article…) ; son produit est celui de la déclaration (G1, B1) et la refacturation est comparée
+                # par les familles C et G. D1 ne juge pas ce produit.
+                out.append(ctx.non_applicable("D1", RaisonCode.couvert_par_autre_controle, unite=unite,
+                                              sous_controle="ligne", documents=[f.id],
+                                              details={"motif": "ligne_de_debours_reproduite"}))
             else:
                 out.append(_d1_resultat(
                     ctx, f, "ligne", unite, lg.montant_ht, q * pu, [lg.quantite, lg.prix_unitaire], tol.t_ligne(),
                     f"le montant de la ligne {_libelle_ligne(lg)}",
                     f"{format_nombre(q)} × {format_montant(pu)}", avec_montant=False, produit=True,
+                    explications_ligne=_explications_ligne(ctx, lg, q, pu, m, taux_facture),
                 ))
         taux, mtva = _dec(ctx, lg.taux_tva), _dec(ctx, lg.montant_tva)
         if m is not None and taux is not None and mtva is not None:
@@ -558,6 +649,7 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
                 ctx, f, "tva_ligne", unite, lg.montant_tva, m * taux / _CENT, [lg.montant_ht, lg.taux_tva],
                 tol.t_ligne(), f"la TVA de la ligne {_libelle_ligne(lg)}",
                 f"{format_montant(m)} × {format_pourcentage(taux)}", avec_montant=False, produit=True,
+                explications_ligne=_explications_tva_ligne(ctx, m, taux, mtva),
             ))
     toutes_lisibles = len(montants) == len([lg for lg in ft.lignes if lg.montant_ht is not None])
     unite_f = cle_unite(ft=f.id)
@@ -578,32 +670,41 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
         and v_td - s_deb > tol.t_somme(len(debours))
         and abs((v_tht - s_tout) - (v_td - s_deb)) <= tol.t_somme(len(montants))
     )
+    ttc, ht, tva = _dec(ctx, ft.total_ttc), _dec(ctx, ft.total_ht), _dec(ctx, ft.total_tva)
+    preuves_lignes = _preuves_lignes_completes(ctx, ft, montants, s_deb, s_prest, s_tout, v_td, v_tht, ttc, tva)
     if toutes_lisibles and debours and v_td is not None and td is not None:
         out.append(_d1_resultat(
             ctx, f, "total_debours", unite_f, td, s_deb, debours, tol.t_somme(len(debours)),
             "le total des débours imprimé", f"somme des {len(debours)} lignes de débours", avec_montant=True,
             ligne_non_lue=bool(meme_ecart), somme_de_lignes=True,
+            motifs_structure=[] if preuves_lignes & {"ttc", "ht_toutes_lignes"} else ["debours_non_prouves_complets"],
         ))
     if toutes_lisibles and montants and v_tht is not None and tht is not None:
         alternatives = [s_prest] if debours and prestations else []
+        complet = "ttc" in preuves_lignes or {"debours", "prestations"} <= preuves_lignes
         out.append(_d1_resultat(
             ctx, f, "total_ht", unite_f, tht, s_tout, [v for _, v in montants], tol.t_somme(len(montants)),
             "le total HT imprimé", f"somme des {len(montants)} montants HT", avec_montant=True,
             alternatives=alternatives,
             ligne_non_lue=bool(meme_ecart) or _tva_confirme_total(ctx, ft, v_tht, s_deb, s_prest, prestations),
-            somme_de_lignes=True,
+            somme_de_lignes=True, motifs_structure=[] if complet else ["lignes_non_prouvees_completes"],
         ))
-    ttc, ht, tva = _dec(ctx, ft.total_ttc), _dec(ctx, ft.total_ht), _dec(ctx, ft.total_tva)
     if ttc is not None and ht is not None and tva is not None:
         assert ft.total_ttc is not None and ft.total_ht is not None and ft.total_tva is not None
         alternatives = [ht + tva + s_deb] if debours and toutes_lisibles and abs(ht - s_prest) <= tol.t_somme(
             max(1, len(prestations))) else []
+        if v_td is not None and v_td > 0 and (v_tht is None or abs(v_tht - v_td) > tol.t_somme(2)):
+            # D-4204 : TTC = HT des prestations + TVA + total des débours imprimé (débours hors HT), même quand
+            # les lignes de débours ne sont pas toutes lues.
+            alternatives.append(ht + tva + v_td)
         out.append(_d1_resultat(
             ctx, f, "total_ttc", unite_f, ft.total_ttc, ht + tva, [ft.total_ht, ft.total_tva], tol.t_somme(2),
             "le total TTC imprimé", "total HT + total TVA", avec_montant=True, alternatives=alternatives,
         ))
     net = _dec(ctx, ft.net_a_payer)
     if net is not None and ttc is not None:
+        alternatives_net = [ttc - abs(_dec(ctx, ft.acomptes) or ZERO) + v_td] if (
+            v_td is not None and v_td > 0 and ht is not None and abs(ht - v_td) > tol.t_somme(2)) else []
         assert ft.net_a_payer is not None and ft.total_ttc is not None
         # Un acompte est une déduction, qu'il soit imprimé en positif ou précédé d'un signe moins.
         acompte = abs(_dec(ctx, ft.acomptes) or ZERO)
@@ -611,6 +712,7 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
         out.append(_d1_resultat(
             ctx, f, "net_a_payer", unite_f, ft.net_a_payer, ttc - acompte, ops, tol.t_somme(len(ops)),
             "le net à payer imprimé", "total TTC − acomptes imprimés", avec_montant=True,
+            alternatives=alternatives_net,
         ))
     return out
 

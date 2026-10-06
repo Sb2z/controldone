@@ -71,13 +71,13 @@ def test_negociation_accept_language():
 def _pages_client(monde):
     return ["/espace", "/espace/depot", "/espace/dossiers", f"/espace/dossiers/{monde.ids[A]['dossier'][0]}",
             f"/espace/lots/{monde.ids[A]['lot'][0]}", "/espace/rapports", "/espace/recouvrement",
-            "/compte/mot-de-passe", "/compte/sessions", "/espace/dossiers/inexistant"]
+            "/compte/mot-de-passe", "/compte/sessions", "/compte", "/espace/dossiers/inexistant"]
 
 
 def _pages_fondateur(monde):
     return ["/admin", "/admin/clients", f"/admin/clients/{A}", f"/admin/clients/{A}/dossiers/{monde.ids[A]['dossier'][0]}",
             "/admin/validation", "/admin/jobs", "/admin/journal", "/admin/alertes", "/admin/autonomie",
-            "/admin/finances", "/compte/sessions"]
+            "/admin/finances", "/admin/notifications", "/compte/sessions", "/compte"]
 
 
 def _rendus(monkeypatch) -> set[str]:
