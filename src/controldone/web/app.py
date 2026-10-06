@@ -19,15 +19,26 @@ from starlette.responses import Response
 
 from controldone.auth import (
     GestionnaireSessions,
+    RegistreRevocations,
     SessionInvalide,
     parametres_cookie,
     secrets_session_depuis_env,
+    sel_debit,
 )
+from controldone.auth.debit import LimiteurDebit
 from controldone.ingest.reception import Limites
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.rendu import page
-from controldone.web.securite import CsrfInvalide, EnTetesSecurite, EtatSecurite, LimiteCorps, NonConnecte
+from controldone.web.securite import (
+    CHEMIN_RAPPORT_CSP,
+    CsrfInvalide,
+    EnTetesSecurite,
+    EtatSecurite,
+    LimiteCorps,
+    NonConnecte,
+    recevoir_rapport_csp,
+)
 
 __all__ = ["ParametresWeb", "create_app"]
 
@@ -49,6 +60,9 @@ class ParametresWeb:
     limites: Limites = field(default_factory=Limites)
     #: Worker intégré (fil d'exécution) pour la démonstration : ``controldone serve`` l'active.
     worker_integre: bool = False
+    #: Limitation de débit et révocations de session en base, partagées par les processus (D-3201, D-3202).
+    #: ``False`` : en mémoire du processus seulement.
+    etat_partage: bool = True
 
 
 def _middleware_session(app: FastAPI):
@@ -82,11 +96,19 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     prod = (mode_execution() == "prod") if p.prod is None else p.prod
     https = prod if p.https is None else p.https
     secrets_ = p.secrets_session or secrets_session_depuis_env()
+    registre = None
+    if p.etat_partage:
+        from controldone.storage.securite import assurer_tables_securite
+
+        assurer_tables_securite(plateforme.db)
+        registre = RegistreRevocations(plateforme.db)
     etat = EtatSecurite(
-        sessions=GestionnaireSessions(secrets_), secret_csrf=secrets_[-1] + "|csrf",
+        sessions=GestionnaireSessions(secrets_, registre=registre), secret_csrf=secrets_[-1] + "|csrf",
         secret_signature=secrets_[-1] + "|signature", prod=prod, https=https,
         cookie=parametres_cookie(prod=prod),
     )
+    if p.etat_partage:
+        etat.partager_debit(plateforme.db, sel_debit(plateforme.cles_maitresses))
     worker = _worker(plateforme) if p.worker_integre else None
 
     @asynccontextmanager
@@ -102,6 +124,8 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     app = FastAPI(title="ControlDOne", docs_url=None, redoc_url=None, openapi_url=None, lifespan=cycle)
     app.state.plateforme = plateforme
     app.state.securite = etat
+    # suivi en direct des dépôts (D-3402) : 30 requêtes d'avance, puis une par seconde, par compte
+    app.state.limiteur_suivi = LimiteurDebit(30, 1.0)
 
     from controldone.api import creer_api
     from controldone.web import routes_admin, routes_auth, routes_client, routes_finances
@@ -117,6 +141,8 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     @app.get("/sante", include_in_schema=False)
     def sante() -> JSONResponse:
         return JSONResponse({"statut": "ok"})
+
+    app.add_api_route(CHEMIN_RAPPORT_CSP, recevoir_rapport_csp, methods=["POST"], include_in_schema=False)
 
     @app.get("/robots.txt", include_in_schema=False)
     def robots() -> PlainTextResponse:

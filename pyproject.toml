@@ -52,6 +52,7 @@ packages = ["src/controldone"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-ra"
+markers = ["lent: test long (exercice de restauration de bout en bout) ; exclure avec -m 'not lent'"]
 
 [tool.ruff]
 line-length = 110

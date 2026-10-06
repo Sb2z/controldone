@@ -5,6 +5,7 @@
     controldone serve [--host 127.0.0.1] [--port 8000] [--sans-worker] [--init-schema]
     controldone init-demo [--force] [--si-absente]
     controldone creer-fondateur --email <adresse> [--nom "…"] [--mot-de-passe-stdin]
+    controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice …
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
 documents est une frontière de regroupement naturelle) et écrit ``report.html``, ``report.pdf``,
@@ -160,6 +161,18 @@ def _creer_fondateur(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sauvegarde(args: argparse.Namespace) -> int:
+    """Délègue à ``controldone.storage.sauvegarde`` (``exercice`` : ``services.exercice_restauration``)."""
+    reste = list(args.arguments)
+    if reste[:1] == ["exercice"]:
+        from controldone.services.exercice_restauration import main as exercice
+
+        return exercice(reste[1:])
+    from controldone.storage.sauvegarde import main as sauvegarde
+
+    return sauvegarde(reste)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="controldone", description="ControlDOne — contrôle technique de cohérence "
                                  "des documents d'import.")
@@ -205,6 +218,11 @@ def main(argv: list[str] | None = None) -> int:
     cf.add_argument("--mot-de-passe-stdin", dest="mot_de_passe_stdin", action="store_true",
                     help="lire le mot de passe sur l'entrée standard (scripts) au lieu de le demander")
     cf.set_defaults(fn=_creer_fondateur)
+
+    sg = sous.add_parser("sauvegarde", add_help=False,
+                         help="sauvegarder | verifier | restaurer | controler | rotation | alerter | exercice")
+    sg.add_argument("arguments", nargs=argparse.REMAINDER)
+    sg.set_defaults(fn=_sauvegarde)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s")

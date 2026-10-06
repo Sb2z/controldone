@@ -6,16 +6,23 @@ sécurité, limite de taille des corps de requête, messages flash signés.
   ``OperatorScope.client`` (journal d'audit avec motif).
 - CSRF : jeton ``nonce.HMAC(secret, sid|nonce)`` lié à la session (``auth.jetons``) ; avant connexion, lié
   à un identifiant de pré-session (cookie ``HttpOnly``).
-- En-têtes : CSP ``default-src 'self'`` (aucune ressource externe, aucun script en ligne), ``X-Frame-Options:
-  DENY``, ``Referrer-Policy: same-origin``, ``X-Content-Type-Options: nosniff``, ``Permissions-Policy``,
+- En-têtes : CSP ``default-src 'self'`` (aucune ressource externe, aucun script en ligne, Trusted Types : aucun
+  puits HTML du DOM, D-3204), violations envoyées à ``/csp-rapport`` (``report-uri`` et ``report-to``), ``X-Frame-
+  Options: DENY``, ``Referrer-Policy: same-origin``, ``X-Content-Type-Options: nosniff``, ``Permissions-Policy``
+  (toutes les fonctions sensibles refusées), ``Cross-Origin-Opener-Policy`` / ``-Resource-Policy: same-origin``,
   HSTS si HTTPS ; ``Cache-Control: no-store`` sur les pages authentifiées.
+- Limitation de débit : seaux partagés en base (``auth.LimiteurDebitPartage``, D-3201) dès que l'application a
+  une plateforme ; seaux en mémoire sinon (tests unitaires).
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import secrets
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlsplit
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from starlette.datastructures import FormData
@@ -23,11 +30,21 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from controldone.auth import DonneesSession, GestionnaireSessions, LimiteurDebit, jeton_csrf, verifier_csrf
+from controldone.auth import (
+    DonneesSession,
+    GestionnaireSessions,
+    Limiteur,
+    LimiteurDebit,
+    LimiteurDebitPartage,
+    jeton_csrf,
+    verifier_csrf,
+)
 from controldone.auth.roles import Acteur, Role
 
 __all__ = [
+    "CHEMIN_RAPPORT_CSP",
     "CSP",
+    "PERMISSIONS_POLICY",
     "CsrfInvalide",
     "EnTetesSecurite",
     "EtatSecurite",
@@ -35,10 +52,27 @@ __all__ = [
     "NonConnecte",
 ]
 
+log = logging.getLogger("controldone.web.securite")
+
+#: Point de réception des violations de CSP (journalisées sans donnée personnelle, débit et taille bornés).
+CHEMIN_RAPPORT_CSP = "/csp-rapport"
+_RAPPORT = f"report-uri {CHEMIN_RAPPORT_CSP}; report-to csp"
+#: Interface : tout vient de l'application (``/static/theme.js`` synchrone, ``/static/vendor/motion.min.js``,
+#: ``/static/app.js``), aucun script ni style en ligne. Trusted Types (D-3204) : aucune politique, donc aucun
+#: ``innerHTML`` / ``insertAdjacentHTML`` / ``document.write`` possible — le JavaScript de l'interface n'écrit que
+#: du ``textContent`` (vérifié par ``tests/security/test_revue_securite_2.py``).
 CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; "
-       "form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'")
+       "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; "
+       "require-trusted-types-for 'script'; trusted-types 'none'; " + _RAPPORT)
 #: Rapport HTML affiché tel quel (gabarit maison, styles intégrés, aucun script) : CSP fermée.
-CSP_RAPPORT = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'"
+CSP_RAPPORT = ("default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'; base-uri 'none'; "
+               + _RAPPORT)
+#: Fonctions du navigateur toutes refusées (noms reconnus par les navigateurs actuels : un nom inconnu produit un
+#: avertissement dans la console).
+PERMISSIONS_POLICY = ", ".join(f"{f}=()" for f in (
+    "accelerometer", "autoplay", "browsing-topics", "camera", "display-capture", "encrypted-media", "geolocation",
+    "gyroscope", "hid", "idle-detection", "magnetometer", "microphone", "midi", "payment", "screen-wake-lock",
+    "serial", "usb", "xr-spatial-tracking"))
 
 
 class NonConnecte(Exception):
@@ -49,6 +83,15 @@ class CsrfInvalide(Exception):
     pass
 
 
+#: Seuils (capacité, recharge par seconde) : 10 tentatives de connexion par adresse et 5 par compte sur
+#: 5 minutes ; API : 120 requêtes en rafale, 2 par seconde ensuite.
+SEUILS: dict[str, tuple[float, float]] = {
+    "connexion_ip": (10, 10 / 300),
+    "connexion_compte": (5, 5 / 300),
+    "api": (120, 2.0),
+}
+
+
 @dataclass
 class EtatSecurite:
     sessions: GestionnaireSessions
@@ -57,9 +100,18 @@ class EtatSecurite:
     prod: bool
     https: bool
     cookie: dict[str, Any]
-    limiteur_connexion_ip: LimiteurDebit = field(default_factory=lambda: LimiteurDebit(10, 10 / 300))
-    limiteur_connexion_compte: LimiteurDebit = field(default_factory=lambda: LimiteurDebit(5, 5 / 300))
-    limiteur_api: LimiteurDebit = field(default_factory=lambda: LimiteurDebit(120, 2.0))
+    limiteur_connexion_ip: Limiteur = field(default_factory=lambda: LimiteurDebit(*SEUILS["connexion_ip"]))
+    limiteur_connexion_compte: Limiteur = field(default_factory=lambda: LimiteurDebit(*SEUILS["connexion_compte"]))
+    limiteur_api: Limiteur = field(default_factory=lambda: LimiteurDebit(*SEUILS["api"]))
+    #: Rapports de violation CSP : par adresse, en mémoire du processus (aucune valeur à partager).
+    limiteur_csp: Limiteur = field(default_factory=lambda: LimiteurDebit(20, 20 / 60))
+
+    def partager_debit(self, db: Any, sel: bytes) -> None:
+        """Seaux en base, partagés par les processus et conservés au redémarrage (D-3201). Seuils inchangés."""
+        self.limiteur_connexion_ip = LimiteurDebitPartage("connexion_ip", *SEUILS["connexion_ip"], db=db, sel=sel)
+        self.limiteur_connexion_compte = LimiteurDebitPartage("connexion_compte", *SEUILS["connexion_compte"],
+                                                              db=db, sel=sel)
+        self.limiteur_api = LimiteurDebitPartage("api", *SEUILS["api"], db=db, sel=sel)
 
     @property
     def nom_cookie(self) -> str:
@@ -199,7 +251,8 @@ class EnTetesSecurite:
                     b"x-frame-options": b"DENY",
                     b"referrer-policy": b"same-origin",
                     b"x-content-type-options": b"nosniff",
-                    b"permissions-policy": b"camera=(), microphone=(), geolocation=(), payment=()",
+                    b"permissions-policy": PERMISSIONS_POLICY.encode(),
+                    b"reporting-endpoints": f'csp="{CHEMIN_RAPPORT_CSP}"'.encode(),
                     b"cross-origin-opener-policy": b"same-origin",
                     b"cross-origin-resource-policy": b"same-origin",
                 }
@@ -274,3 +327,103 @@ async def _repondre_413(send: Send) -> None:
                 "headers": [(b"content-type", b"text/plain; charset=utf-8"),
                             (b"content-length", str(len(corps)).encode())]})
     await send({"type": "http.response.body", "body": corps})
+
+
+# --- rapports de violation de la CSP (D-3204) -----------------------------------------------------------------------
+
+#: Taille maximale d'un envoi de rapports (un rapport réel fait moins de 2 Ko).
+TAILLE_MAX_RAPPORT_CSP = 8 * 1024
+#: Rapports journalisés par envoi au plus (``application/reports+json`` peut en grouper plusieurs).
+RAPPORTS_MAX_PAR_ENVOI = 5
+_TYPES_RAPPORT = ("application/csp-report", "application/reports+json", "application/json")
+_SOURCES_MOTS = frozenset({"inline", "eval", "wasm-eval", "data", "blob", "self", "trusted-types-policy",
+                           "trusted-types-sink"})
+
+
+def _jeton_sur(valeur: Any, longueur: int = 48) -> str:
+    """Valeur réduite à ``[a-z0-9-]`` (nom de directive, disposition) ; ``?`` sinon."""
+    v = str(valeur or "").strip().lower()[:longueur]
+    return v if v and all(c.isascii() and (c.isalnum() or c == "-") for c in v) else "?"
+
+
+def _origine(valeur: Any, hote: str) -> str:
+    """Source bloquée sans chemin, requête, fragment ni identifiants : ``inline``, ``eval``, ``self`` ou
+    ``schéma://hôte[:port]`` (jamais d'URL complète : elle pourrait porter une donnée personnelle)."""
+    v = str(valeur or "").strip()[:2048]
+    if v.lower() in _SOURCES_MOTS:
+        return v.lower()
+    try:
+        u = urlsplit(v)
+        if not u.scheme:
+            return "?"
+        if u.scheme in ("data", "blob", "about", "chrome-extension", "moz-extension", "safari-extension"):
+            return u.scheme
+        if not u.hostname:
+            return "?"
+        if u.hostname == hote:
+            return "self"
+        port = f":{u.port}" if u.port else ""
+    except ValueError:
+        return "?"
+    return f"{u.scheme}://{u.hostname}{port}"[:120]
+
+
+def _chemin(valeur: Any) -> str:
+    """Chemin du document (sans requête ni fragment), limité à des caractères sûrs."""
+    try:
+        p = urlsplit(str(valeur or "")[:2048]).path or "/"
+    except ValueError:
+        return "?"
+    return "".join(c if c.isascii() and (c.isalnum() or c in "/_-.") else "_" for c in p)[:120]
+
+
+def _rapports(donnees: Any) -> list[dict[str, Any]]:
+    if isinstance(donnees, dict) and isinstance(donnees.get("csp-report"), dict):  # report-uri (ancien format)
+        r = donnees["csp-report"]
+        return [{"directive": r.get("effective-directive") or r.get("violated-directive"),
+                 "bloque": r.get("blocked-uri"), "document": r.get("document-uri"),
+                 "disposition": r.get("disposition")}]
+    sortie = []
+    if isinstance(donnees, list):  # report-to (API Reporting)
+        for x in donnees[:RAPPORTS_MAX_PAR_ENVOI]:
+            corps = x.get("body") if isinstance(x, dict) else None
+            if isinstance(x, dict) and x.get("type") == "csp-violation" and isinstance(corps, dict):
+                sortie.append({"directive": corps.get("effectiveDirective"), "bloque": corps.get("blockedURL"),
+                               "document": corps.get("documentURL"), "disposition": corps.get("disposition")})
+    return sortie
+
+
+async def _corps_borne(request: Request, limite: int) -> bytes | None:
+    """Corps de la requête lu en flux, ``None`` au-delà de ``limite`` octets."""
+    corps = bytearray()
+    async for morceau in request.stream():
+        corps += morceau
+        if len(corps) > limite:
+            return None
+    return bytes(corps)
+
+
+def recevoir_rapport_csp(request: Request) -> Response:
+    """``POST /csp-rapport`` : violations de la CSP envoyées par le navigateur. Sans jeton CSRF (le navigateur
+    n'en envoie pas) ; débit borné par adresse ; corps borné à ``TAILLE_MAX_RAPPORT_CSP`` ; journal réduit à la
+    directive, à l'origine de la ressource bloquée et au chemin de la page — ni adresse IP, ni URL complète, ni
+    extrait de script (``script-sample``)."""
+    etat: EtatSecurite = request.app.state.securite
+    ip = request.client.host if request.client else "?"
+    if not etat.limiteur_csp.autoriser(ip):
+        return Response(status_code=429)
+    if request.headers.get("content-type", "").split(";")[0].strip().lower() not in _TYPES_RAPPORT:
+        return Response(status_code=415)
+    corps = depuis_boucle(_corps_borne, request, TAILLE_MAX_RAPPORT_CSP)
+    if corps is None:
+        return Response(status_code=413)
+    try:
+        donnees = json.loads(corps)
+    except (ValueError, RecursionError):
+        return Response(status_code=400)
+    hote = (request.url.hostname or "").lower()
+    for r in _rapports(donnees)[:RAPPORTS_MAX_PAR_ENVOI]:
+        log.warning("csp_violation directive=%s bloque=%s document=%s disposition=%s",
+                    _jeton_sur(r["directive"]), _origine(r["bloque"], hote), _chemin(r["document"]),
+                    _jeton_sur(r["disposition"], 16))
+    return Response(status_code=204)

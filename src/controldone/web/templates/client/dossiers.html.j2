@@ -1,19 +1,37 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import badge_niveau %}
+{% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page"><h1>Dossiers</h1><p class="discret">Clés dans l'ordre : facture du transitaire, transport, MRN, facture commerciale.</p></div>
-<section class="carte">
+<section class="carte" aria-labelledby="t-dossiers">
+<h2 id="t-dossiers" class="vh">Liste des dossiers</h2>
+<form method="get" action="/espace/dossiers" class="filtres" role="search" aria-label="Filtrer les dossiers" data-filtres>
+  <div class="filtre filtre-large">
+    <label for="f-q">Rechercher</label>
+    <input id="f-q" name="q" type="search" value="{{ req.brut.get('q', '') }}" maxlength="80" placeholder="Référence, MRN, n° de facture…" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="filtre">
+    <label for="f-statut">Statut</label>
+    <select id="f-statut" name="statut"><option value="">Tous</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+  </div>
+  {{ fin_filtres(req, "f", "/espace/dossiers") }}
+</form>
+<div data-resultats>
+{{ nb_resultats(p, req, "dossier", "dossiers") }}
 <div class="defilement">
 <table class="donnees">
-  <thead><tr><th scope="col">Dossier</th><th scope="col">Statut</th><th scope="col">Facture du transitaire</th><th scope="col">Transport</th><th scope="col">MRN</th><th scope="col">Facture commerciale</th><th scope="col" class="num">Constats</th><th scope="col" class="num">Recouvrable certain</th></tr></thead>
+  <caption class="vh">Dossiers{% if req.actif %} (filtrés){% endif %}, page {{ p.page }} sur {{ p.pages }}</caption>
+  <thead><tr>{{ th_tri(req, "reference", "Dossier") }}<th scope="col">Statut</th><th scope="col">Facture du transitaire</th><th scope="col">Transport</th><th scope="col">MRN</th><th scope="col">Facture commerciale</th>{{ th_tri(req, "constats", "Constats", "num") }}{{ th_tri(req, "montant", "Recouvrable certain", "num") }}</tr></thead>
   <tbody>
-  {% for d in dossiers %}
+  {% for d in p.elements %}
   <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td>
     {% for _lib, val in d.cles %}<td><code>{{ val }}</code></td>{% endfor %}
     <td class="num">{{ d.nb_constats }}</td><td class="num">{{ d.recouvrable_certain|montant if d.recouvrable_certain else "—" }}</td></tr>
-  {% else %}<tr><td colspan="8" class="vide">Aucun dossier.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}Aucun dossier ne correspond à ces critères. <a href="/espace/dossiers">Afficher tous les dossiers</a>.{% elif total_dossiers == 0 %}Aucun dossier pour l'instant.{% if peut_deposer %} <a href="/espace/depot">Déposer des documents</a>.{% endif %}{% else %}Aucun dossier sur cette page.{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
+{{ pagination(p, req, "Pages des dossiers") }}
 </div>
 </section>
 {% endblock %}

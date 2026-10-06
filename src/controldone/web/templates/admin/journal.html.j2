@@ -1,4 +1,5 @@
 {% extends "base.html.j2" %}
+{% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page"><h1>Journal d'audit</h1></div>
 {% if anomalies %}
@@ -7,17 +8,41 @@
 {% else %}
 <div class="message succes" role="status"><strong>Chaîne intacte :</strong> chaque entrée est liée à la précédente par son empreinte SHA-256.</div>
 {% endif %}
-<section class="carte">
+<section class="carte" aria-labelledby="t-journal">
+<h2 id="t-journal" class="vh">Entrées du journal</h2>
+<form method="get" action="/admin/journal" class="filtres" role="search" aria-label="Filtrer le journal" data-filtres>
+  <div class="filtre">
+    <label for="j-acteur">Acteur</label>
+    <input id="j-acteur" name="acteur" type="search" value="{{ req.brut.get('acteur', '') }}" maxlength="80" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="filtre">
+    <label for="j-action">Action</label>
+    <select id="j-action" name="action"><option value="">Toutes</option>{% for a in actions %}<option value="{{ a }}"{% if req.brut.get('action') == a %} selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="j-client">Client</label>
+    <select id="j-client" name="client"><option value="">Tous</option>{% for c in clients %}<option value="{{ c }}"{% if req.brut.get('client') == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre"><label for="j-du">Du</label><input id="j-du" name="du" type="date" value="{{ req.brut.get('du', '') }}"></div>
+  <div class="filtre"><label for="j-au">Au (inclus)</label><input id="j-au" name="au" type="date" value="{{ req.brut.get('au', '') }}"></div>
+  {{ fin_filtres(req, "j", "/admin/journal") }}
+</form>
+<div data-resultats>
+{{ nb_resultats(p, req, "entrée", "entrées") }}
 <div class="defilement">
 <table class="donnees compacte">
-  <thead><tr><th scope="col" class="num">N°</th><th scope="col">Date</th><th scope="col">Acteur</th><th scope="col">Action</th><th scope="col">Client</th><th scope="col">Cible</th><th scope="col">Détails</th><th scope="col">Empreinte</th></tr></thead>
+  <caption class="vh">Journal d'audit, page {{ p.page }} sur {{ p.pages }}</caption>
+  <thead><tr>{{ th_tri(req, "id", "N°", "num") }}<th scope="col">Date</th><th scope="col">Acteur</th><th scope="col">Action</th><th scope="col">Client</th><th scope="col">Cible</th><th scope="col">Détails</th><th scope="col">Empreinte</th></tr></thead>
   <tbody>
-  {% for e in lignes %}
+  {% for e in p.elements %}
   <tr><td class="num">{{ e.id }}</td><td>{{ e.ts|date }}</td><td><code>{{ e.actor }}</code><br><span class="discret">{{ e.role }}</span></td><td>{{ e.action }}</td><td><code>{{ e.tenant_id or "—" }}</code></td><td><code>{{ e.target or "—" }}</code></td>
     <td class="details">{% for k, v in e.details.items() %}<span>{{ k }} : {{ v }}</span>{% endfor %}</td><td><code>{{ e.hash }}…</code></td></tr>
+  {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}Aucune entrée ne correspond à ces critères.{% else %}Journal vide.{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
+{{ pagination(p, req, "Pages du journal") }}
 </div>
 </section>
 {% endblock %}

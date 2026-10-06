@@ -4,8 +4,11 @@ paramètres de cookie ``httponly`` ; jeton CSRF lié à la session.
 - Signature HMAC (itsdangerous) avec une **liste** de secrets : le dernier signe, tous vérifient
   (rotation du secret sans déconnecter tout le monde).
 - ``rafraichir`` réémet un jeton (nouvel horodatage d'émission) au-delà de ``rotation_s`` ; l'identifiant
-  de session (``sid``) et le début de session sont conservés ; ``revoquer(sid)`` (déconnexion) est en
-  mémoire du processus (voir les points ouverts dans ``docs/SECURITY.md``).
+  de session (``sid``) et le début de session sont conservés.
+- Révocation : ``revoquer(sid)`` (déconnexion) et ``revoquer_utilisateur(user_id)`` (toutes les sessions
+  ouvertes avant maintenant : changement de mot de passe). En mémoire du processus **et**, si un ``registre``
+  est fourni (``auth.revocation.RegistreRevocations``, D-3202), en base : la révocation vaut pour tous les
+  processus et survit au redémarrage (RS-17).
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ import secrets
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from itsdangerous import BadSignature, URLSafeSerializer
 
@@ -36,6 +39,14 @@ __all__ = [
 
 class SessionInvalide(PermissionError):
     pass
+
+
+class Registre(Protocol):
+    """Révocations persistantes (voir ``auth.revocation.RegistreRevocations``)."""
+
+    def revoquer(self, sid: str, *, expire: float) -> None: ...
+    def revoquer_utilisateur(self, user_id: str, *, apres: float, expire: float) -> None: ...
+    def est_revoquee(self, sid: str, user_id: str, debut: float) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -70,7 +81,7 @@ def secrets_session_depuis_env(mode: str | None = None) -> list[str]:
 class GestionnaireSessions:
     def __init__(self, secrets_: str | Sequence[str], *, inactivite_s: int = 30 * 60,
                  duree_absolue_s: int = 8 * 3600, rotation_s: int = 15 * 60,
-                 horloge: Callable[[], float] = time.time) -> None:
+                 horloge: Callable[[], float] = time.time, registre: Registre | None = None) -> None:
         cles = [secrets_] if isinstance(secrets_, str) else list(secrets_)
         if not cles or any(len(c) < 32 for c in cles):
             raise ValueError("secret de session trop court (32 caractères minimum)")
@@ -80,6 +91,9 @@ class GestionnaireSessions:
         self.rotation_s = rotation_s
         self.horloge = horloge
         self._revoquees: set[str] = set()
+        #: user_id -> instant : sessions commencées strictement avant révoquées (copie locale du registre).
+        self._revoquees_avant: dict[str, float] = {}
+        self.registre = registre
 
     def emettre(self, acteur: Acteur, *, deux_facteurs: bool = False, sid: str | None = None,
                 debut: float | None = None) -> str:
@@ -100,7 +114,7 @@ class GestionnaireSessions:
         except (BadSignature, KeyError, ValueError, TypeError) as exc:
             raise SessionInvalide("jeton de session invalide") from exc
         maintenant = self.horloge()
-        if d.sid in self._revoquees:
+        if d.sid in self._revoquees or d.debut < self._revoquees_avant.get(d.user_id, float("-inf")):
             raise SessionInvalide("session révoquée")
         if maintenant - d.emis > self.inactivite_s:
             raise SessionInvalide("session expirée (inactivité)")
@@ -108,6 +122,9 @@ class GestionnaireSessions:
             raise SessionInvalide("session expirée (durée maximale)")
         if d.role is Role.fondateur and not d.deux_facteurs:
             raise SessionInvalide("second facteur exigé pour le fondateur")
+        if self.registre is not None and self.registre.est_revoquee(d.sid, d.user_id, d.debut):
+            self._revoquees.add(d.sid)
+            raise SessionInvalide("session révoquée")
         return d
 
     def rafraichir(self, jeton: str) -> tuple[DonneesSession, str | None]:
@@ -119,8 +136,21 @@ class GestionnaireSessions:
                                sid=d.sid, debut=d.debut)
         return d, nouveau
 
-    def revoquer(self, sid: str) -> None:
+    def revoquer(self, sid: str, *, debut: float | None = None) -> None:
+        """Déconnexion : le ``sid`` est refusé partout (registre) jusqu'à l'expiration absolue de la session."""
         self._revoquees.add(sid)
+        if self.registre is not None:
+            depart = self.horloge() if debut is None else debut
+            self.registre.revoquer(sid, expire=depart + self.duree_absolue_s + 60)
+
+    def revoquer_utilisateur(self, user_id: str) -> float:
+        """Toutes les sessions de ``user_id`` ouvertes jusqu'à maintenant sont révoquées (changement de mot de
+        passe). Renvoie l'instant de coupure : une session émise ensuite (``emettre``) reste valable."""
+        apres = self.horloge()
+        self._revoquees_avant[user_id] = max(apres, self._revoquees_avant.get(user_id, apres))
+        if self.registre is not None:
+            self.registre.revoquer_utilisateur(user_id, apres=apres, expire=apres + self.duree_absolue_s + 60)
+        return apres
 
 
 def parametres_cookie(*, prod: bool = True, max_age: int = 8 * 3600) -> dict[str, Any]:

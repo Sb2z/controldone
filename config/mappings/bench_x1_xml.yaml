@@ -1,7 +1,7 @@
 # Fiche de correspondance (SPEC §5.3.6) — export de déclaration XML « X1 » du banc (format FICTIF,
 # décrit dans bench/generator/FORMATS.md). Chemins XPath relatifs à la racine ; préfixe « d » = espace de noms.
 format_id: bench_x1_xml
-version: "1.0.0"
+version: "1.1.0"
 type: xml
 sous_type: export_xml
 detection:
@@ -75,6 +75,12 @@ listes:
       mode_paiement: d:ModePaiement
     enumerations:
       taux_nature: "@nature"
+  # totaux imprimés par code de taxe (D-3101) : jamais des lignes de taxation
+  totaux_par_code:
+    source: d:Totaux/d:TotalParType
+    champs:
+      type_taxe: "@type"
+      montant: "."
 
 tables:
   categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, X01: autre_taxe, FPE: forfait_petits_envois,

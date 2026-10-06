@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from controldone.auth.roles import Acteur, Role
 from controldone.outbox import ActionBloquee, FileSortante, ModeAutonomie, TransitionInterdite, TypeAction
@@ -31,9 +31,28 @@ from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.file_jobs import JobStore
 from controldone.storage.models import Document, Dossier, Fichier
+from controldone.web.graphes import donnees_fondateur
+from controldone.web.listes import decalage, lire_requete, paginer
+from controldone.web.listes_vues import (
+    NIVEAUX_VALIDATION,
+    PARAMS_DOSSIERS,
+    STATUTS_DOSSIER,
+    STATUTS_JOB,
+    TRIS_DOSSIERS,
+    TRIS_JOBS,
+    TRIS_JOURNAL,
+    TRIS_VALIDATION,
+    filtrer_dossiers,
+    filtrer_validation,
+    libelles_controles,
+    params_jobs,
+    params_journal,
+    params_validation,
+)
 from controldone.web.rendu import page, redirection, retour_sur
 from controldone.web.reponses import fichier_attache, png
 from controldone.web.securite import acteur_de, depuis_boucle, formulaire_sync
+from controldone.web.suivi import etat_traitement
 from controldone.web.vues import image_page, images_dossier, images_preuves
 
 routeur = APIRouter(prefix="/admin")
@@ -68,9 +87,11 @@ def _s(form: Any, cle: str, n: int = 500) -> str:
 @routeur.get("")
 def tableau(request: Request) -> Response:
     f = _fondateur(request)
-    donnees = svc_admin.tableau_de_bord(_pf(request), f)
+    pf = _pf(request)
+    donnees = svc_admin.tableau_de_bord(pf, f)
+    graphes = donnees_fondateur({c.id: c.stats for c in donnees["clients"]})
     return page(request, "admin/tableau.html.j2", titre="Tableau de bord", nav="tableau", d=donnees,
-                demo=any(c.demo for c in donnees["clients"]))
+                graphes=graphes, traitements=_traitements(pf), demo=any(c.demo for c in donnees["clients"]))
 
 
 # --- clients ------------------------------------------------------------------------------------------------
@@ -97,9 +118,12 @@ def creer_client(request: Request) -> Response:
 
 def _fiche(request: Request, f: Acteur, tenant_id: str, **extra: Any) -> Response:
     pf = _pf(request)
+    req = lire_requete(request, PARAMS_DOSSIERS, TRIS_DOSSIERS, "reference", ancre="#dossiers")
     d = svc_admin.fiche_client(pf, f, tenant_id)
+    p = paginer(filtrer_dossiers(d["dossiers"], req), req)
     sorties = FileSortante(pf.db).lister(f, tenant_id=tenant_id)
-    return page(request, "admin/client.html.j2", titre=d["info"]["raison_sociale"], nav="clients", c=d,
+    return page(request, "admin/client.html.j2", titre=d["info"]["raison_sociale"], nav="clients", c=d, p=p, req=req,
+                statuts=STATUTS_DOSSIER,
                 sorties=list(reversed(sorties))[:30], libelles_sortie=LIBELLES_SORTIE, libelles_lot=LIBELLES_LOT,
                 demo=d["info"]["demo"], **extra)
 
@@ -369,17 +393,23 @@ def file_validation(request: Request) -> Response:
     with pf.db.operateur(f) as op:
         clients = {t.id: {"raison_sociale": t.raison_sociale, "actif": t.actif,
                           "demo": bool((t.reglages or {}).get("demo"))} for t in op.lister_clients()}
+        noms_actifs = {k: v["raison_sociale"] for k, v in clients.items() if v["actif"]}
+        req = lire_requete(request, params_validation(noms_actifs), TRIS_VALIDATION, "priorite", ancre="#constats")
+        filtre_client = req.filtres.get("client")
         par_client: dict[str, list[Any]] = defaultdict(list)
         for c in op.file_validation():
             par_client[c.tenant_id].append(c)
         demo = False
+        scopes: dict[str, Any] = {}
         for tenant_id in sorted(set(par_client) | {t for t in clients if clients[t]["actif"]}):
             t = clients.get(tenant_id)
             if t is None:
                 continue
             scope = op.client(tenant_id, "file de validation", lecture=True)
+            scopes[tenant_id] = scope
             demo = demo or t["demo"]
-            courants = {c.id for c in constats_courants(scope)} if par_client.get(tenant_id) else set()
+            constats_client = par_client.get(tenant_id, []) if filtre_client in (None, tenant_id) else []
+            courants = {c.id for c in constats_courants(scope)} if constats_client else set()
             libelles: dict[str, str] = {}
             refs: dict[str, str] = {}
             for d in scope.lister(Dossier):
@@ -399,20 +429,30 @@ def file_validation(request: Request) -> Response:
                     attention.append({"type": "Document non reconnu", "client": t["raison_sociale"],
                                       "tenant_id": tenant_id, "dossier_id": doc.dossier_id,
                                       "dossier": refs.get(doc.dossier_id, doc.dossier_id), "detail": doc.id})
-            vues = [vue_constat(c, libelles) for c in par_client.get(tenant_id, []) if c.id in courants]
-            extraits = images_preuves(pf.vault, scope, vues[:40])
-            for v in vues:
+            for v in (vue_constat(c, libelles) for c in constats_client if c.id in courants):
                 items.append({"c": v, "tenant_id": tenant_id, "client": t["raison_sociale"],
-                              "dossier": refs.get(v.dossier_id, v.dossier_id), "extraits": extraits})
-    ordre = {id(x["c"]): i for i, x in enumerate(items)}
-    tries = trier_constats([x["c"] for x in items])
-    par_c = {id(x["c"]): x for x in items}
-    items = [par_c[id(c)] for c in tries if id(c) in ordre]
+                              "dossier": refs.get(v.dossier_id, v.dossier_id)})
+        ordre = {id(x["c"]): i for i, x in enumerate(items)}
+        tries = trier_constats([x["c"] for x in items])
+        par_c = {id(x["c"]): x for x in items}
+        items = [par_c[id(c)] for c in tries if id(c) in ordre]
+        total_file = len(items)
+        p = paginer(filtrer_validation(items, req), req)
+        # extraits de preuve : seulement pour les constats de la page affichée (un rendu par client)
+        extraits: dict[Any, bytes] = {}
+        for tenant_id in {it["tenant_id"] for it in p.elements}:
+            extraits.update(images_preuves(pf.vault, scopes[tenant_id],
+                                           [it["c"] for it in p.elements if it["tenant_id"] == tenant_id]))
+        for it in p.elements:
+            it["extraits"] = extraits
     sorties = FileSortante(pf.db).lister(f, statuts=["brouillon"])
     noms = {k: v["raison_sociale"] for k, v in clients.items()}
-    return page(request, "admin/validation.html.j2", titre="File de validation", nav="validation", items=items,
-                attention=attention, sorties=sorties, noms=noms, libelles_sortie=LIBELLES_SORTIE, demo=demo,
-                retour="/admin/validation")
+    return page(request, "admin/validation.html.j2", titre="File de validation", nav="validation", p=p, req=req,
+                total_file=total_file, clients_filtre=sorted(noms_actifs.items(), key=lambda x: x[1].casefold()),
+                controles=libelles_controles(), niveaux=NIVEAUX_VALIDATION, attention=attention, sorties=sorties,
+                noms=noms, libelles_sortie=LIBELLES_SORTIE, demo=demo,
+                retour=retour_sur("/admin/validation" + str(request.url.query and "?" + request.url.query),
+                                  "/admin/validation"))
 
 
 def _sortie(request: Request, action_id: str, quoi: str) -> Response:
@@ -497,9 +537,36 @@ def definir_autonomie(request: Request) -> Response:
 def jobs(request: Request) -> Response:
     _fondateur(request)
     store = JobStore(_pf(request).db)
-    recents = store.lister(limite=200, recents=True)  # tri SQL décroissant avant la limite
-    return page(request, "admin/jobs.html.j2", titre="Tâches", nav="jobs", jobs=list(reversed(recents)),
-                compte=store.compter_par_statut())
+    kinds, clients = store.valeurs()
+    req = lire_requete(request, params_jobs(kinds, clients), TRIS_JOBS, "-cree")
+    f = req.filtres
+    criteres = {"statut": f.get("statut"), "kind": f.get("kind"), "tenant_id": f.get("client")}
+    liste, total = _page_sql(req, lambda dec: store.rechercher(**criteres, croissant=req.tri == "cree", decalage=dec,
+                                                              limite=req.taille))
+    p = paginer(liste, req, total=total)
+    return page(request, "admin/jobs.html.j2", titre="Tâches", nav="jobs", p=p, req=req, statuts=STATUTS_JOB,
+                kinds=kinds, clients=clients, compte=store.compter_par_statut())
+
+
+@routeur.get("/jobs/etat")
+def etat_jobs(request: Request) -> Response:
+    """Suivi en direct des traitements de dépôts (tableau de bord du fondateur) : JSON, sans donnée de document."""
+    f = _fondateur(request)
+    if not request.app.state.limiteur_suivi.autoriser(f"suivi:{f.id}"):
+        return JSONResponse({"erreur": "trop de requêtes"}, status_code=429, headers={"Retry-After": "5"})
+    return JSONResponse(_traitements(_pf(request)), headers={"Cache-Control": "no-store"})
+
+
+def _traitements(pf: Plateforme, limite: int = 6) -> dict[str, Any]:
+    store = JobStore(pf.db)
+    liste, _total = store.rechercher(kind="traiter_lot", limite=limite)
+    lots = []
+    for j in liste:
+        statut_lot = "traite" if j.statut == "done" else "recu"
+        lots.append({"lot_id": str(j.payload.get("lot_id") or ""), "client": j.tenant_id or "",
+                     "cree_le": j.run_after.isoformat() if j.run_after else None,
+                     **etat_traitement(statut_lot, j)})
+    return {"compte": store.compter_par_statut(), "lots": lots}
 
 
 @routeur.post("/jobs/{job_id}/relancer")
@@ -516,13 +583,38 @@ def journal(request: Request) -> Response:
     f = _fondateur(request)
     with _pf(request).db.operateur(f) as op:
         anomalies = op.verifier_journal()
-        entrees = op.journal(300)
+        actions, clients = op.valeurs_journal()
+        req = lire_requete(request, params_journal(actions, clients), TRIS_JOURNAL, "-id")
+        fl = req.filtres
+        criteres = {"acteur": fl.get("acteur"), "action": fl.get("action"), "tenant_id": fl.get("client"),
+                    "du": _debut_jour(fl.get("du")), "au": _debut_jour(fl.get("au"), 1)}
+        entrees, total = _page_sql(req, lambda dec: op.rechercher_journal(**criteres, croissant=req.tri == "id",
+                                                                          decalage=dec, limite=req.taille))
         lignes = [{"id": e.id, "ts": e.ts, "actor": e.actor, "role": e.role, "tenant_id": e.tenant_id,
                    "action": e.action, "target": e.target, "ip": e.ip, "details": e.details,
                    "hash": e.hash[:12]} for e in entrees]
         anom = [{"id": a.id, "motif": a.motif} for a in anomalies]
-    return page(request, "admin/journal.html.j2", titre="Journal d'audit", nav="journal", lignes=lignes,
-                anomalies=anom)
+    p = paginer(lignes, req, total=total)
+    return page(request, "admin/journal.html.j2", titre="Journal d'audit", nav="journal", p=p, req=req,
+                actions=actions, clients=clients, anomalies=anom)
+
+
+def _page_sql(req: Any, lire: Any) -> tuple[list[Any], int]:
+    """Page lue en SQL ; une page au-delà de la dernière est relue à la dernière page existante."""
+    liste, total = lire((req.page - 1) * req.taille)
+    if not liste and total and req.page > 1:
+        liste, total = lire(decalage(req, total))
+    return liste, total
+
+
+def _debut_jour(d: Any, plus: int = 0) -> Any:
+    """Minuit (heure de Paris) du jour ``d`` (+ ``plus`` jours), en UTC ; ``None`` sans date."""
+    if d is None:
+        return None
+    from datetime import datetime, time, timedelta
+    from zoneinfo import ZoneInfo
+
+    return datetime.combine(d + timedelta(days=plus), time(0), tzinfo=ZoneInfo("Europe/Paris"))
 
 
 @routeur.get("/alertes")

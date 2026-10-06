@@ -1,0 +1,43 @@
+{# Listes : en-têtes triables, nombre de résultats, pagination (D-3401). Liens GET, utilisables sans JavaScript. #}
+
+{% macro th_tri(req, cle, libelle, classe="") -%}
+<th scope="col"{% if classe %} class="{{ classe }}"{% endif %} aria-sort="{{ req.sens(cle) }}"><a class="tri" href="{{ req.url_tri(cle) }}">{{ libelle }}<span class="tri-ico" aria-hidden="true">{{ {"ascending": "↑", "descending": "↓"}.get(req.sens(cle), "↕") }}</span><span class="vh">{{ {"ascending": " (tri croissant, activer pour décroissant)", "descending": " (tri décroissant, activer pour croissant)"}.get(req.sens(cle), " (trier)") }}</span></a></th>
+{%- endmacro %}
+
+{% macro nb_resultats(p, req, singulier, pluriel) -%}
+<p class="compte-resultats" data-compte>
+{%- if p.total == 0 -%}Aucun {{ singulier }}{% if req.actif %} ne correspond aux filtres{% endif %}.
+{%- elif p.pages == 1 -%}{{ p.total }} {{ singulier if p.total == 1 else pluriel }}{% if req.actif %} (filtré){% endif %}.
+{%- else -%}{{ p.debut }}–{{ p.fin }} sur {{ p.total }} {{ pluriel }}{% if req.actif %} (filtré){% endif %}.
+{%- endif -%}
+</p>
+{%- endmacro %}
+
+{% macro pagination(p, req, libelle="Pagination") -%}
+{% if p.pages > 1 %}
+<nav class="pagination" aria-label="{{ libelle }}">
+  {% if p.page > 1 %}<a href="{{ req.url(page=p.page - 1) }}" rel="prev">‹ Précédente</a>{% else %}<span class="inactif" aria-hidden="true">‹ Précédente</span>{% endif %}
+  <ul>
+  {% for n in p.numeros %}
+    {% if n is none %}<li><span class="ellipse" aria-hidden="true">…</span></li>
+    {% elif n == p.page %}<li><a href="{{ req.url(page=n) }}" aria-current="page"><span class="vh">Page </span>{{ n }}</a></li>
+    {% else %}<li><a href="{{ req.url(page=n) }}"><span class="vh">Page </span>{{ n }}</a></li>{% endif %}
+  {% endfor %}
+  </ul>
+  {% if p.page < p.pages %}<a href="{{ req.url(page=p.page + 1) }}" rel="next">Suivante ›</a>{% else %}<span class="inactif" aria-hidden="true">Suivante ›</span>{% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{# Champs communs en fin de formulaire de filtres : taille de page, boutons, réinitialisation. #}
+{% macro fin_filtres(req, id, chemin, tri_cache=True) -%}
+<div class="filtre filtre-taille">
+  <label for="{{ id }}-taille">Par page</label>
+  <select id="{{ id }}-taille" name="taille">{% for t in (25, 50, 100) %}<option value="{{ t }}"{% if req.taille == t %} selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+</div>
+{% if tri_cache and req.tri != req.tri_defaut %}<input type="hidden" name="tri" value="{{ req.tri }}">{% endif %}
+<div class="filtre filtre-actions">
+  <button type="submit" class="btn">Filtrer</button>
+  {% if req.actif or req.tri != req.tri_defaut %}<a class="petit-lien" href="{{ chemin }}{{ req.ancre }}">Réinitialiser</a>{% endif %}
+</div>
+{%- endmacro %}

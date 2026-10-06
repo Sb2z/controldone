@@ -1,5 +1,6 @@
 {% extends "base.html.j2" %}
-{% from "macros.html.j2" import badge_niveau %}
+{% from "macros.html.j2" import badge_niveau, badge_suivi %}
+{% from "graphes.html.j2" import graphe %}
 {% block contenu %}
 <div class="titre-page">
   <h1>{{ info.raison_sociale }}</h1>
@@ -32,9 +33,15 @@
     <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/html?afficher=1">Version web</a></li>{% endfor %}</ul>
   {% else %}<p class="vide">Votre rapport sera disponible ici après validation des constats.</p>{% endif %}
   <h2>Derniers dépôts</h2>
-  {% if lots %}<ul class="liste-simple">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> — {{ l.statut_libelle }}</li>{% endfor %}</ul>
+  {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}</li>{% endfor %}</ul>
   {% else %}<p class="vide">Aucun dépôt.</p>{% endif %}
   {% if peut_deposer %}<p><a class="btn btn-principal" href="/espace/depot">Déposer des documents</a></p>{% endif %}
 </section>
 </div>
+<section class="graphes" aria-labelledby="t-graphes">
+  <h2 id="t-graphes">En un coup d'œil</h2>
+  <div class="grille-graphes">
+    {% for g in graphes %}<div class="carte">{{ graphe(g) }}</div>{% endfor %}
+  </div>
+</section>
 {% endblock %}

@@ -12,7 +12,7 @@ from controldone.auth import (
     hacher_mot_de_passe,
     verifier_mot_de_passe,
 )
-from controldone.auth.roles import Role
+from controldone.auth.roles import Acteur, Role
 from controldone.auth.service import acteur_client, verifier_mot_de_passe_compte, verifier_second_facteur
 from controldone.storage.comptes import changer_mot_de_passe, utilisateur
 from controldone.web.rendu import page, redirection
@@ -37,6 +37,13 @@ def _ouvrir_session(request: Request, acteur, *, deux_facteurs: bool) -> Respons
     etat.poser_session(rep, jeton)
     rep.delete_cookie(COOKIE_2FA, path="/")
     return rep
+
+
+def _succes(etat: EtatSecurite, request: Request, cle_compte: str) -> None:
+    """Identifiants valides : le compteur du compte repart à zéro et l'adresse récupère son jeton — seuls les
+    échecs épuisent la limite (D-3201 : des connexions de test réussies ne bloquent plus le fondateur)."""
+    etat.limiteur_connexion_compte.effacer(cle_compte)
+    etat.limiteur_connexion_ip.rembourser(_ip(request))
 
 
 @routeur.get("/")
@@ -65,6 +72,7 @@ def connexion(request: Request) -> Response:
     pf = request.app.state.plateforme
     try:
         user_id, role = verifier_mot_de_passe_compte(pf.db, email, mdp)
+        _succes(etat, request, email or "-")
         if role == Role.fondateur.value:
             rep = redirection(request, "/connexion/totp")
             rep.set_cookie(COOKIE_2FA, etat.jeton_2fa(user_id), max_age=300, httponly=True,
@@ -100,6 +108,7 @@ def totp(request: Request) -> Response:
                                          cles_maitresses=pf.cles_maitresses, ip=_ip(request))
     except EchecAuthentification:
         return page(request, "totp.html.j2", titre="Code de vérification", statut=401, erreur="Code invalide.")
+    etat.limiteur_connexion_compte.effacer("2fa:" + user_id)
     return _ouvrir_session(request, acteur, deux_facteurs=True)
 
 
@@ -109,7 +118,7 @@ def deconnexion(request: Request) -> Response:
     etat = _etat(request)
     s = getattr(request.state, "session", None)
     if s is not None:
-        etat.sessions.revoquer(s.sid)
+        etat.sessions.revoquer(s.sid, debut=s.debut)  # tous les processus, jusqu'à l'expiration (D-3202)
     rep = redirection(request, "/connexion", message="Vous êtes déconnecté.")
     etat.effacer_session(rep)
     return rep
@@ -126,6 +135,10 @@ def mdp(request: Request) -> Response:
     acteur = acteur_de(request)
     form = formulaire_sync(request)
     pf = request.app.state.plateforme
+    etat = _etat(request)
+    if not etat.limiteur_connexion_compte.autoriser("mdp:" + acteur.id):
+        return page(request, "mot_de_passe.html.j2", titre="Changer de mot de passe", statut=429,
+                    erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.")
     actuel, nouveau, confirmation = (str(form.get(k) or "")[:1024] for k in ("actuel", "nouveau", "confirmation"))
     compte = utilisateur(pf.db, acteur.id)
     if compte is None or not verifier_mot_de_passe(compte.mot_de_passe_hash, actuel):
@@ -140,4 +153,12 @@ def mdp(request: Request) -> Response:
         return page(request, "mot_de_passe.html.j2", titre="Changer de mot de passe", statut=400,
                     erreur="Le nouveau mot de passe doit comporter au moins 12 caractères.")
     changer_mot_de_passe(pf.db, acteur.id, empreinte, acteur=acteur)
-    return redirection(request, "/", message="Mot de passe modifié.")
+    # Toutes les sessions ouvertes avec l'ancien mot de passe sont révoquées (autres navigateurs, cookie volé) ;
+    # celle-ci est remplacée par une session neuve (D-3202, RS-17).
+    s = request.state.session
+    etat.sessions.revoquer_utilisateur(acteur.id)
+    etat.limiteur_connexion_compte.effacer("mdp:" + acteur.id)
+    rep = redirection(request, "/", message="Mot de passe modifié. Vos autres sessions sont fermées.")
+    etat.poser_session(rep, etat.sessions.emettre(Acteur(s.user_id, s.role, s.tenant_id),
+                                                  deux_facteurs=s.deux_facteurs))
+    return rep

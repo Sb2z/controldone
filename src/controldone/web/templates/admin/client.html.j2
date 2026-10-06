@@ -1,5 +1,6 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import csrf_champ, badge_niveau, kpi %}
+{% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 {% set t = c.info.id %}
 <nav class="fil" aria-label="Fil d'Ariane"><a href="/admin/clients">Clients</a> › <span>{{ c.info.raison_sociale }}</span></nav>
@@ -18,22 +19,38 @@
   {{ kpi("Coût IA du mois", c.cout_ia|montant, "plafond " ~ (c.plafond|montant)) }}
 </section>
 
-<section class="carte">
-  <div class="carte-tete"><h2>Dossiers</h2>
+<section class="carte" id="dossiers" aria-labelledby="t-dossiers">
+  <div class="carte-tete"><h2 id="t-dossiers">Dossiers</h2>
     <form method="post" action="/admin/clients/{{ t }}/publier" class="en-ligne">{{ csrf_champ(csrf) }}
       <button type="submit" class="btn btn-principal">Publier le rapport (constats validés)</button></form>
   </div>
+  <form method="get" action="/admin/clients/{{ t }}#dossiers" class="filtres" role="search" aria-label="Filtrer les dossiers du client" data-filtres>
+    <div class="filtre filtre-large">
+      <label for="d-q">Rechercher</label>
+      <input id="d-q" name="q" type="search" value="{{ req.brut.get('q', '') }}" maxlength="80" placeholder="Référence, MRN, n° de facture…" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="filtre">
+      <label for="d-statut">Statut</label>
+      <select id="d-statut" name="statut"><option value="">Tous</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+    </div>
+    {{ fin_filtres(req, "d", "/admin/clients/" ~ t) }}
+  </form>
+  <div data-resultats>
+  {{ nb_resultats(p, req, "dossier", "dossiers") }}
   <div class="defilement">
   <table class="donnees">
-    <thead><tr><th scope="col">Référence</th><th scope="col">Statut (avant validation)</th><th scope="col">MRN</th><th scope="col">Facture du transitaire</th><th scope="col" class="num">Constats</th><th scope="col" class="num">À valider</th><th scope="col" class="num">Version</th></tr></thead>
+    <caption class="vh">Dossiers du client, page {{ p.page }} sur {{ p.pages }}</caption>
+    <thead><tr>{{ th_tri(req, "reference", "Référence") }}<th scope="col">Statut (avant validation)</th><th scope="col">MRN</th><th scope="col">Facture du transitaire</th>{{ th_tri(req, "constats", "Constats", "num") }}<th scope="col" class="num">À valider</th><th scope="col" class="num">Version</th></tr></thead>
     <tbody>
-    {% for d in c.dossiers %}
+    {% for d in p.elements %}
       <tr><th scope="row"><a href="/admin/clients/{{ t }}/dossiers/{{ d.id }}">{{ d.reference }}</a></th>
       <td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td>{{ d.cles[0][1] }}</td>
       <td class="num">{{ d.nb_constats }}</td><td class="num">{{ d.nb_proposes }}</td><td class="num">{{ d.version }}</td></tr>
-    {% else %}<tr><td colspan="7" class="vide">Aucun dossier.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="7" class="vide">{% if req.actif %}Aucun dossier ne correspond à ces critères.{% else %}Aucun dossier.{% endif %}</td></tr>{% endfor %}
     </tbody>
   </table>
+  </div>
+  {{ pagination(p, req, "Pages des dossiers du client") }}
   </div>
 </section>
 

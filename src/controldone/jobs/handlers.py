@@ -170,6 +170,7 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
 
     reglages = get_settings()
     ctx.exiger_bail()
+    ctx.etape("lecture")  # suivi en direct (D-3402) : lecture des documents puis calculs du pipeline
     with tempfile.TemporaryDirectory(prefix="cd-lot-", dir=_tmp(reglages)) as tmp:
         racine = Path(tmp) / "lot"
         racine.mkdir()
@@ -187,6 +188,7 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
         resultats = _executer_pipeline(ctx, pipeline, racine, profil, grilles, options)
     ctx.heartbeat()
     ctx.exiger_bail()
+    ctx.etape("controles")  # résultats des contrôles : enregistrement des dossiers et constats
 
     par_sha = {sha: fid for fid, _c, _n, _r, sha in fichiers}
     n_constats = 0

@@ -270,6 +270,21 @@ def _est_taxe(el: etree._Element) -> bool:
         or _enfant(el, _TAXE["base_quantite"]) is not None)
 
 
+#: Élément d'un total par code de taxe (« TypeTotal », « TotalParType », « total », « Summe ») : D-3101.
+_TOTAL_RE = re.compile(r"total|summe|somma|suma|recap")
+_NOMBRE_RE = re.compile(r"^-?\d+(?:[.,]\d+)?$")
+
+
+def _est_total_code(el: etree._Element, codes: set[str]) -> bool:
+    """Feuille qui porte un code de taxe des taxations lues (attribut) et un seul nombre, sous un nom de total :
+    total imprimé du code (D-3101). Jamais une ligne de taxation."""
+    if len(_enfants(el)) or not _TOTAL_RE.search(_cle(_local(el.tag))):
+        return False
+    a = _attr(el, _TAXE["type_taxe"])
+    return (a is not None and (el.get(a) or "").strip() in codes
+            and bool(_NOMBRE_RE.match(_texte(el).replace(" ", ""))))
+
+
 def _est_document(el: etree._Element) -> bool:
     if _est_taxe(el) or _est_article(el):
         return False
@@ -281,9 +296,11 @@ def _est_document(el: etree._Element) -> bool:
     return x is not None and bool(_CODE_DOC_RE.match(_texte(x))) and _enfant(el, _DOC_REF) is not None
 
 
-def _dans(el: etree._Element, groupes: list[etree._Element]) -> bool:
-    ens = set(groupes)
-    return any(a in ens for a in el.iterancestors()) or el in ens
+def _dans(el: etree._Element, ens: set[etree._Element] | frozenset[etree._Element]) -> bool:
+    """``el`` est dans un groupe ou sous l'un de ses éléments. ``ens`` est un **ensemble** construit une fois par
+    l'appelant : le reconstruire à chaque appel rendait la déduction quadratique (REV2-01, déni de service par un
+    XML de quelques Mo)."""
+    return el in ens or any(a in ens for a in el.iterancestors())
 
 
 def _valeurs_sens(brut: str) -> dict[str, str]:
@@ -318,7 +335,8 @@ def deduire_fiche_declaration(racine: etree._Element | None) -> dict[str, Any] |
     documents = _groupes(arbre, _est_document)
     if not articles and not taxes:
         return None
-    groupes = articles + taxes + documents
+    groupes = frozenset(articles + taxes + documents)
+    ens_articles = frozenset(articles)
 
     entete: dict[str, Any] = {}
 
@@ -419,8 +437,8 @@ def deduire_fiche_declaration(racine: etree._Element | None) -> dict[str, Any] |
         a_art = _attr(tx, _ATTR_ARTICLE_TAXE)
         if a_art is not None:
             champs["article"] = f"@{a_art}"
-        elif articles and _dans(tx, articles):
-            art = next(a for a in tx.iterancestors() if a in set(articles))
+        elif articles and _dans(tx, ens_articles):
+            art = next(a for a in tx.iterancestors() if a in ens_articles)
             num = listes["articles"]["champs"].get("numero_article")
             if isinstance(num, str):
                 champs["article"] = f"ancestor::{arbre.nom(art)}[1]/{num}"
@@ -459,6 +477,13 @@ def deduire_fiche_declaration(racine: etree._Element | None) -> dict[str, Any] |
         cats = {code: next(iter(cs)) for code, cs in par_code.items() if len(cs) == 1}
         if cats:
             tables["categorie"] = cats
+        # totaux imprimés par code de taxe (D-3101), hors des groupes déjà reconnus
+        codes = {c[1] for t in taxes if (c := _code_taxe_de(t)) is not None}
+        totaux = [el for el in _groupes(arbre, lambda el: _est_total_code(el, codes)) if not _dans(el, groupes)]
+        if totaux:
+            a_code = _attr(totaux[0], _TAXE["type_taxe"])
+            listes["totaux_par_code"] = {"source": arbre.chemin(totaux[0]),
+                                         "champs": {"type_taxe": f"@{a_code}", "montant": "."}}
     if documents:
         d0 = documents[0]
         champs = {}

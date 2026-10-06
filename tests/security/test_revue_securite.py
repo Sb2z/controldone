@@ -423,6 +423,8 @@ def _routes_post(app) -> list[str]:
         if "POST" in (getattr(r, "methods", None) or set()):
             if r.path.startswith(("/api/", "/webhooks/")):
                 continue
+            if r.path == "/csp-rapport":  # rapports du navigateur, sans effet ni état : test_revue_securite_2
+                continue
             sortie.append(r.path)
     return sorted(set(sortie))
 

@@ -270,6 +270,43 @@ class JobStore:
                 return [_info(j) for j in reversed(lignes)]
             return [_info(j) for j in s.execute(q.order_by(Job.cree_le, Job.id).limit(limite)).scalars()]
 
+    def rechercher(self, *, statut: str | None = None, kind: str | None = None, tenant_id: str | None = None,
+                   croissant: bool = False, decalage: int = 0, limite: int = 50) -> tuple[list[JobInfo], int]:
+        """Page de la liste des tâches filtrée (D-3401) : ``(tâches, total)``, tri par création."""
+        conds = []
+        if statut:
+            conds.append(Job.statut == statut)
+        if kind:
+            conds.append(Job.kind == kind)
+        if tenant_id:
+            conds.append(Job.tenant_id == tenant_id)
+        with self.db.session(lecture=True) as s:
+            s.info["controldone_systeme"] = True
+            total = int(s.execute(select(func.count()).select_from(Job).where(*conds)).scalar() or 0)
+            ordre = (Job.cree_le.asc(), Job.id.asc()) if croissant else (Job.cree_le.desc(), Job.id.desc())
+            q = select(Job).where(*conds).order_by(*ordre).offset(max(0, decalage)).limit(max(1, min(limite, 500)))
+            return [_info(j) for j in s.execute(q).scalars()], total
+
+    def valeurs(self) -> tuple[list[str], list[str]]:
+        """Types et clients présents dans la file (listes fermées des filtres)."""
+        with self.db.session(lecture=True) as s:
+            s.info["controldone_systeme"] = True
+            kinds = [k for (k,) in s.execute(select(Job.kind).distinct().order_by(Job.kind))]
+            clients = [t for (t,) in s.execute(select(Job.tenant_id).where(Job.tenant_id.is_not(None)).distinct()
+                                               .order_by(Job.tenant_id))]
+            return kinds, clients
+
+    def marquer_etape(self, job_id: str, worker_id: str, etape: str, *, tentative: int | None = None) -> bool:
+        """Étape en cours d'un job détenu par ce worker (suivi en direct, D-3402), écrite dans ``resultat``
+        (remplacé par le résultat final à ``terminer``). Sans effet si le bail n'est plus détenu."""
+        with self.db.transaction_systeme() as s:
+            res = s.execute(
+                update(Job).where(self._detenu(job_id, worker_id, tentative))
+                .values(resultat={"etape": etape[:32]})
+                .execution_options(synchronize_session=False)
+            )
+            return res.rowcount == 1
+
     def par_cle(self, idempotency_key: str) -> JobInfo | None:
         """Job d'une clé d'idempotence (index unique) : ``traiter_lot:<client>:<lot>``…"""
         with self.db.session(lecture=True) as s:

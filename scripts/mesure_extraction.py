@@ -366,6 +366,19 @@ def _comparer_doc(type_doc: str, champs: Any, verite: dict, base: dict) -> list[
         lu, conf, brut = virtuel(champs, chemin) if virtuel else _valeur(champs, chemin, signe_imprime=type_doc != "avoir")
         ajouter(chemin, chemin, genre, obl, vrai, lu, conf, brut)
 
+    if type_doc == "declaration" and isinstance(verite.get("totaux_par_type"), dict):
+        # D-3101 : totaux imprimés par code de taxe, comparés code par code (champ non obligatoire).
+        lus_code = {}
+        for t in (getattr(champs, "totaux_par_code", None) or []) if champs is not None else []:
+            code = getattr(t.type_taxe, "valeur", None)
+            if code and t.montant is not None and code not in lus_code:
+                lus_code[code] = t.montant
+        for code, vrai in sorted(verite["totaux_par_type"].items()):
+            v = lus_code.get(code)
+            ajouter("totaux_par_code[].montant", f"totaux_par_code[{code}].montant", "montant", False, vrai,
+                    v.valeur if v is not None else None, v.confiance if v is not None else None,
+                    v.valeur_brute if v is not None else None)
+
     for nom, lspec in spec["listes"].items():
         vrais = verite.get(nom)
         if vrais is None:

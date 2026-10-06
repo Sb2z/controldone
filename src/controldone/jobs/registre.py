@@ -91,6 +91,18 @@ class JobContext:
             self.perdu.set()
             raise BailPerdu(self.job.id)
 
+    def etape(self, nom: str) -> None:
+        """Étape en cours, affichée en direct au client (D-3402). Sans effet hors worker ; une erreur
+        d'écriture n'interrompt jamais le traitement."""
+        if self.worker_id is None or self.perdu.is_set():
+            return
+        from controldone.storage.file_jobs import JobStore
+
+        try:
+            JobStore(self.db).marquer_etape(self.job.id, self.worker_id, nom, tentative=self.job.attempts)
+        except Exception:  # pragma: no cover - suivi d'affichage seulement
+            log.warning("étape %s non enregistrée pour %s", nom, self.job.id, exc_info=True)
+
 
 Handler = Callable[[JobContext], "dict[str, Any] | None"]
 HANDLERS: dict[str, Handler] = {}

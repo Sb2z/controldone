@@ -50,6 +50,7 @@ __all__ = [
     "montant_taxe",
     "motifs_structure_masses",
     "motifs_structure_taxes",
+    "motifs_structure_total_code",
     "numero_article",
     "totaux_par_categorie",
 ]
@@ -255,6 +256,40 @@ def motifs_structure_taxes(
             s = sum((b for b in bases if b is not None), _ZERO)
             if abs(bt - s) > tol.t_somme(len(bases)):
                 motifs.append("la base imprimée du total diffère de la somme des bases des lignes")
+    return motifs
+
+
+def motifs_structure_total_code(
+    dec: Document, code: str, lignes: Sequence[int], num: Num, tol: _Tol, *, ecart: Decimal,
+) -> list[str]:
+    """Motifs pour lesquels Σ des lignes d'un code contre le total **imprimé** de ce code
+    (``ChampsDeclaration.totaux_par_code``, D-3101) ne fonde pas un écart certain : ceux du total de la
+    déclaration (doublons, article sans ligne, D-2805, ligne incohérente) ; le code sans ligne lue pour un
+    article qui en a d'autres alors que le total imprimé dépasse la somme lue (la ligne manquante expliquerait
+    l'écart) ; le total des droits et taxes imprimé retrouvé par Σ des totaux par code et non par Σ des lignes
+    (ce sont alors les lignes lues qui sont en cause, pas le total du code)."""
+    c = dec.dec
+    taxations = c.taxations
+    motifs = motifs_structure_taxes(dec, lignes, num, tol)
+    numeros = {numero_article(t.article) for t in taxations} - {""}
+    if numeros and ecart > 0:
+        du_code = {numero_article(taxations[i].article) for i in lignes} - {""}
+        manquants = (numeros | _articles_attendus(dec)) - du_code
+        if manquants:
+            motifs.append(f"le code {code} n'a pas de ligne lue pour l'article {', '.join(sorted(manquants))}")
+    totaux = [num(t.montant) for t in c.totaux_par_code]
+    if totaux and all(x is not None for x in totaux):
+        s_codes = sum((x for x in totaux if x is not None), _ZERO)
+        s_lignes = _sommes_lignes(dec, range(len(taxations)), num)
+        for total in (c.total_droits_taxes, c.total_a_payer):
+            vt = num(total)
+            if vt is None or s_lignes is None:
+                continue
+            t = tol.t_somme(len(taxations))
+            if abs(vt - s_codes) <= tol.t_somme(len(totaux)) and all(abs(vt - x) > t for x in s_lignes):
+                motifs.append("le total des droits et taxes imprimé reprend la somme des totaux par code, pas celle "
+                              "des lignes lues")
+                break
     return motifs
 
 

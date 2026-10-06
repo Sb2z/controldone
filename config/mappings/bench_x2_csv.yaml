@@ -2,14 +2,14 @@
 # décrit dans bench/generator/FORMATS.md). Fichier multi-enregistrements : « #TYPE;col… » déclare les
 # colonnes du type ; chaque ligne commence par son type d'enregistrement.
 format_id: bench_x2_csv
-version: "1.0.0"
+version: "1.1.0"
 type: csv
 sous_type: export_csv
 detection:
   marqueur: "^#ENTETE;mrn;"
   colonnes_requises: [ENTETE.mrn, ENTETE.montant_total_facture, TAXE.type]
   # colonnes connues sans champ du modèle (non journalisées comme inconnues)
-  ignorer: [ENTETE.devise_taux, TOTAL.type, TOTAL.montant, COMMENTAIRE.texte, TAXE.nature_taux]
+  ignorer: [ENTETE.devise_taux, COMMENTAIRE.texte, TAXE.nature_taux]
 csv:
   separateur: ";"
   separateur_decimal: ","
@@ -76,6 +76,12 @@ listes:
       mode_paiement: mode_paiement
     enumerations:
       taux_nature: nature_taux
+  # totaux imprimés par code de taxe (D-3101) : jamais des lignes de taxation
+  totaux_par_code:
+    type_enregistrement: TOTAL
+    champs:
+      type_taxe: type
+      montant: montant
 
 tables:
   categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, X01: autre_taxe, FPE: forfait_petits_envois,

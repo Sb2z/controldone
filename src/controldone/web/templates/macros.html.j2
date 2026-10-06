@@ -6,6 +6,11 @@
 <span class="badge {{ {'valide': 'b-valide', 'rejete': 'b-rejete', 'propose': 'b-propose', 'modifie': 'b-valide'}.get(code, 'b-neutre') }}">{{ libelle }}</span>
 {%- endmacro %}
 
+{# État de traitement d'un dépôt (D-3402) : mis à jour en direct par app.js (attribut data-lot). #}
+{% macro badge_suivi(lot_id, e) -%}
+<span class="badge {{ 'b-rejete' if e.erreur else ('b-valide' if e.fini else 'b-verifier en-cours') }}" data-lot="{{ lot_id }}" data-fini="{{ 'oui' if e.fini else 'non' }}">{{ e.libelle }}</span>
+{%- endmacro %}
+
 {% macro kpi(libelle, valeur, note=None, ton=None, lien=None) -%}
 <div class="kpi{% if ton %} kpi-{{ ton }}{% endif %}">
   <div class="kpi-lib">{{ libelle }}</div>

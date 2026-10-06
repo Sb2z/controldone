@@ -109,7 +109,8 @@ def test_sauvegarde_du_jour_pas_refaite_au_redemarrage(tmp_path):
     faux.write_text(f'#!/usr/bin/env bash\necho "$@" >> {appels}\n', encoding="utf-8")
     faux.chmod(0o700)
     dest = tmp_path / "sauvegardes"
-    env = {**os.environ, "BACKUP_DIR": str(dest)}
+    env = {**os.environ, "BACKUP_DIR": str(dest), "BACKUP_VERIFICATION_PROFONDE_JOUR": "0"}
+    env.pop("BACKUP_PING_URL", None)
     subprocess.run([str(script), "--si-absente"], check=True, env=env, capture_output=True)
     assert appels.read_text().split() == ["--destination", str(dest)]
     (dest / f"controldone-{datetime.now(UTC):%Y%m%d}T021500Z.tar.gz.enc").write_bytes(b"x")

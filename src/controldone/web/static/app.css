@@ -464,6 +464,7 @@ form.en-ligne { display: inline; }
   animation: tourne 6s linear infinite;
 }
 .zone-depot:hover, .zone-depot.survol { border-color: var(--accent); background: var(--accent-clair); }
+.zone-depot:focus-within { border-color: var(--accent); background: var(--accent-clair); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent); }
 .zone-depot.survol { transform: scale(1.012); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent); }
 .zone-depot.survol::before, .zone-depot:hover::before { opacity: 1; }
 .zone-depot input[type="file"] { max-width: 100%; margin-top: .4rem; }
@@ -663,6 +664,84 @@ dialog.palette::backdrop { background: rgba(3, 4, 8, .55); backdrop-filter: blur
 .palette li a[aria-selected="true"] { background: var(--accent-clair); color: var(--encre); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
 .palette .rien { padding: 1.2rem; color: var(--encre-3); font-size: .88rem; text-align: center; }
 
+/* --- listes : filtres, tri, pagination (D-3401) ------------------------------------------------------------------------------ */
+.filtres { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .7rem 1rem; margin: 0 0 1rem; }
+.filtres.carte { padding: 1rem 1.2rem; }
+.filtre { display: flex; flex-direction: column; gap: .3rem; min-width: 9rem; flex: 0 1 auto; }
+.filtre-large { flex: 1 1 16rem; }
+.filtre label, .filtre legend { font-size: .76rem; font-weight: 550; color: var(--encre-2); letter-spacing: .005em; }
+.filtre input, .filtre select { padding: .48rem .65rem; }
+.filtre-taille { min-width: 0; }
+.filtre-taille select { width: 5rem; }
+.filtre-actions { flex-direction: row; align-items: center; gap: .6rem; min-width: 0; }
+.filtre-actions .petit-lien { margin-left: 0; }
+fieldset.filtre { border: 0; padding: 0; margin: 0; flex-direction: row; flex-wrap: wrap; align-items: center; gap: .3rem .45rem; }
+fieldset.filtre legend { padding: 0; margin-bottom: .3rem; float: left; width: 100%; }
+fieldset.filtre input { width: 7.5rem; }
+.compte-resultats { font-size: .8rem; color: var(--encre-2); margin: 0 0 .6rem; font-variant-numeric: tabular-nums; }
+.donnees thead th[aria-sort] a.tri { color: inherit; text-decoration: none; display: inline-flex; gap: .3rem; align-items: center; }
+.donnees thead th[aria-sort] a.tri:hover { color: var(--encre); }
+.donnees thead th[aria-sort="ascending"], .donnees thead th[aria-sort="descending"] { color: var(--encre); }
+.donnees thead th.num a.tri { flex-direction: row-reverse; }
+.tri-ico { font-size: .8em; opacity: .55; }
+th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacity: 1; color: var(--accent); }
+.pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .4rem .8rem; margin-top: 1rem; font-size: .84rem; }
+.pagination ul { display: flex; gap: .3rem; list-style: none; margin: 0; padding: 0; flex-wrap: wrap; }
+.pagination a, .pagination .inactif, .pagination .ellipse {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 2.1rem; height: 2.1rem; padding: 0 .65rem;
+  border-radius: 999px; border: 1px solid var(--filet); color: var(--encre-2); text-decoration: none; font-variant-numeric: tabular-nums;
+}
+.pagination a:hover { border-color: var(--filet-fort); color: var(--encre); }
+.pagination a[aria-current="page"] { background: var(--accent-clair); border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--encre); font-weight: 600; }
+.pagination .inactif { opacity: .45; }
+.pagination .ellipse { border-color: transparent; }
+[data-resultats].charge { opacity: .55; transition: opacity .2s; }
+
+/* --- suivi en direct d'un dépôt (D-3402) ---------------------------------------------------------------------------------------- */
+.suivi-barre { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: .4rem 0 1rem; }
+.suivi-barre > span { display: block; height: 100%; border-radius: inherit; background: var(--degrade); transform-origin: 0 50%; transition: width .6s var(--ressort); }
+.suivi-erreur .suivi-barre > span { background: var(--certain); }
+.suivi-etapes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; counter-reset: etape; }
+.suivi-etapes li { display: flex; align-items: center; gap: .55rem; font-size: .84rem; color: var(--encre-3); counter-increment: etape; }
+.suivi-puce {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--filet-fort); display: grid; place-items: center;
+  font-size: .68rem; font-weight: 650; font-family: var(--mono); color: var(--encre-3);
+}
+.suivi-puce::before { content: counter(etape); }
+.suivi-etapes li.fait { color: var(--encre-2); }
+.suivi-etapes li.fait .suivi-puce { background: var(--conforme-fond); border-color: var(--conforme); color: var(--conforme); }
+.suivi-etapes li.fait .suivi-puce::before { content: "✓"; }
+.suivi-etapes li.en-cours { color: var(--encre); font-weight: 550; }
+.suivi-etapes li.en-cours .suivi-puce { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px var(--accent-clair); animation: pulse-suivi 1.8s ease-in-out infinite; }
+.suivi-etapes li.erreur { color: var(--certain); }
+.suivi-etapes li.erreur .suivi-puce { border-color: var(--certain); color: var(--certain); background: var(--certain-fond); animation: none; }
+.suivi-etapes li.erreur .suivi-puce::before { content: "!"; }
+@keyframes pulse-suivi { 50% { box-shadow: 0 0 0 7px transparent; } }
+.suivi-texte { margin: .9rem 0 0; font-size: .88rem; color: var(--encre-2); }
+.badge.en-cours::before { animation: pouls 1.6s ease-out infinite; }
+@media (max-width: 560px) { .suivi-etapes { grid-template-columns: 1fr 1fr; } }
+
+/* --- graphiques SVG (D-3403) ---------------------------------------------------------------------------------------------------- */
+.graphes > h2 { margin: .4rem 0 .9rem; }
+.grille-graphes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.4rem; }
+.grille-graphes > .carte { margin-bottom: 0; }
+.graphe { margin: 0; }
+.graphe-titre { font-weight: 600; font-size: .95rem; letter-spacing: -.015em; margin-bottom: .6rem; }
+.graphe-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--police); }
+.graphe-svg .g-grille { stroke: var(--filet); stroke-width: 1; shape-rendering: crispEdges; }
+.graphe-svg .g-axe { fill: var(--encre-2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.graphe-svg .g-lib { fill: var(--encre-2); font-size: 12px; }
+.graphe-svg .g-val { fill: var(--encre); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.graphe-svg .g-barre { fill: var(--accent); transition: fill .2s var(--ressort); }
+.graphe-svg .g-item:hover .g-barre { fill: var(--accent-2); }
+.graphe-svg .g-fond { fill: var(--surface-2); }
+.graphe-colonnes .g-barre { transform-box: fill-box; transform-origin: 50% 100%; }
+.graphe-barres .g-barre { transform-box: fill-box; transform-origin: 0 50%; }
+.graphe-note { font-size: .76rem; margin: .5rem 0 0; }
+.graphe-donnees { margin-top: .4rem; }
+.graphe-donnees summary { font-size: .78rem; font-weight: 500; }
+.graphe-vide { margin: .5rem 0; }
+
 /* --- animations d'entrée (activées par le script ; sans script, tout est visible) ---------------------------------------- */
 /* Même liste que REVELER dans app.js. Filet de sécurité : visibles d'office après 2,2 s si le script échoue. */
 .js.anime :is(.titre-page, .fil, .kpi, .carte, .constat, .message, .ancres, .lien-dossier, .accueil-texte > *) {
@@ -734,6 +813,10 @@ dialog.palette::backdrop { background: rgba(3, 4, 8, .55); backdrop-filter: blur
   .bandeau-demo { background: none; border: 1px solid #000; color: #000; }
   .pied { border-top: 1px solid #000; background: none; }
   .badge::before { display: none; }
+  .filtres, .pagination, .tri-ico, [data-rafraichir] { display: none !important; }
+  .graphe-svg .g-barre { fill: #1f4e79; transform: none !important; } .graphe-svg .g-fond { fill: #eee; } .graphe-svg .g-grille { stroke: #ccc; }
+  .graphe-svg .g-axe, .graphe-svg .g-lib, .graphe-svg .g-val { fill: #000; }
+  .suivi-etapes li.en-cours .suivi-puce { animation: none; box-shadow: none; }
 }
 
 /* --- bascule de thème : dévoilement circulaire (View Transitions) ------------------------------------------------------------- */

@@ -1,20 +1,50 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import csrf_champ, constat_carte %}
+{% from "listes.html.j2" import nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page">
   <h1>File de validation</h1>
   <p class="discret">Rien ne sort vers un client sans décision ici. Ordre : écarts certains par montant décroissant, puis à vérifier, puis points à faire vérifier par un professionnel.</p>
 </div>
-<nav class="ancres" aria-label="Sections"><a href="#constats">Constats proposés ({{ items|length }})</a><a href="#sorties">Actions sortantes ({{ sorties|length }})</a><a href="#attention">Points d'attention ({{ attention|length }})</a></nav>
+<nav class="ancres" aria-label="Sections"><a href="#constats">Constats proposés ({{ total_file }})</a><a href="#sorties">Actions sortantes ({{ sorties|length }})</a><a href="#attention">Points d'attention ({{ attention|length }})</a></nav>
 
 <section id="constats" aria-labelledby="t-c">
   <h2 id="t-c">Constats proposés</h2>
-  {% for it in items %}
+  <form method="get" action="/admin/validation#constats" class="filtres carte" role="search" aria-label="Filtrer les constats proposés" data-filtres>
+    <div class="filtre">
+      <label for="v-client">Client</label>
+      <select id="v-client" name="client"><option value="">Tous</option>{% for tid, nom in clients_filtre %}<option value="{{ tid }}"{% if req.brut.get('client') == tid %} selected{% endif %}>{{ nom }}</option>{% endfor %}</select>
+    </div>
+    <div class="filtre filtre-large">
+      <label for="v-controle">Contrôle</label>
+      <select id="v-controle" name="controle"><option value="">Tous</option>{% for cid, lib in controles %}<option value="{{ cid }}"{% if req.brut.get('controle') == cid %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+    </div>
+    <div class="filtre">
+      <label for="v-niveau">Niveau</label>
+      <select id="v-niveau" name="niveau"><option value="">Tous</option>{% for code, lib in niveaux.items() %}<option value="{{ code }}"{% if req.brut.get('niveau') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+    </div>
+    <fieldset class="filtre filtre-fourchette">
+      <legend>Montant en jeu (EUR)</legend>
+      <div><label for="v-min" class="vh">Montant minimal</label><input id="v-min" name="min" inputmode="decimal" maxlength="20" placeholder="min." value="{{ req.brut.get('min', '') }}"></div>
+      <span aria-hidden="true">–</span>
+      <div><label for="v-max" class="vh">Montant maximal</label><input id="v-max" name="max" inputmode="decimal" maxlength="20" placeholder="max." value="{{ req.brut.get('max', '') }}"></div>
+    </fieldset>
+    <div class="filtre">
+      <label for="v-tri">Ordre</label>
+      <select id="v-tri" name="tri">{% for code, lib in [("priorite", "Priorité (§7.7)"), ("-montant", "Montant décroissant"), ("montant", "Montant croissant"), ("client", "Client")] %}<option value="{{ code }}"{% if req.tri == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+    </div>
+    {{ fin_filtres(req, "v", "/admin/validation", False) }}
+  </form>
+  <div data-resultats>
+  {{ nb_resultats(p, req, "constat proposé", "constats proposés") }}
+  {% for it in p.elements %}
     {{ constat_carte(it.c, it.extraits, "/admin/clients/" ~ it.tenant_id, csrf, retour, True, it.tenant_id, it.client, it.dossier) }}
     <p class="lien-dossier"><a href="/admin/clients/{{ it.tenant_id }}/dossiers/{{ it.c.dossier_id }}#constat-{{ it.c.id }}">Ouvrir le dossier {{ it.dossier }} (corriger une valeur, voir les pages)</a></p>
   {% else %}
-    <p class="vide carte">Aucun constat en attente.</p>
+    <p class="vide carte">{% if req.actif %}Aucun constat ne correspond à ces critères. <a href="/admin/validation#constats">Afficher toute la file</a>.{% else %}Aucun constat en attente.{% endif %}</p>
   {% endfor %}
+  {{ pagination(p, req, "Pages de la file de validation") }}
+  </div>
 </section>
 
 <section id="sorties" aria-labelledby="t-s">

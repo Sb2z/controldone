@@ -1,5 +1,6 @@
 {% extends "base.html.j2" %}
-{% from "macros.html.j2" import kpi, badge_niveau %}
+{% from "macros.html.j2" import kpi, badge_niveau, badge_suivi %}
+{% from "graphes.html.j2" import graphe %}
 {% set libs = {"ecart_certain": "Écart certain", "a_verifier": "À vérifier", "conforme": "Conforme", "document_manquant": "Document manquant", "non_concerne": "Non concerné", "inconnu": "En cours"} %}
 {% block contenu %}
 <div class="titre-page">
@@ -42,6 +43,27 @@
   </ul>
   {% else %}<p class="vide">Aucune alerte non lue.</p>{% endif %}
 </section>
+</div>
+
+<div class="grille-2">
+<section class="carte">{{ graphe(graphes[0]) }}</section>
+<section class="carte" aria-labelledby="t-traitements">
+  <div class="carte-tete"><h2 id="t-traitements">Traitements des dépôts</h2><a class="petit-lien" href="/admin/jobs?kind=traiter_lot">Toutes les tâches</a></div>
+  {% if traitements.lots %}
+  <table class="donnees compacte" data-suivi-liste="/admin/jobs/etat">
+    <thead><tr><th scope="col">Client</th><th scope="col">Dépôt</th><th scope="col">État</th></tr></thead>
+    <tbody>
+    {% for l in traitements.lots %}
+      <tr><td><code>{{ l.client or "—" }}</code></td><td><code>{{ l.lot_id[:16] }}</code></td><td>{{ badge_suivi(l.lot_id, l) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="vide">Aucun dépôt traité pour l'instant.</p>{% endif %}
+</section>
+</div>
+<div class="grille-2">
+<section class="carte">{{ graphe(graphes[1]) }}</section>
+<section class="carte">{{ graphe(graphes[2]) }}</section>
 </div>
 
 <section class="carte">

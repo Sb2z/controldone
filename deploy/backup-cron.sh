@@ -4,31 +4,81 @@
 #   deploy/backup-cron.sh [--si-absente] (dans le conteneur, appelé chaque jour par deploy/scheduler.sh ;
 #                                        --si-absente : rien si l'archive du jour existe déjà)
 #       -> scripts/backup.sh --destination "$BACKUP_DIR" : archive chiffrée (clé dérivée de
-#          CONTROLDONE_MASTER_KEY) de la base SQLite (copie en ligne) et du coffre, puis rotation 7 j / 4 sem.
+#          CONTROLDONE_MASTER_KEY) de la base SQLite (copie en ligne), du coffre et des traces d'envoi, avec
+#          manifeste (SHA-256 de chaque fichier) et empreinte .sha256 ; relecture complète de l'archive créée ;
+#          restauration d'essai complète le jour BACKUP_VERIFICATION_PROFONDE_JOUR ; puis rotation 7 j / 4 sem.
+#          Une archive dont la relecture échoue est renommée « .invalide » (le rattrapage la refait).
 #
 #   deploy/backup-cron.sh --hors-site   (sur l'hôte, crontab root, après la sauvegarde du jour)
-#       -> rclone copy "$BACKUP_HOST_DIR" "$BACKUP_RCLONE_REMOTE" : copie hors machine vers un stockage objet
-#          situé dans l'UE (ex. Scaleway Object Storage fr-par, Hetzner Object Storage fsn1, OVHcloud gra).
+#       -> contrôle que la dernière archive locale a moins de BACKUP_AGE_MAX_H heures et que son empreinte
+#          .sha256 est conforme (sans la clé), puis rclone copy vers un stockage objet situé dans l'UE
+#          (ex. Scaleway Object Storage fr-par, Hetzner Object Storage fsn1, OVHcloud gra) et rclone check.
 #          Les archives sont déjà chiffrées : le stockage objet ne voit jamais de données en clair.
 #          Exemple de crontab hôte :
-#            45 2 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
+#            45 2 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes BACKUP_ALERTE_COMPOSE=/srv/controldone/app/deploy/docker-compose.yml /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
 #
-# Restauration : docs/DEPLOIEMENT.md (§ Test de restauration) et docs/EXPLOITATION.md § 3.2.
+# Codes de retour (D-3303) : 0 succès ; 1 création en échec ; 2 configuration (clé, base non SQLite, rclone,
+# distant) ; 3 vérification en échec (archive illisible, altérée, empreinte) ; 4 aucune sauvegarde récente ;
+# 5 copie hors site en échec ; 6 contrôle de la copie hors site en échec.
+#
+# Alertes en cas d'échec :
+#   - dans l'application : alerte fondateur (/admin/alertes) émise par le module Python (mode conteneur) ou,
+#     en mode --hors-site, par « docker compose exec scheduler … alerter » si BACKUP_ALERTE_COMPOSE est défini ;
+#   - hors de l'application (recommandé : détecte aussi une sauvegarde qui ne tourne plus du tout) :
+#     BACKUP_PING_URL (sonde « homme mort » type Healthchecks, auto-hébergeable) reçoit <url>/0 en cas de
+#     succès et <url>/<code> en cas d'échec ; sans signal pendant 26 h, la sonde alerte par courriel.
+#
+# Restauration : docs/DEPLOIEMENT.md (§ Test de restauration), docs/EXPLOITATION.md § 3.2, deploy/README.md.
 set -euo pipefail
 umask 077
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RACINE="$(cd "$ICI/.." && pwd)"
 horodatage() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+signaler() {  # signaler <code> : sonde externe facultative (ne fait jamais échouer le script)
+  if [ -n "${BACKUP_PING_URL:-}" ] && command -v curl >/dev/null; then
+    curl -fsS -m 10 --retry 3 -o /dev/null "${BACKUP_PING_URL%/}/$1" || echo "$(horodatage) sonde injoignable" >&2
+  fi
+  return 0
+}
+
 if [ "${1:-}" = "--hors-site" ]; then
   SOURCE="${BACKUP_HOST_DIR:-/srv/controldone/backups}"
-  : "${BACKUP_RCLONE_REMOTE:?définir BACKUP_RCLONE_REMOTE (ex. objeu:controldone-sauvegardes), voir docs/DEPLOIEMENT.md}"
-  command -v rclone >/dev/null || { echo "rclone absent : apt install rclone" >&2; exit 2; }
+  AGE_MAX_H="${BACKUP_AGE_MAX_H:-26}"
+  echec() {  # echec <code> <message> <kind>
+    echo "$(horodatage) ÉCHEC hors site (code $1) : $2" >&2
+    if [ -n "${BACKUP_ALERTE_COMPOSE:-}" ]; then
+      docker compose -f "$BACKUP_ALERTE_COMPOSE" exec -T scheduler \
+        python -m controldone.storage.sauvegarde alerter --kind "$3" --message "$2" >/dev/null 2>&1 \
+        || echo "$(horodatage) alerte applicative non enregistrée" >&2
+    fi
+    signaler "$1"
+    exit "$1"
+  }
+  [ -n "${BACKUP_RCLONE_REMOTE:-}" ] || echec 2 "BACKUP_RCLONE_REMOTE non défini (ex. objeu:controldone-sauvegardes)" sauvegarde_hors_site_echec
+  command -v rclone >/dev/null || echec 2 "rclone absent : apt install rclone" sauvegarde_hors_site_echec
+  # 1. Fraîcheur de la dernière archive locale : contrôle indépendant du conteneur scheduler.
+  DERNIERE="$(find "$SOURCE" -maxdepth 1 -name 'controldone-*.tar.gz.enc' -printf '%f\n' 2>/dev/null | sort | tail -n 1 || true)"
+  [ -n "$DERNIERE" ] || echec 4 "aucune sauvegarde locale dans $SOURCE" sauvegarde_absente
+  AGE_S=$(( $(date +%s) - $(stat -c %Y "$SOURCE/$DERNIERE") ))
+  [ "$AGE_S" -le $(( AGE_MAX_H * 3600 )) ] \
+    || echec 4 "dernière sauvegarde locale ($DERNIERE) vieille de $(( AGE_S / 3600 )) h (> $AGE_MAX_H h)" sauvegarde_absente
+  # 2. Empreinte de l'archive chiffrée (aucune clé nécessaire).
+  if [ -f "$SOURCE/$DERNIERE.sha256" ]; then
+    (cd "$SOURCE" && sha256sum -c --status "$DERNIERE.sha256") \
+      || echec 3 "empreinte de $DERNIERE non conforme (archive altérée)" sauvegarde_verification_echec
+  fi
+  # 3. Copie (et non sync) : une suppression locale (rotation) n'efface rien à distance ; la durée de conservation
+  #    distante est réglée par une règle de cycle de vie du compartiment (ex. 35 jours).
   echo "$(horodatage) copie hors site : $SOURCE -> $BACKUP_RCLONE_REMOTE"
-  # copy (et non sync) : une suppression locale (rotation) n'efface rien à distance ; la durée de conservation
-  # distante est réglée par une règle de cycle de vie du compartiment (ex. 35 jours).
-  rclone copy "$SOURCE" "$BACKUP_RCLONE_REMOTE" --include 'controldone-*.tar.gz.enc' --immutable --checksum
-  echo "$(horodatage) copie hors site terminée"
+  FILTRES=(--include 'controldone-*.tar.gz.enc' --include 'controldone-*.tar.gz.enc.sha256')
+  rclone copy "$SOURCE" "$BACKUP_RCLONE_REMOTE" "${FILTRES[@]}" --immutable --checksum \
+    || echec 5 "rclone copy vers $BACKUP_RCLONE_REMOTE en échec" sauvegarde_hors_site_echec
+  # 4. Contrôle : chaque archive locale est présente à distance avec le même contenu.
+  rclone check "$SOURCE" "$BACKUP_RCLONE_REMOTE" "${FILTRES[@]}" --one-way \
+    || echec 6 "rclone check : copie distante incomplète ou différente" sauvegarde_hors_site_echec
+  echo "$(horodatage) copie hors site terminée et contrôlée ($DERNIERE)"
+  signaler 0
   exit 0
 fi
 
@@ -42,6 +92,19 @@ if [ "${1:-}" = "--si-absente" ]; then
   fi
   shift
 fi
-echo "$(horodatage) sauvegarde -> $DEST"
-"$RACINE/scripts/backup.sh" --destination "$DEST"
+# Restauration d'essai complète un jour par semaine (1 = lundi … 7 = dimanche ; 0 = jamais ; « tous »).
+OPTIONS=()
+JOUR_PROFOND="${BACKUP_VERIFICATION_PROFONDE_JOUR:-7}"
+if [ "$JOUR_PROFOND" = "tous" ] || [ "$JOUR_PROFOND" = "$(date -u +%u)" ]; then
+  OPTIONS+=(--verification-profonde)
+fi
+echo "$(horodatage) sauvegarde -> $DEST ${OPTIONS[*]:-}"
+code=0
+"$RACINE/scripts/backup.sh" --destination "$DEST" "${OPTIONS[@]}" || code=$?
+if [ "$code" -ne 0 ]; then
+  echo "$(horodatage) ÉCHEC de la sauvegarde (code $code) — alerte fondateur émise, voir /admin/alertes" >&2
+  signaler "$code"
+  exit "$code"
+fi
 echo "$(horodatage) sauvegarde terminée"
+signaler 0

@@ -2,7 +2,7 @@
 # (schéma inventé, décrit dans bench/generator2/FORMATS.md). Données surtout portées par des attributs.
 # Chemins XPath relatifs à la racine ; préfixe « d » = espace de noms.
 format_id: g2_m5_xml
-version: "1.0.0"
+version: "1.1.0"
 type: xml
 sous_type: export_xml
 detection:
@@ -78,6 +78,12 @@ listes:
       mode_paiement: "@paiement"
     enumerations:
       taux_nature: "@mode-calcul"
+  # totaux imprimés par code de taxe (D-3101) : jamais des lignes de taxation
+  totaux_par_code:
+    source: d:dossier/d:recapitulatif/d:total
+    champs:
+      type_taxe: "@code"
+      montant: "."
 
 tables:
   categorie: {A00: droit, A30: autre_taxe, A35: autre_taxe, FPE: forfait_petits_envois, B00: tva}

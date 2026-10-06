@@ -2,7 +2,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 
-.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build
+.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build restauration-test
 
 # Installation reproductible sur un clone neuf (F-17) : crée .venv s'il manque, installe les versions figées
 # de requirements.lock, puis le paquet en mode éditable avec les outils de développement (pytest, ruff).
@@ -50,3 +50,9 @@ diagnostic:
 # Image de production (voir docs/DEPLOIEMENT.md) — construction seulement, aucun déploiement.
 docker-build:
 	docker build -f deploy/Dockerfile -t controldone:$(or $(VERSION),2.0.0) .
+
+# Exercice de restauration de bout en bout (hors ligne, répertoire temporaire, données fictives, var/demo_web
+# jamais touché) : init-demo, sauvegarde chiffrée, effacement, restauration ailleurs, contrôles, web démarré
+# sur les données restaurées. GARDER=1 conserve le répertoire de travail.
+restauration-test:
+	$(PY) -m controldone.cli sauvegarde exercice $(if $(GARDER),--garder,)

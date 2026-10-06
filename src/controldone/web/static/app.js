@@ -195,10 +195,12 @@
       liste.textContent = "";
       if (!vues.length) {
         var vide = document.createElement("li"); vide.className = "rien"; vide.textContent = "Aucun résultat";
+        vide.setAttribute("role", "option"); vide.setAttribute("aria-disabled", "true");
         liste.appendChild(vide); return;
       }
       vues.forEach(function (x, i) {
         var li = document.createElement("li");
+        li.setAttribute("role", "none");
         var a = document.createElement("a");
         a.href = x.url || "#"; a.setAttribute("role", "option"); a.id = "pal-" + i;
         a.setAttribute("aria-selected", i === sel ? "true" : "false");
@@ -279,6 +281,174 @@
     });
   }
 
+
+  /* --- suivi en direct du traitement d'un dépôt (D-3402) ------------------------------------------------------------------------
+     Interroge le point JSON de la même origine (session, périmètre du client) ; seuls des codes d'état et des textes fixes sont
+     affichés (textContent). Arrêt quand le traitement est fini, pause quand l'onglet est masqué, attente plus longue après 429. */
+  var LIBELLES_ETAPE = { recu: "reçu, en attente de traitement", lecture: "lecture des documents", controles: "contrôles", termine: "terminé", erreur: "erreur" };
+  var ORDRE_ETAPES = ["recu", "lecture", "controles", "termine"];
+  function interroger(url, surDonnees, intervalle) {
+    var essais = 0, minuterie = null, arrete = false;
+    function suivant(delai) { if (!arrete) { minuterie = window.setTimeout(tour, delai); } }
+    function tour() {
+      if (document.hidden) { suivant(intervalle); return; }
+      essais++;
+      fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" }, cache: "no-store" })
+        .then(function (r) {
+          if (r.status === 429) { suivant(10000); return null; }
+          if (!r.ok) { arrete = true; return null; }
+          return r.json();
+        })
+        .then(function (d) {
+          if (!d) { return; }
+          if (surDonnees(d) === false) { arrete = true; return; }
+          suivant(essais > 30 ? intervalle * 2.5 : intervalle);
+        })
+        .catch(function () { suivant(intervalle * 3); });
+    }
+    suivant(intervalle);
+    return function () { arrete = true; if (minuterie) { window.clearTimeout(minuterie); } };
+  }
+
+  function suiviLot() {
+    var bloc = document.querySelector("[data-suivi]");
+    if (!bloc || bloc.getAttribute("data-suivi-fini") === "oui") { return; }
+    var barre = bloc.querySelector("[data-suivi-barre]");
+    var texte = bloc.querySelector("[data-suivi-texte]");
+    var etapeAffichee = null;
+    interroger(bloc.getAttribute("data-suivi"), function (d) {
+      var rang = ORDRE_ETAPES.indexOf(d.etape);
+      if (d.erreur) { rang = ORDRE_ETAPES.length - 1; }
+      $$("li[data-etape]", bloc).forEach(function (li, i) {
+        var fait = i < rang || (d.fini && !d.erreur);
+        li.classList.toggle("fait", fait);
+        li.classList.toggle("en-cours", !fait && i === rang);
+        li.classList.toggle("a-venir", !fait && i > rang);
+        li.classList.toggle("erreur", !!d.erreur && i === rang);
+        if (!fait && i === rang && !d.fini) { li.setAttribute("aria-current", "step"); } else { li.removeAttribute("aria-current"); }
+        var lib = li.querySelector(".suivi-lib");
+        if (lib && d.erreur && i === rang) { lib.textContent = "Erreur"; }
+      });
+      if (barre) {
+        var pct = [5, 35, 65, 100][Math.max(0, rang)] || 5;
+        if (d.fini) { pct = 100; }
+        var avant = barre.className;
+        barre.className = "w-" + pct;
+        if (avant !== barre.className && M && !reduit) {
+          M.animate(barre, { opacity: [0.6, 1] }, { duration: 0.6, ease: EASE });
+        }
+      }
+      bloc.classList.toggle("suivi-erreur", !!d.erreur);
+      bloc.classList.toggle("suivi-fini", !!d.fini && !d.erreur);
+      if (d.etape !== etapeAffichee) {
+        etapeAffichee = d.etape;
+        var actuelle = bloc.querySelector("li.en-cours .suivi-puce");
+        if (actuelle) { anime(actuelle, { scale: [0.6, 1.15, 1] }, { duration: 0.5, ease: EASE }); }
+        if (texte) {
+          texte.textContent = d.erreur ? "Traitement en erreur. " + (d.detail || "")
+            : (d.fini ? "Traitement terminé : affichage des résultats…" : "Étape en cours : " + (LIBELLES_ETAPE[d.etape] || d.etape) + ".");
+        }
+      }
+      if (d.fini) {
+        var lien = document.querySelector("[data-rafraichir]");
+        if (lien) { lien.remove(); }
+        if (!d.erreur) { window.setTimeout(function () { window.location.reload(); }, reduit ? 300 : 1200); }
+        return false;
+      }
+      return true;
+    }, 2000);
+  }
+
+  function suiviListes() {
+    $$("[data-suivi-liste]").forEach(function (liste) {
+      var enCours = $$('[data-lot][data-fini="non"]', liste);
+      if (!enCours.length) { return; }
+      interroger(liste.getAttribute("data-suivi-liste"), function (d) {
+        var restants = 0;
+        (d.lots || []).forEach(function (l) {
+          var b = null;
+          $$("[data-lot]", liste).forEach(function (x) { if (x.getAttribute("data-lot") === l.lot_id) { b = x; } });
+          if (!b) { return; }
+          var avant = b.textContent;
+          b.textContent = l.libelle;
+          b.className = "badge " + (l.erreur ? "b-rejete" : (l.fini ? "b-valide" : "b-verifier en-cours"));
+          b.setAttribute("data-fini", l.fini ? "oui" : "non");
+          if (!l.fini) { restants++; }
+          if (avant !== l.libelle) { anime(b, { scale: [0.85, 1.06, 1], opacity: [0.4, 1] }, { duration: 0.45, ease: EASE }); }
+        });
+        return restants > 0;
+      }, 4000);
+    });
+  }
+
+  /* --- filtres des listes : résultats mis à jour pendant la saisie (amélioration ; sans script, le bouton « Filtrer » suffit) ----
+     La page filtrée est demandée à la même adresse (GET, même origine) puis analysée par DOMParser (document inerte : aucun script
+     exécuté) ; seule la région [data-resultats] est remplacée par sa version produite et échappée par le serveur. */
+  function filtresDirects() {
+    if (!window.fetch || !window.DOMParser || !window.history || !history.replaceState) { return; }
+    $$("form[data-filtres]").forEach(function (form) {
+      var annonce = document.createElement("p");
+      annonce.className = "vh"; annonce.setAttribute("aria-live", "polite"); annonce.setAttribute("role", "status");
+      form.appendChild(annonce);
+      var minuterie = null, controleur = null;
+      function adresse() {
+        var params = new URLSearchParams();
+        $$("input, select", form).forEach(function (c) {
+          if (!c.name || c.disabled || c.type === "submit") { return; }
+          var v = (c.value || "").trim();
+          if (v !== "" && !(c.name === "taille" && v === "25")) { params.append(c.name, v); }
+        });
+        var action = new URL(form.getAttribute("action") || window.location.pathname, window.location.href);
+        var q = params.toString();
+        return action.pathname + (q ? "?" + q : "");
+      }
+      function charger() {
+        var url = adresse();
+        var region = document.querySelector("[data-resultats]");
+        if (!region) { return; }
+        if (controleur) { controleur.abort(); }
+        controleur = window.AbortController ? new AbortController() : null;
+        region.classList.add("charge");
+        fetch(url, { credentials: "same-origin", headers: { "Accept": "text/html" }, signal: controleur ? controleur.signal : undefined })
+          .then(function (r) {
+            var type = r.headers.get("content-type") || "";
+            if (!r.ok || type.indexOf("text/html") !== 0 || new URL(r.url).origin !== window.location.origin) { throw new Error("réponse"); }
+            return r.text();
+          })
+          .then(function (html) {
+            var doc = new DOMParser().parseFromString(html, "text/html");
+            var neuve = doc.querySelector("[data-resultats]");
+            if (!neuve) { throw new Error("région"); }
+            var importee = document.importNode(neuve, true);
+            region.replaceWith(importee);
+            history.replaceState(null, "", url + (window.location.hash || ""));
+            var compte = importee.querySelector("[data-compte]");
+            annonce.textContent = compte ? compte.textContent.trim() : "";
+            anime(importee, { opacity: [0.5, 1] }, { duration: 0.3, ease: EASE });
+          })
+          .catch(function () { region.classList.remove("charge"); });
+      }
+      function plusTard() { window.clearTimeout(minuterie); minuterie = window.setTimeout(charger, 400); }
+      $$("input[type=search], input:not([type])", form).forEach(function (c) { c.addEventListener("input", plusTard); });
+      $$("select, input[type=date]", form).forEach(function (c) { c.addEventListener("change", plusTard); });
+    });
+  }
+
+
+  /* --- graphiques : barres qui poussent à leur entrée dans la vue (le SVG final est celui du serveur) ---------------------------- */
+  function graphes() {
+    if (!M || reduit) { return; }
+    $$(".graphe").forEach(function (fig) {
+      var rects = $$(".g-barre", fig);
+      if (!rects.length) { return; }
+      var axe = fig.classList.contains("graphe-colonnes") ? "scaleY" : "scaleX";
+      rects.forEach(function (r) { r.style.transform = axe + "(0)"; });
+      M.inView(fig, function () {
+        M.animate(rects, { transform: [axe + "(0)", axe + "(1)"] }, { duration: 0.9, ease: EASE, delay: M.stagger(0.05) });
+      });
+    });
+  }
+
   /* --- comportements existants ----------------------------------------------------------------------------------------------- */
   document.addEventListener("click", function (e) {
     var cible = e.target.closest("[data-imprimer]");
@@ -287,14 +457,16 @@
     if (t) { e.preventDefault(); basculerTheme(e); }
   });
   // Un motif est exigé : le navigateur le vérifie déjà (required) ; on évite le double envoi.
-  $$("form.decision").forEach(function (f) {
-    f.addEventListener("submit", function () {
-      var b = f.querySelector("button"); if (b) { setTimeout(function () { b.disabled = true; }, 0); }
-    });
+  // (délégation : vaut aussi pour les formulaires des résultats remplacés par les filtres directs)
+  document.addEventListener("submit", function (e) {
+    var f = e.target.closest && e.target.closest("form.decision");
+    if (!f) { return; }
+    var b = f.querySelector("button"); if (b) { setTimeout(function () { b.disabled = true; }, 0); }
   });
 
   function demarrer() {
     entrees(); compteurs(); barres(); halos(); pastille(); progression(); magnetisme(); palette(); depot();
+    suiviLot(); suiviListes(); filtresDirects(); graphes();
   }
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", demarrer); } else { demarrer(); }
 })();

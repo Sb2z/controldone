@@ -9,6 +9,9 @@ from controldone.storage import garde as _garde
 from controldone.storage import (
     models_facturation as _models_facturation,  # noqa: F401  (tables de facturation)
 )
+from controldone.storage import (
+    securite as _securite,  # noqa: F401  (débit et révocations de sessions, D-3201)
+)
 from controldone.storage.audit import verifier_chaine
 from controldone.storage.cles import charger_cles_maitresses, mode_execution, nouvelle_cle
 from controldone.storage.db import Database, SchemaPerime

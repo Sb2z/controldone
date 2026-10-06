@@ -1,9 +1,33 @@
 {% extends "base.html.j2" %}
-{% block meta %}{% if rafraichir %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{# Sans JavaScript : actualisation de la page toutes les 5 s tant que le traitement n'est pas fini (balise dans
+   <noscript> : ignorée quand le script interroge le point de suivi). #}
+{% block meta %}{% if rafraichir %}<noscript><meta http-equiv="refresh" content="5"></noscript>{% endif %}{% endblock %}
 {% block contenu %}
 <nav class="fil" aria-label="Fil d'Ariane"><a href="/espace/depot">Dépôts</a> › <span>{{ lot.recu_le|date }}</span></nav>
 <div class="titre-page"><h1>Dépôt du {{ lot.recu_le|date }}</h1>
-<p>{{ lot.statut_libelle }}{% if lot.job %} — traitement : {{ {"pending": "en attente", "running": "en cours", "done": "terminé", "dead": "en erreur (le fondateur est alerté)"}.get(lot.job.statut, lot.job.statut) }}{% endif %}{% if rafraichir %} <span class="discret">(cette page se met à jour toute seule)</span>{% endif %}</p></div>
+<p>{{ lot.statut_libelle }}</p></div>
+
+<section class="carte suivi-carte" aria-labelledby="t-suivi">
+  <div class="carte-tete"><h2 id="t-suivi">Traitement</h2>{% if not suivi.fini %}<a class="petit-lien" href="/espace/lots/{{ lot.id }}" data-rafraichir>Rafraîchir</a>{% endif %}</div>
+  <div class="suivi{% if suivi.erreur %} suivi-erreur{% endif %}{% if suivi.fini and not suivi.erreur %} suivi-fini{% endif %}" data-suivi="/espace/lots/{{ lot.id }}/etat" data-suivi-fini="{{ 'oui' if suivi.fini else 'non' }}">
+    <div class="suivi-barre" aria-hidden="true"><span class="w-{{ suivi.pourcentage }}" data-suivi-barre></span></div>
+    <ol class="suivi-etapes">
+      {% for code, lib in etapes %}
+      {% set rang = loop.index0 %}
+      <li data-etape="{{ code }}" class="{{ 'fait' if rang < suivi.rang or (suivi.fini and not suivi.erreur) else ('en-cours' if rang == suivi.rang else 'a-venir') }}{% if suivi.erreur and rang == suivi.rang %} erreur{% endif %}"{% if rang == suivi.rang and not suivi.fini %} aria-current="step"{% endif %}>
+        <span class="suivi-puce" aria-hidden="true"></span>
+        <span class="suivi-lib">{% if suivi.erreur and rang == suivi.rang %}Erreur{% else %}{{ lib }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="suivi-texte" role="status" aria-live="polite" data-suivi-texte>
+      {%- if suivi.erreur %}Traitement en erreur. {{ suivi.detail }}
+      {%- elif suivi.fini %}Traitement terminé.
+      {%- else %}Étape en cours : {{ suivi.libelle|lower }}.{% if suivi.detail %} {{ suivi.detail }}{% endif %} <span class="discret">Cette page se met à jour toute seule.</span>{% endif -%}
+    </p>
+  </div>
+</section>
+
 {% if lot.dossiers %}
 <section class="carte"><h2>Dossiers produits</h2>
 <ul class="liste-simple">{% for d in lot.dossiers %}<li><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></li>{% endfor %}</ul>
@@ -15,6 +39,7 @@
 {% for f in lot.fichiers %}
 <tr><td>{{ f.chemin }}</td><td><code>{{ f.type }}</code></td><td class="num">{{ f.taille|taille }}</td>
 <td>{% if f.statut == "refuse" %}<span class="badge b-rejete">Refusé</span> {{ {"protege": "protégé par mot de passe", "corrompu": "corrompu ou illisible", "vide": "vide", "non_supporte": "type non pris en charge", "trop_gros": "trop volumineux", "archive_dangereuse": "archive dangereuse"}.get(f.motif, f.motif) }}{% elif f.doublon %}<span class="badge b-neutre">Déjà reçu</span>{% else %}<span class="badge b-valide">Reçu</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="vide">Aucun fichier.</td></tr>
 {% endfor %}
 </tbody></table>
 </div>

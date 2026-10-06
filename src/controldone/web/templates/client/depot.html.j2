@@ -1,4 +1,5 @@
 {% extends "base.html.j2" %}
+{% from "macros.html.j2" import badge_suivi %}
 {% block contenu %}
 <div class="titre-page"><h1>Déposer des documents</h1>
 <p class="discret">Factures commerciales, déclarations en douane (PDF, XML, CSV), factures du transitaire et avoirs. Rangez chaque envoi dans son propre dossier ou archive ZIP : l'arborescence est conservée et aide au regroupement.</p></div>
@@ -28,7 +29,7 @@
 </section>
 <section class="carte">
   <h2>Dépôts récents</h2>
-  {% if lots %}<ul class="liste-simple">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a><br><span class="discret">{{ l.statut_libelle }} · {{ l.resume.get("fichiers", 0) }} fichier(s){% if l.resume.get("refuses") %}, {{ l.resume.get("refuses") }} refusé(s){% endif %}</span></li>{% endfor %}</ul>
+  {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}<br><span class="discret">{{ l.resume.get("fichiers", 0) }} fichier(s){% if l.resume.get("refuses") %}, {{ l.resume.get("refuses") }} refusé(s){% endif %}</span></li>{% endfor %}</ul>
   {% else %}<p class="vide">Aucun dépôt.</p>{% endif %}
 </section>
 </div>

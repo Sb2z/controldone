@@ -839,12 +839,20 @@ class OperatorScope:
             b["dossiers"][st or "inconnu"] = n
             b["nb_dossiers"] += n
         courants = (select(Constat.tenant_id, Constat.statut_validation, Constat.niveau, Constat.nature_montant,
-                           Constat.montant_en_jeu, Constat.contenu["hors_totaux"].as_string())
+                           Constat.montant_en_jeu, Constat.contenu["hors_totaux"].as_string(), Constat.controle_id,
+                           Dossier.cree_le)
                     .join(Dossier, (Dossier.id == Constat.dossier_id) & (Dossier.tenant_id == Constat.tenant_id)
                           & (Dossier.version == Constat.dossier_version))
-                    .where((Constat.statut_validation == "propose") | (Constat.nature_montant == "recouvrable")))
-        for tenant, statut, niveau, nature, montant, exclu in self.session.execute(courants):
+                    .where(Constat.statut_validation != "rejete"))
+        from controldone.calendrier import mois_paris
+
+        for tenant, statut, niveau, nature, montant, exclu, controle, cree_le in self.session.execute(courants):
             b = bloc(tenant)
+            # séries des graphiques du tableau de bord (D-3403) : constats par famille, montant certain par mois
+            fam = (controle or "?")[:1]
+            cle_fam = "familles_proposes" if statut == "propose" else "familles_valides"
+            if statut in ("propose", "valide"):
+                b.setdefault(cle_fam, {})[fam] = b.setdefault(cle_fam, {}).get(fam, 0) + 1
             if statut == "propose":
                 b["proposes"] += 1
             if exclu:  # hors totaux (E6 remplaçant, doublon F5) : compté une seule fois, comme le rapport
@@ -852,6 +860,10 @@ class OperatorScope:
             if nature == "recouvrable" and montant and montant > 0:
                 if niveau == "ecart_certain" and statut == "valide":
                     b["recouvrable_certain"] += montant
+                    if cree_le is not None:
+                        par_mois = b.setdefault("certain_par_mois", {})
+                        m = mois_paris(cree_le)
+                        par_mois[m] = par_mois.get(m, Decimal(0)) + montant
                 elif niveau == "a_verifier" and statut != "rejete":
                     b["recouvrable_a_verifier"] += montant
         for tenant, reste in self.session.execute(
@@ -878,6 +890,34 @@ class OperatorScope:
 
     def journal(self, limite: int = 500) -> list[AuditLog]:
         return list(self.session.execute(select(AuditLog).order_by(AuditLog.id.desc()).limit(limite)).scalars())
+
+    def rechercher_journal(self, *, acteur: str | None = None, action: str | None = None,
+                           tenant_id: str | None = None, du: datetime | None = None, au: datetime | None = None,
+                           croissant: bool = False, decalage: int = 0, limite: int = 50) -> tuple[list[AuditLog], int]:
+        """Page du journal filtrée (D-3401) : ``(entrées, total)``. Filtres passés à l'ORM comme paramètres liés
+        (``acteur`` : sous-chaîne, ``%`` et ``_`` échappés) ; ``du`` inclus, ``au`` exclu."""
+        conds = []
+        if acteur:
+            conds.append(AuditLog.actor.contains(acteur, autoescape=True))
+        if action:
+            conds.append(AuditLog.action == action)
+        if tenant_id:
+            conds.append(AuditLog.tenant_id == tenant_id)
+        if du is not None:
+            conds.append(AuditLog.ts >= du)
+        if au is not None:
+            conds.append(AuditLog.ts < au)
+        total = int(self.session.execute(select(func.count()).select_from(AuditLog).where(*conds)).scalar() or 0)
+        ordre = AuditLog.id.asc() if croissant else AuditLog.id.desc()
+        q = select(AuditLog).where(*conds).order_by(ordre).offset(max(0, decalage)).limit(max(1, min(limite, 500)))
+        return list(self.session.execute(q).scalars()), total
+
+    def valeurs_journal(self) -> tuple[list[str], list[str]]:
+        """Actions et clients présents dans le journal (listes fermées des filtres)."""
+        actions = [a for (a,) in self.session.execute(select(AuditLog.action).distinct().order_by(AuditLog.action))]
+        clients = [t for (t,) in self.session.execute(
+            select(AuditLog.tenant_id).where(AuditLog.tenant_id.is_not(None)).distinct().order_by(AuditLog.tenant_id))]
+        return actions, clients
 
     def verifier_journal(self) -> list[Any]:
         from controldone.storage.audit import verifier_chaine

@@ -3,7 +3,7 @@
 #
 #   toutes les 5 min    python -m controldone.connecteurs.releve        (dossier surveillé, IMAP, PA)
 #   toutes les 15 min   python -m controldone.agents.planificateur      (met en file les jobs d'agents)
-#   chaque jour         mise en file de purger_retention + sauvegarde chiffrée (deploy/backup-cron.sh)
+#   chaque jour         sauvegarde chiffrée vérifiée (deploy/backup-cron.sh), puis mise en file de purger_retention
 #   chaque mois         mise en file de referentiel_recalculer, à partir du 2 (clé d'idempotence mensuelle :
 #                       rattrapé si le conteneur était arrêté le 2, jamais deux fois dans le mois)
 #
@@ -52,8 +52,10 @@ while [ "$arret" -eq 0 ]; do
   fi
   if [[ "$jour" != "$dernier_jour" && ! "$hhmm" < "$BACKUP_HHMM" ]]; then
     dernier_jour="$jour"
-    tache purge "$PY" -c "from datetime import date; from controldone.jobs import enqueue; enqueue('purger_retention', {}, f'purger_retention:{date.today()}')"
+    # sauvegarde d'abord, purge ensuite : la purge (exécutée par le worker) ne retire pas du coffre, pendant la
+    # copie, un contenu que l'instantané de la base référence encore (D-3306)
     tache sauvegarde "$ICI/backup-cron.sh" --si-absente
+    tache purge "$PY" -c "from datetime import date; from controldone.jobs import enqueue; enqueue('purger_retention', {}, f'purger_retention:{date.today()}')"
   fi
   if [[ "$mois" != "$dernier_mois" ]] && { (( 10#$jdm > 2 )) || [[ "$jdm" == "02" && ! "$hhmm" < "0300" ]]; }; then
     dernier_mois="$mois"

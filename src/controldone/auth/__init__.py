@@ -1,7 +1,7 @@
 """Primitives d'authentification et d'autorisation (SPEC §4, §20.1)."""
 
 from controldone.auth.cles_api import CleApiCreee, creer_cle_api, revoquer_cle_api, verifier_cle_api
-from controldone.auth.debit import LimiteurDebit
+from controldone.auth.debit import Limiteur, LimiteurDebit, LimiteurDebitPartage, sel_debit
 from controldone.auth.jetons import (
     DonneesSession,
     GestionnaireSessions,
@@ -17,6 +17,7 @@ from controldone.auth.motdepasse import (
     hacher_mot_de_passe,
     verifier_mot_de_passe,
 )
+from controldone.auth.revocation import RegistreRevocations
 from controldone.auth.roles import Acteur, Action, Ressource, Role, peut
 from controldone.auth.service import EchecAuthentification, authentifier
 from controldone.auth.totp import code_totp, generer_secret, uri_provisioning, verifier_totp
@@ -28,8 +29,11 @@ __all__ = [
     "DonneesSession",
     "EchecAuthentification",
     "GestionnaireSessions",
+    "Limiteur",
     "LimiteurDebit",
+    "LimiteurDebitPartage",
     "MotDePasseFaible",
+    "RegistreRevocations",
     "Ressource",
     "Role",
     "SessionInvalide",
@@ -44,6 +48,7 @@ __all__ = [
     "peut",
     "revoquer_cle_api",
     "secrets_session_depuis_env",
+    "sel_debit",
     "uri_provisioning",
     "verifier_cle_api",
     "verifier_csrf",

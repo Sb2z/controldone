@@ -1,0 +1,44 @@
+{# Graphiques SVG produits par le serveur (D-3403) : titre et description accessibles, tableau de données en repli. #}
+{% macro graphe(g) -%}
+<figure class="graphe graphe-{{ g.genre }}">
+  <figcaption class="graphe-titre">{{ g.titre }}</figcaption>
+  {% if g.vide %}
+  <p class="vide graphe-vide">Pas encore de données à représenter.</p>
+  {% else %}
+  <svg class="graphe-svg" viewBox="0 0 {{ g.largeur }} {{ g.hauteur }}" role="img" aria-labelledby="{{ g.id }}-t {{ g.id }}-d" focusable="false" preserveAspectRatio="xMidYMid meet" data-graphe>
+    <title id="{{ g.id }}-t">{{ g.titre }}</title>
+    <desc id="{{ g.id }}-d">{{ g.description }}</desc>
+    {% if g.genre == "colonnes" %}
+      {% for y, lib in g.graduations %}
+      <line class="g-grille" x1="56" x2="{{ g.largeur - 12 }}" y1="{{ y }}" y2="{{ y }}"/>
+      <text class="g-axe" x="48" y="{{ y + 4 }}" text-anchor="end">{{ lib }}</text>
+      {% endfor %}
+      {% for b in g.barres %}
+      <g class="g-item">
+        <rect class="g-barre" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.largeur }}" height="{{ b.hauteur }}" rx="3"><title>{{ b.libelle }} : {{ b.texte }}</title></rect>
+        <text class="g-axe" x="{{ b.tx }}" y="{{ b.ty }}" text-anchor="middle">{{ b.libelle }}</text>
+      </g>
+      {% endfor %}
+    {% else %}
+      {% for b in g.barres %}
+      <g class="g-item">
+        <text class="g-lib" x="{{ b.tx }}" y="{{ b.ty }}" text-anchor="end">{{ b.court }}</text>
+        <rect class="g-fond" x="{{ b.x }}" y="{{ b.y }}" width="{{ g.largeur - 340 }}" height="{{ b.hauteur }}" rx="4"/>
+        <rect class="g-barre" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.largeur }}" height="{{ b.hauteur }}" rx="4"><title>{{ b.libelle }} : {{ b.texte }}</title></rect>
+        <text class="g-val" x="{{ b.vx }}" y="{{ b.vy }}">{{ b.texte }}</text>
+      </g>
+      {% endfor %}
+    {% endif %}
+  </svg>
+  {% if g.note %}<p class="discret graphe-note">{{ g.note }}</p>{% endif %}
+  <details class="graphe-donnees">
+    <summary>Données du graphique</summary>
+    <table class="donnees compacte">
+      <caption class="vh">{{ g.titre }}</caption>
+      <thead><tr><th scope="col">{{ g.colonne_libelle }}</th><th scope="col" class="num">{{ g.colonne_valeur }}</th></tr></thead>
+      <tbody>{% for b in g.barres %}<tr><th scope="row">{{ b.libelle }}</th><td class="num">{{ b.texte }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+  {% endif %}
+</figure>
+{%- endmacro %}

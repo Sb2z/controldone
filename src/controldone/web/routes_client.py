@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from controldone.auth.roles import Acteur, Action, Role, peut
 from controldone.outbox import TypeAction
@@ -26,9 +26,22 @@ from controldone.services.lecture import (
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
 from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
+from controldone.web.graphes import donnees_client
+from controldone.web.listes import lire_requete, paginer
+from controldone.web.listes_vues import (
+    PARAMS_DOSSIERS,
+    STATUTS_DOSSIER,
+    STATUTS_ECART,
+    TRIS_DOSSIERS,
+    TRIS_REGISTRE,
+    filtrer_dossiers,
+    filtrer_registre,
+    params_registre,
+)
 from controldone.web.rendu import page, redirection, retour_sur
 from controldone.web.reponses import fichier_attache, png
 from controldone.web.securite import acteur_de, depuis_boucle
+from controldone.web.suivi import ETAPES, etat_traitement
 from controldone.web.vues import image_page, images_dossier
 
 routeur = APIRouter(prefix="/espace")
@@ -60,6 +73,9 @@ def tableau(request: Request) -> Response:
         lots = lister_lots(scope, limite=5)
         registre = reclamations.registre(scope)
         nb_constats = len(constats_courants(scope))
+        graphes = donnees_client(scope)
+    for lot_ in lots:
+        lot_["suivi"] = etat_traitement(lot_["statut"], job_du_lot(pf.db, a.tenant_id, lot_["id"]))
     rapports = publication.actions_client(pf, a, TypeAction.rapport_publication)
     par_statut: dict[str, int] = {}
     for d in dossiers:
@@ -73,7 +89,7 @@ def tableau(request: Request) -> Response:
     }
     return page(request, "client/tableau.html.j2", titre="Tableau de bord", nav="tableau", info=info,
                 dossiers=dossiers[:8], lots=lots, kpi=kpi, par_statut=par_statut, rapports=rapports[-3:],
-                demo=info["demo"], **_contexte(a))
+                graphes=graphes, demo=info["demo"], **_contexte(a))
 
 
 @routeur.get("/depot")
@@ -83,6 +99,8 @@ def depot_form(request: Request) -> Response:
     with pf.db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
         lots = lister_lots(scope, limite=10)
+    for lot_ in lots:
+        lot_["suivi"] = etat_traitement(lot_["statut"], job_du_lot(pf.db, a.tenant_id, lot_["id"]))
     return page(request, "client/depot.html.j2", titre="Déposer des documents", nav="depot", info=info, lots=lots,
                 limites=pf.limites, demo=info["demo"], **_contexte(a))
 
@@ -122,18 +140,66 @@ def lot(request: Request, lot_id: str) -> Response:
     with pf.db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
         donnees = lire_lot(scope, lot_id, job=job)
+    suivi = etat_traitement(donnees["statut"], job)
     return page(request, "client/lot.html.j2", titre="Dépôt", nav="depot", lot=donnees, info=info, demo=info["demo"],
-                rafraichir=donnees["statut"] == "recu", **_contexte(a))
+                suivi=suivi, etapes=ETAPES, rafraichir=not suivi["fini"], **_contexte(a))
+
+
+def _limiter_suivi(request: Request, a: Acteur) -> Response | None:
+    """Limite de débit des points de suivi interrogés par le navigateur (par compte) : 429 au-delà."""
+    if request.app.state.limiteur_suivi.autoriser(f"suivi:{a.id}"):
+        return None
+    return JSONResponse({"erreur": "trop de requêtes"}, status_code=429, headers={"Retry-After": "5"})
+
+
+def _json_suivi(donnees: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(donnees, headers={"Cache-Control": "no-store"})
+
+
+@routeur.get("/suivi")
+def etat_lots(request: Request) -> Response:
+    """État des dépôts récents du client de la session (tableaux de bord) : JSON, aucune donnée de document."""
+    a = _client(request)
+    if (refus := _limiter_suivi(request, a)) is not None:
+        return refus
+    pf = _pf(request)
+    with pf.db.tenant(a.tenant_id, a, lecture=True) as scope:
+        lots = lister_lots(scope, limite=10)
+    sortie = []
+    for x in lots:
+        e = etat_traitement(x["statut"], job_du_lot(pf.db, a.tenant_id, x["id"]))
+        sortie.append({"lot_id": x["id"], **e})
+    return _json_suivi({"lots": sortie})
+
+
+@routeur.get("/lots/{lot_id}/etat")
+def etat_lot(request: Request, lot_id: str) -> Response:
+    """État du traitement d'un dépôt (page du dépôt) : JSON ; 404 identique pour un lot d'un autre client."""
+    a = _client(request)
+    if (refus := _limiter_suivi(request, a)) is not None:
+        return refus
+    pf = _pf(request)
+    job = job_du_lot(pf.db, a.tenant_id, lot_id)
+    try:
+        with pf.db.tenant(a.tenant_id, a, lecture=True) as scope:
+            donnees = lire_lot(scope, lot_id, job=job)
+    except AccesRefuse:
+        return JSONResponse({"erreur": "introuvable"}, status_code=404, headers={"Cache-Control": "no-store"})
+    e = etat_traitement(donnees["statut"], job)
+    return _json_suivi({"lot_id": donnees["id"], **e, "dossiers": len(donnees["dossiers"]),
+                        "fichiers": len(donnees["fichiers"])})
 
 
 @routeur.get("/dossiers")
 def dossiers(request: Request) -> Response:
     a = _client(request)
+    req = lire_requete(request, PARAMS_DOSSIERS, TRIS_DOSSIERS, "reference")
     with _pf(request).db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
         liste = lister_dossiers(scope)
-    return page(request, "client/dossiers.html.j2", titre="Dossiers", nav="dossiers", dossiers=liste, info=info,
-                demo=info["demo"], **_contexte(a))
+    p = paginer(filtrer_dossiers(liste, req), req)
+    return page(request, "client/dossiers.html.j2", titre="Dossiers", nav="dossiers", p=p, req=req,
+                statuts=STATUTS_DOSSIER, total_dossiers=len(liste), info=info, demo=info["demo"], **_contexte(a))
 
 
 @routeur.get("/dossiers/{dossier_id}")
@@ -200,13 +266,17 @@ def recouvrement(request: Request) -> Response:
     with _pf(request).db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
         lignes = reclamations.registre(scope)
+    transitaires = {x.transitaire_id: x.transitaire for x in lignes if x.transitaire_id}
+    req = lire_requete(request, params_registre(transitaires), TRIS_REGISTRE, "-reste")
+    p = paginer(filtrer_registre(lignes, req), req)
     totaux = {
         "initial": sum((x.montant_initial for x in lignes), Decimal(0)),
         "credite": sum((x.montant_credite for x in lignes), Decimal(0)),
         "reste": sum((x.reste for x in lignes if x.statut_code not in ("credite", "abandonne")), Decimal(0)),
     }
     return page(request, "client/recouvrement.html.j2", titre="Suivi des avoirs reçus", nav="recouvrement",
-                lignes=lignes, totaux=totaux, info=info, demo=info["demo"], **_contexte(a))
+                p=p, req=req, statuts=STATUTS_ECART, transitaires=sorted(transitaires.items(), key=lambda t: t[1]),
+                total_lignes=len(lignes), totaux=totaux, info=info, demo=info["demo"], **_contexte(a))
 
 
 def _formulaire_client(request: Request) -> Any:

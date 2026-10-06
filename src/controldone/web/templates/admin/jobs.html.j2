@@ -1,26 +1,48 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import csrf_champ %}
+{% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page"><h1>Tâches</h1>
 <p class="discret">File de tâches en base : réessais automatiques (30 s, 60 s, 120 s…), « morte » après 5 essais.</p></div>
-<section class="kpis">
+<section class="kpis" aria-label="Tâches par statut">
   {% for st, lib in [("pending", "En attente"), ("running", "En cours"), ("done", "Terminées"), ("dead", "Mortes")] %}
-  <div class="kpi{% if st == 'dead' and compte.get('dead') %} kpi-alerte{% endif %}"><div class="kpi-lib">{{ lib }}</div><div class="kpi-val num">{{ compte.get(st, 0) }}</div></div>
+  <div class="kpi{% if st == 'dead' and compte.get('dead') %} kpi-alerte{% endif %}"><div class="kpi-lib">{{ lib }}</div><div class="kpi-val num"><a href="/admin/jobs?statut={{ st }}">{{ compte.get(st, 0) }}</a></div></div>
   {% endfor %}
 </section>
-<section class="carte">
+<section class="carte" aria-labelledby="t-jobs">
+<h2 id="t-jobs" class="vh">Liste des tâches</h2>
+<form method="get" action="/admin/jobs" class="filtres" role="search" aria-label="Filtrer les tâches" data-filtres>
+  <div class="filtre">
+    <label for="t-statut">Statut</label>
+    <select id="t-statut" name="statut"><option value="">Tous</option>{% for code, lib in statuts.items() %}<option value="{{ code }}"{% if req.brut.get('statut') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="t-kind">Type</label>
+    <select id="t-kind" name="kind"><option value="">Tous</option>{% for k in kinds %}<option value="{{ k }}"{% if req.brut.get('kind') == k %} selected{% endif %}>{{ k }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="t-client">Client</label>
+    <select id="t-client" name="client"><option value="">Tous</option>{% for c in clients %}<option value="{{ c }}"{% if req.brut.get('client') == c %} selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+  </div>
+  {{ fin_filtres(req, "t", "/admin/jobs") }}
+</form>
+<div data-resultats>
+{{ nb_resultats(p, req, "tâche", "tâches") }}
 <div class="defilement">
 <table class="donnees compacte">
-  <thead><tr><th scope="col">Créée</th><th scope="col">Type</th><th scope="col">Client</th><th scope="col">Statut</th><th scope="col" class="num">Essais</th><th scope="col">Dernière erreur</th><th scope="col"></th></tr></thead>
+  <caption class="vh">Tâches, page {{ p.page }} sur {{ p.pages }}</caption>
+  <thead><tr>{{ th_tri(req, "cree", "Créée") }}<th scope="col">Type</th><th scope="col">Client</th><th scope="col">Statut</th><th scope="col" class="num">Essais</th><th scope="col">Dernière erreur</th><th scope="col"><span class="vh">Action</span></th></tr></thead>
   <tbody>
-  {% for j in jobs %}
+  {% for j in p.elements %}
   <tr><td>{{ j.run_after|date }}</td><td><code>{{ j.kind }}</code></td><td><code>{{ j.tenant_id or "—" }}</code></td>
     <td><span class="badge {{ {'done': 'b-valide', 'dead': 'b-rejete', 'running': 'b-verifier'}.get(j.statut, 'b-neutre') }}">{{ {"pending": "En attente", "running": "En cours", "done": "Terminée", "dead": "Morte"}.get(j.statut, j.statut) }}</span></td>
     <td class="num">{{ j.attempts }}/{{ j.max_attempts }}</td><td>{{ j.last_error or "" }}</td>
-    <td>{% if j.statut == "dead" %}<form method="post" action="/admin/jobs/{{ j.id }}/relancer" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Relancer</button></form>{% endif %}</td></tr>
-  {% else %}<tr><td colspan="7" class="vide">Aucune tâche.</td></tr>{% endfor %}
+    <td>{% if j.statut == "dead" %}<form method="post" action="/admin/jobs/{{ j.id }}/relancer" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Relancer<span class="vh"> la tâche {{ j.kind }} {{ j.id }}</span></button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="7" class="vide">{% if req.actif %}Aucune tâche ne correspond à ces critères.{% else %}Aucune tâche.{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>
+</div>
+{{ pagination(p, req, "Pages des tâches") }}
 </div>
 </section>
 {% endblock %}

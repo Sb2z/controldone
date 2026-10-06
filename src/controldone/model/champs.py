@@ -58,6 +58,7 @@ __all__ = [
     "Partie",
     "SousTotal",
     "TaxationDeclaration",
+    "TotalTaxeCode",
     "chemin_complet",
     "chemin_relatif",
     "classe_champs",
@@ -339,6 +340,17 @@ class TaxationDeclaration(_Noeud):
     paiement_normalise: PaiementNormalise = PaiementNormalise.inconnu
 
 
+class TotalTaxeCode(_Noeud):
+    """Total imprimé d'un code de taxe (« Total A00 : 323,00 », récapitulatif « A00 Droits de douane 96,65 »,
+    ``<TypeTotal type="A00">``), D-3101. **Jamais** une ligne de taxation : les contrôles qui somment les lignes
+    (famille C, B2 au total) ne le voient pas ; il sert à B2 par code et au réseau d'identités (D-1700)."""
+
+    type_taxe: Opt = None
+    #: Base imprimée du total, quand le récapitulatif l'imprime.
+    base_montant: Opt = None
+    montant: Opt = None
+
+
 class ChampsDeclaration(Champs):
     TYPE: ClassVar[TypeDocument] = TypeDocument.declaration
     type_document: Literal["declaration"] = "declaration"
@@ -370,6 +382,8 @@ class ChampsDeclaration(Champs):
     total_a_payer: Opt = None
     articles: list[ArticleDeclaration] = Field(default_factory=list)
     taxations: list[TaxationDeclaration] = Field(default_factory=list)
+    #: Totaux imprimés par code de taxe (D-3101) ; pas des lignes de taxation.
+    totaux_par_code: list[TotalTaxeCode] = Field(default_factory=list)
 
     @property
     def mrn_prefixe(self) -> str | None:
