@@ -29,5 +29,5 @@
   sont pas versionnés (ignorés depuis l'origine) et n'ont pas encore de recette enregistrée. Proposition : y ajouter
   leur commande et leur empreinte (empreinte « pixels » pour les TIFF, cf. D-3904), et rendre l'écriture des TIFF
   déterministe dans `bench/generator2/degrade.py`. À faire.
-- **Numéro de décision en double : D-3709** (progression fine côté moteur et côté interface). À renuméroter à la
-  consolidation du lot 2. À faire.
+- **Numéro de décision D-3709** : vérifié, une seule décision porte ce numéro (progression fine du pipeline) ;
+  l'interface y renvoie sans la dupliquer. Fait.
