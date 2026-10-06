@@ -43,10 +43,11 @@ class _Releve(logging.Handler):
 def test_base_en_panne_repli_en_memoire_qui_limite_encore():
     # gestionnaire posé sur le journal du module : indépendant de la configuration de journalisation des autres tests
     releve, journal = _Releve(), debit.log
-    niveau, desactive = journal.level, journal.disabled
+    niveau, desactive, global_ = journal.level, journal.disabled, logging.root.manager.disable
     journal.addHandler(releve)
     journal.setLevel(logging.DEBUG)
     journal.disabled = False  # un dictConfig d'un autre test peut l'avoir désactivé
+    logging.disable(logging.NOTSET)  # bench_run appelle logging.disable(WARNING) au niveau global
     try:
         lim = _partage(capacite=2)
         assert lim.autoriser("203.0.113.7")
@@ -57,6 +58,7 @@ def test_base_en_panne_repli_en_memoire_qui_limite_encore():
         journal.removeHandler(releve)
         journal.setLevel(niveau)
         journal.disabled = desactive
+        logging.disable(global_)
     texte = "\n".join(releve.lignes)
     assert "debit_base_indisponible" in texte
     assert "203.0.113.7" not in texte  # l'adresse n'est jamais journalisée

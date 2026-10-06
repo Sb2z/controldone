@@ -191,7 +191,18 @@ def test_etat_traitement_etapes():
     assert etat_traitement("recu", None)["etape"] == "recu"
     assert etat_traitement("recu", {"statut": "pending", "essais": 0})["detail"] == "En attente de traitement."
     assert etat_traitement("recu", {"statut": "running", "etape": "controles"})["etape"] == "controles"
-    assert etat_traitement("recu", {"statut": "running", "etape": "<script>"})["etape"] == "lecture"
+    assert etat_traitement("recu", {"statut": "running", "etape": "<script>"})["etape"] == "pages"
+    # étapes fines du pipeline (D-3709, D-3805) : « <etape> <fait>/<total> » ; ancien « lecture » = lecture des pages
+    assert etat_traitement("recu", {"statut": "running", "etape": "lecture"})["etape"] == "pages"
+    e = etat_traitement("recu", {"statut": "running", "etape": "extraction 3/12"}, "fr")
+    assert (e["etape"], e["rang"], e["fait"], e["total"]) == ("extraction", 3, 3, 12)
+    assert e["texte"] == "Étape en cours : extraction des valeurs (3 sur 12)." and 5 < e["pourcentage"] < 100
+    assert e["pourcentage"] % 5 == 0
+    assert etat_traitement("recu", {"statut": "running", "etape": "regroupement"})["rang"] == 4
+    assert etat_traitement("recu", {"statut": "running", "etape": "controles 9/9"})["pourcentage"] <= 95
+    assert etat_traitement("recu", {"statut": "running", "etape": "pages 99999999/1"})["etape"] == "pages"
+    en = etat_traitement("recu", {"statut": "running", "etape": "classement 1/4"}, "en")
+    assert en["libelle"] == "Classifying documents" and en["texte"].startswith("Current step:")
     e = etat_traitement("recu", {"statut": "dead"})
     assert e["erreur"] and e["fini"] and e["etape"] == "erreur"
     assert etat_traitement("traite", {"statut": "running"})["etape"] == "termine"
@@ -208,7 +219,7 @@ def test_point_de_suivi_lot(monde):
     d = r.json()
     assert d["lot_id"] == lot and d["etape"] == "termine" and d["fini"] and d["dossiers"] == 3
     assert set(d) == {"lot_id", "etape", "libelle", "rang", "fini", "erreur", "pourcentage", "detail", "dossiers",
-                      "fichiers"}
+                      "fichiers", "fait", "total", "texte"}
     lecteur = monde.client()
     connecter_client(lecteur, monde, LECTEUR_A)
     assert lecteur.get(f"/espace/lots/{lot}/etat").status_code == 200
@@ -261,7 +272,11 @@ def test_depot_suivi_etapes_et_page(monde):
     assert job is not None and job.payload.get("lot_id") == lot_id
     assert store.marquer_etape(job.id, "w-test", "lecture", tentative=job.attempts)
     assert not store.marquer_etape(job.id, "autre-worker", "controles")
-    assert c.get(url + "/etat").json()["etape"] == "lecture"
+    assert c.get(url + "/etat").json()["etape"] == "pages"
+    assert store.marquer_etape(job.id, "w-test", "extraction 2/5", tentative=job.attempts)
+    d = c.get(url + "/etat").json()
+    assert (d["etape"], d["fait"], d["total"]) == ("extraction", 2, 5)
+    assert "2/5" in c.get(url).text  # compteur de l'étape courante dans la page (sans JavaScript)
     store.echouer(job.id, "w-test", "essai", tentative=job.attempts)  # nouvel essai dans 30 s
     d = c.get(url + "/etat").json()
     assert d["etape"] == "recu" and d["detail"] == "Nouvel essai programmé." and not d["fini"]

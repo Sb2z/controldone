@@ -194,4 +194,4 @@ def test_pages_sql_dans_l_interface(gros):
     f = gros.client()
     connecter_fondateur(f, gros)
     r = f.get("/admin/validation?niveau=renvoi&page=9999")
-    assert r.status_code == 200 and "Points d'attention" in r.text
+    assert r.status_code == 200 and 'id="attention"' in r.text
