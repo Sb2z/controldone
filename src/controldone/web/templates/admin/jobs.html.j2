@@ -37,7 +37,7 @@
   <tr><td>{{ j.run_after|date }}</td><td><code>{{ j.kind }}</code></td><td><code>{{ j.tenant_id or "—" }}</code></td>
     <td><span class="badge {{ {'done': 'b-valide', 'dead': 'b-rejete', 'running': 'b-verifier'}.get(j.statut, 'b-neutre') }}">{{ {"pending": "En attente", "running": "En cours", "done": "Terminée", "dead": "Morte"}.get(j.statut, j.statut) }}</span></td>
     <td class="num">{{ j.attempts }}/{{ j.max_attempts }}</td><td>{{ j.last_error or "" }}</td>
-    <td>{% if j.statut == "dead" %}<form method="post" action="/admin/jobs/{{ j.id }}/relancer" class="en-ligne">{{ csrf_champ(csrf) }}<button class="btn btn-petit" type="submit">Relancer<span class="vh"> la tâche {{ j.kind }} {{ j.id }}</span></button></form>{% endif %}</td></tr>
+    <td>{% if j.statut == "dead" %}<form method="post" action="/admin/jobs/{{ j.id }}/relancer" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}"><button class="btn btn-petit" type="submit">Relancer<span class="vh"> la tâche {{ j.kind }} {{ j.id }}</span></button></form>{% endif %}</td></tr>
   {% else %}<tr><td colspan="7" class="vide">{% if req.actif %}Aucune tâche ne correspond à ces critères.{% else %}Aucune tâche.{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>

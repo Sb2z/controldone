@@ -28,6 +28,7 @@ from controldone.controls._aides_befg import ZERO
 from controldone.controls._aides_befg import entre_parentheses as _entre_parentheses
 from controldone.controls._aides_befg import num_utilisable as _dec
 from controldone.controls._aides_befg import somme as _somme
+from controldone.controls.classify import Classement
 from controldone.controls.confusion import (
     CLASSES_CONFUSION,
     LETTRES_CHIFFRES,
@@ -943,6 +944,9 @@ def _comparer_composante(
                                          refact, tol),
         montant=ecart, raisons_supplementaires=raisons,
     )
+    ailleurs = _unite_portee_ailleurs(ctx, cid, u, classement, details)
+    if ailleurs is not None:
+        return ailleurs
     nom = _NOM_CATEGORIE[cat]
     if sources:
         ref_txt = (f"indique comme montant liquidé pour {nom} {format_montant(liq)}"
@@ -964,6 +968,28 @@ def _comparer_composante(
         + [preuve(c.valeur, RolePreuve.contexte) for c in credits],
         **commun,
     )
+
+
+#: Raisons d'une comparaison C1 à C5 qui ne rattache pas la facture à cette seule déclaration (D-3704).
+_RAISONS_NON_UNIVOQUES = frozenset({RaisonCode.attribution_non_univoque, RaisonCode.allocation_prorata})
+
+
+def _unite_portee_ailleurs(ctx: ControlContext, cid: str, u: UniteC, classement: Classement,
+                           details: dict) -> ResultatControle | None:
+    """Facture de transitaire répartie entre plusieurs dossiers du lot (relevé au prorata) dont la comparaison
+    n'est pas univoque (``attribution_non_univoque`` ou ``allocation_prorata``) : le même montant refacturé
+    serait comparé à la déclaration de chaque dossier, un constat par déclaration. Le constat n'est porté que
+    par le premier dossier (identifiant) qui contient la facture ; les autres rendent ``non_applicable``
+    (``couvert_par_autre_controle``, ``details.dossier``), dans l'esprit de D-3105 (D-3704)."""
+    if classement.niveau is not Niveau.a_verifier or not set(classement.raisons) & _RAISONS_NON_UNIVOQUES:
+        return None
+    factures = {f.id for f in u.factures}
+    freres = sorted({a.dossier.id for a in ctx.autres_dossiers if factures & set(a.documents)})
+    if not freres or ctx.dossier.id < freres[0]:
+        return None
+    return ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, unite=u.cle, documents=u.document_ids,
+                              details={**details, "motif": "facture_repartie_evaluee_dans_un_autre_dossier",
+                                       "dossier": freres[0]})
 
 
 def _composante(ctx: ControlContext, cid: str, cat: CategorieTaxe) -> list[ResultatControle]:
@@ -1178,6 +1204,10 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
             raisons_supplementaires=([RaisonCode.valeur_absente] if incompletes else [])
             + ([RaisonCode.attribution_non_univoque] if u.attribution_incertaine else []),
         )
+        ailleurs = _unite_portee_ailleurs(ctx, "C5", u, classement, details)
+        if ailleurs is not None:
+            out.append(ailleurs)
+            continue
         composition = []
         for cat in (*CATEGORIES, None):
             if cat in exclues:

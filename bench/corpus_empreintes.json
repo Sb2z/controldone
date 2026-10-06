@@ -1,0 +1,21 @@
+{
+  "_description": "Recettes des corpus de banc non versionnés (D-3904) : régénération à l'octet près par `make corpus-g6` (scripts/corpus.py). Empreinte : find holdout -name truth.json | sort | xargs sha256sum | sha256sum, depuis la racine du corpus. Ajouter ici chaque nouveau corpus avec son empreinte. sha256_pixels : empreinte de secours où les TIFF sont comparés par leurs pixels (Pillow laisse un octet de remplissage non initialisé dans les TIFF LZW : python scripts/corpus.py empreinte --pixels).",
+  "corpus": {
+    "corpus_g6": {
+      "sortie": "bench/corpus_g6",
+      "generateur": "bench.generator2",
+      "prefixe": "GV",
+      "graine": 20261008,
+      "nombre": 160,
+      "par_controle": 3,
+      "split": "holdout",
+      "options": [
+        "ext",
+        "all-holdout"
+      ],
+      "dossiers": 160,
+      "sha256": "d604e7b4936af4b1473c79bd4ee557dd0702cead3d197aded56776299511b554",
+      "sha256_pixels": "27aa9daa11594624237d16f9aef1b8249d5f1d96cb8c0fff487c0e0d4e00c8e9"
+    }
+  }
+}

@@ -418,3 +418,18 @@ def test_d9_articles_comptes_a_verifier_et_sans_declaration():
     c = un(run([_dec_articles(articles=8), f]), "D9").constat
     assert c.niveau is Niveau.a_verifier and RaisonCode.total_reconstruit in c.raisons
     assert un(run([f]), "D9").outcome is Outcome.non_verifiable
+
+
+def test_d1_total_superieur_a_la_somme_lue_sous_le_seuil_d3703():
+    # Scan : lignes lues sous C_MIN_CERTAIN, total HT imprimé supérieur à leur somme -> des lignes non lues
+    # expliquent l'écart : non vérifiable (et non « à vérifier »).
+    f = ft(ligne(N.frais_dedouanement, "50.00", confiance=0.80), ligne(N.debours_droits, "100.00", confiance=0.80),
+           total_ht="455.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.confiance_insuffisante
+    assert r.details["motif"] == "lignes_possiblement_non_lues"
+    # écart de sens contraire (total inférieur) : une ligne non lue ne l'explique pas -> constat conservé
+    f = ft(ligne(N.frais_dedouanement, "50.00", confiance=0.80), ligne(N.debours_droits, "100.00", confiance=0.80),
+           total_ht="120.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.outcome is Outcome.a_verifier

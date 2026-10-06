@@ -35,6 +35,7 @@ décisions D-3301 à D-3306.
 | Élément | Dans l'archive | Remarque |
 |---|---|---|
 | Base SQLite (`var/controldone.db`) | oui, `base/controldone.db` | copie **en ligne** par l'API de sauvegarde de SQLite : instantané cohérent même pendant les écritures |
+| Base PostgreSQL (si `CONTROLDONE_DATABASE_URL` en `postgresql+pg8000://…`) | oui, `base/controldone.dump` | `pg_dump --format=custom` sur un instantané exporté, le même que celui du manifeste (D-3501) ; `pg_dump` de la même version majeure que le serveur |
 | Coffre (`var/coffre/`) | oui, `coffre/` | objets déjà chiffrés par client ; copiés tels quels |
 | Traces d'envoi (`var/outbox_envoyee/`) | oui, `outbox_envoyee/` | copies des rapports et factures mis à disposition |
 | Manifeste | oui, `MANIFESTE.json` (en dernier) | taille et SHA-256 de **chaque** fichier, lignes par table, tête de la chaîne d'audit |
@@ -53,9 +54,11 @@ au moins 35 jours (durée de conservation hors site), sinon les anciennes archiv
 controldone sauvegarde sauvegarder [--destination DIR] [--verification-profonde]   # crée, relit, rotation
 controldone sauvegarde verifier --dernier --destination DIR [--profond] [--age-max-h 26]
 controldone sauvegarde restaurer <archive> <répertoire_vide> --controler
+controldone sauvegarde restaurer <archive> <répertoire_vide> --base-cible <url_base_pg_vide> --controler   # PostgreSQL
 controldone sauvegarde controler <répertoire_restauré>
 controldone sauvegarde rotation --destination DIR [--jours 7] [--semaines 4]
 make restauration-test                     # exercice complet sur une base fictive, hors ligne (≈ 15 s)
+make restauration-test-pg                  # le même sur PostgreSQL (serveur jetable local, ≈ 25 s)
 ```
 
 - `sauvegarder` relit **toujours** l'archive qu'elle vient d'écrire (déchiffrement de chaque segment, SHA-256 de
@@ -66,6 +69,9 @@ make restauration-test                     # exercice complet sur une base ficti
   table égales au manifeste, chaîne d'audit intacte, **chaque** objet du coffre déchiffré et conforme à sa
   référence, chaque fichier référencé par la base présent. Le conteneur `scheduler` la fait chaque dimanche
   (`BACKUP_VERIFICATION_PROFONDE_JOUR`).
+- Sauvegarde, purge et restauration partagent un verrou de maintenance (`<data_dir>/.verrou-maintenance`,
+  D-3504) : une purge lancée à la main pendant la copie est reportée, au lieu de retirer un objet que
+  l'instantané référence.
 - `restaurer` n'écrit que dans un répertoire **absent ou vide** et ne remplace jamais les données en service ;
   la mise en service suit `docs/EXPLOITATION.md` § 3.2.
 - `make restauration-test` : base de démonstration neuve (`init-demo`, données fictives) dans un répertoire
@@ -90,7 +96,7 @@ make restauration-test                     # exercice complet sur une base ficti
 |---|---|
 | 0 | succès |
 | 1 | création de l'archive en échec (disque plein, base illisible…) |
-| 2 | configuration : clé maîtresse absente ou invalide, base non SQLite, rclone ou distant absent |
+| 2 | configuration : clé maîtresse absente ou invalide, `pg_dump` absent, rclone ou distant absent, verrou de maintenance pris (restauration) |
 | 3 | vérification en échec : archive illisible, altérée, empreinte ou manifeste non conformes |
 | 4 | aucune sauvegarde assez récente (`--age-max-h`, `BACKUP_AGE_MAX_H`, défaut 26 h) |
 | 5 / 6 | copie hors site en échec / copie distante incomplète ou différente (`rclone check`) |
@@ -98,8 +104,11 @@ make restauration-test                     # exercice complet sur une base ficti
 - Chaque échec côté application émet une alerte fondateur, une par jour et par type, visible dans
   `/admin/alertes` : `sauvegarde_echec`, `sauvegarde_verification_echec`, `sauvegarde_absente`,
   `sauvegarde_hors_site_echec` (côté hôte, si `BACKUP_ALERTE_COMPOSE` est défini).
-- **Limite** : une alerte dans l'application ne se voit qu'en se connectant, et ne part pas si le conteneur
-  `scheduler` est arrêté. Pour être prévenu par courriel, y compris quand plus rien ne tourne, définir
+- **Notifications poussées** (D-3502, facultatives) : webhook et/ou courriel configurés dans `.env.prod`
+  (`CONTROLDONE_NOTIF_*`) ; une notification par type et par jour, sans donnée client ; rien n'est envoyé sans
+  configuration (`docs/EXPLOITATION.md` § 3.3).
+- **Limite** : une alerte dans l'application ne se voit qu'en se connectant (sauf notifications configurées), et
+  ne part pas si le conteneur `scheduler` est arrêté. Pour être prévenu par courriel, y compris quand plus rien ne tourne, définir
   `BACKUP_PING_URL` (sonde « homme mort » type Healthchecks, auto-hébergeable) : `<url>/0` après chaque succès,
   `<url>/<code>` après un échec ; la sonde alerte si aucun signal n'arrive pendant 26 h. Le contrôle hors site
   sur l'hôte vérifie aussi, indépendamment du conteneur, que la dernière archive locale a moins de 26 h.

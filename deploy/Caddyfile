@@ -11,16 +11,24 @@
 {$CONTROLDONE_DOMAIN} {
 	encode zstd gzip
 
-	# --- Taille des requêtes ---------------------------------------------------------------------------
-	# Dépôt de lots (interface et API) : jusqu'à 500 Mo par lot côté application (ingest.reception.Limites).
+	# --- Taille des requêtes (alignée sur l'application, D-3608) -------------------------------------------
+	# Unités binaires (MiB, KiB) comme l'application (web/app.py : LimiteCorps ; 1 Mo = 1 048 576 octets).
+	# Dépôt de lots (interface et API) : 500 Mio par lot (ingest.reception.Limites.taille_lot) + 16 Mio
+	# d'enveloppe multipart côté application ; Caddy laisse 4 Mio de marge au-dessus.
 	@depot path /espace/depot /api/v1/lots /api/v1/einvoices
 	request_body @depot {
-		max_size 520MB
+		max_size 520MiB
 	}
-	# Tout le reste (formulaires, grilles, avoirs, webhooks Stripe) : 60 Mo au plus.
-	@autres not path /espace/depot /api/v1/lots /api/v1/einvoices
+	# Rapports de violation CSP : l'application en lit 8 Kio au plus (web/securite.py) ; 16 Kio ici.
+	@csp path /csp-rapport
+	request_body @csp {
+		max_size 16KiB
+	}
+	# Tout le reste (formulaires, grilles, avoirs, webhooks Stripe) : l'application refuse au-delà de 2 Mio
+	# (413) ; Caddy coupe à 4 Mio pour ne pas relayer de gros corps inutiles.
+	@autres not path /espace/depot /api/v1/lots /api/v1/einvoices /csp-rapport
 	request_body @autres {
-		max_size 60MB
+		max_size 4MiB
 	}
 
 	# --- En-têtes de sécurité ----------------------------------------------------------------------------

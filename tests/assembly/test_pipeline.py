@@ -233,3 +233,28 @@ def test_fichier_en_double_rattache_et_signale(lot):
     # une seule facture transitaire comptée par les contrôles (pas de second C1/C5 ni de second P4)
     assert len([x for x in r.resultats if x.controle_id == "C1" and x.constat is not None]) <= 1
     assert not [c for c in r.findings.constats if c.controle_id == "P4" and copies[0].id in c.documents_concernes]
+
+
+def test_progression_etapes_fines(lot):
+    """D-3709 : rappel de progression (étapes, compteurs croissants) ; un rappel en erreur n'arrête rien."""
+    from controldone.pipeline import ETAPES_PROGRESSION
+
+    vus: list[tuple[str, int, int]] = []
+    opts = OptionsPipeline(seed=1, progression=lambda e, f, t: vus.append((e, f, t)))
+    res = traiter_lot(lot / "docs", PROFIL, [], options=opts, composants=_composants())
+    assert len(res) == 1
+    etapes = [e for e, _f, _t in vus]
+    assert set(etapes) == set(ETAPES_PROGRESSION)
+    # ordre des étapes respecté (première apparition)
+    premieres = sorted(set(etapes), key=etapes.index)
+    assert premieres == list(ETAPES_PROGRESSION)
+    assert ("pages", 4, 4) in vus and ("regroupement", 1, 1) in vus and ("controles", 1, 1) in vus
+    extraction = [(f, t) for e, f, t in vus if e == "extraction"]
+    assert extraction[-1][0] == extraction[-1][1] and [f for f, _t in extraction] == sorted(f for f, _t in extraction)
+
+    def casse(*_a):
+        raise RuntimeError("affichage indisponible")
+
+    res2 = traiter_lot(lot / "docs", PROFIL, [], options=OptionsPipeline(seed=1, progression=casse),
+                       composants=_composants())
+    assert [c.controle_id for c in res2[0].findings.constats] == [c.controle_id for c in res[0].findings.constats]

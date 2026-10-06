@@ -39,11 +39,11 @@
     <td><span class="badge {{ {'credite': 'b-valide', 'abandonne': 'b-neutre', 'conteste': 'b-rejete', 'reclame': 'b-verifier', 'partiellement_credite': 'b-verifier'}.get(x.statut_code, 'b-propose') }}">{{ x.statut }}</span>{% if x.age_jours is not none %}<br><span class="discret">{{ x.age_jours }} j{% if x.relance %} · {{ x.relance }}{% endif %}</span>{% endif %}</td>
     {% if peut_declarer %}<td class="actions-registre">
       {% if x.statut_code in ("ouvert", "conteste") %}
-      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit">J'ai envoyé mon courrier<span class="vh"> (dossier {{ x.dossier_reference or x.dossier_id }}, {{ x.composante }})</span></button></form>
+      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}"><button type="submit" class="btn btn-petit">J'ai envoyé mon courrier<span class="vh"> (dossier {{ x.dossier_reference or x.dossier_id }}, {{ x.composante }})</span></button></form>
       {% endif %}
       {% if x.statut_code not in ("credite", "abandonne") %}
       <details class="corriger"><summary>Avoir reçu<span class="vh"> (dossier {{ x.dossier_reference or x.dossier_id }}, {{ x.composante }})</span></summary>
-      <form method="post" action="/espace/recouvrement/{{ x.id }}/avoir" class="formulaire compact">{{ csrf_champ(csrf) }}
+      <form method="post" action="/espace/recouvrement/{{ x.id }}/avoir" class="formulaire compact">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
         <label for="m-{{ x.id }}">Montant (EUR)</label><input id="m-{{ x.id }}" name="montant" inputmode="decimal" required maxlength="15">
         <label for="r-{{ x.id }}">N° de l'avoir</label><input id="r-{{ x.id }}" name="reference" maxlength="200">
         <button type="submit" class="btn btn-petit">Enregistrer</button></form></details>

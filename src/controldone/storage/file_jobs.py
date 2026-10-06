@@ -61,11 +61,15 @@ class JobInfo:
     locked_by: str | None
     last_error: str | None
     resultat: dict[str, Any] | None
+    #: Création de la tâche (tri et colonne « Créée » de l'écran Tâches) ; ``run_after`` : prochain essai.
+    cree_le: datetime | None = None
+    termine_le: datetime | None = None
 
 
 def _info(j: Job) -> JobInfo:
     return JobInfo(j.id, j.kind, dict(j.payload or {}), j.idempotency_key, j.tenant_id, j.statut, j.attempts,
-                   j.max_attempts, j.run_after, j.locked_until, j.locked_by, j.last_error, j.resultat)
+                   j.max_attempts, j.run_after, j.locked_until, j.locked_by, j.last_error, j.resultat,
+                   cree_le=j.cree_le, termine_le=j.termine_le)
 
 
 class JobStore:

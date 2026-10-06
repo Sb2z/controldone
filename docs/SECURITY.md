@@ -151,6 +151,11 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   fondateur ; tout texte passe `guardrails.check_text` avant approbation **et** juste avant l'envoi ;
   autonomie `manuel` par défaut pour tous les types, modifiable par le fondateur seul ; le seul expéditeur
   livré écrit des fichiers (`var/outbox_envoyee/`) — aucun code d'envoi réel (testé).
+- **Notifications des alertes au fondateur** (D-3502, `services/notifications.py`) : seul envoi réel du code,
+  hors de la file sortante ; désactivé tant que `CONTROLDONE_NOTIF_*` n'est pas défini, jamais en `dev`/`test` ;
+  destination fixée par l'environnement (aucun agent ni client ne la choisit) ; contenu limité au type d'alerte,
+  à un libellé fixe, au nombre, à l'heure et au chemin `/admin/alertes` (aucune donnée client, testé) ; webhook
+  en HTTPS sans suivre de redirection, SMTP en STARTTLS ou TLS ; URL et mot de passe jamais journalisés.
 - **Journaux** : JSON, liste blanche de champs (identifiants, durées, compteurs, codes) ; une exception est
   journalisée par son **nom de classe** seulement (son message pourrait contenir du texte de document).
 - **Coûts IA** : plafond mensuel par client (alerte à 80 %, arrêt des appels au modèle à 100 %).
@@ -196,9 +201,8 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 2. Liste des sessions actives d'un compte (la révocation persistante est faite, D-3202).
 3. ~~Limiteur de débit partagé entre processus~~ : fait (D-3201).
 4. Chiffrement du volume qui porte la base (ou PostgreSQL avec chiffrement au repos de l'hébergeur).
-5. Migrations de schéma (Alembic) : aujourd'hui `Database.creer_schema()` crée les tables manquantes ; une
-   colonne manquante est détectée au démarrage du web et du worker, qui refusent de démarrer (D-1322), mais la
-   migration reste manuelle.
+5. ~~Migrations de schéma~~ : fait (D-3503) — étapes versionnées (`schema_version`), `controldone migrer` avec
+   sauvegarde préalable ; le web et le worker refusent de démarrer tant qu'une étape est en attente (production).
 
 Revue de sécurité indépendante (constats, preuves, correctifs, risques restants) : `docs/REVUE_SECURITE.md`,
 puis seconde revue (octobre 2026) : `docs/REVUE_SECURITE_2.md`.

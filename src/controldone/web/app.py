@@ -29,6 +29,7 @@ from controldone.auth.debit import LimiteurDebit
 from controldone.ingest.reception import Limites
 from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalide
 from controldone.storage.erreurs import AccesRefuse
+from controldone.web.i18n import activer, langue_de
 from controldone.web.rendu import page
 from controldone.web.securite import (
     CHEMIN_RAPPORT_CSP,
@@ -78,6 +79,7 @@ def _middleware_session(app: FastAPI):
                 request.state.session, nouveau = etat.sessions.rafraichir(jeton)
             except SessionInvalide:
                 invalide = True
+        activer(langue_de(request))  # langue de l'interface pour toute la requête (D-3803)
         reponse = await call_next(request)
         if nouveau:
             etat.poser_session(reponse, nouveau)
@@ -129,9 +131,10 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     app.state.limiteur_suivi = LimiteurDebit(30, 1.0)
 
     from controldone.api import creer_api
-    from controldone.web import routes_admin, routes_auth, routes_client, routes_finances
+    from controldone.web import routes_admin, routes_auth, routes_client, routes_compte, routes_finances
 
     app.include_router(routes_auth.routeur)
+    app.include_router(routes_compte.routeur)
     app.include_router(routes_finances.routeur)
     app.include_router(routes_finances.routeur_webhooks)
     app.include_router(routes_admin.routeur)

@@ -4,7 +4,8 @@
 #   deploy/backup-cron.sh [--si-absente] (dans le conteneur, appelé chaque jour par deploy/scheduler.sh ;
 #                                        --si-absente : rien si l'archive du jour existe déjà)
 #       -> scripts/backup.sh --destination "$BACKUP_DIR" : archive chiffrée (clé dérivée de
-#          CONTROLDONE_MASTER_KEY) de la base SQLite (copie en ligne), du coffre et des traces d'envoi, avec
+#          CONTROLDONE_MASTER_KEY) de la base (SQLite : copie en ligne ; PostgreSQL : pg_dump sur instantané),
+#          du coffre et des traces d'envoi, avec
 #          manifeste (SHA-256 de chaque fichier) et empreinte .sha256 ; relecture complète de l'archive créée ;
 #          restauration d'essai complète le jour BACKUP_VERIFICATION_PROFONDE_JOUR ; puis rotation 7 j / 4 sem.
 #          Une archive dont la relecture échoue est renommée « .invalide » (le rattrapage la refait).
@@ -17,7 +18,7 @@
 #          Exemple de crontab hôte :
 #            45 2 * * * BACKUP_RCLONE_REMOTE=objeu:controldone-sauvegardes BACKUP_ALERTE_COMPOSE=/srv/controldone/app/deploy/docker-compose.yml /srv/controldone/app/deploy/backup-cron.sh --hors-site >> /var/log/controldone-backup.log 2>&1
 #
-# Codes de retour (D-3303) : 0 succès ; 1 création en échec ; 2 configuration (clé, base non SQLite, rclone,
+# Codes de retour (D-3303) : 0 succès ; 1 création en échec ; 2 configuration (clé, pg_dump absent, rclone,
 # distant) ; 3 vérification en échec (archive illisible, altérée, empreinte) ; 4 aucune sauvegarde récente ;
 # 5 copie hors site en échec ; 6 contrôle de la copie hors site en échec.
 #

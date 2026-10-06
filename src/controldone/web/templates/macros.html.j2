@@ -1,14 +1,14 @@
 {% macro badge_niveau(code, libelle) -%}
-<span class="badge {{ {'ecart_certain': 'b-certain', 'a_verifier': 'b-verifier', 'conforme': 'b-conforme', 'document_manquant': 'b-manquant', 'non_concerne': 'b-neutre', 'en_validation': 'b-neutre', 'en_cours': 'b-neutre'}.get(code, 'b-neutre') }}">{{ libelle }}</span>
+<span class="badge {{ {'ecart_certain': 'b-certain', 'a_verifier': 'b-verifier', 'conforme': 'b-conforme', 'document_manquant': 'b-manquant', 'non_concerne': 'b-neutre', 'en_validation': 'b-neutre', 'en_cours': 'b-neutre'}.get(code, 'b-neutre') }}">{{ _(libelle) }}</span>
 {%- endmacro %}
 
 {% macro badge_validation(code, libelle) -%}
-<span class="badge {{ {'valide': 'b-valide', 'rejete': 'b-rejete', 'propose': 'b-propose', 'modifie': 'b-valide'}.get(code, 'b-neutre') }}">{{ libelle }}</span>
+<span class="badge {{ {'valide': 'b-valide', 'rejete': 'b-rejete', 'propose': 'b-propose', 'modifie': 'b-valide'}.get(code, 'b-neutre') }}">{{ _(libelle) }}</span>
 {%- endmacro %}
 
 {# État de traitement d'un dépôt (D-3402) : mis à jour en direct par app.js (attribut data-lot). #}
 {% macro badge_suivi(lot_id, e) -%}
-<span class="badge {{ 'b-rejete' if e.erreur else ('b-valide' if e.fini else 'b-verifier en-cours') }}" data-lot="{{ lot_id }}" data-fini="{{ 'oui' if e.fini else 'non' }}">{{ e.libelle }}</span>
+<span class="badge {{ 'b-rejete' if e.erreur else ('b-valide' if e.fini else 'b-verifier en-cours') }}" data-lot="{{ lot_id }}" data-fini="{{ 'oui' if e.fini else 'non' }}">{{ _(e.libelle) }}</span>
 {%- endmacro %}
 
 {% macro kpi(libelle, valeur, note=None, ton=None, lien=None) -%}
@@ -28,60 +28,60 @@
     <div class="constat-titre">
       {{ badge_niveau(c.niveau_code, c.niveau) }}
       <span class="controle">{{ c.controle_id }}</span>
-      <span class="controle-lib">{{ c.controle_libelle }}</span>
+      <span class="controle-lib" lang="fr">{{ c.controle_libelle }}</span>
       {% if client %}<span class="contexte">· {{ client }}{% if dossier %} · {{ dossier }}{% endif %}</span>{% endif %}
     </div>
     <div class="constat-montant">
-      {% if c.montant != "—" %}<span class="num">{{ c.montant }}</span><span class="nature">{{ c.nature }}</span>{% else %}<span class="nature">{{ c.nature }}</span>{% endif %}
+      {% if c.montant_valeur is not none %}<span class="num">{{ c.montant_valeur|montant }}</span>{% endif %}<span class="nature">{{ _(c.nature) }}</span>
     </div>
   </header>
-  <p class="libelle">{{ c.libelle }}</p>
-  {% if c.raisons %}<ul class="raisons">{% for r in c.raisons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+  <p class="libelle" lang="fr">{{ c.libelle }}</p>
+  {% if c.raisons %}<ul class="raisons" lang="fr">{% for r in c.raisons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
   <dl class="meta">
-    {% if c.composante %}<div><dt>Composante</dt><dd>{{ c.composante }}</dd></div>{% endif %}
-    <div><dt>Tolérance appliquée</dt><dd class="num">{{ c.tolerance or "—" }}</dd></div>
-    <div><dt>Seuil de certitude</dt><dd class="num">{{ c.seuil or "—" }}</dd></div>
-    {% if fondateur %}<div><dt>Validation</dt><dd>{{ badge_validation(c.statut_validation_code, c.statut_validation) }}{% if c.commentaire %} <span class="discret">— {{ c.commentaire }}</span>{% endif %}</dd></div>{% endif %}
+    {% if c.composante %}<div><dt>{{ _("Composante") }}</dt><dd>{{ _(c.composante) }}</dd></div>{% endif %}
+    <div><dt>{{ _("Tolérance appliquée") }}</dt><dd class="num">{{ c.tolerance or "—" }}</dd></div>
+    <div><dt>{{ _("Seuil de certitude") }}</dt><dd class="num">{{ c.seuil or "—" }}</dd></div>
+    {% if fondateur %}<div><dt>{{ _("Validation") }}</dt><dd>{{ badge_validation(c.statut_validation_code, c.statut_validation) }}{% if c.commentaire %} <span class="discret" lang="fr">— {{ c.commentaire }}</span>{% endif %}</dd></div>{% endif %}
   </dl>
-  {% if fondateur and c.bloque %}<p class="alerte-ligne">Libellé bloqué par les garde-fous : {{ c.motif_blocage }}</p>{% endif %}
+  {% if fondateur and c.bloque %}<p class="alerte-ligne">{{ _("Libellé bloqué par les garde-fous :") }} {{ c.motif_blocage }}</p>{% endif %}
   {% if c.preuves %}
   <div class="preuves">
     {% for p in c.preuves %}
     <figure class="preuve">
       <figcaption>
-        <span class="preuve-role">{{ p.role }}</span>
-        <span class="preuve-doc">{{ p.document }}{% if p.page %}, page {{ p.page }}{% endif %}</span>
+        <span class="preuve-role">{{ _(p.role) }}</span>
+        <span class="preuve-doc">{{ p.document }}{% if p.page %}, {{ _("page {n}", n=p.page) }}{% endif %}</span>
       </figcaption>
       {% set img = extraits.get((c.id, p.index)) %}
-      {% if img %}<img src="data:image/png;base64,{{ img|b64 }}" alt="Extrait de la page {{ p.page }} : valeur lue {{ p.valeur_lue or '' }}" loading="lazy">{% endif %}
-      {% if p.valeur_lue %}<div class="valeur-lue"><span>Valeur lue</span> <code>{{ p.valeur_lue }}</code></div>{% endif %}
-      {% if p.calcul %}<div class="calcul"><span>Calcul</span> <code>{{ p.calcul }}</code></div>{% endif %}
+      {% if img %}<img src="data:image/png;base64,{{ img|b64 }}" alt="{{ _("Extrait de la page {n} : valeur lue {v}", n=p.page, v=p.valeur_lue or "") }}" loading="lazy">{% endif %}
+      {% if p.valeur_lue %}<div class="valeur-lue"><span>{{ _("Valeur lue") }}</span> <code>{{ p.valeur_lue }}</code></div>{% endif %}
+      {% if p.calcul %}<div class="calcul"><span>{{ _("Calcul") }}</span> <code>{{ p.calcul }}</code></div>{% endif %}
     </figure>
     {% endfor %}
   </div>
   {% endif %}
-  {% if c.prochaine_action %}<p class="action"><strong>Prochaine action :</strong> {{ c.prochaine_action }}</p>{% endif %}
+  {% if c.prochaine_action %}<p class="action"><strong>{{ _("Prochaine action :") }}</strong> <span lang="fr">{{ c.prochaine_action }}</span></p>{% endif %}
   {% if fondateur and c.statut_validation_code == "propose" and tenant_id %}
   <div class="decisions">
     <form method="post" action="/admin/clients/{{ tenant_id }}/constats/{{ c.id }}/valider" class="decision">
       {{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
-      <button type="submit" class="btn btn-principal">Valider</button>
+      <button type="submit" class="btn btn-principal">{{ _("Valider") }}</button>
     </form>
     <form method="post" action="/admin/clients/{{ tenant_id }}/constats/{{ c.id }}/rejeter" class="decision decision-motif">
       {{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
-      <label class="vh" for="rej-{{ c.id }}">Motif du rejet</label>
-      <input id="rej-{{ c.id }}" name="motif" required maxlength="1000" placeholder="Motif du rejet (obligatoire)">
-      <button type="submit" class="btn">Rejeter</button>
+      <label class="vh" for="rej-{{ c.id }}">{{ _("Motif du rejet") }}</label>
+      <input id="rej-{{ c.id }}" name="motif" required maxlength="1000" placeholder="{{ _("Motif du rejet (obligatoire)") }}">
+      <button type="submit" class="btn">{{ _("Rejeter") }}</button>
     </form>
     {% if c.niveau_code == "ecart_certain" %}
     <form method="post" action="/admin/clients/{{ tenant_id }}/constats/{{ c.id }}/retrograder" class="decision decision-motif">
       {{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
-      <label class="vh" for="ret-{{ c.id }}">Motif de la rétrogradation</label>
-      <input id="ret-{{ c.id }}" name="motif" required maxlength="1000" placeholder="Valeur à confirmer : laquelle ?">
-      <button type="submit" class="btn">Rétrograder en à vérifier</button>
+      <label class="vh" for="ret-{{ c.id }}">{{ _("Motif de la rétrogradation") }}</label>
+      <input id="ret-{{ c.id }}" name="motif" required maxlength="1000" placeholder="{{ _("Valeur à confirmer : laquelle ?") }}">
+      <button type="submit" class="btn">{{ _("Rétrograder en à vérifier") }}</button>
     </form>
     {% else %}
-    <p class="discret note-decision">Pour en faire un écart certain : corriger ou confirmer la valeur douteuse dans le dossier (le contrôle est relancé).</p>
+    <p class="discret note-decision">{{ _("Pour en faire un écart certain : corriger ou confirmer la valeur douteuse dans le dossier (le contrôle est relancé).") }}</p>
     {% endif %}
   </div>
   {% endif %}

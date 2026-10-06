@@ -98,6 +98,27 @@ def _localisation(dec: Document, t: TaxationDeclaration) -> str:
     return f"Au niveau de la déclaration{ref}"
 
 
+def _base_tronquee(ctx: ControlContext, base: ValeurSourcee, v_base: Decimal, v_taux: Decimal, v_montant: Decimal,
+                   nature: TauxNature) -> int | None:
+    """Puissance de dix ``k`` (1 à 6) telle que le montant imprimé soit le produit d'une base dont les chiffres lus
+    sont le début : ``base × 10^k ≤ montant / taux ≤ (base + u) × 10^k``, ``u`` étant l'unité du dernier chiffre lu
+    (à ``u`` près des deux côtés, et à la tolérance de ligne près). Seulement pour une base lue sous
+    ``C_MIN_CERTAIN`` (D-3705). ``None`` sinon."""
+    if base.confiance >= ctx.profil.c_min_certain or v_base <= 0 or v_taux <= 0 or v_montant <= 0:
+        return None
+    unite_lue = Decimal(1).scaleb(v_base.as_tuple().exponent) if isinstance(v_base.as_tuple().exponent, int) else None
+    if unite_lue is None:
+        return None
+    tol = ctx.tol.t_taxe_ligne()
+    for k in range(1, 7):
+        f = Decimal(10) ** k
+        bas = _produit((v_base - unite_lue) * f, v_taux, nature) - tol
+        haut = _produit((v_base + unite_lue) * f, v_taux, nature) + tol
+        if bas <= v_montant <= haut:
+            return k
+    return None
+
+
 def _b1_ligne(ctx: ControlContext, dec: Document, index: int, t: TaxationDeclaration) -> ResultatControle:
     unite = cle_unite(dec=dec.id, tax=index)
     code_taxe = t.type_taxe.valeur if t.type_taxe is not None and t.type_taxe.valeur else "?"
@@ -137,6 +158,13 @@ def _b1_ligne(ctx: ControlContext, dec: Document, index: int, t: TaxationDeclara
     )
     if tol.taxe_ligne_concorde(v_montant, calcul):
         return ctx.conforme("B1", **commun)
+    k = _base_tronquee(ctx, base, v_base, v_taux, v_montant, nature)
+    if k is not None:
+        # D-3705 : base lue sous le seuil dont les chiffres de tête redonnent le montant à une puissance de dix
+        # près (« 30,65 » lu pour 30 651,38) : les décimales perdues interdisent la variante exacte du test de
+        # confusion ; la lecture ne permet pas de conclure.
+        return ctx.non_verifiable("B1", RaisonCode.confiance_insuffisante, **{
+            **commun, "details": {**details, "motif": "base_lue_tronquee", "puissance_de_dix": k}})
 
     # Test de confusion (§8.5.4) sur chacune des trois valeurs imprimées.
     confusion = [

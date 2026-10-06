@@ -112,6 +112,7 @@ LIBELLES_SIGNAL = {
     SignalLien.codes_communs: "codes SH6 communs",
     SignalLien.nom_fichier: "nom de fichier",
     SignalLien.graine: "document de référence du dossier",
+    SignalLien.reference_proche: "référence retrouvée dans le dossier",
 }
 LIBELLES_NON_LU = {
     "ingestion_indisponible": "lecture des fichiers indisponible",

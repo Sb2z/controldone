@@ -238,7 +238,9 @@ class OptionsPipeline:
     - ``seed`` : identifiants reproductibles (banc) ;
     - ``dossier_id_sortie`` : identifiant écrit dans ``findings.json`` (banc : ``BXnnnn``) ;
     - ``memo`` : mémoire des étapes indexée par clé d'idempotence (rejeu sans recalcul) ;
-    - ``controles`` : sous-ensemble de contrôles à exécuter (``None`` = tous).
+    - ``controles`` : sous-ensemble de contrôles à exécuter (``None`` = tous) ;
+    - ``progression`` : rappel facultatif ``(etape, fait, total)`` appelé au fil du traitement (suivi en direct,
+      D-3709) ; ``etape`` parmi ``ETAPES_PROGRESSION``. Une erreur du rappel n'interrompt jamais le traitement.
     """
 
     seed: int | None = None
@@ -251,6 +253,22 @@ class OptionsPipeline:
     memo: dict[str, Any] | None = None
     racine: Path | None = None
     plafond_ia_dossier_eur: Decimal = Decimal("0.50")
+    progression: Callable[[str, int, int], None] | None = field(default=None, repr=False, compare=False)
+
+
+#: Étapes signalées par ``OptionsPipeline.progression`` (D-3709), dans l'ordre : fichiers lus (pages, découpage),
+#: documents classés, documents extraits, regroupement en dossiers, dossiers contrôlés.
+ETAPES_PROGRESSION = ("pages", "classement", "extraction", "regroupement", "controles")
+
+
+def _progresser(options: OptionsPipeline | None, etape: str, fait: int, total: int) -> None:
+    rappel = options.progression if options is not None else None
+    if rappel is None:
+        return
+    try:
+        rappel(etape, fait, total)
+    except Exception:  # suivi d'affichage seulement
+        log.warning("progression_en_erreur etape=%s", etape)
 
 
 @dataclass
@@ -518,7 +536,8 @@ def _preparer_lot(
             precharger(sources, pages_paralleles())
         except Exception as e:
             log.warning("prechargement_pages_en_erreur exception=%s", type(e).__name__)
-    for s in sources:
+    for i_source, s in enumerate(sources):
+        _progresser(options, "pages", i_source, len(sources))
         if comp.decoupeur is None:
             non_lus.append(NonLu(fichier=s.fichier.chemin_relatif, motif="ingestion_indisponible"))
             continue
@@ -543,6 +562,9 @@ def _preparer_lot(
                 d = d.model_copy(update={"identite": _identite(d, s.fichier, len(r.documents))})
             documents.append(d)
 
+    _progresser(options, "pages", len(sources), len(sources))
+    _progresser(options, "classement", len(documents), len(documents))
+
     # 4-5. extraction (+ normalisation intégrée à la construction des valeurs)
     contenus = {s.fichier.id: s for s in sources}
     cost_guard = None
@@ -555,10 +577,14 @@ def _preparer_lot(
     versions: dict[str, str] = {}
     partielle = False
     extraits: list[Document] = []
+    a_extraire = sum(1 for d in documents if d.type in TYPES_EXTRAITS and d.champs is None and extracteurs)
+    n_extraits = 0
     for d in documents:
         if d.type not in TYPES_EXTRAITS or d.champs is not None or not extracteurs:
             extraits.append(d)
             continue
+        _progresser(options, "extraction", n_extraits, a_extraire)
+        n_extraits += 1
         fid = d.pages[0].fichier_id if d.pages else None
         src = contenus.get(fid) if fid else None
         pages_doc = [p for p in pages.get(fid or "", []) if any(pr.numero == p.numero for pr in d.pages)]
@@ -576,6 +602,7 @@ def _preparer_lot(
         avertissements.extend(av)
         extraits.append(nouveau)
     documents = extraits
+    _progresser(options, "extraction", a_extraire, a_extraire)
     if comp.normaliseur is not None:
         try:
             documents = list(comp.normaliseur(documents))
@@ -593,6 +620,7 @@ def _preparer_lot(
                                  document_id=d.id, pages=[p.numero for p in d.pages]))
 
     # 6. regroupement
+    _progresser(options, "regroupement", 0, 1)
     courriels = {s.fichier.id: s.courriel for s in sources if s.courriel}
     try:
         reg = regrouper(
@@ -613,6 +641,7 @@ def _preparer_lot(
         dossiers = []
         non_lus.append(NonLu(fichier="*", motif=f"regroupement_en_erreur:{type(e).__name__}"))
     cles["regroupement"] = [cle_idempotence_regroupement(d.document_ids()) for d in dossiers]
+    _progresser(options, "regroupement", 1, 1)
     cles["version_regroupement"] = VERSION_REGROUPEMENT
     return LotPrepare(
         lot=lot, profil=profil, grilles=grilles, fichiers=fichiers, chemins=chemins, pages=pages,
@@ -741,7 +770,8 @@ def controler_lot(
     )
     sortie: list[ResultatDossier] = []
     pour_sortie: list[tuple[Dossier, list[ResultatControle], dict[str, Any]]] = []
-    for dossier in prepare.dossiers:
+    for i_dossier, dossier in enumerate(prepare.dossiers):
+        _progresser(options, "controles", i_dossier, len(prepare.dossiers))
         autres = [a for a in [*autres_dossiers, *freres] if a.dossier.id != dossier.id]
         docs = [prepare.documents[i] for i in dossier.document_ids() if i in prepare.documents]
         cles = {"controles": cle_controles(dossier.id, dossier.version, empreinte, contexte)}
@@ -766,6 +796,7 @@ def controler_lot(
             resultats = [_resultat_erreur_interne(dossier, execution.id, e)]
         resultats, cles["redaction"] = _rediger(resultats)
         pour_sortie.append((dossier, resultats, cles))
+    _progresser(options, "controles", len(prepare.dossiers), len(prepare.dossiers))
     duree = prepare.duree_s + (time.perf_counter() - debut)
     execution = execution.model_copy(update={"termine_le": horodatage(), "duree_s": round(duree, 3)})
     for dossier, resultats, cles in pour_sortie:
@@ -807,4 +838,4 @@ def traiter_lot(
     return controler_lot(prepare, autres_dossiers=autres_dossiers, options=options)
 
 
-__all__ += ["autres_dossiers_de"]
+__all__ += ["ETAPES_PROGRESSION", "autres_dossiers_de"]

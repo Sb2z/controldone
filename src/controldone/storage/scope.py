@@ -21,7 +21,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from sqlalchemy import Numeric, case, cast, func, select
+from sqlalchemy import Numeric, case, cast, false, func, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -158,6 +158,13 @@ class TenantScope:
         if modele is Constat and not peut(self.actor, Action.lire_constats_proposes, self._ressource()):
             q = q.where(Constat.statut_validation == "valide")
         return q
+
+    def requete(self, modele: type[M]) -> Any:
+        """``SELECT`` cloisonné de ``modele`` (même périmètre que ``lister`` : ce client, constats publiés seuls
+        pour un rôle client), à compléter par l'appelant (filtres en paramètres liés, colonnes, tri, limite) —
+        listes filtrées en SQL de l'interface (D-3801)."""
+        self.exiger(Action.lire)
+        return self._requete(modele)
 
     # --- API générique -----------------------------------------------------------------------------
     def obtenir(self, modele: type[M], id: Any) -> M:
@@ -805,6 +812,93 @@ class OperatorScope:
             return (0 if c.niveau == "ecart_certain" else 1, -(c.montant_en_jeu or Decimal(0)))
 
         return sorted(constats, key=priorite)  # tri exact en Decimal (stable)
+
+    def rechercher_file_validation(self, *, clients: Sequence[str], client: str | None = None,
+                                   controle: str | None = None, niveau: str | None = None,
+                                   mini: Decimal | None = None, maxi: Decimal | None = None, tri: str = "priorite",
+                                   decalage: int = 0, limite: int = 25,
+                                   auditer: bool = True) -> tuple[list[Constat], int, int]:
+        """Page filtrée de la file de validation (D-3801) : ``(constats, total filtré, total de la file)``.
+
+        Filtres et tri **en SQL** (paramètres liés), sur les constats ``propose`` de la version courante des
+        clients ``clients`` (actifs). ``niveau`` : ``ecart_certain`` / ``a_verifier`` (hors renvois) ou
+        ``renvoi``. ``mini`` / ``maxi`` : montant en jeu chiffré (nature autre que ``renvoi`` / ``aucun``).
+        Tri ``priorite`` (§7.7 : renvois en dernier, écarts certains, à vérifier, montant décroissant,
+        contrôle), ``montant`` / ``-montant`` (sans montant en dernier) ou ``client`` (raison sociale, dossier).
+        Les montants, stockés en texte exact, sont comparés et triés par ``CAST … AS NUMERIC`` ; les bornes sont
+        passées en texte et converties par la base (aucun flottant côté Python)."""
+        if auditer:
+            self._audit_immediat("lire_file_validation", None, "constats")
+        renvoi = func.coalesce(Constat.contenu["renvoi"].as_boolean(), False)
+        nature = func.coalesce(func.nullif(Constat.contenu["nature_montant"].as_string(), ""),
+                               func.nullif(Constat.nature_montant, ""), "aucun")
+        chiffre = Constat.montant_en_jeu.is_not(None) & nature.not_in(("renvoi", "aucun"))
+        montant = cast(Constat.montant_en_jeu, Numeric)
+        valeur = case((chiffre, montant), else_=None)
+        base = self._proposes_courants().where(Constat.tenant_id.in_(list(clients)))
+        total_file = int(self.session.execute(
+            base.with_only_columns(func.count()).order_by(None)).scalar() or 0)
+        q = base
+        if client:
+            q = q.where(Constat.tenant_id == client)
+        if controle:
+            q = q.where(Constat.controle_id == controle)
+        if niveau == "renvoi":
+            q = q.where(renvoi == true())
+        elif niveau:
+            q = q.where((Constat.niveau == niveau) & (renvoi == false()))
+        if mini is not None:
+            q = q.where(chiffre & (montant >= cast(str(mini), Numeric)))
+        if maxi is not None:
+            q = q.where(chiffre & (montant <= cast(str(maxi), Numeric)))
+        total = int(self.session.execute(
+            select(func.count()).select_from(q.order_by(None).subquery())).scalar() or 0)
+        rang = case((Constat.niveau == "ecart_certain", 0), (Constat.niveau == "a_verifier", 1), else_=2)
+        # même ordre que ``services.lecture.trier_constats`` appliqué à ``file_validation`` (ordre stable)
+        priorite = [renvoi, rang, func.coalesce(valeur, 0).desc(), Constat.controle_id,
+                    func.coalesce(montant, 0).desc(), Constat.id]
+        if tri in ("montant", "-montant"):
+            ordre = [valeur.is_(None), valeur.desc() if tri == "-montant" else valeur.asc(), *priorite]
+        elif tri == "client":
+            q = q.join(Tenant, Tenant.id == Constat.tenant_id)
+            ordre = [func.lower(Tenant.raison_sociale), func.coalesce(Dossier.reference, Dossier.id), *priorite]
+        else:
+            ordre = priorite
+        constats = list(self.session.execute(q.order_by(*ordre).offset(decalage).limit(limite)).scalars())
+        return constats, total, total_file
+
+    def points_attention(self, clients: Sequence[str], *, limite: int = 200,
+                         auditer: bool = True) -> tuple[list[dict[str, Any]], int]:
+        """Points d'attention de la file de validation (D-3801) : documents non reconnus rattachés à un dossier
+        et rattachements faibles, pour les clients ``clients``. Lecture **en colonnes** (référence, liste
+        ``liens`` extraite du JSON en SQL), sans valider chaque dossier ; au plus ``limite`` lignes, plus le
+        total. ``detail`` : identifiant du document (libellé calculé par l'appelant)."""
+        if auditer:
+            self._audit_immediat("lire_points_attention", None, "dossiers")
+        ids = list(clients)
+        sortie: list[dict[str, Any]] = []
+        total = 0
+        q = (select(Dossier.tenant_id, Dossier.id, Dossier.reference, Dossier.contenu["liens"])
+             .where(Dossier.tenant_id.in_(ids)).order_by(Dossier.tenant_id, Dossier.reference, Dossier.id))
+        for tenant_id, dossier_id, reference, liens in self.session.execute(q):
+            for lien in liens or []:
+                if isinstance(lien, dict) and lien.get("force") == "faible":
+                    total += 1
+                    if len(sortie) < limite:
+                        sortie.append({"type": "faible", "tenant_id": tenant_id, "dossier_id": dossier_id,
+                                       "dossier": reference or dossier_id,
+                                       "document_id": str(lien.get("document_id") or "")})
+        d = (select(Document.tenant_id, Document.dossier_id, Document.id, Dossier.reference)
+             .join(Dossier, (Dossier.id == Document.dossier_id) & (Dossier.tenant_id == Document.tenant_id),
+                   isouter=True)
+             .where(Document.tenant_id.in_(ids), Document.type == "inconnu", Document.dossier_id.is_not(None))
+             .order_by(Document.tenant_id, Document.id))
+        for tenant_id, dossier_id, document_id, reference in self.session.execute(d):
+            total += 1
+            if len(sortie) < limite:
+                sortie.append({"type": "inconnu", "tenant_id": tenant_id, "dossier_id": dossier_id,
+                               "dossier": reference or dossier_id, "document_id": document_id})
+        return sortie, total
 
     def compter_proposes(self) -> int:
         q = self._proposes_courants().with_only_columns(func.count()).order_by(None)

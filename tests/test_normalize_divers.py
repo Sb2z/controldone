@@ -265,3 +265,19 @@ def test_cle_emetteur_reconnait_le_nom_complet():
     ts = [Transitaire(id="tra_1", nom="Transit FICTIF", tva="FR11000555550")]
     p = Partie(nom=vs("avoir.emetteur.nom", "TRANSIT FICTIF SAS", document_id="d"))
     assert cle_emetteur(p, ts) == "tra_1"
+
+
+def test_references_proches_d3702():
+    from controldone.normalize.refs import distance_bornee, mrn_proches, ref_transport_proches
+
+    assert distance_bornee("ABCD", "ABXD", 2) == 1 and distance_bornee("AAAA", "BBBB", 2) == 3
+    # MRN fictifs : une lecture OCR (pays, 5/S) reste proche ; un autre envoi ne l'est pas
+    assert mrn_proches("26FA32BIVU7IEWGFWW", "26FR32BIVU7IEWGFWW")
+    assert mrn_proches("26FRGKICHEPGSTEFAS", "26FRGK3CHEPG9T5FA4")
+    assert not mrn_proches("26FRNQAXEOLD2XTWZ0", "26FRG9YL3TE5MNH5W6")
+    assert not mrn_proches("26FR32BIVU7", "26FR32BIVU7")  # trop court
+    assert ref_transport_proches("DEM0828978588", "DEMO028970508")
+    assert ref_transport_proches("DEMO 6091 / 37653", "DEMO609137653")
+    assert not ref_transport_proches("DEMO087829269", "DEMO609137653")
+    assert not ref_transport_proches("FICU126999737", "FICU705793239")
+    assert not ref_transport_proches("ABC123", "ABC124")  # trop court pour une lecture approchée

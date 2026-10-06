@@ -8,6 +8,8 @@
     controldone debit lister | effacer (--email E | --ip A | --cle-api P | --tout) [--motif "…"]
     controldone reinitialiser-mot-de-passe --email <adresse> [--mot-de-passe-stdin]
     controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice …
+    controldone migrer [--etat] [--sans-sauvegarde]
+    controldone alertes notifier | essai | etat
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
 documents est une frontière de regroupement naturelle) et écrit ``report.html``, ``report.pdf``,
@@ -72,7 +74,6 @@ def _serve(args: argparse.Namespace) -> int:
     from controldone.config import get_settings
     from controldone.services.plateforme import Plateforme
     from controldone.web import ParametresWeb, create_app
-
     from controldone.web.securite import ModeIncoherent, verifier_mode_service
 
     try:  # mode dev oublié en production (RS-16, D-3601)
@@ -84,8 +85,8 @@ def _serve(args: argparse.Namespace) -> int:
     # tmpfs /tmp en mémoire (D-1305) : ``CONTROLDONE_TMP_DIR``, défaut ``<data_dir>/tmp``.
     get_settings().appliquer_repertoire_temporaire()
     plateforme = Plateforme.depuis_env()
-    if args.init_schema:
-        plateforme.db.creer_schema()
+    if args.init_schema:  # tables d'une base neuve ; migrations d'une base existante : ci-dessous (D-3503)
+        plateforme.db.creer_schema(migrer=False)
     from controldone.storage import SchemaPerime
 
     try:  # colonnes ajoutées par une version plus récente sans migration : arrêt explicite (D-1322)
@@ -185,6 +186,76 @@ def _sauvegarde(args: argparse.Namespace) -> int:
     return sauvegarde(reste)
 
 
+def _migrer(args: argparse.Namespace) -> int:
+    """Migrations de schéma (D-3503) : sauvegarde d'abord (par défaut), puis étapes en attente."""
+    from controldone.storage.db import Database
+
+    db = Database()
+    try:
+        attente = db.migrations_en_attente()
+        neuve = _base_neuve(db)
+        print(f"base : {db.engine.url.render_as_string(hide_password=True)}")
+        print("migrations en attente : " + (", ".join(f"{m.version:04d} {m.nom}" for m in attente) or "aucune"))
+        if args.etat or (not attente and not neuve):
+            return 0
+        if attente and not neuve and not args.sans_sauvegarde:
+            from controldone.storage.sauvegarde import main as sauvegarde
+
+            print("sauvegarde avant migration…", flush=True)
+            destination = env("BACKUP_DIR")  # conteneur scheduler : /backups ; sinon <data_dir>/sauvegardes
+            code = sauvegarde(["sauvegarder", "--sans-rotation", *(["--destination", destination] if destination else [])])
+            if code != 0:
+                print(f"sauvegarde en échec (code {code}) : migration abandonnée (--sans-sauvegarde pour passer "
+                      "outre, après une sauvegarde faite autrement)", file=sys.stderr)
+                return 1
+        db.creer_schema(migrer=False)  # tables manquantes ; base neuve : migrations inscrites
+        db.migrer(journal=print)
+        manquantes = db.colonnes_manquantes()
+        if manquantes:
+            print("colonnes encore manquantes : " + ", ".join(manquantes[:20]), file=sys.stderr)
+            return 3
+        print("schéma à jour.")
+        return 0
+    finally:
+        db.fermer()
+
+
+def _base_neuve(db: object) -> bool:
+    from controldone.storage.migrations import base_neuve
+
+    return base_neuve(db.engine)  # type: ignore[attr-defined]
+
+
+def _alertes(args: argparse.Namespace) -> int:
+    """Notifications poussées des alertes (D-3502) : rien ne part hors production ni sans configuration."""
+    from controldone.services.notifications import ConfigNotifications, envoyer_essai, notifier_alertes
+
+    config = ConfigNotifications.depuis_env()
+    for e in config.erreurs:
+        print(f"configuration ignorée — {e}", file=sys.stderr)
+    if args.action == "etat":
+        print("notifications : " + ("actives" if config.actif else f"inactives ({config.motif_inactif()})"))
+        for c in config.canaux:
+            print(f"  canal : {c.nom}")  # jamais l'URL ni le mot de passe
+        return 0
+    if args.action == "essai":
+        if not config.actif:
+            print(f"notifications inactives : {config.motif_inactif()}", file=sys.stderr)
+            return 2
+        reussis, rates = envoyer_essai(config)
+        print(f"essai envoyé : {', '.join(reussis) or 'aucun'} ; en échec : {', '.join(rates) or 'aucun'}")
+        return 0 if not rates else 1
+    from controldone.storage.db import Database
+
+    db = Database()
+    try:
+        rapport = notifier_alertes(db, config)
+    finally:
+        db.fermer()
+    print("\n".join(rapport.lignes()))
+    return 1 if rapport.echecs else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="controldone", description="ControlDOne — contrôle technique de cohérence "
                                  "des documents d'import.")
@@ -239,6 +310,16 @@ def main(argv: list[str] | None = None) -> int:
                          help="sauvegarder | verifier | restaurer | controler | rotation | alerter | exercice")
     sg.add_argument("arguments", nargs=argparse.REMAINDER)
     sg.set_defaults(fn=_sauvegarde)
+
+    mg = sous.add_parser("migrer", help="migrations de schéma (sauvegarde préalable par défaut)")
+    mg.add_argument("--etat", action="store_true", help="afficher les migrations en attente sans rien faire")
+    mg.add_argument("--sans-sauvegarde", dest="sans_sauvegarde", action="store_true",
+                    help="ne pas sauvegarder avant (sauvegarde déjà faite autrement)")
+    mg.set_defaults(fn=_migrer)
+
+    al = sous.add_parser("alertes", help="notifications poussées des alertes : notifier | essai | etat")
+    al.add_argument("action", choices=["notifier", "essai", "etat"])
+    al.set_defaults(fn=_alertes)
 
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbeux else logging.ERROR, format="%(levelname)s %(message)s")

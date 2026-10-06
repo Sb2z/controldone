@@ -5,7 +5,8 @@
   Impact : un passage à PostgreSQL laisserait la production sans sauvegarde ni vérification ni exercice. Proposition :
   `pg_dump -Fc` envoyé dans le même flux chiffré `CDSAV2` (entrée `base/controldone.dump`), manifeste avec les
   lignes par table lues dans la base, restauration par `pg_restore` dans une base vide, exercice sur un PostgreSQL
-  jetable. À faire (avant tout passage à PostgreSQL).
+  jetable. **Fait (D-3501)** : `make restauration-test-pg` conforme sur PostgreSQL 16 ; reste l'image Docker
+  (`docs/backlog/production.md`).
 
 - **Compression gzip niveau 9 sur un coffre déjà chiffré.** Constat : `sauvegarder` ouvre le tar en `w|gz` (niveau
   9 par défaut) ; le coffre est chiffré donc incompressible. Mesure (poste de développement, coffre de 200 Mo) :
@@ -18,13 +19,14 @@
   `sauvegarde_absente`, `sauvegarde_hors_site_echec` s'affichent sous leur nom technique. Impact : lisibilité.
   Proposition : ajouter les libellés (« Sauvegarde en échec », « Sauvegarde non conforme », « Aucune sauvegarde
   récente », « Copie hors site en échec ») et un bandeau sur `/admin` tant qu'une alerte de sauvegarde n'est pas
-  lue. À faire (bloc interface).
+  lue. **Libellés faits (D-3505)** ; bandeau à faire (bloc interface).
 
 - **Alertes non poussées.** Constat : les alertes fondateur (`storage/alertes.py`) ne sont visibles qu'en se
   connectant à `/admin` ; aucun courriel n'existe dans le code. Impact : une sauvegarde en panne peut rester
   inaperçue plusieurs jours si `BACKUP_PING_URL` n'est pas configuré (RPO non borné). Proposition : configurer la
   sonde externe à l'ouverture (liste de contrôle de `docs/DEPLOIEMENT.md` § 15) ; à terme, une notification par
-  courriel des alertes critiques. À faire (décision du fondateur sur le prestataire de courriel).
+  courriel des alertes critiques. **Fait (D-3502)** : webhook et courriel, désactivés tant que non configurés ;
+  reste le choix du prestataire (décision du fondateur) et la configuration à l'ouverture.
 
 - **RPO de 24 h.** Constat : une seule sauvegarde par jour (`SCHED_BACKUP_HHMM`). Impact : jusqu'à une journée de
   dépôts et de décisions perdue si le volume est perdu. Proposition : deux sauvegardes par jour (coût : quelques
@@ -55,4 +57,5 @@
   la purge (D-3306), mais une purge mise en file à la main pendant la copie peut retirer un objet que l'instantané
   référence. Impact : objet manquant dans l'archive, signalé par le contrôle approfondi (« contenu référencé
   absent »), sans conséquence pour un contenu de toute façon expiré. Proposition : verrou consultatif partagé
-  sauvegarde/purge dans `var/`. Fait pour le cas planifié ; à faire pour le cas manuel.
+  sauvegarde/purge dans `var/`. **Fait (D-3306 pour le cas planifié, D-3504 pour le cas manuel)** : verrou
+  `flock` partagé par sauvegarde, purge et restauration ; purge reportée de 10 minutes.

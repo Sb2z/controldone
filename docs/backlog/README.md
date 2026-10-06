@@ -11,3 +11,5 @@ impact, proposition, et « fait » ou « à faire ». L'orchestrateur consolide 
 | `sauvegardes.md` | sauvegarde et restauration |
 | `interface.md` | recherche, filtres, pagination, suivi en direct |
 | `orchestrateur.md` | constats transverses |
+| `outillage.md` | vérifications avant enregistrement, couverture, tests de propriétés, corpus non versionnés |
+| `production.md` | fiabilité de la production : PostgreSQL, alertes poussées, migrations, verrou de maintenance |

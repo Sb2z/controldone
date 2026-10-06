@@ -3,12 +3,12 @@
    <noscript> : ignorée quand le script interroge le point de suivi). #}
 {% block meta %}{% if rafraichir %}<noscript><meta http-equiv="refresh" content="5"></noscript>{% endif %}{% endblock %}
 {% block contenu %}
-<nav class="fil" aria-label="Fil d'Ariane"><a href="/espace/depot">Dépôts</a> › <span>{{ lot.recu_le|date }}</span></nav>
-<div class="titre-page"><h1>Dépôt du {{ lot.recu_le|date }}</h1>
-<p>{{ lot.statut_libelle }}</p></div>
+<nav class="fil" aria-label="{{ _("Fil d'Ariane") }}"><a href="/espace/depot">{{ _("Dépôts") }}</a> › <span>{{ lot.recu_le|date }}</span></nav>
+<div class="titre-page"><h1>{{ _("Dépôt du {date}", date=lot.recu_le|date) }}</h1>
+<p>{{ _(lot.statut_libelle) }}</p></div>
 
 <section class="carte suivi-carte" aria-labelledby="t-suivi">
-  <div class="carte-tete"><h2 id="t-suivi">Traitement</h2>{% if not suivi.fini %}<a class="petit-lien" href="/espace/lots/{{ lot.id }}" data-rafraichir>Rafraîchir</a>{% endif %}</div>
+  <div class="carte-tete"><h2 id="t-suivi">{{ _("Traitement") }}</h2>{% if not suivi.fini %}<a class="petit-lien" href="/espace/lots/{{ lot.id }}" data-rafraichir>{{ _("Rafraîchir") }}</a>{% endif %}</div>
   <div class="suivi{% if suivi.erreur %} suivi-erreur{% endif %}{% if suivi.fini and not suivi.erreur %} suivi-fini{% endif %}" data-suivi="/espace/lots/{{ lot.id }}/etat" data-suivi-fini="{{ 'oui' if suivi.fini else 'non' }}">
     <div class="suivi-barre" aria-hidden="true"><span class="w-{{ suivi.pourcentage }}" data-suivi-barre></span></div>
     <ol class="suivi-etapes">
@@ -16,30 +16,28 @@
       {% set rang = loop.index0 %}
       <li data-etape="{{ code }}" class="{{ 'fait' if rang < suivi.rang or (suivi.fini and not suivi.erreur) else ('en-cours' if rang == suivi.rang else 'a-venir') }}{% if suivi.erreur and rang == suivi.rang %} erreur{% endif %}"{% if rang == suivi.rang and not suivi.fini %} aria-current="step"{% endif %}>
         <span class="suivi-puce" aria-hidden="true"></span>
-        <span class="suivi-lib">{% if suivi.erreur and rang == suivi.rang %}Erreur{% else %}{{ lib }}{% endif %}</span>
+        <span class="suivi-lib">{% if suivi.erreur and rang == suivi.rang %}{{ _("Erreur") }}{% else %}{{ _(lib) }}{% endif %}</span>
       </li>
       {% endfor %}
     </ol>
     <p class="suivi-texte" role="status" aria-live="polite" data-suivi-texte>
-      {%- if suivi.erreur %}Traitement en erreur. {{ suivi.detail }}
-      {%- elif suivi.fini %}Traitement terminé.
-      {%- else %}Étape en cours : {{ suivi.libelle|lower }}.{% if suivi.detail %} {{ suivi.detail }}{% endif %} <span class="discret">Cette page se met à jour toute seule.</span>{% endif -%}
+      {{- suivi.texte }}{% if not suivi.fini %} <span class="discret">{{ _("Cette page se met à jour toute seule.") }}</span>{% endif -%}
     </p>
   </div>
 </section>
 
 {% if lot.dossiers %}
-<section class="carte"><h2>Dossiers produits</h2>
+<section class="carte"><h2>{{ _("Dossiers produits") }}</h2>
 <ul class="liste-simple">{% for d in lot.dossiers %}<li><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></li>{% endfor %}</ul>
-<p class="discret">Les constats apparaissent après validation par le fondateur.</p></section>
+<p class="discret">{{ _("Les constats apparaissent après validation par le fondateur.") }}</p></section>
 {% endif %}
-<section class="carte"><h2>Fichiers</h2>
+<section class="carte"><h2>{{ _("Fichiers") }}</h2>
 <div class="defilement">
-<table class="donnees compacte"><thead><tr><th scope="col">Fichier</th><th scope="col">Type</th><th scope="col" class="num">Taille</th><th scope="col">État</th></tr></thead><tbody>
+<table class="donnees compacte"><thead><tr><th scope="col">{{ _("Fichier") }}</th><th scope="col">{{ _("Type") }}</th><th scope="col" class="num">{{ _("Taille") }}</th><th scope="col">{{ _("État") }}</th></tr></thead><tbody>
 {% for f in lot.fichiers %}
 <tr><td>{{ f.chemin }}</td><td><code>{{ f.type }}</code></td><td class="num">{{ f.taille|taille }}</td>
-<td>{% if f.statut == "refuse" %}<span class="badge b-rejete">Refusé</span> {{ {"protege": "protégé par mot de passe", "corrompu": "corrompu ou illisible", "vide": "vide", "non_supporte": "type non pris en charge", "trop_gros": "trop volumineux", "archive_dangereuse": "archive dangereuse"}.get(f.motif, f.motif) }}{% elif f.doublon %}<span class="badge b-neutre">Déjà reçu</span>{% else %}<span class="badge b-valide">Reçu</span>{% endif %}</td></tr>
-{% else %}<tr><td colspan="4" class="vide">Aucun fichier.</td></tr>
+<td>{% if f.statut == "refuse" %}<span class="badge b-rejete">{{ _("Refusé") }}</span> {{ {"protege": _("protégé par mot de passe"), "corrompu": _("corrompu ou illisible"), "vide": _("vide"), "non_supporte": _("type non pris en charge"), "trop_gros": _("trop volumineux"), "archive_dangereuse": _("archive dangereuse")}.get(f.motif, f.motif) }}{% elif f.doublon %}<span class="badge b-neutre">{{ _("Déjà reçu") }}</span>{% else %}<span class="badge b-valide">{{ _("Reçu") }}</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="vide">{{ _("Aucun fichier.") }}</td></tr>
 {% endfor %}
 </tbody></table>
 </div>

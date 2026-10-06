@@ -44,17 +44,17 @@ from controldone.auth.roles import Acteur, Role
 
 __all__ = [
     "CHEMIN_RAPPORT_CSP",
-    "ModeIncoherent",
-    "hotes_autorises",
-    "url_publique",
-    "verifier_mode_service",
     "CSP",
     "PERMISSIONS_POLICY",
     "CsrfInvalide",
     "EnTetesSecurite",
     "EtatSecurite",
     "LimiteCorps",
+    "ModeIncoherent",
     "NonConnecte",
+    "hotes_autorises",
+    "url_publique",
+    "verifier_mode_service",
 ]
 
 log = logging.getLogger("controldone.web.securite")

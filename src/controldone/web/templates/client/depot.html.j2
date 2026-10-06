@@ -1,36 +1,36 @@
 {% extends "base.html.j2" %}
 {% from "macros.html.j2" import badge_suivi %}
 {% block contenu %}
-<div class="titre-page"><h1>Déposer des documents</h1>
-<p class="discret">Factures commerciales, déclarations en douane (PDF, XML, CSV), factures du transitaire et avoirs. Rangez chaque envoi dans son propre dossier ou archive ZIP : l'arborescence est conservée et aide au regroupement.</p></div>
+<div class="titre-page"><h1>{{ _("Déposer des documents") }}</h1>
+<p class="discret">{{ _("Factures commerciales, déclarations en douane (PDF, XML, CSV), factures du transitaire et avoirs. Rangez chaque envoi dans son propre dossier ou archive ZIP : l'arborescence est conservée et aide au regroupement.") }}</p></div>
 <div class="grille-2 grille-large-etroite">
 <section class="carte">
   {% if peut_deposer %}
   <form method="post" action="/espace/depot" enctype="multipart/form-data" class="formulaire depot" data-depot>
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label for="fichiers" class="vh">Fichiers ou archives ZIP</label>
+    <label for="fichiers" class="vh">{{ _("Fichiers ou archives ZIP") }}</label>
     <div class="zone-depot">
       <svg class="ico-depot" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.5V4.5M12 4.5l-4 4M12 4.5l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 14.5v3a2 2 0 002 2h11a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-      <strong>Glissez vos fichiers ici</strong>
-      <span>ou cliquez pour choisir — PDF, scans, XML, CSV, XLSX, e-mails ou archives ZIP</span>
+      <strong>{{ _("Glissez vos fichiers ici") }}</strong>
+      <span>{{ _("ou cliquez pour choisir — PDF, scans, XML, CSV, XLSX, e-mails ou archives ZIP") }}</span>
       <input id="fichiers" name="fichiers" type="file" multiple required accept=".pdf,.zip,.xml,.csv,.xlsx,.png,.jpg,.jpeg,.tif,.tiff,.eml">
     </div>
     <ul class="liste-fichiers" aria-hidden="true"></ul>
     <p class="discret" data-resume aria-live="polite"></p>
-    <button type="submit" class="btn btn-principal">Envoyer</button>
+    <button type="submit" class="btn btn-principal">{{ _("Envoyer") }}</button>
   </form>
-  {% else %}<p>Votre compte est en lecture seule : le dépôt est réservé aux administrateurs de votre société.</p>{% endif %}
-  <h2>Limites</h2>
+  {% else %}<p>{{ _("Votre compte est en lecture seule : le dépôt est réservé aux administrateurs de votre société.") }}</p>{% endif %}
+  <h2>{{ _("Limites") }}</h2>
   <ul class="liste-simple">
-    <li>{{ (limites.taille_fichier // 1048576) }} Mo par fichier, {{ (limites.taille_lot // 1048576) }} Mo par dépôt, {{ limites.pages_fichier }} pages par fichier.</li>
-    <li>Archives : {{ limites.zip_entrees }} fichiers au plus, {{ limites.zip_profondeur }} niveaux d'archives imbriquées ; chemins absolus, « .. », liens symboliques et archives anormalement compressées refusés.</li>
-    <li>Les documents sont chiffrés au repos et traités comme des données : aucun texte qu'ils contiennent n'est exécuté.</li>
+    <li>{{ _("{a} Mo par fichier, {b} Mo par dépôt, {c} pages par fichier.", a=limites.taille_fichier // 1048576, b=limites.taille_lot // 1048576, c=limites.pages_fichier) }}</li>
+    <li>{{ _("Archives : {n} fichiers au plus, {p} niveaux d'archives imbriquées ; chemins absolus, « .. », liens symboliques et archives anormalement compressées refusés.", n=limites.zip_entrees, p=limites.zip_profondeur) }}</li>
+    <li>{{ _("Les documents sont chiffrés au repos et traités comme des données : aucun texte qu'ils contiennent n'est exécuté.") }}</li>
   </ul>
 </section>
 <section class="carte">
-  <h2>Dépôts récents</h2>
-  {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}<br><span class="discret">{{ l.resume.get("fichiers", 0) }} fichier(s){% if l.resume.get("refuses") %}, {{ l.resume.get("refuses") }} refusé(s){% endif %}</span></li>{% endfor %}</ul>
-  {% else %}<p class="vide">Aucun dépôt.</p>{% endif %}
+  <h2>{{ _("Dépôts récents") }}</h2>
+  {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}<br><span class="discret">{{ _("{n} fichier(s)", n=l.resume.get("fichiers", 0)) }}{% if l.resume.get("refuses") %}, {{ _("{n} refusé(s)", n=l.resume.get("refuses")) }}{% endif %}</span></li>{% endfor %}</ul>
+  {% else %}<p class="vide">{{ _("Aucun dépôt.") }}</p>{% endif %}
 </section>
 </div>
 {% endblock %}

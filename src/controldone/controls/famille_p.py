@@ -104,6 +104,7 @@ _SIGNAUX = {
     "codes_communs": "codes marchandise communs",
     "nom_fichier": "nom de fichier",
     "graine": "document graine",
+    "reference_proche": "référence retrouvée dans le dossier",
 }
 
 

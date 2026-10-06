@@ -227,7 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     db = Database()
     if args.init_schema:
-        db.creer_schema()
+        db.creer_schema(migrer=False)  # migrations : exiger_schema_a_jour (D-3503)
     from controldone.storage.db import SchemaPerime
 
     try:  # D-1322 : jamais d'erreur « no such column » en cours de job

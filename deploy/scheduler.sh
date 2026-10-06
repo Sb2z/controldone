@@ -3,6 +3,8 @@
 #
 #   toutes les 5 min    python -m controldone.connecteurs.releve        (dossier surveillé, IMAP, PA)
 #   toutes les 15 min   python -m controldone.agents.planificateur      (met en file les jobs d'agents)
+#   toutes les 5 min    controldone alertes notifier                     (notifications poussées, D-3502 :
+#                       sans effet si aucun canal n'est configuré ; une par type d'alerte et par jour)
 #   chaque jour         sauvegarde chiffrée vérifiée (deploy/backup-cron.sh), puis mise en file de purger_retention
 #   chaque mois         mise en file de referentiel_recalculer, à partir du 2 (clé d'idempotence mensuelle :
 #                       rattrapé si le conteneur était arrêté le 2, jamais deux fois dans le mois)
@@ -45,6 +47,7 @@ while [ "$arret" -eq 0 ]; do
   if [ "$cle5" != "$dernier_releve" ]; then
     dernier_releve="$cle5"
     tache releve "$PY" -m controldone.connecteurs.releve
+    tache notifications "$PY" -m controldone.cli alertes notifier
   fi
   if [ "$cle15" != "$dernier_plan" ]; then
     dernier_plan="$cle15"
@@ -53,8 +56,10 @@ while [ "$arret" -eq 0 ]; do
   if [[ "$jour" != "$dernier_jour" && ! "$hhmm" < "$BACKUP_HHMM" ]]; then
     dernier_jour="$jour"
     # sauvegarde d'abord, purge ensuite : la purge (exécutée par le worker) ne retire pas du coffre, pendant la
-    # copie, un contenu que l'instantané de la base référence encore (D-3306)
+    # copie, un contenu que l'instantané de la base référence encore (D-3306). Une purge lancée à la main pendant
+    # la copie est reportée par le verrou de maintenance partagé (D-3504).
     tache sauvegarde "$ICI/backup-cron.sh" --si-absente
+    tache notifications "$PY" -m controldone.cli alertes notifier   # échec de sauvegarde : notifié aussitôt
     tache purge "$PY" -c "from datetime import date; from controldone.jobs import enqueue; enqueue('purger_retention', {}, f'purger_retention:{date.today()}')"
   fi
   if [[ "$mois" != "$dernier_mois" ]] && { (( 10#$jdm > 2 )) || [[ "$jdm" == "02" && ! "$hhmm" < "0300" ]]; }; then

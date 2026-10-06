@@ -95,13 +95,36 @@ def _relance(age: int | None, statut: str, jours: tuple[int, ...] | None = None)
     return f"rappel suggéré ({passees[-1]} jours)" if passees else None
 
 
-def registre(scope: TenantScope, *, ecart_id: str | None = None) -> list[LigneRegistre]:
-    """Écarts du client dont le constat est visible par l'acteur (rôle client : constats publiés)."""
+def registre(scope: TenantScope, *, ecart_id: str | None = None,
+             ecart_ids: list[str] | None = None) -> list[LigneRegistre]:
+    """Écarts du client dont le constat est visible par l'acteur (rôle client : constats publiés).
+
+    ``ecart_ids`` : seulement ces écarts, dans cet ordre (page d'une liste filtrée en SQL, D-3801) ; les
+    constats, dossiers et événements lus sont alors limités à ceux de la page."""
     jours = jours_relance(scope.client().reglages)
-    visibles = {c.id: c for c in scope.lister(Constat)}
     transitaires = {t.id: t.nom for t in scope.lister(Transitaire)}
-    references = {d.id: d.reference or d.id for d in scope.lister(Dossier)}
-    lignes = [scope.obtenir(Ecart, ecart_id)] if ecart_id else scope.lister(Ecart, ordre=Ecart.modifie_le)
+    if ecart_ids is not None:
+        par_id = {e.id: e for e in scope.session.execute(
+            scope.requete(Ecart).where(Ecart.id.in_(ecart_ids))).scalars()}
+        lignes = [par_id[i] for i in ecart_ids if i in par_id]
+        visibles = {c.id: c for c in scope.session.execute(
+            scope.requete(Constat).where(Constat.id.in_([e.constat_id for e in lignes]))).scalars()}
+        ids_dossiers = [str((e.contenu or {}).get("dossier_id") or "") for e in lignes]
+        references = {d.id: d.reference or d.id for d in scope.session.execute(
+            scope.requete(Dossier).where(Dossier.id.in_(ids_dossiers))).scalars()}
+    else:
+        visibles = {c.id: c for c in scope.lister(Constat)}
+        references = {d.id: d.reference or d.id for d in scope.lister(Dossier)}
+        lignes = [scope.obtenir(Ecart, ecart_id)] if ecart_id else scope.lister(Ecart, ordre=Ecart.modifie_le)
+    # événements de toutes les lignes en une requête (et non une par écart)
+    evenements: dict[str, list[Any]] = {}
+    ids_lignes = [e.id for e in lignes if e.constat_id in visibles]
+    for i in range(0, len(ids_lignes), 500):
+        q = (scope.requete(EvenementRecouvrement)
+             .where(EvenementRecouvrement.ecart_id.in_(ids_lignes[i:i + 500]))
+             .order_by(EvenementRecouvrement.le))
+        for v in scope.session.execute(q).scalars():
+            evenements.setdefault(v.ecart_id, []).append(v)
     maintenant = datetime.now(UTC)
     out = []
     for e in lignes:
@@ -121,7 +144,7 @@ def registre(scope: TenantScope, *, ecart_id: str | None = None) -> list[LigneRe
                  "montant": str(v.montant) if v.montant is not None else None,
                  "commentaire": (v.contenu or {}).get("commentaire"),
                  "piece": ((v.contenu or {}).get("piece") or {}).get("autre")}
-                for v in scope.lister(EvenementRecouvrement, ecart_id=e.id, ordre=EvenementRecouvrement.le)]
+                for v in evenements.get(e.id, [])]
         try:
             comp = LIBELLES_COMPOSANTE.get(Composante(j.get("composante")), j.get("composante") or "—")
         except ValueError:

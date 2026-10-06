@@ -15,8 +15,17 @@ from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
-__all__ = ["DOMAINES_AUTORISES", "SOURCES", "THEMES", "DomaineNonAutorise", "Source", "domaine_autorise",
-           "TAILLE_MAX_REPONSE", "empreinte_contenu", "telecharger"]
+__all__ = [
+    "DOMAINES_AUTORISES",
+    "SOURCES",
+    "TAILLE_MAX_REPONSE",
+    "THEMES",
+    "DomaineNonAutorise",
+    "Source",
+    "domaine_autorise",
+    "empreinte_contenu",
+    "telecharger",
+]
 
 #: Taille maximale d'une page téléchargée (lue en flux ; au-delà : ``non_verifie``, motif ``trop_volumineux``).
 #: Les pages officielles suivies font moins de 1 Mo (RS-19).

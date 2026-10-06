@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import multiprocessing
 import tempfile
 from collections.abc import Callable
@@ -31,7 +32,9 @@ from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.models import Fichier, Lot, PageTexte
 from controldone.storage.vault import FileVault
 
-__all__ = ["charger_pipeline", "chemin_sur", "purger_retention", "traiter_lot"]
+log = logging.getLogger("controldone.jobs.handlers")
+
+__all__ = ["charger_pipeline", "chemin_sur", "purger_retention", "relais_progression", "traiter_lot"]
 
 
 def charger_pipeline() -> tuple[Callable[..., Any], type]:
@@ -93,8 +96,13 @@ def _rattacher_fichiers(doc: Any, fichiers_pipeline: dict[str, Any], par_sha: di
     return doc.model_copy(update={"pages": pages})
 
 
-def _pipeline_fils(conn: Any, pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+def _pipeline_fils(conn: Any, pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any],
+                   avec_progression: bool = False) -> None:
     try:
+        options = kwargs.get("options")
+        if avec_progression and options is not None and hasattr(options, "progression"):
+            # étapes fines du pipeline (D-3709) relayées au parent par le même tube que le résultat
+            options.progression = lambda etape, fait, total: conn.send(("progression", (etape, fait, total)))
         conn.send(("ok", pipeline(*args, **kwargs)))
     except BaseException as exc:  # pragma: no cover - exécuté dans le processus fils
         conn.send(("erreur", f"{type(exc).__name__}"))
@@ -103,15 +111,18 @@ def _pipeline_fils(conn: Any, pipeline: Callable[..., Any], args: tuple[Any, ...
 
 
 def executer_avec_delai(pipeline: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any],
-                        delai_s: float, *, battement: Callable[[], bool] | None = None) -> Any:
+                        delai_s: float, *, battement: Callable[[], bool] | None = None,
+                        progression: Callable[[str, int, int], None] | None = None) -> Any:
     """Exécute ``pipeline`` dans un processus fils (``spawn`` : aucun verrou hérité du parent) ; au-delà de
     ``delai_s`` secondes le fils est tué et ``ErreurDefinitive`` est levée. ``battement`` est appelé
-    pendant l'attente (bail du job) ; s'il renvoie ``False`` le fils est tué aussi."""
+    pendant l'attente (bail du job) ; s'il renvoie ``False`` le fils est tué aussi. ``progression`` reçoit, dans
+    le parent, les étapes fines signalées par le pipeline du fils (``OptionsPipeline.progression``, D-3709)."""
     import time
 
     mp = multiprocessing.get_context("spawn")
     recu, envoi = mp.Pipe(duplex=False)
-    fils = mp.Process(target=_pipeline_fils, args=(envoi, pipeline, args, kwargs), daemon=True)
+    fils = mp.Process(target=_pipeline_fils, args=(envoi, pipeline, args, kwargs, progression is not None),
+                      daemon=True)
     fils.start()
     envoi.close()
     fin = time.monotonic() + delai_s
@@ -119,6 +130,13 @@ def executer_avec_delai(pipeline: Callable[..., Any], args: tuple[Any, ...], kwa
         while True:
             if recu.poll(min(5.0, max(0.05, fin - time.monotonic()))):
                 etat, valeur = recu.recv()
+                if etat == "progression":
+                    if progression is not None:
+                        try:
+                            progression(*valeur)
+                        except Exception:  # suivi d'affichage seulement
+                            log.warning("progression non relayée", exc_info=True)
+                    continue
                 if etat != "ok":
                     raise ErreurTemporaire(f"pipeline en échec ({valeur})")
                 return valeur
@@ -140,10 +158,35 @@ def _executer_pipeline(ctx: JobContext, pipeline: Callable[..., Any], racine: Pa
     from controldone.config import get_settings
 
     delai = get_settings().lot_duree_max_s
+    relais = relais_progression(ctx)
     if delai and delai > 0 and getattr(pipeline, "__module__", "") == "controldone.pipeline":
         return executer_avec_delai(pipeline, (racine, profil, grilles), {"options": options}, float(delai),
-                                   battement=ctx.heartbeat)
+                                   battement=ctx.heartbeat, progression=relais)
+    if hasattr(options, "progression"):
+        options.progression = relais
     return pipeline(racine, profil, grilles, options=options)
+
+
+def relais_progression(ctx: JobContext, *, intervalle_s: float = 2.0,
+                       horloge: Callable[[], float] | None = None) -> Callable[[str, int, int], None]:
+    """Étapes fines du pipeline (D-3709) écrites par ``JobContext.etape`` : ``"<etape> <fait>/<total>"``
+    (``pages``, ``classement``, ``extraction``, ``regroupement``, ``controles`` ; ``regroupement`` sans compteur).
+    Une écriture à chaque changement d'étape, sinon au plus une toutes les ``intervalle_s`` secondes (et la
+    dernière d'une étape). L'affichage (``web/suivi.py``) montre « lecture » pour une valeur qu'il ne connaît pas."""
+    import time
+
+    lire_horloge = horloge or time.monotonic
+    etat: dict[str, Any] = {"etape": None, "t": float("-inf")}
+
+    def relais(etape: str, fait: int, total: int) -> None:
+        t = lire_horloge()
+        if etape == etat["etape"] and fait < total and t - etat["t"] < intervalle_s:
+            return
+        etat["etape"], etat["t"] = etape, t
+        valeur = etape if etape == "regroupement" else f"{etape} {fait}/{total}"
+        ctx.etape(valeur[:32])
+
+    return relais
 
 
 @handler("traiter_lot")

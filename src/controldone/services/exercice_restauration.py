@@ -18,6 +18,12 @@ jamais touché. Étapes :
 
 Sortie : un compte rendu étape par étape avec les durées (mesure du temps de restauration) ; code 0 si tout est
 conforme, 1 sinon.
+
+PostgreSQL (D-3501, ``--postgres <url d'un serveur jetable>`` ou ``CONTROLDONE_EXERCICE_PG_URL``) : même parcours,
+la base source et la base restaurée étant deux bases créées pour l'occasion sur ce serveur (droit ``CREATEDB``)
+et supprimées à la fin ; la sauvegarde passe par ``pg_dump``, la restauration par ``pg_restore`` dans la base
+vide, la vérification profonde charge le dump dans une troisième base jetable. Serveur jetable local :
+``scripts/pg_jetable.sh`` (``make restauration-test-pg``). Ne jamais viser un serveur de production.
 """
 
 from __future__ import annotations
@@ -73,7 +79,8 @@ def _verifier(condition: bool, message: str) -> None:
         raise EchecExercice(message)
 
 
-def _environnement(travail: Path, donnees: Path, base: Path, cle: str, secret_session: str) -> dict[str, str]:
+def _environnement(travail: Path, donnees: Path, base: Path | str, cle: str, secret_session: str,
+                   pg_serveur: str | None = None) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("CONTROLDONE_", "BACKUP_")) and k not in ("ANTHROPIC_API_KEY",)}
     env.update({
@@ -82,10 +89,12 @@ def _environnement(travail: Path, donnees: Path, base: Path, cle: str, secret_se
         "CONTROLDONE_MASTER_KEY": cle,
         "CONTROLDONE_SECRET_KEY": secret_session,
         "CONTROLDONE_DATA_DIR": str(donnees),
-        "CONTROLDONE_DATABASE_URL": f"sqlite:///{base}",
+        "CONTROLDONE_DATABASE_URL": base if isinstance(base, str) else f"sqlite:///{base}",
         "CONTROLDONE_TMP_DIR": str(travail / "tmp"),
         "PYTHONPATH": os.pathsep.join(filter(None, [str(RACINE_DEPOT / "src"), os.environ.get("PYTHONPATH")])),
     })
+    if pg_serveur:  # vérification profonde : chargement d'essai du dump dans une base jetable
+        env["BACKUP_PG_VERIFICATION_URL"] = pg_serveur
     return env
 
 
@@ -191,12 +200,22 @@ def _interdit(chemin: Path) -> bool:
     return c == demo_web or c.is_relative_to(demo_web) or demo_web.is_relative_to(c)
 
 
-def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = None) -> ResultatExercice:
-    """Déroule l'exercice dans ``travail`` (vide ou absent)."""
+def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = None,
+                      pg_serveur: str | None = None) -> ResultatExercice:
+    """Déroule l'exercice dans ``travail`` (vide ou absent) ; ``pg_serveur`` : sur PostgreSQL (serveur jetable)."""
+    import secrets
+
     from cryptography.fernet import Fernet
 
     from controldone.storage.controle_restauration import controler
-    from controldone.storage.sauvegarde import MANIFESTE, instantane_base, verifier
+    from controldone.storage.sauvegarde import (
+        MANIFESTE,
+        creer_base_pg,
+        instantane_base,
+        instantane_postgresql,
+        supprimer_base_pg,
+        verifier,
+    )
 
     res = ResultatExercice(travail=travail)
     if _interdit(travail) or (travail.exists() and (not travail.is_dir() or any(travail.iterdir()))):
@@ -207,7 +226,20 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
     cle = Fernet.generate_key().decode()
     secret_session = hashlib.sha256(os.urandom(32)).hexdigest()
     source, sauvegardes, restauree = travail / "source", travail / "sauvegardes", travail / "restauree"
-    env_source = _environnement(travail, source, source / "controldone.db", cle, secret_session)
+    suffixe = secrets.token_hex(4)
+    bases_pg = {"source": f"cd_exercice_src_{suffixe}", "restauree": f"cd_exercice_rest_{suffixe}"}
+    urls: dict[str, str] = {}
+    base_source: Path | str = source / "controldone.db"
+    if pg_serveur:
+        try:
+            urls["source"] = base_source = creer_base_pg(pg_serveur, bases_pg["source"])
+        except Exception as exc:
+            res.echec = f"serveur PostgreSQL de l'exercice injoignable : {type(exc).__name__}: {str(exc)[:300]}"
+            return res
+    env_source = _environnement(travail, source, base_source, cle, secret_session, pg_serveur)
+
+    def etat_base(nom: str, fichier: Path) -> dict[str, Any]:
+        return instantane_postgresql(urls[nom]) if pg_serveur else instantane_base(fichier)
 
     def etape(nom: str, fn: Callable[[], str]) -> None:
         debut = time.monotonic()
@@ -221,11 +253,11 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
         def init() -> str:
             etat["ids"] = _identifiants(_cli(env_source, travail, "init-demo"))
             _verifier(not (source / "dev_master.key").exists(), "clé de développement écrite dans les données")
-            return "2 clients fictifs, fondateur avec TOTP"
+            return "2 clients fictifs, fondateur avec TOTP" + (" — PostgreSQL" if pg_serveur else "")
         etape("base de démonstration (init-demo)", init)
 
         def empreintes() -> str:
-            etat["base"] = instantane_base(source / "controldone.db")
+            etat["base"] = etat_base("source", source / "controldone.db")
             etat["coffre"] = _empreintes_arbre(source / "coffre")
             etat["sorties"] = _empreintes_arbre(source / "outbox_envoyee")
             _verifier(etat["base"]["integrite"] == "ok", "base source corrompue")
@@ -247,7 +279,8 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
         def negatifs() -> str:
             archive: Path = etat["archive"]
             brut = archive.read_bytes()
-            _verifier(cle.encode() not in brut and b"SQLite format" not in brut, "clé ou base en clair dans l'archive")
+            _verifier(cle.encode() not in brut and b"SQLite format" not in brut and b"PGDMP" not in brut,
+                      "clé ou base en clair dans l'archive")
             r = verifier(archive, [cle.encode()])
             _verifier(r.ok and r.manifeste is not None, f"vérification : {r.problemes}")
             noms = set(r.manifeste["fichiers"]) | {MANIFESTE}  # type: ignore[index]
@@ -266,20 +299,28 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
         def effacer() -> str:
             shutil.rmtree(source)
             _verifier(not source.exists(), "source non effacée")
+            if pg_serveur:
+                supprimer_base_pg(pg_serveur, bases_pg["source"])
+                return "source supprimée (fichiers et base PostgreSQL)"
             return "source supprimée"
         etape("effacement de la source", effacer)
 
-        env_restauree = _environnement(travail, restauree, restauree / "base" / "controldone.db", cle, secret_session)
+        base_restauree: Path | str = restauree / "base" / "controldone.db"
+        if pg_serveur:
+            urls["restauree"] = base_restauree = creer_base_pg(pg_serveur, bases_pg["restauree"])
+        env_restauree = _environnement(travail, restauree, base_restauree, cle, secret_session)
 
         def restaurer() -> str:
+            options = ["--base-cible", urls["restauree"]] if pg_serveur else []
             sortie = _cli(env_restauree, travail, "sauvegarde", "restaurer", str(etat["archive"]), str(restauree),
-                          "--controler")
+                          *options, "--controler")
             _verifier("CONFORME" in sortie, f"contrôle de la restauration : {sortie[-400:]}")
-            return "déchiffrée, manifeste, intégrité, coffre déchiffré, audit"
+            return ("pg_restore dans une base vide, " if pg_serveur else "") + \
+                "déchiffrée, manifeste, intégrité, coffre déchiffré, audit"
         etape("restauration dans un nouvel endroit", restaurer)
 
         def comparer() -> str:
-            apres = instantane_base(restauree / "base" / "controldone.db")
+            apres = etat_base("restauree", restauree / "base" / "controldone.db")
             ecarts = {t: (n, apres["tables"].get(t)) for t, n in etat["base"]["tables"].items()
                       if apres["tables"].get(t) != n}
             _verifier(not ecarts and set(apres["tables"]) == set(etat["base"]["tables"]),
@@ -287,7 +328,7 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
             _verifier(apres["audit"] == etat["base"]["audit"], "tête de la chaîne d'audit différente")
             _verifier(_empreintes_arbre(restauree / "coffre") == etat["coffre"], "coffre restauré différent")
             _verifier(_empreintes_arbre(restauree / "outbox_envoyee") == etat["sorties"], "traces d'envoi différentes")
-            rapport = controler(restauree, [cle.encode()])
+            rapport = controler(restauree, [cle.encode()], base_url=urls.get("restauree"))
             _verifier(rapport.ok, f"contrôle : {rapport.problemes}")
             return (f"{len(apres['tables'])} tables identiques, audit {apres['audit']['entrees']} entrées, "
                     f"{rapport.objets_coffre} objets déchiffrés, {rapport.references} références présentes")
@@ -302,6 +343,8 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
         etape("parcours web (connexion, rapport)", lambda: _parcours_web(etat["url"], etat["ids"]))
     except (EchecExercice, subprocess.TimeoutExpired, OSError) as exc:
         res.echec = str(exc)[:1000]
+    except Exception as exc:  # base PostgreSQL de l'exercice (création, suppression)
+        res.echec = f"{type(exc).__name__}: {str(exc)[:900]}"
     finally:
         proc = etat.get("web")
         if proc is not None:
@@ -310,6 +353,12 @@ def executer_exercice(travail: Path, *, journal: Callable[[str], None] | None = 
                 proc.wait(15)
             except subprocess.TimeoutExpired:
                 proc.kill()
+        if pg_serveur:
+            for nom in bases_pg.values():
+                try:
+                    supprimer_base_pg(pg_serveur, nom)
+                except Exception:  # serveur arrêté entre-temps : rien d'autre à nettoyer
+                    break
     return res
 
 
@@ -318,6 +367,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                  description="Exercice de restauration de bout en bout sur une base fictive.")
     ap.add_argument("--repertoire", default=None, help="répertoire de travail (vide) ; défaut : temporaire")
     ap.add_argument("--garder", action="store_true", help="ne pas effacer le répertoire de travail")
+    ap.add_argument("--postgres", default=os.environ.get("CONTROLDONE_EXERCICE_PG_URL") or None,
+                    help="URL d'un serveur PostgreSQL JETABLE (droit CREATEDB) : exercice sur PostgreSQL")
     args = ap.parse_args(argv)
     if args.repertoire:
         travail = Path(args.repertoire)
@@ -328,7 +379,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         travail = Path(tempfile.mkdtemp(prefix="cd-exercice-restauration-"))
     a_effacer = not args.garder
     print(f"Répertoire de travail : {travail}", flush=True)
-    res = executer_exercice(travail, journal=lambda m: print(m, flush=True))
+    if args.postgres:
+        print("Moteur : PostgreSQL (serveur jetable)", flush=True)
+    res = executer_exercice(travail, journal=lambda m: print(m, flush=True), pg_serveur=args.postgres)
     print("\n".join(res.lignes()))
     if a_effacer and not _interdit(travail):
         shutil.rmtree(travail, ignore_errors=True)

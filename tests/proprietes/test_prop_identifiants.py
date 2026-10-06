@@ -119,7 +119,7 @@ def test_mrn_egaux_symetrique(x, y):
 
 _CLASSES = {}
 for _k, _v in CONFUSION_OCR.items():
-    _CLASSES.setdefault(chr(_v), {chr(_v)}).add(chr(_k))
+    _CLASSES.setdefault(_v, {_v}).add(chr(_k))
 
 
 @given(ref=st.text(alphabet=alnum, min_size=1, max_size=20), data=st.data())

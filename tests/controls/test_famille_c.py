@@ -761,3 +761,28 @@ def test_lignes_par_article_incompletes():
     # article 2 sans ligne de TVA alors que les autres en ont une
     d = _dec_lignes("doc_dec1", [*complet[:3], ("3", DROIT, "0.00"), ("3", TVA, "10.00")])
     assert reference_declaration(contexte([d]), d).lecture_incomplete == "article_sans_ligne_de_sa_categorie"
+
+
+def test_releve_reparti_entre_dossiers_un_seul_constat_d3704():
+    # Relevé réparti au prorata entre deux dossiers du lot : la même ligne n'est comparée qu'une fois, dans le
+    # premier dossier (identifiant) qui contient la facture ; ailleurs non applicable (couvert).
+    from controldone.controls.context import AutreDossier
+    from controldone.testing import dossier_pour
+
+    d2 = dec("doc_dec2", (DROIT, "60.00"), mrn=MRN_B)
+    f = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "200.00"), refs_mrn=[MRN_A, MRN_B])
+    d1 = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_A)
+
+    def ctx_avec(autre_id):
+        autre = AutreDossier(dossier_pour([d1, f], id=autre_id), {d1.id: d1, f.id: f})
+        ctx = contexte([d2, f], autres_dossiers=[autre])
+        ctx.dossier.allocations.append(Allocation(
+            source_document_id="doc_ft1", source_ligne=0, cible_document_id="doc_dec2",
+            montant_alloue=D("80.00"), methode=MethodeAllocation.prorata))
+        return ctx
+
+    (r,) = run_controls(ctx_avec("dos_autre"), controles=["C1"])  # « dos_autre » < « dos_test »
+    assert r.outcome is Outcome.non_applicable and r.raison_code is RaisonCode.couvert_par_autre_controle
+    assert r.details["dossier"] == "dos_autre"
+    (r,) = run_controls(ctx_avec("dos_zzz"), controles=["C1"])  # ce dossier porte le constat
+    assert r.outcome is Outcome.a_verifier and RaisonCode.allocation_prorata in r.constat.raisons

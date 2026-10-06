@@ -63,6 +63,7 @@ from controldone.model import (
     Methode,
     ModePoste,
     NatureLigne,
+    Niveau,
     PosteGrille,
     PrestationsHorsGrille,
     RaisonCode,
@@ -414,6 +415,10 @@ def _attendu_simple(ctx: ControlContext, lr: LigneRoutee) -> tuple[Decimal, str,
 # =====================================================================================================
 
 
+#: Raisons de classement qui disent qu'une lecture (OCR) ne suffit pas à trancher (D-3703).
+_RAISONS_LECTURE = frozenset({RaisonCode.confiance_insuffisante, RaisonCode.lecture_non_corroboree})
+
+
 def _d1_resultat(
     ctx: ControlContext,
     f: Document,
@@ -430,6 +435,7 @@ def _d1_resultat(
     alternatives: Sequence[Decimal] = (),
     ligne_non_lue: bool = False,
     produit: bool = False,
+    somme_de_lignes: bool = False,
 ) -> ResultatControle:
     v_imp = imprime.decimal_signe()
     candidats = [calcul, *alternatives]
@@ -464,6 +470,13 @@ def _d1_resultat(
                    *(Confusion(o, accepte=acc_operande(o)) for o in operandes)],
         documents=[f.id], montant=ecart,
     )
+    if (somme_de_lignes and ecart > 0 and classement.niveau is Niveau.a_verifier
+            and set(classement.raisons) & _RAISONS_LECTURE):
+        # D-3703 : total imprimé supérieur à la somme des lignes lues, lecture sous le seuil (scan) : des lignes
+        # non lues expliquent l'écart dans le sens observé, et aucune identité ne prouve que la lecture est
+        # complète (elle aurait rendu le classement certain). Comme D-2307 pour B2/B3.
+        return ctx.non_verifiable("D1", RaisonCode.confiance_insuffisante, **{
+            **commun, "details": {"motif": "lignes_possiblement_non_lues"}})
     libelle = (
         f"Sur {_la_facture(f)}{_par(page_txt([imprime]))}, {objet} "
         f"({format_montant(v_imp)}) diffère du calcul des valeurs imprimées ({calcul_txt} = "
@@ -554,7 +567,7 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
         out.append(_d1_resultat(
             ctx, f, "total_debours", unite_f, td, s_deb, debours, tol.t_somme(len(debours)),
             "le total des débours imprimé", f"somme des {len(debours)} lignes de débours", avec_montant=True,
-            ligne_non_lue=bool(meme_ecart),
+            ligne_non_lue=bool(meme_ecart), somme_de_lignes=True,
         ))
     if toutes_lisibles and montants and v_tht is not None and tht is not None:
         alternatives = [s_prest] if debours and prestations else []
@@ -563,6 +576,7 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
             "le total HT imprimé", f"somme des {len(montants)} montants HT", avec_montant=True,
             alternatives=alternatives,
             ligne_non_lue=bool(meme_ecart) or _tva_confirme_total(ctx, ft, v_tht, s_deb, s_prest, prestations),
+            somme_de_lignes=True,
         ))
     ttc, ht, tva = _dec(ctx, ft.total_ttc), _dec(ctx, ft.total_ht), _dec(ctx, ft.total_tva)
     if ttc is not None and ht is not None and tva is not None:

@@ -7,6 +7,10 @@ Voir ``docs/EXPLOITATION.md`` §3 et ``deploy/README.md``.
   ``controldone-AAAAMMJJTHHMMSSZ.tar.gz.enc`` (droits 0600) + ``….tar.gz.enc.sha256`` (empreinte de l'archive
   chiffrée, format ``sha256sum`` : contrôle d'une copie hors site **sans** la clé). La mémoire utilisée ne
   dépend pas de la taille du coffre (un segment de 1 Mio à la fois) — F-02, D-1320.
+- PostgreSQL (D-3501) : ``pg_dump --format=custom`` pris sur un **instantané exporté** (``pg_export_snapshot``)
+  dans la même transaction que le comptage des lignes et la tête de l'audit : le manifeste décrit exactement le
+  contenu du dump. Entrée ``base/controldone.dump`` au lieu de ``base/controldone.db`` ; même conteneur
+  ``CDSAV2``. ``restaurer --base-cible <url>`` charge le dump par ``pg_restore`` dans une base **vide**.
 - Contenu de l'archive (D-3301) : ``base/controldone.db``, ``coffre/`` (déjà chiffré par client),
   ``outbox_envoyee/`` (traces des envois mis à disposition) et, en dernier, ``MANIFESTE.json`` : taille et
   SHA-256 de **chaque** fichier, nombre de lignes par table et tête de la chaîne d'audit de l'instantané.
@@ -37,7 +41,7 @@ Ligne de commande : ``python -m controldone.storage.sauvegarde sauvegarder|verif
 rotation|alerter …`` (aussi ``controldone sauvegarde …``). Codes de retour (D-3303) : 0 succès ; 1 échec de
 la création ; 2 configuration (base non SQLite, clé absente ou invalide, archive introuvable) ; 3 vérification
 ou contrôle en échec ; 4 aucune sauvegarde assez récente. Chaque échec émet une alerte au fondateur (une par
-jour et par type). PostgreSQL : ``pg_dump`` (voir l'exploitation) ; ``sauvegarder`` le refuse.
+jour et par type). Verrou de maintenance partagé avec la purge et la restauration (``storage.verrou``, D-3504).
 """
 
 from __future__ import annotations
@@ -53,12 +57,13 @@ import re
 import shutil
 import sqlite3
 import struct
+import subprocess
 import sys
 import tarfile
 import tempfile
 import time
 import zlib
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -74,13 +79,20 @@ __all__ = [
     "MANIFESTE",
     "NOM_RE",
     "TAILLE_SEGMENT",
+    "OutilAbsent",
     "RapportVerification",
+    "creer_base_pg",
     "derniere_sauvegarde",
     "empreinte_fichier",
+    "est_postgresql",
     "instantane_base",
+    "instantane_postgresql",
     "restaurer",
+    "restaurer_postgresql",
     "rotation",
     "sauvegarder",
+    "sauvegarder_postgresql",
+    "supprimer_base_pg",
     "verifier",
 ]
 
@@ -90,9 +102,13 @@ MANIFESTE = "MANIFESTE.json"
 TAILLE_SEGMENT = 1024 * 1024
 _LONGUEUR_MAX = 8 * TAILLE_SEGMENT  # jeton Fernet d'un segment : < 2 × clair (base64 + en-tête)
 _ARC_BASE = "base/controldone.db"
+_ARC_DUMP = "base/controldone.dump"  # PostgreSQL : pg_dump --format=custom (D-3501)
+MAGIE_PG = b"PGDMP"
 _RACINES = ("base", "coffre", "outbox_envoyee")
 EXT_EMPREINTE = ".sha256"
 EXT_INVALIDE = ".invalide"
+
+ATTENTE_RESTAURATION_S = 60.0  # attente du verrou de maintenance avant une restauration (D-3504)
 
 # Codes de retour de la ligne de commande (D-3303)
 OK, ECHEC_CREATION, ECHEC_CONFIGURATION, ECHEC_VERIFICATION, ECHEC_FRAICHEUR = 0, 1, 2, 3, 4
@@ -277,16 +293,13 @@ def _ajouter_arbre(tar: tarfile.TarFile, racine: Path, prefixe: str, fichiers: d
                 continue
 
 
-def sauvegarder(base_sqlite: Path | str, coffre: Path | str | None, destination: Path | str,
-                cles: Sequence[bytes], *, now: datetime | None = None, tmp_dir: Path | str | None = None,
-                sorties: Path | str | None = None) -> Path:
-    """Sauvegarde en flux ; ``tmp_dir`` (copie de la base) : défaut ``destination`` (même volume).
-    ``sorties`` : répertoire des traces d'envoi (``<data_dir>/outbox_envoyee``), facultatif."""
+def _creer_archive(destination: Path, cles: Sequence[bytes], now: datetime | None, tmp_dir: Path | str | None,
+                   coffre: Path | str | None, sorties: Path | str | None,
+                   preparer_base: Callable[[Path], tuple[Path, str, dict[str, Any]]]) -> Path:
+    """Archive ``CDSAV2`` : ``preparer_base(tmp)`` écrit la copie cohérente de la base dans ``tmp`` et renvoie
+    ``(fichier, nom dans l'archive, état pour le manifeste)`` ; puis coffre, traces d'envoi et manifeste."""
     from controldone import __version__
 
-    base_sqlite, destination = Path(base_sqlite), Path(destination)
-    if not base_sqlite.is_file():
-        raise FileNotFoundError(f"base SQLite introuvable : {base_sqlite}")
     now = now or datetime.now(UTC)
     destination.mkdir(parents=True, exist_ok=True, mode=0o700)
     cible = destination / f"controldone-{now.astimezone(UTC).strftime('%Y%m%dT%H%M%SZ')}.tar.gz.enc"
@@ -294,15 +307,7 @@ def sauvegarder(base_sqlite: Path | str, coffre: Path | str | None, destination:
     if tmp_dir is not None:
         Path(tmp_dir).mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.TemporaryDirectory(prefix=".cd-sauvegarde-", dir=tmp_dir or destination) as tmp:
-        copie = Path(tmp) / "controldone.db"
-        src = sqlite3.connect(str(base_sqlite))
-        dst = sqlite3.connect(str(copie))
-        try:
-            src.backup(dst)
-        finally:
-            dst.close()
-            src.close()
-        etat_base = instantane_base(copie)
+        copie, nom_base, etat_base = preparer_base(Path(tmp))
         fichiers: dict[str, dict[str, Any]] = {}
         fd = os.open(partiel, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         try:
@@ -310,13 +315,13 @@ def sauvegarder(base_sqlite: Path | str, coffre: Path | str | None, destination:
                 ecrivain = _EcrivainChiffre(sortie, _fernet(cles))
                 with tarfile.open(fileobj=ecrivain, mode="w|gz") as tar:  # type: ignore[call-overload]
                     tar.addfile(_entree_tar("base", repertoire=True))
-                    _ajouter_fichier(tar, copie, _ARC_BASE, fichiers)
+                    _ajouter_fichier(tar, copie, nom_base, fichiers)
                     for racine, prefixe in ((coffre, "coffre"), (sorties, "outbox_envoyee")):
                         if racine is not None and Path(racine).is_dir():
                             _ajouter_arbre(tar, Path(racine), prefixe, fichiers)
                     manifeste = {
                         "format": "controldone-sauvegarde", "version": 1, "application": __version__,
-                        "cree_le": now.astimezone(UTC).isoformat(), "base": {"chemin": _ARC_BASE, **etat_base},
+                        "cree_le": now.astimezone(UTC).isoformat(), "base": {"chemin": nom_base, **etat_base},
                         "fichiers": fichiers,
                     }
                     brut = json.dumps(manifeste, ensure_ascii=False, indent=1, sort_keys=True).encode()
@@ -331,6 +336,211 @@ def sauvegarder(base_sqlite: Path | str, coffre: Path | str | None, destination:
             raise
     _ecrire_empreinte(cible, empreinte)
     return cible
+
+
+def sauvegarder(base_sqlite: Path | str, coffre: Path | str | None, destination: Path | str,
+                cles: Sequence[bytes], *, now: datetime | None = None, tmp_dir: Path | str | None = None,
+                sorties: Path | str | None = None) -> Path:
+    """Sauvegarde en flux ; ``tmp_dir`` (copie de la base) : défaut ``destination`` (même volume).
+    ``sorties`` : répertoire des traces d'envoi (``<data_dir>/outbox_envoyee``), facultatif."""
+    base_sqlite = Path(base_sqlite)
+    if not base_sqlite.is_file():
+        raise FileNotFoundError(f"base SQLite introuvable : {base_sqlite}")
+
+    def copier(tmp: Path) -> tuple[Path, str, dict[str, Any]]:
+        copie = tmp / "controldone.db"
+        src = sqlite3.connect(str(base_sqlite))
+        dst = sqlite3.connect(str(copie))
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        return copie, _ARC_BASE, {"moteur": "sqlite", **instantane_base(copie)}
+
+    return _creer_archive(Path(destination), cles, now, tmp_dir, coffre, sorties, copier)
+
+
+# --- PostgreSQL (D-3501) ----------------------------------------------------------------------------------
+
+
+class OutilAbsent(FileNotFoundError):
+    """``pg_dump`` / ``pg_restore`` introuvable (paquet ``postgresql-client`` de la même version majeure que le
+    serveur, ou chemin dans ``CONTROLDONE_PG_DUMP`` / ``CONTROLDONE_PG_RESTORE``)."""
+
+
+def est_postgresql(url: str | None) -> bool:
+    from sqlalchemy.engine import make_url
+
+    return bool(url) and make_url(url).get_backend_name() == "postgresql"  # type: ignore[arg-type]
+
+
+_PARAMS_LIBPQ = {"sslmode": "PGSSLMODE", "sslrootcert": "PGSSLROOTCERT", "sslcert": "PGSSLCERT",
+                 "sslkey": "PGSSLKEY", "host": "PGHOST", "port": "PGPORT", "application_name": "PGAPPNAME"}
+
+
+def _env_libpq(url: str) -> dict[str, str]:
+    """Paramètres de connexion des outils PostgreSQL **par l'environnement** (le mot de passe n'apparaît jamais
+    dans la ligne de commande ni dans ``ps``)."""
+    from sqlalchemy.engine import make_url
+
+    u = make_url(url)
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
+    for cle, var in (("host", "PGHOST"), ("port", "PGPORT"), ("username", "PGUSER"), ("password", "PGPASSWORD"),
+                     ("database", "PGDATABASE")):
+        valeur = getattr(u, cle)
+        if valeur not in (None, ""):
+            env[var] = str(valeur)
+    for cle, valeur in u.query.items():
+        if cle in _PARAMS_LIBPQ:
+            env[_PARAMS_LIBPQ[cle]] = valeur if isinstance(valeur, str) else valeur[0]
+    env["PGCONNECT_TIMEOUT"] = env.get("PGCONNECT_TIMEOUT", "15")
+    return env
+
+
+def _outil(nom: str) -> str:
+    chemin = shutil.which(os.environ.get(f"CONTROLDONE_{nom.upper()}") or nom)
+    if chemin is None:
+        raise OutilAbsent(f"{nom} introuvable : installer postgresql-client (même version majeure que le "
+                          f"serveur) ou définir CONTROLDONE_{nom.upper()}")
+    return chemin
+
+
+def _executer_outil(args: list[str], env: dict[str, str], *, timeout: float = 6 * 3600) -> str:
+    p = subprocess.run(args, env=env, capture_output=True, text=True, timeout=timeout, check=False)
+    if p.returncode != 0:
+        # le message de pg_dump / pg_restore ne contient ni données ni mot de passe (paramètres par l'env)
+        raise RuntimeError(f"{Path(args[0]).name} : code {p.returncode} — {p.stderr.strip()[-500:]}")
+    return p.stdout
+
+
+def _moteur_pg(url: str) -> Any:
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+
+    return create_engine(url, poolclass=NullPool, future=True)
+
+
+def _etat_pg(conn: Any) -> dict[str, Any]:
+    from sqlalchemy import text
+
+    tables = [r[0] for r in conn.execute(text(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() "
+        "AND table_type = 'BASE TABLE' ORDER BY table_name"))]
+    lignes = {t: int(conn.execute(text(f'SELECT COUNT(*) FROM "{t}"')).scalar_one()) for t in tables}
+    audit: dict[str, Any] = {"entrees": 0, "tete": None}
+    if "audit_log" in tables:
+        tete = conn.execute(text("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1")).scalar()
+        audit = {"entrees": lignes["audit_log"], "tete": tete}
+    return {"integrite": "ok", "tables": lignes, "audit": audit}
+
+
+def instantane_postgresql(url: str) -> dict[str, Any]:
+    """Lignes par table et tête de l'audit d'une base PostgreSQL (transaction en lecture seule cohérente)."""
+    moteur = _moteur_pg(url)
+    try:
+        with moteur.connect() as conn:
+            conn = conn.execution_options(isolation_level="REPEATABLE READ")
+            with conn.begin():
+                return _etat_pg(conn)
+    finally:
+        moteur.dispose()
+
+
+def sauvegarder_postgresql(url: str, coffre: Path | str | None, destination: Path | str, cles: Sequence[bytes],
+                           *, now: datetime | None = None, tmp_dir: Path | str | None = None,
+                           sorties: Path | str | None = None) -> Path:
+    """Comme ``sauvegarder``, la base étant un ``pg_dump --format=custom`` pris sur un instantané exporté :
+    comptage des lignes, tête de l'audit et dump voient exactement les mêmes données."""
+    from sqlalchemy import text
+
+    pg_dump = _outil("pg_dump")
+    env = _env_libpq(url)
+
+    def exporter(tmp: Path) -> tuple[Path, str, dict[str, Any]]:
+        dump = tmp / "controldone.dump"
+        moteur = _moteur_pg(url)
+        try:
+            with moteur.connect() as conn:
+                conn = conn.execution_options(isolation_level="REPEATABLE READ")
+                with conn.begin():
+                    conn.execute(text("SET TRANSACTION READ ONLY"))
+                    instantane = conn.execute(text("SELECT pg_export_snapshot()")).scalar_one()
+                    etat = _etat_pg(conn)
+                    # la transaction reste ouverte pendant pg_dump : l'instantané exporté reste valable
+                    _executer_outil([pg_dump, "--format=custom", "--no-owner", "--no-privileges",
+                                     f"--snapshot={instantane}", f"--file={dump}"], env)
+                    version = _executer_outil([pg_dump, "--version"], env).strip()
+        finally:
+            moteur.dispose()
+        with dump.open("rb") as f:
+            if f.read(len(MAGIE_PG)) != MAGIE_PG:
+                raise ErreurIntegrite("pg_dump n'a pas produit une archive au format custom")
+        return dump, _ARC_DUMP, {"moteur": "postgresql", "outil": version, **etat}
+
+    return _creer_archive(Path(destination), cles, now, tmp_dir, coffre, sorties, exporter)
+
+
+_NOM_BASE_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+
+
+def creer_base_pg(url_serveur: str, nom: str) -> str:
+    """Crée la base vide ``nom`` (UTF-8) sur le serveur de ``url_serveur`` ; renvoie son URL."""
+    from sqlalchemy import text
+    from sqlalchemy.engine import make_url
+
+    if not _NOM_BASE_RE.match(nom):
+        raise ValueError(f"nom de base refusé : {nom!r}")
+    moteur = _moteur_pg(url_serveur).execution_options(isolation_level="AUTOCOMMIT")
+    try:
+        with moteur.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{nom}" TEMPLATE template0 ENCODING \'UTF8\''))
+    finally:
+        moteur.dispose()
+    return make_url(url_serveur).set(database=nom).render_as_string(hide_password=False)
+
+
+def supprimer_base_pg(url_serveur: str, nom: str) -> None:
+    from sqlalchemy import text
+
+    if not _NOM_BASE_RE.match(nom):
+        raise ValueError(f"nom de base refusé : {nom!r}")
+    moteur = _moteur_pg(url_serveur).execution_options(isolation_level="AUTOCOMMIT")
+    try:
+        with moteur.connect() as conn:
+            conn.execute(text(f'DROP DATABASE IF EXISTS "{nom}" WITH (FORCE)'))
+    finally:
+        moteur.dispose()
+
+
+def _lister_dump(dump: Path) -> int:
+    """``pg_restore --list`` : nombre d'objets du dump (lève si le dump est illisible)."""
+    sortie = _executer_outil([_outil("pg_restore"), "--list", str(dump)], dict(os.environ), timeout=600)
+    return sum(1 for ligne in sortie.splitlines() if ligne and not ligne.startswith(";"))
+
+
+def restaurer_postgresql(dump: Path | str, url: str) -> dict[str, Any]:
+    """Charge ``dump`` (``base/controldone.dump`` d'un répertoire restauré) dans la base **vide** ``url`` par
+    ``pg_restore --single-transaction --exit-on-error`` ; renvoie l'état de la base chargée."""
+    from sqlalchemy import text
+
+    dump = Path(dump)
+    with dump.open("rb") as f:
+        if f.read(len(MAGIE_PG)) != MAGIE_PG:
+            raise ErreurIntegrite("dump PostgreSQL illisible (format custom attendu)")
+    moteur = _moteur_pg(url)
+    try:
+        with moteur.connect() as conn:
+            n = conn.execute(text("SELECT COUNT(*) FROM information_schema.tables "
+                                  "WHERE table_schema = current_schema()")).scalar_one()
+    finally:
+        moteur.dispose()
+    if n:
+        raise FileExistsError(f"la base cible n'est pas vide ({n} tables) : restauration refusée")
+    env = _env_libpq(url)
+    _executer_outil([_outil("pg_restore"), "--no-owner", "--no-privileges", "--exit-on-error",
+                     "--single-transaction", f"--dbname={env['PGDATABASE']}", str(dump)], env)
+    return instantane_postgresql(url)
 
 
 def _ecrire_empreinte(archive: Path, empreinte: str) -> None:
@@ -460,6 +670,8 @@ def verifier(archive: Path | str, cles: Sequence[bytes]) -> RapportVerification:
                 h, n = hashlib.sha256(), 0
                 assert f is not None
                 while bloc := f.read(TAILLE_SEGMENT):
+                    if n == 0 and membre.name == _ARC_DUMP and not bloc.startswith(MAGIE_PG):
+                        rapport.problemes.append("dump PostgreSQL illisible (format custom attendu)")
                     h.update(bloc)
                     n += len(bloc)
                 vus[membre.name] = {"taille": n, "sha256": h.hexdigest()}
@@ -474,7 +686,7 @@ def verifier(archive: Path | str, cles: Sequence[bytes]) -> RapportVerification:
         rapport.empreinte_externe = "conforme" if attendue == empreinte.h.hexdigest() else "différente"
         if rapport.empreinte_externe == "différente":
             rapport.problemes.append("empreinte de l'archive différente de son fichier .sha256")
-    if _ARC_BASE not in vus:
+    if _ARC_BASE not in vus and _ARC_DUMP not in vus:
         rapport.problemes.append("base absente de la sauvegarde")
     rapport.problemes += _comparer_au_manifeste(vus, rapport.manifeste)
     if rapport.manifeste and rapport.manifeste.get("base", {}).get("integrite") != "ok":
@@ -485,9 +697,12 @@ def verifier(archive: Path | str, cles: Sequence[bytes]) -> RapportVerification:
 def restaurer(archive: Path | str, cible: Path | str, cles: Sequence[bytes]) -> Path:
     """Déchiffre et extrait en flux dans ``cible`` (absent ou vide) : ``base/controldone.db``, ``coffre/``,
     ``outbox_envoyee/``, ``MANIFESTE.json`` ; puis revérifie chaque fichier écrit contre le manifeste."""
+    from controldone.storage.verrou import NOM_VERROU
+
     cible = Path(cible)
     archive = Path(archive)
-    if cible.exists() and (not cible.is_dir() or any(cible.iterdir())):
+    # (le seul fichier admis : le verrou de maintenance, quand la cible est le répertoire de données)
+    if cible.exists() and (not cible.is_dir() or any(p.name != NOM_VERROU for p in cible.iterdir())):
         raise FileExistsError(f"la cible de restauration doit être absente ou vide : {cible}")
     cible.mkdir(parents=True, exist_ok=True, mode=0o700)
     with _ouvrir(archive, cles) as (tar, lecteur):
@@ -497,7 +712,7 @@ def restaurer(archive: Path | str, cible: Path | str, cles: Sequence[bytes]) -> 
         if lecteur is not None:
             lecteur.vider()
     base = cible / _ARC_BASE
-    if not base.is_file():
+    if not base.is_file() and not (cible / _ARC_DUMP).is_file():
         raise ErreurIntegrite("base absente de la sauvegarde")
     manifeste_chemin = cible / MANIFESTE
     if manifeste_chemin.is_file():
@@ -506,10 +721,22 @@ def restaurer(archive: Path | str, cible: Path | str, cles: Sequence[bytes]) -> 
         except ValueError as exc:
             raise ErreurIntegrite("manifeste illisible") from exc
         vus = {p.relative_to(cible).as_posix(): {"taille": p.stat().st_size, "sha256": empreinte_fichier(p)}
-               for p in sorted(cible.rglob("*")) if p.is_file() and p != manifeste_chemin}
+               for p in sorted(cible.rglob("*"))
+               if p.is_file() and p != manifeste_chemin and p != cible / NOM_VERROU}
         problemes = _comparer_au_manifeste(vus, manifeste)
         if problemes:
             raise ErreurIntegrite("restauration non conforme au manifeste : " + "; ".join(problemes[:5]))
+    if not base.is_file():  # PostgreSQL : le dump se lit (pg_restore --list) ; chargement : restaurer_postgresql
+        dump = cible / _ARC_DUMP
+        with dump.open("rb") as f:
+            if f.read(len(MAGIE_PG)) != MAGIE_PG:
+                raise ErreurIntegrite("dump PostgreSQL illisible (format custom attendu)")
+        with contextlib.suppress(OutilAbsent):
+            try:
+                _lister_dump(dump)
+            except RuntimeError as exc:
+                raise ErreurIntegrite(f"dump PostgreSQL illisible : {exc}") from exc
+        return cible
     con = sqlite3.connect(str(base))
     try:
         ok = con.execute("PRAGMA integrity_check").fetchone()[0]
@@ -595,24 +822,48 @@ def _alerter_echec(exc: BaseException) -> None:
                                 "disque, la clé maîtresse et le journal de sauvegarde.", {"erreur": type(exc).__name__})
 
 
-def _verification_profonde(archive: Path, cles: Sequence[bytes]) -> list[str]:
-    """Restaure dans un répertoire temporaire **à côté de l'archive** (même volume), contrôle, efface."""
+def _verification_profonde(archive: Path, cles: Sequence[bytes]) -> tuple[list[str], list[str]]:
+    """Restaure dans un répertoire temporaire **à côté de l'archive** (même volume), contrôle, efface.
+    PostgreSQL : chargement d'essai dans une base jetable créée sur ``BACKUP_PG_VERIFICATION_URL`` (serveur de
+    vérification, droit ``CREATEDB``), supprimée ensuite ; sans ce réglage, le dump est seulement relu
+    (``pg_restore --list``). Renvoie ``(problèmes, remarques)``."""
+    import secrets
+
     from controldone.storage.controle_restauration import controler
 
     with tempfile.TemporaryDirectory(prefix=".cd-verification-", dir=archive.parent) as tmp:
         try:
             cible = restaurer(archive, Path(tmp) / "r", cles)
         except (ErreurIntegrite, OSError) as exc:
-            return [f"restauration d'essai impossible : {exc}"]
-        return controler(cible, cles).problemes
+            return [f"restauration d'essai impossible : {exc}"], []
+        if not (cible / _ARC_DUMP).is_file():
+            return controler(cible, cles).problemes, []
+        serveur = os.environ.get("BACKUP_PG_VERIFICATION_URL", "").strip()
+        if not serveur:
+            return [], ["base PostgreSQL : dump relu ; chargement d'essai non fait (BACKUP_PG_VERIFICATION_URL "
+                        "non défini)"]
+        nom = f"cd_verif_{secrets.token_hex(6)}"
+        try:
+            url = creer_base_pg(serveur, nom)
+            restaurer_postgresql(cible / _ARC_DUMP, url)
+            return controler(cible, cles, base_url=url).problemes, [f"base PostgreSQL chargée à l'essai ({nom})"]
+        except Exception as exc:
+            return [f"chargement d'essai PostgreSQL impossible : {type(exc).__name__}: {str(exc)[:300]}"], []
+        finally:
+            with contextlib.suppress(Exception):
+                supprimer_base_pg(serveur, nom)
 
 
 def _verifier_et_signaler(archive: Path, cles: Sequence[bytes], *, profond: bool) -> int:
     rapport = verifier(archive, cles)
+    remarques: list[str] = []
     if rapport.ok and profond:
-        rapport.problemes += _verification_profonde(archive, cles)
-    print("\n".join(rapport.lignes()) if not profond or not rapport.ok else
-          "\n".join([*rapport.lignes(), "contrôle approfondi : restauration d'essai conforme"]))
+        problemes, remarques = _verification_profonde(archive, cles)
+        rapport.problemes += problemes
+    lignes = rapport.lignes()
+    if profond and rapport.ok:
+        lignes.append("contrôle approfondi : restauration d'essai conforme")
+    print("\n".join([*lignes, *(f"remarque         : {r}" for r in remarques)]))
     if rapport.ok:
         return OK
     alerter("sauvegarde_verification_echec", f"Sauvegarde {archive.name} non conforme : {rapport.problemes[0]}"[:500],
@@ -623,6 +874,7 @@ def _verifier_et_signaler(archive: Path, cles: Sequence[bytes], *, profond: bool
 def main(argv: Sequence[str] | None = None) -> int:
     from controldone.config import get_settings
     from controldone.storage.db import Database
+    from controldone.storage.verrou import VerrouOccupe, verrou_maintenance
 
     parser = argparse.ArgumentParser(prog="python -m controldone.storage.sauvegarde")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -641,9 +893,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     r = sub.add_parser("restaurer", help="restaure dans un répertoire absent ou vide")
     r.add_argument("archive")
     r.add_argument("cible")
+    r.add_argument("--base-cible", dest="base_cible", default=None,
+                   help="PostgreSQL : URL d'une base VIDE où charger le dump (pg_restore)")
     r.add_argument("--controler", action="store_true", help="puis contrôle approfondi (coffre, audit, tables)")
     c = sub.add_parser("controler", help="contrôle approfondi d'un répertoire restauré")
     c.add_argument("cible")
+    c.add_argument("--base-url", dest="base_cible", default=None,
+                   help="PostgreSQL : URL de la base où le dump a été chargé")
     for p in (b, sub.add_parser("rotation", help="applique la politique de conservation")):
         if p is not b:
             p.add_argument("--destination", default=None)
@@ -669,13 +925,24 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.cmd == "sauvegarder":
         db = Database()
-        chemin = db.chemin_sqlite()
+        chemin, url = db.chemin_sqlite(), db.url
         db.fermer()
-        if chemin is None:
-            print("base non SQLite : utiliser pg_dump (voir docs/EXPLOITATION.md)", file=sys.stderr)
+        if chemin is None and not est_postgresql(url):
+            print("base ni SQLite ni PostgreSQL : sauvegarde impossible", file=sys.stderr)
             return ECHEC_CONFIGURATION
-        try:
-            sortie = sauvegarder(chemin, data_dir / "coffre", destination, cles, sorties=data_dir / "outbox_envoyee")
+        attente = float(os.environ.get("BACKUP_VERROU_ATTENTE_S", "1800"))
+        try:  # purge et restauration exclues pendant la copie (D-3504)
+            with verrou_maintenance(data_dir, "sauvegarde", attente_s=attente):
+                if chemin is not None:
+                    sortie = sauvegarder(chemin, data_dir / "coffre", destination, cles,
+                                         sorties=data_dir / "outbox_envoyee")
+                else:
+                    sortie = sauvegarder_postgresql(url, data_dir / "coffre", destination, cles,
+                                                    sorties=data_dir / "outbox_envoyee")
+        except OutilAbsent as exc:
+            _alerter_echec(exc)
+            print(f"sauvegarde impossible : {exc}", file=sys.stderr)
+            return ECHEC_CONFIGURATION
         except Exception as exc:
             _alerter_echec(exc)
             print(f"sauvegarde en échec : {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -715,18 +982,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         return code
     if args.cmd == "restaurer":
         try:
-            cible = restaurer(args.archive, args.cible, cles)
-        except (ErreurIntegrite, FileExistsError, FileNotFoundError) as exc:
+            with verrou_maintenance(data_dir, "restauration", attente_s=ATTENTE_RESTAURATION_S):
+                cible = restaurer(args.archive, args.cible, cles)
+                if (cible / _ARC_DUMP).is_file() and args.base_cible:
+                    etat = restaurer_postgresql(cible / _ARC_DUMP, args.base_cible)
+                    print(f"base PostgreSQL chargée : {len(etat['tables'])} tables, "
+                          f"{sum(etat['tables'].values())} lignes")
+        except (ErreurIntegrite, FileExistsError, FileNotFoundError, VerrouOccupe, RuntimeError) as exc:
             print(f"restauration refusée : {exc}", file=sys.stderr)
-            return ECHEC_VERIFICATION if isinstance(exc, ErreurIntegrite) else ECHEC_CONFIGURATION
+            return (ECHEC_CONFIGURATION if isinstance(exc, VerrouOccupe | FileExistsError | FileNotFoundError)
+                    else ECHEC_VERIFICATION)
         print(cible)
+        if (cible / _ARC_DUMP).is_file() and not args.base_cible:
+            print("base PostgreSQL extraite (base/controldone.dump) : la charger dans une base vide avec "
+                  "--base-cible <url>", file=sys.stderr)
         if not args.controler:
             return OK
         args.cible = str(cible)
     if args.cmd in ("restaurer", "controler"):
         from controldone.storage.controle_restauration import controler
 
-        rapport = controler(Path(args.cible), cles)
+        rapport = controler(Path(args.cible), cles, base_url=args.base_cible)
         print("\n".join(rapport.lignes()))
         return OK if rapport.ok else ECHEC_VERIFICATION
     for p in rotation(destination, jours=args.jours, semaines=args.semaines):

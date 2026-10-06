@@ -3835,3 +3835,246 @@ confusion de lecture ne s'applique plus au montant, D-2303). Total 811 -> 669. T
 `test_famille_a.py`, `test_famille_c.py`, `test_famille_e.py`, `test_famille_f.py`, `test_corroboration.py`,
 `tests/extract/test_totaux_categories_d29.py`, `tests/ingest/test_ingest_structure_exports_attributs.py`,
 `tests/test_model.py` (données fictives).
+
+## D-3901 — Vérifications avant enregistrement, locales et hors ligne
+
+`.pre-commit-config.yaml` ne déclare que des crochets `repo: local` (`scripts/precommit/lancer.sh` puis
+`scripts/precommit/verifs.py`, bibliothèque standard + PyYAML) : rien n'est téléchargé, le résultat ne dépend pas
+d'un dépôt tiers. Vérifiés : `ruff check` (src, tests, scripts), espaces en fin de ligne (Markdown : deux espaces
+de saut de ligne admis), fichiers > 2 Mo (corpus `bench/corpus*/` exclus ; la vidéo de démonstration déjà
+versionnée est admise nommément), clés privées et jetons d'API reconnaissables (Anthropic, Stripe réel, webhook
+Stripe, AWS, GitHub, Slack ; ligne marquée `pragma: allowlist secret` ignorée), syntaxe JSON/YAML, pas de `print(`
+dans les paquets cœur (les commandes gardent les leurs). Pas de `ruff format --check` : le code n'est pas formaté
+par ruff (301 fichiers sur 363). Le crochet git n'est jamais installé automatiquement : `make hooks`.
+`make pre-commit` et la CI vérifient tout le dépôt. Outils de développement seulement : pre-commit (MIT).
+
+## D-3902 — Couverture mesurée, sans seuil bloquant pour l'instant
+
+coverage.py (Apache-2.0) via pytest-cov (MIT), branches comprises, configuration dans `pyproject.toml`
+(`[tool.coverage.*]`, données et HTML sous `var/couverture/`). `make couverture` ajoute un résumé **par paquet** et
+la liste des modules critiques les moins couverts (`scripts/couverture_paquets.py`, `var/couverture/paquets.md`).
+Base de référence et lecture : `docs/QUALITE.md`. Seuil (`COUV_MIN`) laissé à 0 tant que les blocs sécurité et
+stockage modifient `web/securite.py`, `storage/securite.py` et `storage/scope.py`.
+
+## D-3903 — Tests de propriétés (Hypothesis)
+
+Hypothesis (MPL-2.0 : copyleft faible au niveau du fichier, outil de test jamais distribué ni installé dans
+l'image) dans les extras `dev`. `tests/proprietes/` (marqueur `proprietes`) : lecture et formatage des montants
+(groupements français, anglais, allemand, suisse, indien ; signes, parenthèses, devises), saisie, tolérances
+(symétrie, monotonie, seuil ≥ tolérance, `Decimal` partout), TVA FR / SIREN, MRN (préfixe stable, bruit de
+lecture) et clés de confusion OCR, dates multilingues et ambiguïté jour/mois, redirection interne, paramètres de
+liste et pagination. Profils `dev` (100 exemples), `ci` (150, déterministe, sans base d'exemples) et `intensif`
+(2 000) par `HYPOTHESIS_PROFILE` / `make proprietes PROFIL=…`. Aucun défaut trouvé, y compris en `intensif`.
+
+## D-3904 — Corpus de banc non versionnés : régénération et empreinte
+
+À partir de `corpus_g6`, les corpus ne sont plus versionnés : `.gitignore` ignore `bench/corpus_*/` et ré-inclut
+`corpus_g3`, `corpus_g4`, `corpus_g5` (déjà suivis, rien n'est désindexé). Recette et empreinte de chaque corpus dans
+`bench/corpus_empreintes.json` ; `make corpus-g6` (régénération sautée si le corpus présent est conforme,
+`FORCE=1` pour refaire), `make corpus-verifier`, `make corpus GRAINE=… PREFIXE=…` (`scripts/corpus.py`). Empreinte
+exacte = celle consignée dans `docs/backlog/orchestrateur.md` (test de cohérence). Constat en la vérifiant : les TIFF
+LZW écrits par Pillow ne sont pas déterministes à l'octet (un octet de remplissage) ; une régénération de
+`corpus_g6` a donc des pixels identiques mais une empreinte exacte différente. Empreinte de secours `sha256_pixels`
+(TIFF comparés par leurs pixels décodés), acceptée et signalée comme telle. Documentation : `bench/README.md`.
+
+# Fiabilité de la production : PostgreSQL, alertes poussées, migrations, verrou (bloc P, octobre 2026)
+
+Tests : `tests/platform/test_sauvegarde_postgresql.py`, `test_migrations.py`, `test_verrou_maintenance.py`,
+`tests/ops/test_notifications.py` ; exercices `make restauration-test` et `make restauration-test-pg`.
+
+## D-3501 — Sauvegarde et restauration PostgreSQL dans l'archive `CDSAV2`
+
+- **Constat** : `sauvegarder` refusait une base non SQLite (code 2) ; un passage à PostgreSQL laissait la
+  production sans sauvegarde, sans vérification ni exercice.
+- **Choix** : `sauvegarder_postgresql` écrit `base/controldone.dump` (`pg_dump --format=custom --no-owner
+  --no-privileges`) dans la **même** archive chiffrée `CDSAV2`, avec le coffre, les traces d'envoi et le manifeste.
+  Cohérence : une transaction `REPEATABLE READ` en lecture seule exporte son instantané (`pg_export_snapshot`),
+  compte les lignes et lit la tête de l'audit, et reste ouverte pendant `pg_dump --snapshot=…` : manifeste et dump
+  voient exactement les mêmes données. Paramètres de connexion par l'environnement (`PGPASSWORD`…), jamais en
+  argument. `verifier` contrôle l'en-tête `PGDMP` ; `restaurer` relit le dump (`pg_restore --list`) ;
+  `restaurer --base-cible <url>` le charge par `pg_restore --single-transaction --exit-on-error` dans une base
+  **vide** (refus sinon) ; `controler --base-url` compare lignes, audit et références du coffre comme pour SQLite.
+  Vérification profonde : base jetable sur `BACKUP_PG_VERIFICATION_URL`, supprimée ensuite ; sans ce réglage, dump
+  relu seulement (remarque, pas d'échec). Exercice : `controldone sauvegarde exercice --postgres <serveur jetable>`
+  (`make restauration-test-pg`, grappe `initdb` dans `/tmp` par `scripts/pg_jetable.sh`, jamais un service).
+- **Pilote** : `pg8000` (BSD-3-Clause, pur Python ; extra `postgres` de `pyproject.toml`). psycopg écarté
+  (LGPL-3.0 : licences permissives seulement). L'application tourne sur PostgreSQL 16 avec pg8000 (init-demo,
+  web, worker, exercice complet conforme), à condition que la base soit en UTF-8.
+- **Mesure** (poste de développement, base de démonstration) : exercice PostgreSQL complet 24 s, dont
+  restauration + contrôle + démarrage du web 4,9 s.
+- **Écarté** : sauvegarde physique (`pg_basebackup`) — liée à la version et à l'architecture, ne restaure pas
+  dans une base vide d'un autre serveur ; dump SQL en clair (`--format=plain`) — pas de `pg_restore --list`, et
+  restauration non transactionnelle.
+
+## D-3502 — Alertes poussées : webhook et courriel, désactivés par défaut
+
+- **Constat** : les alertes n'étaient visibles qu'en se connectant à `/admin` ; une sauvegarde en panne pouvait
+  passer inaperçue plusieurs jours.
+- **Choix** : `services/notifications.py`, deux canaux : webhook (POST JSON en HTTPS, sans redirection,
+  compatible Slack/Mattermost `text`, Healthchecks `/fail`, ntfy en format `texte`) et courriel (SMTP, STARTTLS
+  ou TLS, destinataires fixes). Règles : aucun canal sans configuration explicite (`CONTROLDONE_NOTIF_*`) ;
+  aucun envoi hors `CONTROLDONE_ENV=prod`, même configuré ; contenu limité au type, à un libellé fixe, au nombre,
+  à l'heure et au chemin `/admin/alertes` ; une notification par type et par jour (`notifications_alertes`),
+  les suivantes regroupées ; alertes de plus de 24 h ou déjà lues jamais envoyées (activer ne déverse pas
+  l'historique) ; 5 essais par jour au plus ; un canal en panne n'empêche pas l'autre. Envoi **hors**
+  transaction, puis inscription. Lancé par le planificateur (toutes les 5 min et après la sauvegarde).
+- **Pourquoi pas la file sortante** (D-459) : elle sert aux envois approuvés un à un par le fondateur ; une
+  alerte doit partir sans attendre, vers une destination fixée par l'exploitant, et ne contient aucune donnée
+  client. La file sortante reste sans code d'envoi réel (test inchangé).
+- **Limite** : rien ne part si le conteneur `scheduler` est arrêté ; `BACKUP_PING_URL` reste nécessaire.
+
+## D-3503 — Migrations de schéma versionnées, sans Alembic
+
+- **Constat** : `create_all` ne crée ni colonne ni index sur une table existante ; aucun moyen de faire évoluer une
+  base en service (index demandés par l'interface, nouvelles colonnes).
+- **Choix** : `storage/migrations.py` : table `schema_version`, étapes Python ordonnées et **idempotentes**
+  (`CREATE INDEX IF NOT EXISTS`, colonne ajoutée seulement si absente, nullable), une transaction par étape avec
+  son inscription, verrou consultatif sous PostgreSQL. Base neuve : `create_all` puis toutes les étapes inscrites
+  (chaque évolution est aussi déclarée dans les modèles, testé). Base existante, même antérieure au mécanisme :
+  étapes en attente exécutées. `controldone migrer` sauvegarde d'abord (abandon si la sauvegarde échoue) ;
+  `serve` / worker migrent seuls en `dev` / `test`, refusent de démarrer en production (code 3) sauf
+  `CONTROLDONE_MIGRATION_AUTO=1`. `serve --init-schema` ne crée plus que les tables d'une base neuve.
+- **Étapes** : 1 `socle` (tables manquantes : débit, révocations et sessions actives D-3201/D-3202,
+  facturation, notifications) ; 2 `index_journal_taches` (`audit_log` : action+id, actor+id, ts ; `jobs` :
+  statut+cree_le, kind+statut+run_after, cree_le) ; 3 `alertes_notifiees` (`alertes.notifiee_le` ; alertes
+  existantes marquées traitées ; table `notifications_alertes`). Testé sur SQLite et PostgreSQL 16.
+- **Alembic écarté** : installé dans `.venv` mais ni figé ni importé ; il ajouterait Mako et une seconde
+  description du schéma, son autogénération ne sert pas pour des ajouts de colonnes et d'index, et les `ALTER`
+  de SQLite demandent de toute façon des étapes écrites à la main. À reconsidérer si des transformations lourdes
+  (renommage, changement de type) deviennent nécessaires.
+- **Limite** : l'index `actor` ne sert pas la recherche par sous-chaîne du journal (`LIKE '%…%'`) ; il sert les
+  préfixes et l'égalité.
+
+## D-3504 — Verrou de maintenance : sauvegarde, purge, restauration
+
+- **Constat** : une purge mise en file à la main pendant une sauvegarde pouvait retirer un objet que l'instantané
+  référence (D-3306 ne couvrait que le cas planifié).
+- **Choix** : `storage/verrou.py`, `flock` exclusif sur `<data_dir>/.verrou-maintenance` (libéré avec le
+  processus, partagé par les conteneurs du même hôte qui montent `/app/var`). La création d'archive le prend
+  (attente `BACKUP_VERROU_ATTENTE_S`, 30 min, puis échec + alerte) ; `purger_expires` le prend sans attendre
+  (`VerrouOccupe` -> le job `purger_retention` est reporté de 10 min sans consommer d'essai) ; la restauration
+  aussi (attente 60 s, code 2). La vérification de l'archive se fait hors verrou. Le fichier du verrou est le
+  seul admis dans une cible de restauration « vide ».
+- **Limite** : plusieurs hôtes (PostgreSQL partagé, volumes distincts) ne sont pas couverts : verrou consultatif
+  PostgreSQL à ajouter le jour venu (`docs/backlog/production.md`).
+
+## D-3505 — Libellés des alertes de sauvegarde
+
+`admin/alertes.html.j2` traduit `sauvegarde_echec`, `sauvegarde_verification_echec`, `sauvegarde_absente`,
+`sauvegarde_hors_site_echec` ; mêmes libellés fixes dans les notifications. Le bandeau sur `/admin` reste à faire
+(bloc interface).
+
+# Sécurité : suivi des revues (bloc S, octobre 2026)
+
+Points ouverts de la première revue (RS-16, RS-18 à RS-21) et du backlog `docs/backlog/securite.md`. Tests :
+`tests/security/test_suivi_securite.py` (22 tests) et `tests/security/test_postgresql_securite.py` (6 tests,
+marqueur `postgresql`).
+
+## D-3601 — Mode `dev` oublié en production : `serve` refuse de démarrer (RS-16)
+
+- **Constat** : `CONTROLDONE_ENV` absent vaut `dev` (clé maîtresse générée sur le disque, cookies sans `Secure`
+  ni `__Host-`, pas de HSTS). L'image Docker fixe `prod`, mais une installation à la main pouvait l'oublier.
+- **Choix** : le défaut `dev` reste (démonstration, tests, développement en une commande), mais
+  `controldone serve` refuse de démarrer (code 2, avant de créer quoi que ce soit) en `dev`/`test` quand la
+  configuration est celle d'une production : écoute hors boucle locale (`--host 0.0.0.0`, adresse publique),
+  `--https` ou `--proxy`. `CONTROLDONE_DEV_RESEAU=1` lève le refus (démonstration volontaire sur un réseau de
+  confiance), avec un avertissement journalisé. `web.securite.verifier_mode_service`.
+- **Écarté** : défaut `prod` (casserait `make serve-demo`, les tests et tout essai local sans clés : l'échec
+  « fermé » se paierait en confusion pour tous les usages légitimes).
+
+## D-3602 — URL publique configurée et en-tête `Host` filtré (RS-18)
+
+- Liens de paiement et d'abonnement Stripe construits avec `web.securite.url_publique` :
+  `CONTROLDONE_URL_PUBLIQUE` (`https://hôte[:port]`, sans chemin ni identifiants), sinon
+  `https://CONTROLDONE_DOMAIN` ; **jamais** l'en-tête `Host` en production (erreur lisible si rien n'est
+  configuré) ; en développement seulement, l'URL de la requête à défaut de configuration.
+- Domaine configuré : `TrustedHostMiddleware` (400 pour un `Host` étranger), hôtes admis = domaine, hôte de
+  l'URL publique, `CONTROLDONE_HOTES_AUTORISES` (liste), boucle locale (sonde de santé de l'image). Vérifié dans
+  l'image construite (`Host: piege.test` → 400, domaine → 200, sonde « healthy »).
+
+## D-3603 — Sessions actives : table `sessions_actives` et API pour l'interface
+
+- Table de plateforme `sessions_actives` (`storage/securite.py`, `SessionOuverte`) : une ligne par connexion
+  réussie (`sid`, `user_id`, début, dernière émission du jeton, expiration, appareil, réseau), mise à jour à
+  chaque rotation (au plus toutes les 15 min : pas d'écriture par requête), supprimée à la déconnexion, à la
+  révocation, au changement de mot de passe, purgée à l'expiration (`purger_revocations`). Créée par
+  `assurer_tables_securite` au démarrage du web et par l'étape 1 des migrations (D-3503) ; table nouvelle,
+  aucune colonne ajoutée.
+- **Minimisation** : appareil réduit à « navigateur · système » par listes fermées (`reduire_appareil`, jamais
+  le `User-Agent`), réseau tronqué (`/24` IPv4, `/48` IPv6, `reduire_reseau`).
+- API (`auth.jetons.GestionnaireSessions`) : `sessions_actives(user_id, sid_courant=…)` (liste de
+  `storage.securite.SessionActive` : `sid`, `debut`, `vu`, `appareil`, `reseau`, `courante` ; la plus récemment
+  active d'abord ; révoquées, inactives et expirées exclues), `fermer_session(user_id, sid)` (`False` si ce n'est
+  pas une session ouverte **de ce compte**), `fermer_autres_sessions(user_id, sid_courant)` (nombre fermé). Les
+  connexions passent par `EtatSecurite.ouvrir_session(request, reponse, acteur, deux_facteurs=…)`, qui
+  enregistre la session. Sans registre (tests unitaires) : liste vide. Mode d'emploi pour l'interface :
+  `docs/backlog/securite.md`.
+
+## D-3604 — Cookies secondaires `__Host-` ; copie locale des révocations bornée
+
+- `cd_2fa` (étape du second facteur) et `cd_flash` (messages) deviennent `__Host-cd_2fa` et `__Host-cd_flash`
+  en production (comme `__Host-cd_session` et `__Host-cd_pre`) : `Secure`, `Path=/`, sans `Domain`. Effacement
+  par un `Set-Cookie` `Secure` (sinon refusé par le navigateur pour un nom `__Host-`). Accès par
+  `EtatSecurite.nom_2fa`, `nom_flash`, `poser_2fa`, `lire_2fa_requete`, `effacer_2fa`, `effacer_flash`.
+- `GestionnaireSessions` : copie locale des révocations (`sid`, coupures par utilisateur) bornée à 10 000
+  entrées chacune (`MAX_REVOCATIONS_LOCALES`) : les entrées expirées partent d'abord, puis les plus anciennes ;
+  le registre en base fait foi (une révocation sortie de la copie reste refusée).
+
+## D-3605 — Base vivante sur un volume chiffré : constat au démarrage (RS-21)
+
+- `storage.securite.chiffrement_volume(chemin)` : `chiffre` si le fichier de la base est sur un volume dm-crypt
+  (LUKS) ou sur un volume logique construit au-dessus (lecture de `/sys/dev/block/MAJ:MIN`, `dm/uuid` `CRYPT-…`,
+  esclaves), `non_chiffre`, ou `inconnu` (superposition sans périphérique, réseau, autre système).
+- Au démarrage de `serve` en production (SQLite) : `non_chiffre` → avertissement et alerte `volume_non_chiffre`
+  (une par mois) ; `inconnu` → information journalisée ; `CONTROLDONE_VOLUME_CHIFFRE=1` déclare un chiffrement
+  invisible d'ici (disque chiffré par l'hébergeur). PostgreSQL : à la charge de l'hôte de la base.
+- **Écarté** : chiffrer la base SQLite elle-même (SQLCipher : dépendance native, licence et sauvegardes à
+  revoir) ; refuser de démarrer (un volume non détectable n'est pas un volume en clair).
+
+## D-3606 — Rendu OCR des PDF : plafond de pixels
+
+- `ingest.pages.echelle_rendu_ocr` : `dpi / 72` (300 dpi), abaissée seulement si la page dépasserait
+  `MAX_PIXELS_RENDU_OCR` = 40 Mpx (même borne que l'agrandissement des images, REV2-03). A4, A3, légal US et A2
+  à 300 dpi restent sous le plafond : **sortie inchangée pour les pages ordinaires, `VERSION_PAGES` inchangée**.
+  Au-delà (page de plusieurs mètres), avertissement `rendu_ocr_reduit` sur la page.
+
+## D-3607 — Vignettes rendues dans le processus isolé (RS-20)
+
+- `services.vignettes` ne rend plus dans le processus web : `ingest.pages.executer_isole("rendu_page", …)`
+  (même forkserver que l'extraction : environnement sans secrets, `RLIMIT_AS` 1,5 Go, délai 30 s, arrêt forcé),
+  liste fermée de cibles (`CIBLES_ISOLEES`). Un plantage ou un dépassement donne « pas d'image » (journalisé).
+  Coût mesuré : ≈ 50 ms par rendu (même ordre que le rendu local), le cache des PNG est inchangé.
+- **Écarté** : rendre les vignettes à l'ingestion et les stocker chiffrées (stockage, purge et effacement à
+  revoir pour un gain de quelques dizaines de millisecondes).
+
+## D-3608 — Caddy : tailles de corps alignées sur l'application
+
+- `/csp-rapport` : 16 Kio (l'application en lit 8 Kio) ; dépôts : 520 Mio (application : 500 Mio + 16 Mio
+  d'enveloppe) ; tout le reste : 4 Mio (l'application refuse au-delà de 2 Mio ; auparavant 60 Mo). Unités binaires
+  comme l'application. Matchers disjoints ; configuration validée par `caddy validate` 2.10.
+
+## D-3609 — Dépendances figées avec empreintes ; audit de l'image
+
+- `requirements.lock` porte les empreintes SHA-256 de toutes les distributions (`make lock` : `uv pip compile
+  --generate-hashes`, Linux, Python 3.11, versions inchangées) ; le Dockerfile installe par `pip
+  --require-hashes`, et le backend de construction (hatchling, editables) vient de `deploy/requirements-build.lock`
+  (empreintes aussi) dans un environnement de l'étape « build » seulement (`--no-build-isolation`) : plus aucun
+  téléchargement non vérifié. `make install` (uv) vérifie les empreintes présentes.
+- Image : pip, setuptools et wheel retirés (venv et interpréteur de base) — inutiles à l'exécution et porteurs
+  de copies vendues de `wheel` / `jaraco.context` signalées HIGH corrigeables.
+- `make audit-image` (ou `make audit IMAGE=…`) : Trivy (binaire, sinon image `aquasec/trivy:0.75.0` par Docker ;
+  `AUDIT_CA_BUNDLE` pour un mandataire à autorité privée) sur l'image construite, paquets du système et Python.
+  Bloque sur une vulnérabilité HIGH/CRITICAL **corrigeable** ; les autres sont listées (`var/audit/image.md`).
+  Résultat du 6 octobre 2026 (Debian 13.7) : 0 grave corrigeable ; 77 graves sans correctif publié
+  (CRITICAL 1 : libxml2 ; HIGH : util-linux, curl, expat, libtiff, libtesseract…), à suivre.
+- Paquets hors du fichier figé : `alembic` et `mako` retirés de `.venv` (Alembic écarté, D-3503) ;
+  `python-dateutil` et `six` restent, dépendances de `pg8000` (extra `postgres`, D-3501), hors de l'image.
+
+## D-3610 — Débit, révocations et sessions testés sous PostgreSQL
+
+- `make test-pg-securite` : serveur jetable (`scripts/pg_jetable.sh`, PostgreSQL 16, 127.0.0.1:55441), base neuve
+  par test, tests marqués `postgresql` (sautés sans `CONTROLDONE_TEST_PG_URL`), serveur arrêté et effacé
+  ensuite. Couvre le `SELECT … FOR UPDATE`, les conflits de première insertion rejoués (six connexions sur une clé
+  absente : exactement 20 jetons sur 60 demandes ; cinq révocations simultanées du même utilisateur : une ligne,
+  coupure la plus tardive), la table bornée, les révocations et les sessions actives entre deux « processus ».
+  6 tests verts le 6 octobre 2026. À ajouter à la CI (déclenchement manuel) avec le paquet `postgresql`.

@@ -27,15 +27,14 @@ from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalid
 from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.graphes import donnees_client
-from controldone.web.listes import lire_requete, paginer
+from controldone.web.listes import lire_requete
+from controldone.web.listes_sql import page_dossiers, page_registre, totaux_registre, transitaires_registre
 from controldone.web.listes_vues import (
     PARAMS_DOSSIERS,
     STATUTS_DOSSIER,
     STATUTS_ECART,
     TRIS_DOSSIERS,
     TRIS_REGISTRE,
-    filtrer_dossiers,
-    filtrer_registre,
     params_registre,
 )
 from controldone.web.rendu import page, redirection, retour_sur
@@ -196,10 +195,9 @@ def dossiers(request: Request) -> Response:
     req = lire_requete(request, PARAMS_DOSSIERS, TRIS_DOSSIERS, "reference")
     with _pf(request).db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
-        liste = lister_dossiers(scope)
-    p = paginer(filtrer_dossiers(liste, req), req)
+        p, total_dossiers = page_dossiers(scope, req)  # filtres, tri et pagination en SQL (D-3801)
     return page(request, "client/dossiers.html.j2", titre="Dossiers", nav="dossiers", p=p, req=req,
-                statuts=STATUTS_DOSSIER, total_dossiers=len(liste), info=info, demo=info["demo"], **_contexte(a))
+                statuts=STATUTS_DOSSIER, total_dossiers=total_dossiers, info=info, demo=info["demo"], **_contexte(a))
 
 
 @routeur.get("/dossiers/{dossier_id}")
@@ -265,18 +263,14 @@ def recouvrement(request: Request) -> Response:
     a = _client(request)
     with _pf(request).db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
-        lignes = reclamations.registre(scope)
-    transitaires = {x.transitaire_id: x.transitaire for x in lignes if x.transitaire_id}
-    req = lire_requete(request, params_registre(transitaires), TRIS_REGISTRE, "-reste")
-    p = paginer(filtrer_registre(lignes, req), req)
-    totaux = {
-        "initial": sum((x.montant_initial for x in lignes), Decimal(0)),
-        "credite": sum((x.montant_credite for x in lignes), Decimal(0)),
-        "reste": sum((x.reste for x in lignes if x.statut_code not in ("credite", "abandonne")), Decimal(0)),
-    }
+        transitaires = transitaires_registre(scope)
+        req = lire_requete(request, params_registre(transitaires), TRIS_REGISTRE, "-reste")
+        totaux, total_lignes = totaux_registre(scope)
+        p = page_registre(scope, req, transitaires)  # filtres, tri et pagination en SQL (D-3801)
     return page(request, "client/recouvrement.html.j2", titre="Suivi des avoirs reçus", nav="recouvrement",
                 p=p, req=req, statuts=STATUTS_ECART, transitaires=sorted(transitaires.items(), key=lambda t: t[1]),
-                total_lignes=len(lignes), totaux=totaux, info=info, demo=info["demo"], **_contexte(a))
+                total_lignes=total_lignes, totaux=totaux, info=info, demo=info["demo"],
+                retour=retour_sur("/espace/recouvrement" + req.url(), "/espace/recouvrement"), **_contexte(a))
 
 
 def _formulaire_client(request: Request) -> Any:
@@ -289,18 +283,19 @@ def _formulaire_client(request: Request) -> Any:
 def declarer_envoi(request: Request, ecart_id: str) -> Response:
     a = _client(request)
     form = _formulaire_client(request)
+    retour = retour_sur(form.get("retour"), "/espace/recouvrement")
     try:
         reclamations.declarer_envoi_releve(_pf(request), a, ecart_id, str(form.get("commentaire") or "")[:500])
     except RequeteInvalide as exc:
-        return redirection(request, "/espace/recouvrement", erreur=str(exc))
-    return redirection(request, retour_sur(form.get("retour"), "/espace/recouvrement"),
-                       message="Envoi de votre courrier enregistré.")
+        return redirection(request, retour, erreur=str(exc))
+    return redirection(request, retour, message="Envoi de votre courrier enregistré.")
 
 
 @routeur.post("/recouvrement/{ecart_id}/avoir")
 def avoir(request: Request, ecart_id: str) -> Response:
     a = _client(request)
     form = _formulaire_client(request)
+    retour = retour_sur(form.get("retour"), "/espace/recouvrement")
     try:
         montant = montant_saisi(form.get("montant"), nom="montant HT de l'avoir")
         tva = form.get("montant_tva")
@@ -310,5 +305,5 @@ def avoir(request: Request, ecart_id: str) -> Response:
                                             str(form.get("commentaire") or "")[:500], origine=origine,
                                             montant_tva=montant_tva)
     except RequeteInvalide as exc:
-        return redirection(request, "/espace/recouvrement", erreur=str(exc))
-    return redirection(request, "/espace/recouvrement", message="Avoir enregistré.")
+        return redirection(request, retour, erreur=str(exc))
+    return redirection(request, retour, message="Avoir enregistré.")

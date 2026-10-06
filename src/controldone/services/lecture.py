@@ -60,6 +60,7 @@ __all__ = [
     "constats_courants",
     "detail_dossier",
     "job_du_lot",
+    "ligne_dossier",
     "lire_lot",
     "lister_dossiers",
     "lister_lots",
@@ -297,23 +298,26 @@ def lister_dossiers(scope: TenantScope) -> list[DossierLigne]:
     par_dossier: dict[str, list[Constat]] = {}
     for c in constats:
         par_dossier.setdefault(c.dossier_id, []).append(c)
-    out = []
-    for d in scope.lister(Dossier, ordre=Dossier.reference):
-        cs = par_dossier.get(d.id, [])
-        statut, code = _statut(d.statut_global, cs, client=client)
-        totaux = [c for c in cs if not hors_totaux(c)]  # même règle que le rapport (D-1319)
-        cert = sum((c.montant_en_jeu for c in totaux if c.niveau == "ecart_certain" and c.statut_validation == "valide"
-                    and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
-        aver = sum((c.montant_en_jeu for c in totaux if c.niveau == "a_verifier" and c.statut_validation != "rejete"
-                    and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
-        out.append(DossierLigne(
-            id=d.id, reference=d.reference or d.id, statut=statut, statut_code=code, version=d.version,
-            lot_id=d.lot_id, cree_le=d.cree_le, cles=_cles(d.contenu or {}),
-            nb_constats=len([c for c in cs if c.statut_validation != "rejete"]),
-            nb_proposes=len([c for c in cs if c.statut_validation == "propose"]),
-            recouvrable_certain=cert, recouvrable_a_verifier=aver,
-        ))
-    return out
+    return [ligne_dossier(d, par_dossier.get(d.id, []), client=client)
+            for d in scope.lister(Dossier, ordre=Dossier.reference)]
+
+
+def ligne_dossier(d: Any, cs: list[Constat], *, client: bool) -> DossierLigne:
+    """Ligne de liste d'un dossier (``d`` : ``Dossier`` ou objet aux mêmes attributs ; ``cs`` : ses constats
+    courants visibles). Partagée par ``lister_dossiers`` et la liste paginée en SQL (``web/listes_sql.py``)."""
+    statut, code = _statut(d.statut_global, cs, client=client)
+    totaux = [c for c in cs if not hors_totaux(c)]  # même règle que le rapport (D-1319)
+    cert = sum((c.montant_en_jeu for c in totaux if c.niveau == "ecart_certain" and c.statut_validation == "valide"
+                and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
+    aver = sum((c.montant_en_jeu for c in totaux if c.niveau == "a_verifier" and c.statut_validation != "rejete"
+                and c.nature_montant == "recouvrable" and c.montant_en_jeu and c.montant_en_jeu > 0), Decimal(0))
+    return DossierLigne(
+        id=d.id, reference=d.reference or d.id, statut=statut, statut_code=code, version=d.version,
+        lot_id=d.lot_id, cree_le=d.cree_le, cles=_cles(d.contenu or {}),
+        nb_constats=len([c for c in cs if c.statut_validation != "rejete"]),
+        nb_proposes=len([c for c in cs if c.statut_validation == "propose"]),
+        recouvrable_certain=cert, recouvrable_a_verifier=aver,
+    )
 
 
 @dataclass

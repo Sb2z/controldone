@@ -147,3 +147,21 @@ def test_reproductible_et_via_le_moteur():
     b = run_controls(contexte([d]), controles=["B1"])
     assert [r.model_dump() for r in a] == [r.model_dump() for r in b]
     assert a[0].constat.id.startswith("f_") and a[0].empreinte_tolerances
+
+
+def test_base_lue_tronquee_sur_scan_d3705():
+    # « 30,65 » lu pour 30 651,38 (décimales perdues, × 1 000) : la lecture ne permet pas de conclure.
+    d = _dec(taxation("doc_dec1", base="30.65", taux="2.9", montant="888.89", methode="ocr", confiance=0.80))
+    r = _un(contexte([d]))
+    assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.confiance_insuffisante
+    assert r.details["motif"] == "base_lue_tronquee" and r.details["puissance_de_dix"] == 3
+    # « 1.257 » pour 1 257,9 (× 1 000) : à une unité du dernier chiffre lu près
+    d = _dec(taxation("doc_dec1", base="1.257", taux="20", montant="251.58", methode="ocr", confiance=0.80))
+    assert _un(contexte([d])).details["motif"] == "base_lue_tronquee"
+
+
+def test_base_tronquee_lue_avec_certitude_ou_ecart_quelconque_reste_un_constat():
+    d = _dec(taxation("doc_dec1", base="30.65", taux="2.9", montant="888.89"))  # texte natif, 0,99
+    assert _un(contexte([d])).outcome is not Outcome.non_verifiable
+    d = _dec(taxation("doc_dec1", base="30.65", taux="2.9", montant="20.43", methode="ocr", confiance=0.80))
+    assert _un(contexte([d])).outcome is Outcome.a_verifier

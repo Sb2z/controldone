@@ -46,6 +46,10 @@ controldone = "controldone.cli:main"
 # Outils de développement seulement (jamais dans l'image) ; licences : pytest MIT, ruff MIT, pytest-cov MIT, coverage
 # Apache-2.0, hypothesis MPL-2.0 (copyleft faible au fichier, non distribué), pre-commit MIT (D-3901–D-3903).
 dev = ["pytest>=8.0", "ruff>=0.4", "pytest-cov>=5.0", "coverage[toml]>=7.4", "hypothesis>=6.100", "pre-commit>=3.5"]
+# PostgreSQL (D-3501) : pilote pur Python pg8000 (BSD-3-Clause ; dépend de python-dateutil Apache-2.0/BSD, scramp
+# MIT-0, asn1crypto MIT). psycopg (LGPL-3.0) écarté : licences permissives seulement. URL :
+# postgresql+pg8000://… ; sauvegarde : pg_dump / pg_restore (paquet postgresql-client, même version majeure).
+postgres = ["pg8000>=1.31"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/controldone"]
@@ -57,6 +61,7 @@ addopts = "-ra"
 markers = [
   "lent: test long (exercice de restauration de bout en bout) ; exclure avec -m 'not lent'",
   "proprietes: test de propriétés Hypothesis (tests/proprietes, profil HYPOTHESIS_PROFILE)",
+  "postgresql: exige un serveur PostgreSQL jetable (CONTROLDONE_TEST_PG_URL ; make test-pg-securite), sauté sinon",
 ]
 
 [tool.ruff]

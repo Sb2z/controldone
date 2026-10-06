@@ -23,6 +23,7 @@ import hashlib
 import io
 import itertools
 import json
+import logging
 import multiprocessing
 import os
 import re
@@ -46,11 +47,17 @@ from controldone.model.enums import QualiteTexte
 from .sniff import MIME_CSV, MIME_EML, MIME_ODS, MIME_PDF, MIME_TEXTE, MIME_XLSX, MIME_XML, decoder_texte
 from .texte import Ligne, Mot, PageText, construire_lignes, score_texte
 
+log = logging.getLogger("controldone.ingest.pages")
+
 __all__ = [
+    "CIBLES_ISOLEES",
+    "MAX_PIXELS_RENDU_OCR",
     "VERSION_PAGES",
     "CachePagesDisque",
     "OptionsPages",
     "PageExtraite",
+    "echelle_rendu_ocr",
+    "executer_isole",
     "extraire_pages",
     "extraire_pages_local",
     "ocr_disponible",
@@ -299,7 +306,7 @@ def _executer_sous_processus(contenu: bytes, mime: str, options: dict, memoire_m
 _ENV_PROCESSUS_PAGES = {"OMP_THREAD_LIMIT": "1", "OPENBLAS_NUM_THREADS": "1"}
 #: Modules chargés une fois dans le forkserver (code et bibliothèques seulement : aucune donnée de document).
 _PRECHARGES = ["controldone.ingest.pages", "controldone.ingest.sniff", "pdfplumber", "pypdfium2", "pytesseract",
-               "PIL.Image", "PIL.ImageStat", "openpyxl", "lxml.etree"]
+               "PIL.Image", "PIL.ImageStat", "openpyxl", "lxml.etree", "controldone.services.vignettes"]
 _FORKSERVER_DISPONIBLE = os.name == "posix" and "forkserver" in multiprocessing.get_all_start_methods()
 _VERROU_FS = threading.Lock()
 _PID_FS: list[int | None] = [None]  # processus qui a configuré le forkserver (un fork en hérite sans pouvoir l'utiliser)
@@ -408,11 +415,61 @@ def _processus_pages(envoi, contenu: bytes, mime: str, options: dict, memoire_mo
 
 def _executer_forkserver(contenu: bytes, mime: str, options: dict, memoire_mo: int,
                          timeout: float) -> tuple[str | None, str | None]:
+    brut, motif = _lancer_forkserver(_processus_pages, (contenu, mime, options, memoire_mo, timeout), timeout)
+    return (brut.decode("utf-8") if brut is not None else None), motif
+
+
+#: Rendus confiés au processus isolé (RS-20, D-3607) : nom -> fonction ``module:attribut`` qui renvoie des octets
+#: ou ``None``. Liste fermée : le parent ne peut demander rien d'autre.
+CIBLES_ISOLEES = {"rendu_page": "controldone.services.vignettes:rendu_local"}
+
+
+def _processus_cible(envoi, cible: str, kwargs: dict, memoire_mo: int, delai_s: float) -> None:
+    """Corps du processus isolé pour un rendu de ``CIBLES_ISOLEES`` (enfant du forkserver)."""
+    import importlib
+    import signal
+
+    try:
+        nul = os.open(os.devnull, os.O_RDWR)
+        os.dup2(nul, 1)
+        os.dup2(nul, 2)
+        os.environ.update(_ENV_PROCESSUS_PAGES)
+        _limiteur_memoire(memoire_mo)()
+        signal.alarm(int(delai_s) + 30)
+        module, _, attribut = CIBLES_ISOLEES[cible].partition(":")
+        resultat = getattr(importlib.import_module(module), attribut)(**kwargs)
+        envoi.send_bytes(b"\x00" if resultat is None else b"\x01" + bytes(resultat))
+        envoi.close()
+    except BaseException:
+        os._exit(1)
+
+
+def executer_isole(cible: str, kwargs: dict, *, memoire_mo: int = 1536,
+                   delai_s: float = 30.0) -> tuple[bytes | None, str | None]:
+    """Exécute la fonction ``CIBLES_ISOLEES[cible](**kwargs)`` dans un processus isolé (même forkserver que
+    l'extraction des pages : environnement sans secrets, ``RLIMIT_AS``, délai, arrêt forcé). Renvoie
+    ``(octets, None)``, ``(None, None)`` si la fonction a renvoyé ``None``, ou ``(None, motif)`` en cas d'échec
+    (délai, mémoire, plantage de la bibliothèque de rendu). Sans forkserver (plateforme non POSIX) : exécution
+    locale, journalisée."""
+    import importlib
+
+    if cible not in CIBLES_ISOLEES:
+        raise ValueError(f"cible non autorisée : {cible}")
+    if not _FORKSERVER_DISPONIBLE:  # pragma: no cover - Linux en production
+        log.warning("rendu_non_isole cible=%s", cible)
+        module, _, attribut = CIBLES_ISOLEES[cible].partition(":")
+        return getattr(importlib.import_module(module), attribut)(**kwargs), None
+    brut, motif = _lancer_forkserver(_processus_cible, (cible, kwargs, memoire_mo, delai_s), delai_s)
+    if brut is None:
+        return None, motif
+    return (bytes(brut[1:]) if brut[:1] == b"\x01" else None), None
+
+
+def _lancer_forkserver(cible_fn, args: tuple, timeout: float) -> tuple[bytes | None, str | None]:
     with _VERROU_FS:
         ctx = _contexte_forkserver()
         recu, envoi = ctx.Pipe(duplex=False)
-        proc = _ProcessusPages(target=_processus_pages, name="cdo-pages", daemon=True,
-                                   args=(envoi, contenu, mime, options, memoire_mo, timeout))
+        proc = _ProcessusPages(target=cible_fn, name="cdo-pages", daemon=True, args=(envoi, *args))
         # Le worker de jobs exécute le pipeline dans un processus « daemon » (jobs.handlers) : multiprocessing y
         # refuse tout enfant parce qu'il ne les attendrait pas à la sortie. Ici l'enfant est toujours attendu ou
         # tué avant de rendre la main (et se termine seul au-delà du délai) : on lève l'interdiction pour ce start.
@@ -428,7 +485,7 @@ def _executer_forkserver(contenu: bytes, mime: str, options: dict, memoire_mo: i
     try:
         if recu.poll(timeout):
             try:
-                donnees = recu.recv_bytes().decode("utf-8")
+                donnees = recu.recv_bytes()
             except (EOFError, OSError):
                 donnees = None
         else:
@@ -667,8 +724,11 @@ def _pages_pdf(contenu: bytes, opts: OptionsPages) -> list[PageText]:
                 sortie.append(natif)
                 continue
             try:
-                image = pp.render(scale=opts.dpi / 72).to_pil()
+                echelle, reduite = echelle_rendu_ocr(*pp.get_size(), opts.dpi)
+                image = pp.render(scale=echelle).to_pil()
                 ocr = _ocr_image(image, opts, numero)
+                if reduite:
+                    ocr.avertissements.append("rendu_ocr_reduit")
             except Exception as e:  # rendu impossible
                 ocr = _page_illisible(numero, f"rendu_impossible:{type(e).__name__}")
             ocr.largeur, ocr.hauteur, ocr.texte_masque = largeur, hauteur, texte_masque
@@ -680,6 +740,23 @@ def _pages_pdf(contenu: bytes, opts: OptionsPages) -> list[PageText]:
         if doc_pdfium is not None:
             doc_pdfium.close()
     return sortie or [_page_illisible(1, "pdf_sans_page")]
+
+
+#: Plafond de pixels d'une page PDF rendue pour l'OCR (D-3606) : même borne que l'agrandissement des images
+#: (REV2-03). Une page A2 à 300 dpi en fait 34,8 M, une A3 17,4 M : les pages ordinaires sont rendues à
+#: ``OptionsPages.dpi`` sans changement. Au-delà (page de plusieurs mètres), la résolution baisse pour tenir dans
+#: le plafond au lieu d'allouer des gigaoctets dans le processus isolé avant d'échouer sous ``RLIMIT_AS``.
+MAX_PIXELS_RENDU_OCR = 40_000_000
+
+
+def echelle_rendu_ocr(largeur_pt: float, hauteur_pt: float, dpi: int,
+                      max_pixels: int = MAX_PIXELS_RENDU_OCR) -> tuple[float, bool]:
+    """``(échelle pdfium, réduite)`` : ``dpi / 72``, abaissée si la page dépasserait ``max_pixels``."""
+    w, h = max(1.0, float(largeur_pt)), max(1.0, float(hauteur_pt))
+    echelle = dpi / 72
+    if w * h * echelle * echelle <= max_pixels:
+        return echelle, False
+    return (max_pixels / (w * h)) ** 0.5 * 0.99, True  # marge pour les arrondis au pixel
 
 
 def _meilleure(natif: PageText, ocr: PageText, nb_natif: int) -> PageText:

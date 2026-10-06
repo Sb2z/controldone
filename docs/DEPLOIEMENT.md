@@ -262,6 +262,7 @@ Sauvegarde manuelle immédiate : `docker compose exec scheduler /app/deploy/back
 | Disponibilité | Sonde HTTPS externe toutes les 5 min sur **`https://app.exemple.fr/sante`** (réponse `{"statut":"ok"}`), alerte par courriel. Elle vérifie aussi le certificat. |
 | Conteneurs | `docker compose ps` (web a un healthcheck `/sante` ; `restart: unless-stopped` partout). |
 | Journaux | `docker compose logs -f --tail 100 web worker scheduler caddy` (JSON, sans contenu de document ; rotation 5 × 10 Mo). |
+| Alertes poussées | Facultatif (D-3502) : `CONTROLDONE_NOTIF_WEBHOOK_URL` (Slack, Mattermost, ntfy, Healthchecks `/fail`) et/ou `CONTROLDONE_NOTIF_SMTP_*` (courriel) dans `.env.prod` ; une notification par type d'alerte et par jour, sans donnée client ; essai : `docker compose exec scheduler controldone alertes essai`. Rien n'est envoyé sans cette configuration. |
 | Sauvegardes | Sonde « homme mort » `BACKUP_PING_URL` (alerte par courriel sans signal pendant 26 h) ; alertes `sauvegarde_*` dans `/admin/alertes` ; `docker compose logs scheduler | grep sauvegarde` doit montrer un `tache_ok` par jour ; `ls -lt /srv/controldone/backups` ; `rclone ls objeu:controldone-sauvegardes`. |
 | Jobs en échec, coûts IA | `/admin` (alertes `job_mort`, `cout_ia_alerte`, `cout_ia_plafond`). |
 | Disque | `df -h /srv/controldone` chaque semaine (alerte à 80 %). |
@@ -304,16 +305,23 @@ docker compose -f deploy/docker-compose.yml exec scheduler /app/deploy/backup-cr
 git fetch && git log --oneline HEAD..origin/main                                      # 2. relire
 git pull --ff-only
 sed -i 's/^CONTROLDONE_VERSION=.*/CONTROLDONE_VERSION=2.0.1/' deploy/.env.prod        # 3. nouvelle étiquette
-cd deploy && docker compose build && docker compose up -d                              # 4. reconstruction
-docker compose ps && curl -fsS https://app.exemple.fr/sante                            # 5. contrôle
+cd deploy && docker compose build                                                      # 4. reconstruction
+docker compose run --rm --no-deps scheduler controldone migrer --etat                  # 5. migrations ?
+docker compose stop web worker scheduler                                               #    si en attente :
+docker compose run --rm --no-deps scheduler controldone migrer                         #    sauvegarde + étapes
+docker compose up -d                                                                   # 6. redémarrage
+docker compose ps && curl -fsS https://app.exemple.fr/sante                            # 7. contrôle
 ```
 
 - Retour arrière : remettre l'ancienne valeur de `CONTROLDONE_VERSION` (l'image précédente est conservée
   localement) puis `docker compose up -d` ; si le schéma a changé entre-temps, restaurer la sauvegarde de
   l'étape 1 (§ 14).
-- Le schéma : `--init-schema` crée les tables manquantes au démarrage de `web` ; il n'y a pas encore de
-  migrations (SECURITY.md, point ouvert 5) : lire les notes de version avant une mise à jour qui modifie
-  des colonnes.
+- Le schéma (D-3503) : `--init-schema` crée les tables d'une base neuve au démarrage de `web`. Une base
+  existante évolue par des **migrations versionnées** (table `schema_version`) : tant qu'une migration est en
+  attente, `web` et `worker` refusent de démarrer (code 3, « schéma de la base à migrer : … ») au lieu de
+  tourner sur un schéma incomplet. `controldone migrer` fait d'abord une sauvegarde chiffrée (vérifiée) puis
+  applique les étapes ; `--etat` les liste sans rien faire. `CONTROLDONE_MIGRATION_AUTO=1` migre au démarrage
+  (déconseillé : pas de sauvegarde préalable).
 - Dépendances : `requirements.lock` est régénéré depuis le venv de développement (`uv pip freeze`, en
   retirant la ligne `-e` et les outils de dev, voir l'en-tête du fichier) puis commité avec le changement.
 - Image de base et paquets système : `docker compose build --pull` une fois par mois (correctifs de

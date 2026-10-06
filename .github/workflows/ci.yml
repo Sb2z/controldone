@@ -50,10 +50,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.lock
           pip install --no-deps -e .
-          pip install "pytest>=8.0" "ruff>=0.4"
+          pip install "pytest>=8.0" "ruff>=0.4" "pytest-cov>=5.0" "coverage[toml]>=7.4" "hypothesis>=6.100" \
+            "pre-commit>=3.5"
 
       - name: Ruff
         run: ruff check src tests scripts
+
+      # D-3901 : mêmes vérifications qu'avant enregistrement (toutes locales, aucun dépôt de crochets téléchargé).
+      - name: Vérifications avant enregistrement (pre-commit, tout le dépôt)
+        run: pre-commit run --all-files --show-diff-on-failure
 
       # D-3203 : vulnérabilités connues (pip-audit sur requirements.lock), SBOM CycloneDX, licences permissives
       # seulement (exceptions justifiées : config/audit_dependances.json). Outils dans un environnement séparé.
@@ -73,8 +78,34 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Pytest
-        run: pytest -q
+      # D-3903 : tests de propriétés à profil borné et déterministe (150 exemples par propriété, graine fixe).
+      - name: Tests de propriétés (Hypothesis, profil ci)
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: pytest -q tests/proprietes
+
+      # D-3902 : suite complète sous mesure de couverture (branches) ; résumé par paquet et HTML en artefact.
+      - name: Pytest avec couverture
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: |
+          mkdir -p var/couverture
+          pytest -q --cov --cov-report=html --cov-report=json --cov-report=term:skip-covered
+          python scripts/couverture_paquets.py var/couverture/couverture.json --out var/couverture/paquets.md \
+            --min "${COUV_MIN:-0}"
+          cat var/couverture/paquets.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rapport de couverture
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: couverture
+          path: |
+            var/couverture/html/
+            var/couverture/paquets.md
+            var/couverture/couverture.json
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Banc — génération du corpus (dev + holdout)
         if: ${{ inputs.banc }}

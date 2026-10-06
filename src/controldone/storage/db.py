@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from controldone.config import env
 from controldone.storage import garde
+from controldone.storage import migrations as _migrations
 from controldone.storage.models import AuditLog, Base
 
 if TYPE_CHECKING:
@@ -101,8 +102,23 @@ class Database:
         self._fabrique_lecture = sessionmaker(self.engine_lecture, expire_on_commit=False)
 
     # --- schéma ---
-    def creer_schema(self) -> None:
+    def creer_schema(self, *, migrer: bool = True) -> None:
+        """Tables manquantes (``create_all``) ; base neuve : toutes les migrations inscrites ; base existante :
+        migrations en attente appliquées si ``migrer`` (sinon laissées à ``exiger_schema_a_jour``)."""
+        neuve = _migrations.base_neuve(self.engine)
         Base.metadata.create_all(self.engine)
+        if neuve:
+            _migrations.inscrire_toutes(self.engine)
+        elif migrer:
+            self.migrer()
+
+    def migrations_en_attente(self) -> list[_migrations.Migration]:
+        return _migrations.en_attente(self.engine)
+
+    def migrer(self, *, journal: Any = None) -> list[_migrations.Migration]:
+        """Applique les migrations en attente (D-3503). Sauvegarder avant en production : ``controldone
+        migrer`` le fait par défaut."""
+        return _migrations.appliquer(self.engine, journal=journal)
 
     def colonnes_manquantes(self) -> list[str]:
         """``table.colonne`` déclarées par le code mais absentes d'une table **existante** (``create_all``
@@ -120,8 +136,19 @@ class Database:
         return manquantes
 
     def exiger_schema_a_jour(self) -> None:
-        """Lève ``SchemaPerime`` si une table existante n'a pas toutes les colonnes du code (démarrage du web
-        et du worker)."""
+        """Démarrage du web et du worker. Migrations en attente : appliquées en ``dev`` / ``test`` ou avec
+        ``CONTROLDONE_MIGRATION_AUTO=1``, sinon ``SchemaPerime`` (production : sauvegarder puis ``controldone
+        migrer``). Puis lève ``SchemaPerime`` si une table existante n'a pas toutes les colonnes du code."""
+        from controldone.storage.cles import mode_execution
+
+        attente = self.migrations_en_attente()
+        if attente:
+            if mode_execution() in ("dev", "test") or env("CONTROLDONE_MIGRATION_AUTO") == "1":
+                self.migrer()
+            else:
+                raise SchemaPerime("schéma de la base à migrer : " + ", ".join(
+                    f"{m.version:04d} {m.nom}" for m in attente) + " — sauvegarder puis exécuter « controldone "
+                    "migrer » (docs/EXPLOITATION.md, migrations)")
         manquantes = self.colonnes_manquantes()
         if manquantes:
             raise SchemaPerime("schéma de la base périmé : colonnes manquantes " + ", ".join(manquantes[:20])

@@ -41,7 +41,7 @@ hostiles = st.sampled_from([
 @given(st.one_of(st.text(max_size=60), hostiles, st.from_regex(r"\A/[ -~]{0,40}\Z"), st.none(), st.integers()))
 def test_retour_toujours_interne(valeur):
     r = retour_sur(valeur, DEFAUT)
-    assert r == DEFAUT or r == valeur
+    assert r in (DEFAUT, valeur)
     morceaux = urlsplit(r)
     assert morceaux.scheme == "" and morceaux.netloc == ""
     assert r.startswith("/") and not r.startswith("//")

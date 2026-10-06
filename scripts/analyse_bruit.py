@@ -243,6 +243,11 @@ def main(argv: list[str] | None = None) -> int:
         ta = ventiler(avant)["controle_sous"]
         tb = tables["controle_sous"]
         print(f"\n## Différence avec --avant ({len(avant)} -> {len(bruits)})")
+        for ca, cb in zip(cpts_av, cpts, strict=True):
+            print(f"  {ca['jeu']} -> {cb['jeu']} : bruit {ca['fp_a_verifier']} -> {cb['fp_a_verifier']}, "
+                  f"pièges {ca['violations_pieges']} -> {cb['violations_pieges']}, VP/FP certains "
+                  f"{ca['vp_certain']}/{ca['fp_certain']} -> {cb['vp_certain']}/{cb['fp_certain']}, rappel "
+                  f"{ca['rappel']} -> {cb['rappel']}, rappel certain {ca['rappel_certain']} -> {cb['rappel_certain']}")
         for k in sorted(set(ta) | set(tb), key=lambda k: (tb.get(k, 0) - ta.get(k, 0), k)):
             if ta.get(k, 0) != tb.get(k, 0):
                 print(f"  {ta.get(k, 0):5d} -> {tb.get(k, 0):5d}  {k}")

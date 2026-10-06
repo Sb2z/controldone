@@ -406,13 +406,27 @@ def test_avoir_rattache_par_facture_origine():
 
 
 def test_avoir_par_mrn_est_moyen_donc_faible():
+    # MRN d'une déclaration rattachée seulement par le même dossier source (aucun appui solide) : faible
+    lot = Lot()
+    lot.fc("fc1", "docs/a/fc.pdf", tva="FR00000000000")
+    lot.dec("dec1", "docs/a/dec.pdf", montant=None)
+    lot.avoir("av1", "docs/a/av.pdf", origine=None, mrns=(MRN1,))
+    res = lot.regrouper()
+    d = _dossier_de(res, "av1")
+    assert _lien(d, "dec1").force is ForceLien.faible
+    lien = _lien(d, "av1")
+    assert lien.score == 2 and lien.force is ForceLien.faible
+
+
+def test_avoir_par_mrn_d_une_declaration_solide_est_moyen():
+    # D-3702 : le MRN cité est celui d'une déclaration solidement rattachée -> « moyenne », jamais « forte »
     lot = Lot()
     lot.fc("fc1", "docs/a/fc.pdf")
     lot.dec("dec1", "docs/a/dec.pdf", refs=[("N380", "INV-10001")])
     lot.avoir("av1", "docs/b/av.pdf", origine=None, mrns=(MRN1,))
     res = lot.regrouper(options=OptionsRegroupement(annee=2026, meme_source=False))
     lien = _lien(_dossier_de(res, "av1"), "av1")
-    assert lien.score == 2 and lien.force is ForceLien.faible
+    assert lien.force is ForceLien.moyenne and SignalLien.reference_proche in lien.signaux
 
 
 def test_facture_transitaire_orpheline_devient_un_dossier_incomplet():
@@ -626,7 +640,53 @@ def test_facture_repartie_sur_deux_declarations_par_repli_reste_possible():
     lot = Lot()
     lot.fc("fc1", "docs/fc.pdf", total="1000.00", tva=None)
     lot.dec("dec1", "docs/dec1.pdf", mrn=MRN1, refs=[("N380", "INV-10001")], montant="600.00")
-    lot.dec("dec2", "docs/dec2.pdf", mrn=MRN2, montant="400.00", tva=None)
+    # MRN réaliste (11 caractères aléatoires) : MRN1 et MRN2 ne diffèrent que d'un caractère, soit deux lectures
+    # d'un même MRN au sens de D-3702.
+    lot.dec("dec2", "docs/dec2.pdf", mrn="26FRK7Q2ZP9XW4M1T8", montant="400.00", tva=None)
     res = lot.regrouper()
     assert len(res.dossiers) == 1
     assert _lien(res.dossiers[0], "dec2").force is ForceLien.faible
+
+
+# --- D-3702 : lien faible renforcé par une référence retrouvée dans le dossier --------------------------------
+
+MRN_A = "26FRG9YL3TE5MNH5W6"
+MRN_B = "26FRNQAXEOLD2XTWZ0"  # autre envoi
+
+
+def test_declaration_au_mrn_mal_lu_retrouve_sur_la_facture_du_transitaire():
+    lot = Lot()
+    lot.fc("fc1", "docs/fc.pdf", transport="DEMO609137653", tva="FR00000000000")
+    lot.ft("ft1", "docs/ft.pdf", mrns=(MRN_A,), transports=("DEMO 6091 / 37653",))
+    lot.dec("dec1", "docs/dec.pdf", mrn="26FRG9YL3TESMNHSW6", montant=None)  # 5 -> S : lecture OCR
+    res = lot.regrouper()
+    assert len(res.dossiers) == 1
+    lien = _lien(res.dossiers[0], "dec1")
+    assert lien.force is ForceLien.moyenne
+    assert lien.signaux == [SignalLien.meme_dossier_source, SignalLien.reference_proche]
+
+
+def test_facture_d_un_autre_envoi_reste_faible():
+    lot = Lot()
+    lot.fc("fc1", "docs/fc.pdf", transport="DEMO609137653")
+    lot.dec("dec1", "docs/dec.pdf", mrn=MRN_A, refs=[("N380", "INV-10001")])
+    lot.ft("ft1", "docs/ft1.pdf", mrns=(MRN_A,), transports=("DEMO609137653",))
+    lot.ft("ft9", "docs/ft9.pdf", numero="FT-900", mrns=(MRN_B,), transports=("DEMO087829269",),
+           lignes=(("debours_droits", "999.00", None),))
+    res = lot.regrouper()
+    d = _dossier_de(res, "ft1")
+    assert _lien(d, "ft1").force is ForceLien.forte
+    lien = _lien(_dossier_de(res, "ft9"), "ft9")
+    assert lien.force is ForceLien.faible and SignalLien.reference_proche not in lien.signaux
+
+
+def test_document_sans_reference_dans_le_fichier_d_un_document_solide():
+    # page illisible d'un PDF « envoi complet » classée facture du transitaire : rien ne la contredit
+    lot = Lot()
+    lot.fc("fc1", "docs/fc.pdf")
+    lot.dec("dec1", "docs/envoi.pdf", refs=[("N380", "INV-10001")])
+    lot.ajouter(TypeDocument.facture_transitaire, ChampsFactureTransitaire(), "docs/envoi.pdf", id="ft1",
+                pages=(3,))
+    res = lot.regrouper()
+    lien = _lien(_dossier_de(res, "ft1"), "ft1")
+    assert lien.force is ForceLien.moyenne and SignalLien.reference_proche in lien.signaux

@@ -6,9 +6,11 @@ import re
 
 __all__ = [
     "LONGUEUR_MIN_CONTAINMENT",
+    "distance_bornee",
     "est_mrn",
     "mrn_egaux",
     "mrn_prefixe",
+    "mrn_proches",
     "norm_ref",
     "norm_ref_containment",
     "norm_ref_transport",
@@ -16,6 +18,7 @@ __all__ = [
     "ref_egales",
     "ref_transport_compatibles",
     "ref_transport_egales",
+    "ref_transport_proches",
 ]
 
 #: §8.4 : l'une contient l'autre et la plus courte a au moins 5 caractères.
@@ -151,3 +154,51 @@ def ref_transport_compatibles(x: str | None, y: str | None) -> bool:
         return True
     court, long_ = (a, b) if len(a) <= len(b) else (b, a)
     return len(court) >= LONGUEUR_MIN_CONTAINMENT and court in long_
+
+
+# --- Références lues imparfaitement (regroupement, D-3702) ----------------------------------------------
+
+
+def distance_bornee(a: str, b: str, borne: int) -> int:
+    """Distance d'édition (substitution, insertion, suppression) de ``a`` à ``b``, plafonnée à ``borne + 1``."""
+    if abs(len(a) - len(b)) > borne:
+        return borne + 1
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cour = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cour[j] = min(prec[j] + 1, cour[j - 1] + 1, prec[j - 1] + (ca != cb))
+        if min(cour) > borne:
+            return borne + 1
+        prec = cour
+    return min(prec[-1], borne + 1)
+
+
+#: Écart toléré entre deux lectures d'un même MRN (préfixe de 15 caractères, après classes de confusion OCR).
+MRN_DIFFERENCES_PROCHES = 4
+
+
+def mrn_proches(x: str | None, y: str | None) -> bool:
+    """Deux lectures d'un même MRN (préfixe stable) malgré l'OCR : clés de confusion (``cle_confusion_ocr``) d'au
+    moins 12 caractères, même année (deux premiers chiffres, sous confusion) et au plus
+    ``MRN_DIFFERENCES_PROCHES`` caractères d'écart. Onze caractères aléatoires parmi 36 : deux MRN distincts
+    n'en partagent pas sept par hasard (D-3104)."""
+    a, b = cle_confusion_ocr(mrn_prefixe(x)), cle_confusion_ocr(mrn_prefixe(y))
+    if len(a) < 12 or len(b) < 12 or a[:2] != b[:2]:
+        return False
+    return distance_bornee(a, b, MRN_DIFFERENCES_PROCHES) <= MRN_DIFFERENCES_PROCHES
+
+
+def ref_transport_proches(x: str | None, y: str | None) -> bool:
+    """Deux lectures d'une même référence de transport : compatibles (``ref_transport_compatibles``), ou clés de
+    confusion OCR d'au moins 10 caractères à au plus ``max(1, n // 4)`` caractères d'écart (``n`` : longueur
+    la plus courte ; 3 pour une référence de 13 caractères)."""
+    if ref_transport_compatibles(x, y):
+        return True
+    a = norm_ref_transport(x).translate(CONFUSION_OCR)
+    b = norm_ref_transport(y).translate(CONFUSION_OCR)
+    n = min(len(a), len(b))
+    if n < 10:
+        return False
+    borne = max(1, n // 4)
+    return distance_bornee(a, b, borne) <= borne

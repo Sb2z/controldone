@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Sauvegarde chiffrée de ControlDOne (base SQLite en ligne + coffre + traces d'envoi, manifeste SHA-256),
+# Sauvegarde chiffrée de ControlDOne (base SQLite en ligne ou PostgreSQL par pg_dump + coffre + traces d'envoi,
+# manifeste SHA-256),
 # relecture complète de l'archive créée, puis rotation (7 jours, 4 semaines).
 # Usage : scripts/backup.sh [--destination DIR] [--verification-profonde] [--sans-rotation]
 # Vérification : controldone sauvegarde verifier --dernier --destination DIR [--profond]

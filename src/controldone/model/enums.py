@@ -528,6 +528,9 @@ class SignalLien(StrEnum):
     nom_fichier = "nom_fichier"
     # Ajout (D-013) : le document graine du dossier (§7.5 étape 2) porte ce signal.
     graine = "graine"
+    # Ajout (D-3702) : MRN, référence de transport ou numéro de facture du document retrouvé, à une lecture
+    # imparfaite près, sur un document solidement rattaché au même dossier. Le lien reste au plus « moyenne ».
+    reference_proche = "reference_proche"
 
 
 class MethodeAllocation(StrEnum):

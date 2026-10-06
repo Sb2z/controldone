@@ -68,13 +68,16 @@ from controldone.model.valeur import ValeurSourcee
 from controldone.normalize.fiscal import normalize_vat
 from controldone.normalize.parties import identifier_transitaire
 from controldone.normalize.refs import (
+    est_mrn,
     mrn_egaux,
     mrn_prefixe,
+    mrn_proches,
     norm_ref,
     norm_ref_transport,
     ref_compatibles,
     ref_egales,
     ref_transport_compatibles,
+    ref_transport_proches,
 )
 
 __all__ = [
@@ -339,6 +342,8 @@ class _Groupe:
     membres: dict[str, tuple[int, list[SignalLien]]] = field(default_factory=dict)  # doc -> (score, signaux)
     frontiere: tuple[str, ...] = ()
     courriel: str | None = None
+    #: membres dont le lien, renforcé par une référence retrouvée (D-3702), reste au plus « moyenne »
+    plafond_moyenne: set[str] = field(default_factory=set)
 
 
 class _Regroupeur:
@@ -815,6 +820,7 @@ class _Regroupeur:
         if self.options.meme_source:
             self._consolider()
         self._corroborer()
+        self._corroborer_faibles()
         # doublons : suivent leur original
         for d in self.docs:
             if not d.doublon_de:
@@ -897,6 +903,87 @@ class _Regroupeur:
                     nouveaux = sorted(set(sig) | ajout, key=_ORDRE_SIGNAUX.index)
                     g.membres[mid] = (max(score, self._score(TypeDocument.declaration, nouveaux)), nouveaux)
 
+    def _refs_lues(self, d: Document) -> dict[str, list[str]]:
+        """Références lues d'un document, par genre : ``mrn`` (MRN de la déclaration, à défaut celui de son nom de
+        fichier ; MRN cités), ``transport`` (titres de transport ; références citées par une déclaration),
+        ``numero`` (numéro propre), ``cite`` (numéros de facture cités)."""
+        out: dict[str, list[str]] = {"mrn": [], "transport": [], "numero": [], "cite": []}
+        if not _exploitable(d):
+            return out
+        num = _numero(d)
+        if num and d.type is not TypeDocument.declaration:
+            out["numero"].append(num)
+        if d.type is TypeDocument.declaration:
+            mrn = _txt(d.dec.mrn)
+            if not mrn:
+                fic = self._fichier(d)
+                nom = PurePosixPath(fic.chemin_relatif).stem if fic else ""
+                mrn = next((t for t in re.split(r"[^A-Za-z0-9]+", nom) if est_mrn(t)), None)
+            out["mrn"] += [mrn] if mrn else []
+            refs = _refs_documents_declaration(d)
+            out["transport"] += refs
+            out["cite"] += refs
+        elif d.type is TypeDocument.facture_transitaire:
+            out["mrn"] += _mrns_ft(d)
+            out["transport"] += _transports_ft(d)
+            out["cite"] += [r for r in (_txt(v) for v in d.ft.refs_facture_commerciale) if r]
+        elif d.type is TypeDocument.avoir:
+            out["mrn"] += [m for m in (_txt(v) for v in d.av.refs_mrn) if m]
+            out["transport"] += [r for r in (_txt(v) for v in d.av.refs_transport) if r]
+            out["cite"] += [r for r in (_txt(v) for v in d.av.refs_facture_origine) if r]
+        elif d.type is TypeDocument.facture_commerciale:
+            out["transport"] += [r for r in [_txt(d.fc.ref_transport)] if r]
+        elif d.type is TypeDocument.document_support:
+            out["transport"] += _transports_support(d)
+            out["cite"] += [r for r in (_txt(v) for v in d.sup.refs_facture) if r]
+        return out
+
+    def _reference_retrouvee(self, faible: Document, refs_f: dict[str, list[str]], appui: Document,
+                             refs_a: dict[str, list[str]]) -> bool:
+        """Le document faiblement rattaché et un document solidement rattaché au même dossier partagent une
+        référence, à une lecture imparfaite près : MRN (``mrn_proches``), titre de transport
+        (``ref_transport_proches`` ; entre deux déclarations, égalité ou inclusion seulement : leurs références
+        mêlent numéros de facture et titres), numéro de facture cité par l'un et porté par l'autre (égaux)."""
+        if any(mrn_proches(a, b) for a in refs_f["mrn"] for b in refs_a["mrn"]):
+            return True
+        deux_dec = faible.type is TypeDocument.declaration and appui.type is TypeDocument.declaration
+        comparer = ref_transport_compatibles if deux_dec else ref_transport_proches
+        if any(comparer(a, b) for a in refs_f["transport"] for b in refs_a["transport"]):
+            return True
+        return any(ref_egales(a, b) for a in refs_f["numero"] for b in refs_a["cite"]) or any(
+            ref_egales(a, b) for a in refs_f["cite"] for b in refs_a["numero"])
+
+    def _corroborer_faibles(self) -> None:
+        """Lien faible (score 2, P4) d'un document dont une référence se retrouve, à une lecture imparfaite près,
+        sur un document **solidement** rattaché au même dossier (graine ou score ≥ 3) : le lien devient
+        « moyenne » (signal ``reference_proche``), jamais « forte » (D-3702). Un document qui ne porte que des
+        références étrangères au dossier (facture d'un autre envoi rangée ici) reste faible. Un document lu sans
+        aucune référence, dans le **même fichier** qu'un document solidement rattaché, est renforcé de même : rien
+        ne le contredit. Rien n'est réuni ni déplacé. Répété tant qu'un lien change (un document renforcé peut
+        appuyer le suivant)."""
+        for g in self.groupes:
+            refs = {mid: self._refs_lues(self.par_id[mid]) for mid in g.membres}
+            change = True
+            while change:
+                change = False
+                solides = [mid for mid, (score, sig) in g.membres.items()
+                           if (score >= 3 or SignalLien.graine in sig) and _exploitable(self.par_id[mid])
+                           and not self.par_id[mid].doublon_de]
+                for mid, (score, sig) in list(g.membres.items()):
+                    d = self.par_id[mid]
+                    if score > 2 or SignalLien.graine in sig or d.doublon_de:
+                        continue
+                    retrouvee = any(self._reference_retrouvee(d, refs[mid], self.par_id[a], refs[a])
+                                    for a in solides if a != mid)
+                    sans_reference = not any(refs[mid].values())
+                    meme_fichier = sans_reference and any(self._meme_fichier(d, self.par_id[a])
+                                                          for a in solides if a != mid)
+                    if retrouvee or meme_fichier:
+                        g.membres[mid] = (3, sorted(set(sig) | {SignalLien.reference_proche},
+                                                    key=_ORDRE_SIGNAUX.index))
+                        g.plafond_moyenne.add(mid)
+                        change = True
+
     def _complet(self, g: _Groupe) -> bool:
         types = {self.par_id[m].type for m in g.membres if _exploitable(self.par_id[m])}
         return TypeDocument.facture_commerciale in types and TypeDocument.declaration in types
@@ -948,6 +1035,8 @@ class _Regroupeur:
                     score = max(score, POIDS_FORCE[ForceLien.forte])
                 else:
                     force = force_depuis_score(score, sig) or ForceLien.faible
+                    if mid in g.plafond_moyenne and force is ForceLien.forte:
+                        force = ForceLien.moyenne
                 liens.append(
                     LienDocument(
                         id=id_stable(Prefixe.lien, VERSION_REGROUPEMENT, g.graine, mid),

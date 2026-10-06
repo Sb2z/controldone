@@ -1,21 +1,21 @@
 {% extends "base.html.j2" %}
 {% block contenu %}
-<div class="titre-page"><h1>Rapports et relevés d'écarts</h1></div>
+<div class="titre-page"><h1>{{ _("Rapports et relevés d'écarts") }}</h1></div>
 <div class="grille-2">
 <section class="carte">
-  <h2>Rapports de diagnostic</h2>
+  <h2>{{ _("Rapports de diagnostic") }}</h2>
   {% if rapports %}
-  <ul class="liste-simple">{% for r in rapports %}<li><strong>{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">— mis à disposition le {{ r.envoye_le|date }}</span><br>{{ r.payload_effectif.get("corps") }}<br>
-    <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">Télécharger le PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/html?afficher=1">Version web</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/json">JSON</a></li>{% endfor %}</ul>
-  {% else %}<p class="vide">Aucun rapport publié pour l'instant.</p>{% endif %}
+  <ul class="liste-simple">{% for r in rapports %}<li><strong lang="fr">{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">— {{ _("mis à disposition le {date}", date=r.envoye_le|date) }}</span><br><span lang="fr">{{ r.payload_effectif.get("corps") }}</span><br>
+    <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">{{ _("Télécharger le PDF") }}</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/html?afficher=1">{{ _("Version web") }}</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/json">JSON</a></li>{% endfor %}</ul>
+  {% else %}<p class="vide">{{ _("Aucun rapport publié pour l'instant.") }}</p>{% endif %}
 </section>
 <section class="carte">
-  <h2>Relevés d'écarts</h2>
-  <p class="discret">Chaque relevé présente les différences chiffrées entre vos documents ; il est suivi d'un « modèle à adapter par le client » que vous complétez et utilisez vous-même si vous le décidez. Si vous envoyez un courrier, vous pouvez le noter dans le <a href="/espace/recouvrement">suivi des avoirs reçus</a>.</p>
+  <h2>{{ _("Relevés d'écarts") }}</h2>
+  <p class="discret">{{ _("Chaque relevé présente les différences chiffrées entre vos documents ; il est suivi d'un « modèle à adapter par le client » que vous complétez et utilisez vous-même si vous le décidez. Les relevés sont rédigés en français.") }} {{ _("Si vous envoyez un courrier, vous pouvez le noter dans le") }} <a href="/espace/recouvrement">{{ _("suivi des avoirs reçus") }}</a>.</p>
   {% if reclamations %}
-  <ul class="liste-simple">{% for r in reclamations %}<li><strong>{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">— {{ r.envoye_le|date }}</span><br>
-    <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/txt">Texte à coller dans un courriel</a></li>{% endfor %}</ul>
-  {% else %}<p class="vide">Aucun relevé d'écarts pour l'instant.</p>{% endif %}
+  <ul class="liste-simple">{% for r in reclamations %}<li><strong lang="fr">{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">— {{ r.envoye_le|date }}</span><br>
+    <a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/txt">{{ _("Texte à coller dans un courriel") }}</a></li>{% endfor %}</ul>
+  {% else %}<p class="vide">{{ _("Aucun relevé d'écarts pour l'instant.") }}</p>{% endif %}
 </section>
 </div>
 {% endblock %}

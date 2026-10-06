@@ -19,11 +19,8 @@ from controldone.services import publication, reclamations, validation
 from controldone.services.lecture import (
     LIBELLES_LOT,
     client_info,
-    constats_courants,
     detail_dossier,
-    documents_du_dossier,
     libelle_document,
-    trier_constats,
     vue_constat,
 )
 from controldone.services.plateforme import Plateforme, RequeteInvalide
@@ -43,7 +40,6 @@ from controldone.web.listes_vues import (
     TRIS_JOURNAL,
     TRIS_VALIDATION,
     filtrer_dossiers,
-    filtrer_validation,
     libelles_controles,
     params_jobs,
     params_journal,
@@ -386,73 +382,76 @@ def corriger(request: Request, tenant_id: str, dossier_id: str) -> Response:
 
 @routeur.get("/validation")
 def file_validation(request: Request) -> Response:
+    """File de validation : filtres, tri et pagination en SQL (D-3801) ; seuls les constats de la page affichée
+    sont mis en forme (libellés des documents, extraits de preuve), dans le périmètre de leur client."""
     f = _fondateur(request)
     pf = _pf(request)
-    items: list[dict[str, Any]] = []
-    attention: list[dict[str, Any]] = []
     with pf.db.operateur(f) as op:
         clients = {t.id: {"raison_sociale": t.raison_sociale, "actif": t.actif,
                           "demo": bool((t.reglages or {}).get("demo"))} for t in op.lister_clients()}
         noms_actifs = {k: v["raison_sociale"] for k, v in clients.items() if v["actif"]}
         req = lire_requete(request, params_validation(noms_actifs), TRIS_VALIDATION, "priorite", ancre="#constats")
-        filtre_client = req.filtres.get("client")
-        par_client: dict[str, list[Any]] = defaultdict(list)
-        for c in op.file_validation():
-            par_client[c.tenant_id].append(c)
-        demo = False
-        scopes: dict[str, Any] = {}
-        for tenant_id in sorted(set(par_client) | {t for t in clients if clients[t]["actif"]}):
-            t = clients.get(tenant_id)
-            if t is None:
-                continue
-            scope = op.client(tenant_id, "file de validation", lecture=True)
-            scopes[tenant_id] = scope
-            demo = demo or t["demo"]
-            constats_client = par_client.get(tenant_id, []) if filtre_client in (None, tenant_id) else []
-            courants = {c.id for c in constats_courants(scope)} if constats_client else set()
-            libelles: dict[str, str] = {}
-            refs: dict[str, str] = {}
-            for d in scope.lister(Dossier):
-                refs[d.id] = d.reference or d.id
-                from controldone.model.dossier import Dossier as DossierModele
+        fl = req.filtres
+        criteres = {"clients": sorted(noms_actifs), "client": fl.get("client"), "controle": fl.get("controle"),
+                    "niveau": fl.get("niveau"), "mini": fl.get("min"), "maxi": fl.get("max"), "tri": req.tri}
+        total_file = 0
 
-                m = DossierModele.model_validate(d.contenu)
-                for doc_id, doc in documents_du_dossier(scope, m).items():
-                    libelles[doc_id] = libelle_document(doc)
-                for lien in m.liens:
-                    if lien.force.value == "faible":
-                        attention.append({"type": "Rattachement faible", "client": t["raison_sociale"],
-                                          "tenant_id": tenant_id, "dossier_id": d.id, "dossier": refs[d.id],
-                                          "detail": libelles.get(lien.document_id, lien.document_id)})
-            for doc in scope.lister(Document, type="inconnu"):
-                if doc.dossier_id:
-                    attention.append({"type": "Document non reconnu", "client": t["raison_sociale"],
-                                      "tenant_id": tenant_id, "dossier_id": doc.dossier_id,
-                                      "dossier": refs.get(doc.dossier_id, doc.dossier_id), "detail": doc.id})
-            for v in (vue_constat(c, libelles) for c in constats_client if c.id in courants):
-                items.append({"c": v, "tenant_id": tenant_id, "client": t["raison_sociale"],
-                              "dossier": refs.get(v.dossier_id, v.dossier_id)})
-        ordre = {id(x["c"]): i for i, x in enumerate(items)}
-        tries = trier_constats([x["c"] for x in items])
-        par_c = {id(x["c"]): x for x in items}
-        items = [par_c[id(c)] for c in tries if id(c) in ordre]
-        total_file = len(items)
-        p = paginer(filtrer_validation(items, req), req)
-        # extraits de preuve : seulement pour les constats de la page affichée (un rendu par client)
-        extraits: dict[Any, bytes] = {}
-        for tenant_id in {it["tenant_id"] for it in p.elements}:
-            extraits.update(images_preuves(pf.vault, scopes[tenant_id],
-                                           [it["c"] for it in p.elements if it["tenant_id"] == tenant_id]))
-        for it in p.elements:
-            it["extraits"] = extraits
+        def lire(dec: int) -> tuple[list[Any], int]:
+            nonlocal total_file
+            constats, total, total_file = op.rechercher_file_validation(**criteres, decalage=dec, limite=req.taille)
+            return constats, total
+
+        constats, total = _page_sql(req, lire)
+        bruts, nb_attention = op.points_attention(sorted(noms_actifs))
+        demo = any(clients[t]["demo"] for t in noms_actifs)
+        par_client: dict[str, list[Any]] = defaultdict(list)
+        for c in constats:
+            par_client[c.tenant_id].append(c)
+        for b in bruts:
+            par_client.setdefault(b["tenant_id"], [])
+        items_par_id: dict[str, dict[str, Any]] = {}
+        attention: list[dict[str, Any]] = []
+        for tenant_id, liste in par_client.items():
+            nom = clients[tenant_id]["raison_sociale"]
+            scope = op.client(tenant_id, "file de validation", lecture=True)
+            libelles = _libelles_documents(scope, {c.dossier_id for c in liste},
+                                           {b["document_id"] for b in bruts if b["tenant_id"] == tenant_id})
+            refs = {d.id: d.reference or d.id for d in scope.session.execute(
+                scope.requete(Dossier).where(Dossier.id.in_({c.dossier_id for c in liste}))).scalars()}
+            vues = [vue_constat(c, libelles) for c in liste]
+            extraits = images_preuves(pf.vault, scope, vues)
+            for v in vues:
+                items_par_id[v.id] = {"c": v, "tenant_id": tenant_id, "client": nom,
+                                      "dossier": refs.get(v.dossier_id, v.dossier_id), "extraits": extraits}
+            for b in bruts:
+                if b["tenant_id"] == tenant_id:
+                    attention.append({"type": "Rattachement faible" if b["type"] == "faible" else "Document non reconnu",
+                                      "client": nom, "tenant_id": tenant_id, "dossier_id": b["dossier_id"],
+                                      "dossier": b["dossier"],
+                                      "detail": libelles.get(b["document_id"], b["document_id"])
+                                      if b["type"] == "faible" else b["document_id"]})
+        p = paginer([items_par_id[c.id] for c in constats], req, total=total)
     sorties = FileSortante(pf.db).lister(f, statuts=["brouillon"])
     noms = {k: v["raison_sociale"] for k, v in clients.items()}
     return page(request, "admin/validation.html.j2", titre="File de validation", nav="validation", p=p, req=req,
                 total_file=total_file, clients_filtre=sorted(noms_actifs.items(), key=lambda x: x[1].casefold()),
-                controles=libelles_controles(), niveaux=NIVEAUX_VALIDATION, attention=attention, sorties=sorties,
-                noms=noms, libelles_sortie=LIBELLES_SORTIE, demo=demo,
-                retour=retour_sur("/admin/validation" + str(request.url.query and "?" + request.url.query),
-                                  "/admin/validation"))
+                controles=libelles_controles(), niveaux=NIVEAUX_VALIDATION, attention=attention,
+                nb_attention=nb_attention, sorties=sorties, noms=noms, libelles_sortie=LIBELLES_SORTIE, demo=demo,
+                retour=retour_sur("/admin/validation" + req.url(), "/admin/validation"))
+
+
+def _libelles_documents(scope: Any, dossier_ids: set[str], document_ids: set[str]) -> dict[str, str]:
+    """Libellés des documents des dossiers ``dossier_ids`` et des documents ``document_ids`` (page affichée)."""
+    from controldone.model.documents import Document as DocumentModele
+
+    q = scope.requete(Document).where(Document.dossier_id.in_(dossier_ids) | Document.id.in_(document_ids))
+    libelles: dict[str, str] = {}
+    for d in scope.session.execute(q).scalars():
+        try:
+            libelles[d.id] = libelle_document(DocumentModele.model_validate(d.contenu))
+        except ValueError:
+            libelles[d.id] = d.id
+    return libelles
 
 
 def _sortie(request: Request, action_id: str, quoi: str) -> Response:
@@ -545,7 +544,8 @@ def jobs(request: Request) -> Response:
                                                               limite=req.taille))
     p = paginer(liste, req, total=total)
     return page(request, "admin/jobs.html.j2", titre="Tâches", nav="jobs", p=p, req=req, statuts=STATUTS_JOB,
-                kinds=kinds, clients=clients, compte=store.compter_par_statut())
+                kinds=kinds, clients=clients, compte=store.compter_par_statut(),
+                retour=retour_sur("/admin/jobs" + req.url(), "/admin/jobs"))
 
 
 @routeur.get("/jobs/etat")
@@ -572,9 +572,9 @@ def _traitements(pf: Plateforme, limite: int = 6) -> dict[str, Any]:
 @routeur.post("/jobs/{job_id}/relancer")
 def relancer(request: Request, job_id: str) -> Response:
     f = _fondateur(request)
-    formulaire_sync(request)
+    form = formulaire_sync(request)
     ok = JobStore(_pf(request).db).relancer(job_id, acteur_id=f.id)
-    return redirection(request, "/admin/jobs", message="Tâche remise en file." if ok else None,
+    return redirection(request, retour_sur(form.get("retour"), "/admin/jobs"), message="Tâche remise en file." if ok else None,
                        erreur=None if ok else "Seule une tâche morte peut être relancée.")
 
 

@@ -21,10 +21,10 @@ l'action du fondateur ; tout le reste peut être traité sans lui.
 
 | Point | Bloc | Effort |
 |---|---|---|
-| Sauvegarde automatique pour PostgreSQL (aujourd'hui seulement SQLite) | sauvegardes | moyen |
-| Alertes poussées (courriel ou ping) et non seulement visibles dans l'interface | sauvegardes | moyen |
+| ~~Sauvegarde automatique pour PostgreSQL~~ : fait (D-3501) ; reste l'image Docker avec `pg_dump` | production | petit |
+| ~~Alertes poussées~~ : fait (D-3502), à configurer à l'ouverture (**décision** : prestataire de courriel) | production | procédure |
 | Tester sur PostgreSQL la limitation de débit et les révocations de session | sécurité | moyen |
-| Mécanisme de migration de schéma (index, nouvelles colonnes sur une base existante) | interface | moyen |
+| ~~Mécanisme de migration de schéma~~ : fait (D-3503), index du journal et des tâches compris | production | — |
 | Plafond de pixels pour le rendu OCR des PDF | sécurité | petit |
 | Empreintes dans `requirements.lock` ; paquets installés hors du fichier figé | sécurité | petit |
 | Audit des paquets de l'image Docker (Debian, Tesseract) | sécurité | petit |
@@ -33,7 +33,7 @@ l'action du fondateur ; tout le reste peut être traité sans lui.
 | Révocations en mémoire bornées | sécurité | petit |
 | Points restants de la première revue (RS-16, RS-18 à RS-21) | sécurité | petit à moyen |
 | Traces d'envoi en clair sur le disque (`outbox_envoyee`) | sauvegardes / sécurité | moyen |
-| Purge lancée à la main pendant une sauvegarde : verrou | sauvegardes | petit |
+| ~~Purge lancée à la main pendant une sauvegarde : verrou~~ : fait (D-3504) | production | — |
 | RPO de 24 h : deux sauvegardes par jour, ou journal de transactions | sauvegardes | moyen |
 | Exercice mensuel sur une vraie archive de production ; test de la copie séquestrée de la clé | sauvegardes | procédure |
 | Contrôle Trusted Types / CSP dans un navigateur en CI | sécurité | petit |
@@ -57,7 +57,7 @@ l'action du fondateur ; tout le reste peut être traité sans lui.
 | Filtres calculés en SQL plutôt qu'en Python pour les gros clients | moyen |
 | Retour après action dans une liste filtrée : garder les filtres | petit |
 | Colonne « Créée » des tâches qui affiche le prochain essai | petit |
-| Libellés des nouvelles alertes de sauvegarde dans l'écran Alertes | petit |
+| ~~Libellés des nouvelles alertes de sauvegarde~~ : faits (D-3505) ; bandeau sur `/admin` à faire | petit |
 | Liste des sessions actives et « fermer mes autres sessions » | moyen |
 | Interface en anglais | moyen |
 
