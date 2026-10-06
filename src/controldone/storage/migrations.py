@@ -130,11 +130,21 @@ def _m0003_alertes_notifiees(conn: Connection) -> None:
     Base.metadata.tables["notifications_alertes"].create(conn, checkfirst=True)
 
 
+def _m0004_sessions_actives(conn: Connection) -> None:
+    """Table ``sessions_actives`` (liste « mes sessions actives », fermer les autres sessions, D-3603). Table
+    nouvelle : rien à faire si l'étape 1 l'a déjà créée."""
+    import controldone.storage.securite  # noqa: F401  (déclare la table dans Base.metadata)
+
+    Base.metadata.tables["sessions_actives"].create(conn, checkfirst=True)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "socle", "tables manquantes (débit, sessions, facturation, notifications)", _m0001_socle),
     Migration(2, "index_journal_taches", "index du journal et des tâches", _m0002_index_journal_taches),
     Migration(3, "alertes_notifiees", "colonne alertes.notifiee_le et table notifications_alertes",
               _m0003_alertes_notifiees),
+    Migration(4, "sessions_actives", "table sessions_actives (sessions ouvertes par compte, D-3603)",
+              _m0004_sessions_actives),
 )
 
 
