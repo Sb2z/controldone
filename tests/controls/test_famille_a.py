@@ -809,3 +809,17 @@ def test_gabarits_sans_formulation_interdite():
     for nom in fa.__all__:
         if nom.startswith("ACTION"):
             assert check_text(getattr(fa, nom)) == [], nom
+
+
+def test_a10_nette_couverte_par_b4_quand_une_nette_d_article_depasse_sa_brute():
+    # D-3106 : article 1 déclaré avec une masse nette (150) supérieure à sa masse brute (120) : B4 le relève ; la
+    # masse nette déclarée qui en découle ne donne pas un second constat A10 (même fait).
+    f = facture(masse_nette_totale=fv("masse_nette_totale", "100.000"),
+                masse_brute_totale=fv("masse_brute_totale", "120.000"))
+    d = declaration(masse_brute_totale=dv("masse_brute_totale", "120.000"),
+                    articles=[_article("1", masse_nette=dv("articles[].masse_nette", "150.000"),
+                                       masse_brute=dv("articles[].masse_brute", "120.000"))])
+    rs = {r.sous_controle: r for r in fa.a10_masses(ctx_de([f, d]))}
+    assert rs["nette"].outcome is Outcome.non_applicable
+    assert rs["nette"].raison_code is RaisonCode.couvert_par_autre_controle
+    assert rs["brute"].outcome is Outcome.conforme

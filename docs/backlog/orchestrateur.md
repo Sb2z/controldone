@@ -15,3 +15,6 @@
   `bench/corpus_g6` : `find holdout -name truth.json | sort | xargs sha256sum | sha256sum` doit donner
   `d604e7b4936af4b1473c79bd4ee557dd0702cead3d197aded56776299511b554`. 160 dossiers, 190 erreurs dont 74 attendues
   « certain », 767 pièges. Fait.
+- **Trusted Types vérifiés dans un navigateur** (Chromium, Playwright) après activation par le bloc sécurité :
+  parcours fondateur et client, palette Ctrl+K, bascule de thème, filtrage en direct des dossiers, page de suivi d'un
+  dépôt — 0 erreur console, 0 rapport CSP. Fait. Reste à faire : ce contrôle en CI (cf. backlog sécurité).

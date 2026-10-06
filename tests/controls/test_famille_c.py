@@ -634,6 +634,23 @@ def test_c7_mrn_cite_inconnu():
     assert c7_references(contexte([d, f2]))[0].outcome is Outcome.conforme
 
 
+def test_c7_mrn_proche_de_celui_du_dossier_le_designe():
+    # D-3104 : MRN cité lu avec trois caractères faux (OCR) ou un caractère perdu : il désigne la déclaration du
+    # dossier ; un MRN distinct (caractères aléatoires) reste sans correspondance.
+    from controldone.controls.famille_c import mrn_designe
+
+    assert mrn_designe("26FRK7Q2ZX9PLM3VB2", "26FRK7Q2ZX9PLM3VB2")
+    assert mrn_designe("26FRK7O2ZX9PIM3V82", "26FRK7Q2ZX9PLM3VB2")
+    assert mrn_designe("26FRK7Q2Z9PLM3VB2", "26FRK7Q2ZX9PLM3VB2")
+    assert not mrn_designe("26FRX4D8TW1NCE7HU5", "26FRK7Q2ZX9PLM3VB2")
+    assert not mrn_designe("25DEK7Q2ZX9PLM3VB2", "26FRK7Q2ZX9PLM3VB2")
+    d = dec("doc_dec1", (DROIT, "100.00"), mrn=MRN_B)
+    proche = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), refs_mrn=["26FRK7O2ZX9PIM3V82"])
+    assert c7_references(contexte([d, proche]))[0].outcome is Outcome.conforme
+    autre = ft("doc_ft1", ligne("doc_ft1", N.debours_droits, "100.00"), refs_mrn=["26FRX4D8TW1NCE7HU5"])
+    assert c7_references(contexte([d, autre]))[0].outcome is Outcome.a_verifier
+
+
 def test_c7_reference_transport():
     from controldone.model import DocumentReference
 

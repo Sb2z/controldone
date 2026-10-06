@@ -339,3 +339,111 @@ def test_moteur_et_b1_inchange():
     for r in rs:
         if r.constat is not None:
             assert r.constat.motif_blocage is None
+
+
+def test_b4_somme_brute_lue_sous_le_seuil_non_verifiable():
+    # D-3107 : signal interne, sans montant, dont une masse n'est lue que sous le seuil de confiance (OCR) : la
+    # lecture ne peut pas trancher, aucun constat.
+    d = declaration(id=DEC, masse_brute_totale=dv("masse_brute_totale", "500.0"),
+                    articles=[art("1", masse_nette="90", masse_brute="100"),
+                              ArticleDeclaration(numero_article=dv("articles[].numero_article", "2"),
+                                                 masse_nette=dv("articles[].masse_nette", "90"),
+                                                 masse_brute=dv("articles[].masse_brute", "100", confiance=0.8))])
+    (somme,) = par_sous(b4_masses(contexte([d])), "somme_brute")
+    assert somme.outcome is Outcome.non_verifiable and somme.raison_code is RaisonCode.confiance_insuffisante
+
+
+# --- B2 par code (totaux imprimés par code de taxe, D-3101 à D-3103) -------------------------------------------
+
+
+def tot_code(code, montant, doc=DEC, **kw):
+    from controldone.model import TotalTaxeCode
+
+    return TotalTaxeCode(type_taxe=dv("totaux_par_code[].type_taxe", code, doc),
+                         montant=dv("totaux_par_code[].montant", montant, doc, **kw))
+
+
+def _lignes_b2(a00_art2="20.00"):
+    return [tax("10.00"), tax(a00_art2, article="2"),
+            tax("50.00", code="B00", cat=CategorieTaxe.tva), tax("60.00", article="2", code="B00", cat=CategorieTaxe.tva)]
+
+
+def test_b2_code_total_imprime_faux_ecart_certain():
+    d = dec_b2(*_lignes_b2(), total="140.00", totaux_par_code=[tot_code("A00", "40.00"), tot_code("B00", "110.00")])
+    rs = b2_sommes_taxes(contexte([d]))
+    (a00, b00) = par_sous(rs, "code")
+    assert a00.outcome is Outcome.ecart_certain and a00.ecart == D("10.00")
+    assert a00.constat.montant_en_jeu == D("10.00") and a00.constat.nature_montant is NatureMontant.arithmetique_declaration
+    assert "taxe A00" in a00.constat.libelle
+    textes_propres(a00)
+    assert b00.outcome is Outcome.conforme
+    (tot,) = par_sous(rs, "total")
+    assert tot.outcome is Outcome.conforme
+
+
+def test_b2_code_lecture_corroboree():
+    # Valeurs lues (texte natif) : chaque ligne sommée est confirmée par base × taux = montant (D-1700) ; le total du
+    # code est la valeur mise en cause.
+    d = dec_b2(*_lignes_b2(), total="140.00", totaux_par_code=[tot_code("A00", "40.00"), tot_code("B00", "110.00")])
+    (a00, _) = par_sous(b2_sommes_taxes(contexte([d], exiger_lecture_corroboree=True)), "code")
+    assert a00.outcome is Outcome.ecart_certain
+
+
+def test_b2_code_meme_ecart_que_le_total_un_seul_constat():
+    # ligne A00 de l'article 2 imprimée 25,00 : le total du code (30) et le total général (140) s'écartent de -5 tous
+    # les deux ; un seul constat, celui du total (D-3102).
+    d = dec_b2(*_lignes_b2("25.00"), total="140.00", totaux_par_code=[tot_code("A00", "30.00")])
+    rs = b2_sommes_taxes(contexte([d]))
+    (a00,) = par_sous(rs, "code")
+    assert a00.outcome is Outcome.non_applicable and a00.raison_code is RaisonCode.couvert_par_autre_controle
+    (tot,) = par_sous(rs, "total")
+    assert tot.outcome.est_constat and tot.ecart == D("-5.00")
+    # tous les totaux par code imprimés redonnent le total général : ce sont les lignes qui sont en cause
+    d = dec_b2(*_lignes_b2("25.00"), total="140.00", totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "110.00")])
+    (a00, _) = par_sous(b2_sommes_taxes(contexte([d])), "code")
+    assert not a00.outcome.est_constat
+
+
+def test_b2_code_ligne_non_lue_non_verifiable():
+    # la ligne A00 de l'article 2 n'est pas lue et la somme des lignes ne redonne pas le total : la ligne manquante
+    # peut expliquer l'écart du code -> impossible de conclure (D-3102)
+    lignes = [t for t in _lignes_b2() if not (t.article.valeur == "2" and t.type_taxe.valeur == "A00")]
+    d = dec_b2(*lignes, total="140.00", totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "110.00")])
+    (a00, _) = par_sous(b2_sommes_taxes(contexte([d])), "code")
+    assert a00.outcome is Outcome.non_verifiable and a00.raison_code is RaisonCode.structure_non_validee
+
+
+def test_b2_code_ligne_absente_vaut_zero_quand_le_total_general_tient():
+    # la somme de toutes les lignes lues redonne le total : la ligne A00 de l'article 2, non lue, vaut zéro ; l'écart
+    # du code A00 est établi (D-3103)
+    lignes = [t for t in _lignes_b2() if not (t.article.valeur == "2" and t.type_taxe.valeur == "A00")]
+    d = dec_b2(*lignes, total="120.00", totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "110.00")])
+    (a00, b00) = par_sous(b2_sommes_taxes(contexte([d])), "code")
+    assert a00.outcome is Outcome.ecart_certain and a00.ecart == D("20.00")
+    assert b00.outcome is Outcome.conforme
+
+
+def test_b2_code_tva_autoliquidee_total_a_payer_du_code():
+    lignes = _lignes_b2()
+    for t in lignes[2:]:
+        t.montant_a_payer = dv("taxations[].montant_a_payer", "0.00")
+        t.paiement_normalise = PaiementNormalise.autoliquide
+    d = dec_b2(*lignes, total="140.00", totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "0.00")])
+    (_, b00) = par_sous(b2_sommes_taxes(contexte([d])), "code")
+    assert b00.outcome is Outcome.conforme
+
+
+def test_b2_code_ligne_de_total_de_categorie_prioritaire():
+    # le code A00 porte déjà une ligne de total sans article (D-301) : pas de second sous-contrôle pour ce code
+    lignes = [*_lignes_b2(), tax("30.00", article=None)]
+    d = dec_b2(*lignes, total="140.00", totaux_par_code=[tot_code("A00", "30.00"), tot_code("B00", "110.00")])
+    rs = b2_sommes_taxes(contexte([d]))
+    assert len(par_sous(rs, "categorie")) == 1
+    assert [r.details["type_taxe"] for r in par_sous(rs, "code")] == ["B00"]
+
+
+def test_b2_code_lu_sous_le_seuil_a_verifier():
+    d = dec_b2(*_lignes_b2(), total="140.00",
+               totaux_par_code=[tot_code("A00", "40.00", confiance=0.8, methode="ocr"), tot_code("B00", "110.00")])
+    (a00, _) = par_sous(b2_sommes_taxes(contexte([d])), "code")
+    assert a00.outcome is Outcome.a_verifier and RaisonCode.confiance_insuffisante in a00.constat.raisons

@@ -134,3 +134,41 @@ def test_ligne_de_taxe_manquante_aucun_total_confirme():
     taxes = [t for t in TAXES if not (t[0] == "2" and t[1] == "A00")]
     c = _extraire_ocr(_page(taxes, "Total A00: 12,56   Total B00: 64,91", total="77,47"))
     assert c.total_droits_taxes.confiance < 0.9 and c.total_a_payer.confiance < 0.9
+
+
+# --- D-3101 : totaux par code portés par le modèle ---------------------------------------------------------------
+
+
+def _totaux(c: ChampsDeclaration) -> dict[str, tuple[str, float]]:
+    return {t.type_taxe.valeur: (t.montant.valeur, t.montant.confiance) for t in c.totaux_par_code}
+
+
+def test_totaux_par_code_portes_par_le_modele_jamais_des_lignes():
+    c = _extraire_ocr(_page(TAXES, "Total A00: 12,56   Total B00: 64,91", total="77,47"))
+    t = _totaux(c)
+    assert {k: v for k, (v, _) in t.items()} == {"A00": "12.56", "B00": "64.91"}
+    assert t["A00"][1] >= 0.9 and t["B00"][1] >= 0.9  # Σ des lignes du code = total imprimé du code
+    assert len(c.taxations) == 4 and all(x.article is not None for x in c.taxations)
+    assert c.totaux_par_code[0].montant.chemin == "declaration.totaux_par_code[0].montant"
+
+
+def test_total_de_code_faux_porte_tel_quel_sans_confirmation():
+    c = _extraire_ocr(_page(TAXES, "Total A00: 99,99   Total B00: 64,91", total="74,47"))
+    t = _totaux(c)
+    assert t["A00"][0] == "99.99" and t["A00"][1] < 0.9  # valeur mise en cause par B2 : jamais confirmée
+    assert t["B00"][1] >= 0.9
+
+
+def test_code_suivi_de_deux_points_dans_une_case_comptable():
+    c = _extraire_ocr(_page(TAXES, "N380 0005-0   A00 : 12,56   B00 : 64,91", total="77,47"))
+    assert {k: v for k, (v, _) in _totaux(c).items()} == {"A00": "12.56", "B00": "64.91"}
+
+
+def test_code_entre_parentheses_apres_le_libelle():
+    c = _extraire_ocr(_page(TAXES, "Total droits (A00)   12,56", total="77,47"))
+    assert {k: v for k, (v, _) in _totaux(c).items()} == {"A00": "12.56"}
+
+
+def test_code_deux_points_avec_plusieurs_nombres_ignore():
+    c = _extraire_ocr(_page(TAXES, "A00 : 12,56 20,0 % 2,51", total="77,47"))
+    assert _totaux(c) == {}

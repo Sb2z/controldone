@@ -295,3 +295,17 @@ def test_f3_autre_facture_illisible_signal():
     dec = declaration(id="doc_dec", mrn=MRN, taxations=[taxation("doc_dec", base="1000", taux="10", montant="100.00")])
     r = un(f3_declaration_refacturee_deux_fois(contexte([dec, nouveau], autres_dossiers=[autre(ancien)])))
     assert r.outcome is Outcome.conforme
+
+
+def test_f1_document_partage_entre_dossiers_un_seul_constat():
+    # D-3105 : une facture rattachée à deux dossiers (relevé « par MRN ») et sa copie : le constat F1 n'est porté que
+    # par le premier dossier (identifiant) qui les contient.
+    a = ft("doc_0001", "FT-001", "2026-08-01", ("50.00",))
+    b = ft("doc_0002", "FT-001", "2026-08-01", ("50.00",))
+    b.doublon_de = a.id
+    rs = {r.unite: r for r in f1_document_en_double(contexte([a, b], autres_dossiers=[autre(a, b, id="dos_a")]))}
+    r = rs["doc:doc_0002"]
+    assert r.outcome is Outcome.non_applicable and r.raison_code is RaisonCode.couvert_par_autre_controle
+    assert r.details["dossier"] == "dos_a"
+    rs = {r.unite: r for r in f1_document_en_double(contexte([a, b], autres_dossiers=[autre(a, b, id="dos_z")]))}
+    assert rs["doc:doc_0002"].outcome is Outcome.a_verifier

@@ -359,3 +359,17 @@ def test_e6_ecart_releve_dans_le_dossier():
     assert e6[0].constat.montant_en_jeu == D("10.00") and e6[0].details["remplace_constat_id"] == c1.constat.id
     assert "écart relevé" in esp(e6[0].constat.libelle)
     propre(e6[0])
+
+
+def test_e5_avoir_partage_entre_dossiers_un_seul_constat():
+    # D-3105 : un même avoir rattaché à deux dossiers n'est relevé que dans l'un : le premier (identifiant) dont une
+    # déclaration a un MRN cité par l'avoir, à défaut le premier de tous.
+    av = avoir("doc_av1", mrns=(MRN,))
+    autre_sans_mrn = AutreDossier(dossier_pour([av], id="dos_a"), {av.id: av})
+    r = un(e5_avoir_sans_ecart(contexte([dec_e(), ft_e(), av], autres_dossiers=[autre_sans_mrn])))
+    assert r.outcome is Outcome.a_verifier  # seul ce dossier porte la déclaration citée
+    r = un(e5_avoir_sans_ecart(contexte([ft_e(), av], autres_dossiers=[autre_sans_mrn])))
+    assert r.outcome is Outcome.non_applicable and r.raison_code is RaisonCode.couvert_par_autre_controle
+    assert r.details["dossier"] == "dos_a"
+    for fn in (e1_rattachement, e2_avoir_superieur_origine, e3_avoir_recu_deux_fois, e4_arithmetique_avoir):
+        assert all(x.outcome is Outcome.non_applicable for x in fn(contexte([ft_e(), av], autres_dossiers=[autre_sans_mrn])))

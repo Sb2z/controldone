@@ -277,3 +277,39 @@ def test_feuilles_derivees_ramenees_aux_sources():
     index = {a.id: a, b.id: b}
     feuilles = corroboration._feuilles([s], index.get)
     assert {v.id for v in feuilles} == {a.id, b.id}
+
+
+# =====================================================================================================
+# Totaux imprimés par code de taxe (D-3101)
+# =====================================================================================================
+
+
+def _total_code(code, montant):
+    from controldone.model import TotalTaxeCode
+
+    return TotalTaxeCode(type_taxe=vs("declaration.totaux_par_code[].type_taxe", code, document_id=DEC),
+                         montant=vs("declaration.totaux_par_code[].montant", montant, document_id=DEC))
+
+
+def test_identites_des_totaux_par_code():
+    """Σ lignes du code = total du code ; Σ totaux par code = total des droits et taxes : deux identités du réseau."""
+    d = _dec(_droit("1", "100.00", "10", "10.00"), _droit("2", "200.00", "10", "20.00"),
+             _tva("1", "110.00", "22.00"), _tva("2", "220.00", "44.00"), total="96.00",
+             totaux_par_code=[_total_code("A00", "30.00"), _total_code("B00", "66.00")])
+    reseau = {i.cle: i for i in corroboration.reseau(d, lambda v: v is not None, contexte([d]).tol)}
+    assert reseau["dec:code:A00"].tient and reseau["dec:code:B00"].tient
+    assert reseau["dec:codes:total_droits_taxes"].tient
+    # les totaux par code ne sont jamais des lignes : la somme des lignes reste celle des quatre taxations
+    assert len(reseau["dec:total_droits_taxes:incluse"].operandes) == 4
+
+
+def test_b2_code_certain_avec_lecture_corroboree():
+    """Total A00 imprimé faux (40 au lieu de 30) : les lignes sommées sont confirmées (base × taux, total général) ;
+    le total du code est la valeur mise en cause."""
+    d = _dec(_droit("1", "100.00", "10", "10.00"), _droit("2", "200.00", "10", "20.00"),
+             _tva("1", "110.00", "22.00"), _tva("2", "220.00", "44.00"), total="96.00",
+             nombre_articles=vs("declaration.nombre_articles", "2", document_id=DEC),
+             totaux_par_code=[_total_code("A00", "40.00"), _total_code("B00", "66.00")])
+    rs = [r for r in b2_sommes_taxes(contexte([d])) if r.sous_controle == "code"]
+    assert [r.outcome for r in rs] == [Outcome.ecart_certain, Outcome.conforme]
+    assert rs[0].constat.montant_en_jeu == D("10.00")
