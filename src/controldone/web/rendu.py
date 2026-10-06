@@ -136,14 +136,23 @@ def page(request: Request, nom: str, *, titre: str, statut: int = 200, demo: boo
     html = environnement().get_template(nom).render(
         request=request, titre=traduire(titre), acteur=acteur, csrf=etat.jeton(request), demo=demo, flash=flash,
         nav=nav, chemin=request.url.path, langue=langue, textes_js=textes_js(langue),
-        retour_langue=retour_sur(request.url.path + ("?" + request.url.query if request.url.query else ""),
-                                 retour_sur(request.url.path, "/")),
+        retour_langue=_retour_langue(request, statut),
         **contexte)
     rep = HTMLResponse(html, status_code=statut)
     if flash:
         etat.effacer_flash(rep)
     etat.poser_presession(request, rep)
     return rep
+
+
+def _retour_langue(request: Request, statut: int) -> str:
+    """Adresse de retour du choix de langue : la page courante (chemin relatif validé par ``retour_sur``) ; pour une
+    page d'erreur, l'accueil — une 404 ne doit rien renvoyer de l'adresse demandée (cloisonnement : réponse
+    identique pour une ressource d'un autre client et une ressource inexistante)."""
+    if statut >= 400:
+        return "/"
+    chemin = request.url.path
+    return retour_sur(chemin + ("?" + request.url.query if request.url.query else ""), retour_sur(chemin, "/"))
 
 
 def redirection(request: Request, url: str, *, message: str | None = None, erreur: str | None = None,

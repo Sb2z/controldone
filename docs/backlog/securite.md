@@ -14,7 +14,8 @@ Constats repérés pendant le bloc C (`docs/REVUE_SECURITE_2.md`) et non traité
 - **`requirements.lock` sans empreintes.** **Fait (D-3609)** : empreintes, `make lock`, `--require-hashes` et
   backend de construction figé dans le Dockerfile (image construite et vérifiée le 6 octobre).
 - **Paquets installés hors du fichier figé.** **Fait (D-3609)** : `alembic`, `mako` retirés (Alembic écarté,
-  D-3503) ; `python-dateutil`, `six` sont des dépendances de `pg8000` (extra `postgres`, D-3501), hors de l'image.
+  D-3503) ; `python-dateutil`, `six` (dépendances de `pg8000`, extra `postgres`) figés avec lui dans
+  `requirements.lock`.
 - **Rendu OCR des PDF sans plafond de pixels.** `ingest/pages.py` rend chaque page à 300 dpi dans le processus isolé
   sans borne de taille ; une page de 5 m × 5 m échoue sous `RLIMIT_AS` (page illisible) après une grosse allocation.
   Proposition : plafonner l'échelle comme les vignettes (`services.vignettes.MAX_PIXELS`), au-delà de A0. Sans effet
@@ -76,10 +77,6 @@ ok = etat.sessions.fermer_session(s.user_id, sid_vise)       # POST (CSRF) ; Fal
   lisent des fichiers hostiles, mais dans le processus isolé (sans secrets, mémoire et délai bornés). Proposition :
   relancer `make audit-image` à chaque construction ; reconstruire dès qu'un correctif paraît (l'audit bloque
   alors). **À suivre.**
-- **PostgreSQL en production sans pilote dans l'image** : `pg8000` est un extra (`postgres`) hors de
-  `requirements.lock` ; une image pointée sur PostgreSQL échouerait au démarrage. Proposition : si PostgreSQL est
-  retenu pour la production, l'ajouter à `requirements.lock` puis `make lock` (empreintes) et `make audit`.
-  **À décider (bloc P).**
 - **Libellé de l'alerte `volume_non_chiffre`** (D-3605) dans l'écran Alertes. **À faire (interface).**
 - **`docs/SECURITY.md`** : y reporter D-3601 à D-3605 (refus du mode `dev` exposé, URL publique et hôtes admis,
   sessions actives, cookies `__Host-`, constat du volume chiffré). Variables documentées dans

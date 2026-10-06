@@ -104,27 +104,20 @@ def registre(scope: TenantScope, *, ecart_id: str | None = None,
     jours = jours_relance(scope.client().reglages)
     transitaires = {t.id: t.nom for t in scope.lister(Transitaire)}
     if ecart_ids is not None:
-        par_id = {e.id: e for e in scope.session.execute(
-            scope.requete(Ecart).where(Ecart.id.in_(ecart_ids))).scalars()}
+        par_id = {e.id: e for e in scope.lister_parmi(Ecart, "id", ecart_ids)}
         lignes = [par_id[i] for i in ecart_ids if i in par_id]
-        visibles = {c.id: c for c in scope.session.execute(
-            scope.requete(Constat).where(Constat.id.in_([e.constat_id for e in lignes]))).scalars()}
+        visibles = {c.id: c for c in scope.lister_parmi(Constat, "id", [e.constat_id for e in lignes])}
         ids_dossiers = [str((e.contenu or {}).get("dossier_id") or "") for e in lignes]
-        references = {d.id: d.reference or d.id for d in scope.session.execute(
-            scope.requete(Dossier).where(Dossier.id.in_(ids_dossiers))).scalars()}
+        references = {d.id: d.reference or d.id for d in scope.lister_parmi(Dossier, "id", ids_dossiers)}
     else:
         visibles = {c.id: c for c in scope.lister(Constat)}
         references = {d.id: d.reference or d.id for d in scope.lister(Dossier)}
         lignes = [scope.obtenir(Ecart, ecart_id)] if ecart_id else scope.lister(Ecart, ordre=Ecart.modifie_le)
-    # événements de toutes les lignes en une requête (et non une par écart)
+    # événements de toutes les lignes en une requête par paquet (et non une par écart)
     evenements: dict[str, list[Any]] = {}
-    ids_lignes = [e.id for e in lignes if e.constat_id in visibles]
-    for i in range(0, len(ids_lignes), 500):
-        q = (scope.requete(EvenementRecouvrement)
-             .where(EvenementRecouvrement.ecart_id.in_(ids_lignes[i:i + 500]))
-             .order_by(EvenementRecouvrement.le))
-        for v in scope.session.execute(q).scalars():
-            evenements.setdefault(v.ecart_id, []).append(v)
+    for v in scope.lister_parmi(EvenementRecouvrement, "ecart_id", [e.id for e in lignes if e.constat_id in visibles],
+                                ordre=EvenementRecouvrement.le):
+        evenements.setdefault(v.ecart_id, []).append(v)
     maintenant = datetime.now(UTC)
     out = []
     for e in lignes:

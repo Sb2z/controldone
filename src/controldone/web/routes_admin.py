@@ -418,8 +418,7 @@ def file_validation(request: Request) -> Response:
             scope = op.client(tenant_id, "file de validation", lecture=True)
             libelles = _libelles_documents(scope, {c.dossier_id for c in liste},
                                            {b["document_id"] for b in bruts if b["tenant_id"] == tenant_id})
-            refs = {d.id: d.reference or d.id for d in scope.session.execute(
-                scope.requete(Dossier).where(Dossier.id.in_({c.dossier_id for c in liste}))).scalars()}
+            refs = {d.id: d.reference or d.id for d in scope.lister_parmi(Dossier, "id", {c.dossier_id for c in liste})}
             vues = [vue_constat(c, libelles) for c in liste]
             extraits = images_preuves(pf.vault, scope, vues)
             for v in vues:
@@ -447,9 +446,8 @@ def _libelles_documents(scope: Any, dossier_ids: set[str], document_ids: set[str
     """Libellés des documents des dossiers ``dossier_ids`` et des documents ``document_ids`` (page affichée)."""
     from controldone.model.documents import Document as DocumentModele
 
-    q = scope.requete(Document).where(Document.dossier_id.in_(dossier_ids) | Document.id.in_(document_ids))
     libelles: dict[str, str] = {}
-    for d in scope.session.execute(q).scalars():
+    for d in scope.lister_parmi(Document, "dossier_id", dossier_ids) + scope.lister_parmi(Document, "id", document_ids):
         try:
             libelles[d.id] = libelle_document(DocumentModele.model_validate(d.contenu))
         except ValueError:

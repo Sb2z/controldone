@@ -166,6 +166,24 @@ class TenantScope:
         self.exiger(Action.lire)
         return self._requete(modele)
 
+    def lister_parmi(self, modele: type[M], champ: str, valeurs: Iterable[Any], *, ordre: Any = None) -> list[M]:
+        """Lignes de ``modele`` dont ``champ`` est dans ``valeurs`` (``IN`` en paramètres liés, par paquets de 500),
+        même cloisonnement que ``lister`` : lecture d'une page de liste sans tout relire (D-3801)."""
+        if champ == "tenant_id":
+            raise AccesRefuse("filtre tenant_id interdit")
+        valeurs = list(dict.fromkeys(v for v in valeurs if v is not None))
+        out: list[M] = []
+        for i in range(0, len(valeurs), 500):
+            q = self.requete(modele).where(getattr(modele, champ).in_(valeurs[i:i + 500]))
+            if ordre is not None:
+                q = q.order_by(ordre)
+            out.extend(self.session.execute(q).scalars())
+        return out
+
+    def executer_lecture(self, q: Any) -> list[Any]:
+        """Exécute une lecture construite **dans ``controldone.storage``** à partir de ``requete`` (listes en SQL)."""
+        return list(self.session.execute(q))
+
     # --- API générique -----------------------------------------------------------------------------
     def obtenir(self, modele: type[M], id: Any) -> M:
         self.exiger(Action.lire)

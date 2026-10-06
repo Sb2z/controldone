@@ -3998,8 +3998,8 @@ marqueur `postgresql`).
   réussie (`sid`, `user_id`, début, dernière émission du jeton, expiration, appareil, réseau), mise à jour à
   chaque rotation (au plus toutes les 15 min : pas d'écriture par requête), supprimée à la déconnexion, à la
   révocation, au changement de mot de passe, purgée à l'expiration (`purger_revocations`). Créée par
-  `assurer_tables_securite` au démarrage du web et par l'étape 1 des migrations (D-3503) ; table nouvelle,
-  aucune colonne ajoutée.
+  `assurer_tables_securite` au démarrage du web et par l'étape **4** des migrations (`sessions_actives`, D-3503 ;
+  l'étape 1 la crée aussi sur une base qui ne l'a pas encore passée) ; table nouvelle, aucune colonne ajoutée.
 - **Minimisation** : appareil réduit à « navigateur · système » par listes fermées (`reduire_appareil`, jamais
   le `User-Agent`), réseau tronqué (`/24` IPv4, `/48` IPv6, `reduire_reseau`).
 - API (`auth.jetons.GestionnaireSessions`) : `sessions_actives(user_id, sid_courant=…)` (liste de
@@ -4067,8 +4067,10 @@ marqueur `postgresql`).
   Bloque sur une vulnérabilité HIGH/CRITICAL **corrigeable** ; les autres sont listées (`var/audit/image.md`).
   Résultat du 6 octobre 2026 (Debian 13.7) : 0 grave corrigeable ; 77 graves sans correctif publié
   (CRITICAL 1 : libxml2 ; HIGH : util-linux, curl, expat, libtiff, libtesseract…), à suivre.
-- Paquets hors du fichier figé : `alembic` et `mako` retirés de `.venv` (Alembic écarté, D-3503) ;
-  `python-dateutil` et `six` restent, dépendances de `pg8000` (extra `postgres`, D-3501), hors de l'image.
+- Paquets hors du fichier figé : `alembic` et `mako` retirés de `.venv` (Alembic écarté, D-3503). L'extra
+  `postgres` (D-3501) est **figé** dans `requirements.lock` avec ses dépendances (`pg8000`, `python-dateutil`, `six`,
+  `scramp`, `asn1crypto` : 73 paquets) : `make install` et l'image l'ont, `make audit` le couvre (0 vulnérabilité,
+  licences permissives).
 
 ## D-3610 — Débit, révocations et sessions testés sous PostgreSQL
 
@@ -4078,3 +4080,126 @@ marqueur `postgresql`).
   absente : exactement 20 jetons sur 60 demandes ; cinq révocations simultanées du même utilisateur : une ligne,
   coupure la plus tardive), la table bornée, les révocations et les sessions actives entre deux « processus ».
   6 tests verts le 6 octobre 2026. À ajouter à la CI (déclenchement manuel) avec le paquet `postgresql`.
+
+# Moteur (lot 2) : bruit « à vérifier » sur jeux neufs, progression du pipeline (dev seulement, octobre 2026)
+
+Constat : sur les jeux jamais vus, le bruit « à vérifier » non apparié restait à 1,8–1,9 constat par dossier (alerte :
+1,5), pour 0,95–1,19 sur les jeux de développement. Il a été ventilé sur les seuls jeux de développement par un outil
+nouveau, puis réduit famille par famille. Règles générales seulement : aucune ne lit un nom de gabarit, de fichier
+(hors un MRN imprimé dans le nom du fichier d'une déclaration, comme référence à recouper), de client ou de
+transitaire.
+
+## D-3701 — Outil d'analyse du bruit : `scripts/analyse_bruit.py`
+
+Joint `metrics.json` (classes de `bench.score`), `findings.json` (raisons, sous-contrôle, documents concernés) et la
+vérité du split `dev` (type, format, mise en page, gabarit, dégradation des documents ; pièges). Ventile le bruit
+(`fp_a_verifier`, non apparié ou piège déclenché) par contrôle × sous-contrôle, contrôle × raison, type / format /
+dégradation des documents concernés, mise en page de la déclaration, gabarit du transitaire ; liste les pièges
+déclenchés par description et les constats en double dans un même lot ; `--avant` compare deux bancs (compteurs,
+différence par contrôle, nouveaux constats). Refuse tout autre split que `dev` (les jeux tenus à l'écart ne sont lus
+qu'en totaux, par `bench.score`). `--controle`, `--exemples`, `--json`. Tests : `tests/bench/test_analyse_bruit.py`.
+
+## D-3702 — Regroupement : lien faible renforcé par une référence retrouvée dans le dossier (P4)
+
+Constat (dev, trois jeux) : 62 P4 « rattachement faible » non appariés, aucune erreur réelle ; le signal « même
+dossier source » seul ou un MRN cité (avoir, poids « moyenne ») suffisait à « faible ». Le contrôle sert sur les
+factures d'un autre envoi rangées dans le dossier (8 pièges tolérés sur g4/g2, 8 factures `ft9` du corpus d'origine).
+
+Règle (`regroupement._corroborer_faibles`, après `_corroborer`) : un membre au lien faible (score ≤ 2, ni graine ni
+doublon) dont une référence se retrouve sur un membre **solidement** rattaché au même dossier (graine ou score ≥ 3)
+passe à « moyenne » avec le signal nouveau `reference_proche` (« référence retrouvée dans le dossier ») :
+- MRN : `normalize.refs.mrn_proches` — préfixes de 15 caractères, clés de confusion OCR, même année, au plus 4
+  caractères d'écart (comme D-3104 ; onze caractères aléatoires) ; MRN de la déclaration, à défaut celui imprimé dans
+  le nom de son fichier ; MRN cités par une facture du transitaire ou un avoir ;
+- titre de transport : `ref_transport_proches` — compatibles, ou clés de confusion d'au moins 10 caractères à au plus
+  `max(1, n // 4)` caractères d'écart ; entre deux déclarations, égalité ou inclusion seulement (leurs références
+  mêlent numéros de facture et titres : deux factures successives ne doivent pas se confirmer) ;
+- numéro de facture : porté par l'un, cité par l'autre (égaux) ;
+- document lu **sans aucune** référence, dans le **même fichier** qu'un membre solide (page illisible d'un PDF
+  « envoi complet ») : rien ne le contredit.
+Répété tant qu'un lien change. Jamais « forte » (plafond explicite, même avec `mrn_cite`) : la condition 5 de
+§8.5.1 (lien solide pour un écart certain) est inchangée, seul P4 distingue « faible » de « moyenne ». Un document qui
+ne porte que des références étrangères au dossier reste faible.
+
+Mesure (préparations de 56 dossiers du dev à P4, liens comparés à `expected_links` de la vérité) : 41 liens
+renforcés, tous de documents du dossier ; aucun document étranger renforcé ; les 16 documents étrangers (8 `ftx`
+piégés de g4/g2, 8 `ft9` du corpus d'origine) restent faibles et signalés. Banc : voir D-3707.
+Test modifié : `test_facture_repartie_sur_deux_declarations_par_repli_reste_possible` (MRN1 et MRN2 des
+fixtures ne diffèrent que d'un caractère : deux lectures d'un même MRN au sens de cette règle ; MRN réaliste).
+
+## D-3703 — D1 total HT / total des débours : lignes possiblement non lues
+
+Comme D-2307 pour B2/B3 : `total_ht` ou `total_debours` imprimé **supérieur** à la somme des lignes lues, classement
+`a_verifier` pour cause de lecture (`confiance_insuffisante` ou `lecture_non_corroboree`) : des lignes non lues
+expliquent l'écart dans ce sens et aucune identité ne prouve que la lecture est complète (elle aurait rendu le
+classement certain) -> `non_verifiable` (`confiance_insuffisante`, motif `lignes_possiblement_non_lues`). Écart de
+sens contraire, ou classement certain : inchangés. Coût : BX0168 (corpus d'origine), apparié jusqu'ici à un montant
+faux (9 053,88 EUR pour 53,88 attendus : l'écart venait surtout des lignes non lues), n'est plus relevé.
+
+## D-3704 — C1 à C5 : relevé réparti au prorata, un constat par facture
+
+Une facture du transitaire répartie entre plusieurs dossiers du lot (relevé au prorata) était comparée, dans chaque
+dossier, à la seule déclaration de ce dossier : le même montant refacturé donnait un constat par déclaration (GZ0030
+×3, GX0120 ×5). Quand le classement est `a_verifier` avec `attribution_non_univoque` ou `allocation_prorata`
+**et** que la comparaison porte sur une ligne qu'aucun MRN ni aucune allocation ne désigne (`LigneDebours.partagee` :
+ligne non ventilée, MRN illisible ou sans correspondance), le constat n'est porté que par le premier dossier
+(identifiant) qui contient la facture ; ailleurs `non_applicable` (`couvert_par_autre_controle`, `details.dossier`,
+motif `facture_repartie_evaluee_dans_un_autre_dossier`), dans l'esprit de D-3105. Une ligne ventilée par MRN est un
+fait propre à chaque dossier : jamais concernée (une première version sans cette condition faisait perdre le vrai
+C2 de GZ0145, ventilé par MRN). Un écart certain n'est jamais concerné.
+
+## D-3705 — B1 : base lue tronquée sur un scan
+
+« 30,65 » lu pour 30 651,38 (GZ0154), « 1.224 » pour 122 481 (GX0054) : les décimales perdues empêchent la variante
+« séparateur » (× 1 000) du test de confusion de redonner le montant à la tolérance près ; le montant, confirmé par
+le total de son code (D-3101), n'était plus sujet à confusion. Règle (`famille_b._base_tronquee`) : base lue sous
+`C_MIN_CERTAIN`, et une puissance de dix `k` (1 à 6) telle que `(base − u) × 10^k × taux ≤ montant ≤ (base + u) ×
+10^k × taux` (à la tolérance de ligne près), `u` étant l'unité du dernier chiffre lu -> `non_verifiable`
+(`confiance_insuffisante`, motif `base_lue_tronquee`, `details.puissance_de_dix`). Les erreurs B1 injectées
+(`taxe_base_taux_incoherente`) ne sont pas des facteurs de dix.
+
+## D-3706 — Totaux par code : récapitulatif sans ligne lue ; total de catégorie sans code
+
+Constat (`scripts/mesure_extraction.py`, corpus d'origine) : sur L1/L3 dégradés (d2), ce ne sont pas les totaux par
+code qui manquent mais les lignes de taxation (tableau illisible) ; les totaux lus étaient écartés faute de ligne du
+même code. L2 imprime « Total autres taxes 1332,32 » sans code.
+- Un code sans ligne de taxation lue est retenu quand **tous** les totaux par code lus (au moins deux) redonnent,
+  additionnés, le total des droits et taxes ou le total à payer imprimé (0,01 EUR par code) : l'identité confirme
+  chacun.
+- « Total droits / autres taxes / TVA <montant> » sans code est rattaché au **seul** code des lignes lues de cette
+  catégorie, quand ce code n'a pas de total lu et que la catégorie n'a qu'un tel total ; confiance plafonnée (pénalité
+  0,15 : jamais ≥ 0,90, le rattachement est déduit). « Total des droits et taxes » n'est pas une catégorie.
+Mesure (totaux par code, dev) : corpus d'origine 577 justes / 205 absents / 1 faux -> 649 / 133 / 1 ; g4 -> 335 /
+34 / 1 (58 absents avant, D-3101) ; g2 -> 419 / 46 / 2 (82 absents avant). Calibration des déclarations : ≥ 0,90
+justes à 100 % (23 499 sur le corpus d'origine), 99,99 % (1 fausse sur 14 312, la même qu'avant, g4), 99,97 % (5 sur
+16 551, les mêmes, g2). Tests : `tests/extract/test_totaux_categories_d29.py`.
+
+## D-3707 — Mesures (dev seulement)
+
+Bancs `dev` (bloc A -> lot 2, `scripts/analyse_bruit.py --avant`) :
+
+| jeu | bruit non apparié + pièges | par dossier | pièges déclenchés | VP/FP certains | rappel |
+|---|---|---|---|---|---|
+| g4 (175) | 200 -> 176 | 1,14 -> 1,01 | 46 -> 40 | 103/0 -> 103/0 | 0,8311 -> 0,8311 |
+| g2 (232) | 277 -> 226 | 1,19 -> 0,97 | 29 -> 17 | 115/0 -> 115/0 | 0,8700 -> 0,8700 |
+| d'origine (202) | 192 -> 174 | 0,95 -> 0,86 | 28 -> 28 | 125/0 -> 125/0 | 0,8320 -> 0,8293 |
+
+Par contrôle (trois jeux) : P4 62 -> 28, C5 56 -> 41, D1 `total_ht` 15 -> 0, D1 `total_debours` 8 -> 0, C1 24 -> 14,
+C4 18 -> 11, B1 31 -> 27 ; E5 24 -> 25 (un reliquat d'avoir devenu visible). Aucun FP certain ; aucune erreur
+appariée perdue hors BX0168-E2 (D-3703) ; exactitude des montants inchangée (g4 0,958, g2 0,9658). Les jeux tenus à
+l'écart n'ont pas été relancés par ce bloc (lecture en totaux seulement, à faire par le fondateur ou au bloc suivant).
+Suite complète : 2 431 tests verts ; 8 échecs dans `tests/web`, `tests/facturation`, `tests/security`,
+`tests/platform/test_isolation.py`, tous sur des fichiers modifiés en parallèle par les blocs interface et sécurité
+(`web/suivi.py`, `services/reclamations.py`…), aucun sur un fichier du moteur.
+
+## D-3709 — Progression fine du pipeline
+
+`OptionsPipeline.progression` : rappel facultatif `(etape, fait, total)`, étapes `pipeline.ETAPES_PROGRESSION` =
+`pages` (fichiers lus : pages, découpage, classement des documents de chaque fichier), `classement` (documents
+classés), `extraction` (documents extraits), `regroupement`, `controles` (dossiers contrôlés). Une erreur du rappel
+est journalisée et n'interrompt rien. `jobs.handlers.relais_progression(ctx)` écrit `"<etape> <fait>/<total>"`
+(`regroupement` sans compteur, 32 caractères au plus) par `JobContext.etape` : à chaque changement d'étape, à la fin
+d'une étape, sinon au plus toutes les 2 s (une écriture en base par appel). Le pipeline exécuté dans le processus fils
+de `executer_avec_delai` envoie ses étapes par le tube du résultat (`("progression", …)`), relayées dans le parent ;
+`options.progression` reste `None` à travers le tube (rien d'impicklable). L'affichage relève du bloc interface
+(`web/suivi.py`, D-3805). Tests : `tests/assembly/test_pipeline.py`, `tests/platform/test_relais_progression.py`.
