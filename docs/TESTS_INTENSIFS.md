@@ -276,6 +276,39 @@ Pour diagnostiquer, j'ai lu le contrôle en cause sur ces deux jeux : ils ne son
 Tous les seuils passent. Le bruit baisse sur tous les jeux tenus à l'écart. Les deux faux certains restants (D1,
 un piège sur `corpus_g6` et un non apparié sur `corpus_g5`) existaient déjà avant le lot.
 
+## Sixième mesure : lot 3 — `corpus_g8` et `corpus_g9` vierges (6–7 octobre 2026)
+
+**Jeux.** `corpus_g8` (graine 20261010) et `corpus_g9` (graine 20261011) comptent chacun 160 dossiers, générés avec
+`--ext --per-control 3`. `corpus_g8` a 188 erreurs, dont 80 attendues « certain », et 785 pièges ; `corpus_g9` a
+190 erreurs, dont 63 attendues « certain », et 772 pièges. Ils ne sont pas versionnés ; leurs recettes et empreintes
+sont dans `bench/corpus_empreintes.json`.
+
+**`corpus_g8`.** La première mesure du lot 3 donnait 55 vrais / 2 faux (D4 non apparié, D3 sur un piège), soit 96,5 %
+et un seuil échoué ; avant le lot, c'était 54 / 3. Correction D-4212 à D-4215 sur les seuls jeux de développement, à
+partir du seul nom des contrôles en cause : **54 vrais / 0 faux**, seuil passé. Ce jeu n'est donc plus vierge pour
+D3/D4.
+
+**`corpus_g9`, mesure vierge du code final** : 63 vrais / 1 faux (C1, montant inexact), précision 98,4 % (Wilson
+91,7 %), rappel des erreurs attendues « certain » 87,3 %, bruit 1,14 par dossier, **seuil passé**.
+
+| Jeu tenu à l'écart | Vrais / faux certains | Précision | Rappel | Bruit / dossier |
+|---|---|---|---|---|
+| `corpus_g9` (vierge) | 63 / 1 | 98,4 % | 73,7 % | 1,14 |
+| `corpus_g8` | 54 / 0 | 100 % | 82,5 % | 0,98 |
+| `corpus_g7` | 52 / 0 | 100 % | 76,7 % | 1,23 |
+| `corpus_g6` | 61 / 0 | 100 % | 75,8 % | 1,31 |
+| `corpus_g5` | 37 / 0 | 100 % | 80,5 % | 1,35 |
+| `corpus_g4` | 32 / 0 | 100 % | 80,3 % | 0,67 |
+| `corpus_g3` | 66 / 0 | 100 % | 88,3 % | 0,63 |
+| `corpus_g2` | 40 / 0 | 100 % | 83,1 % | 0,57 |
+| `corpus_h2` | 46 / 0 | 100 % | 79,7 % | 1,25 |
+| `corpus` | 45 / 0 | 100 % | 85,2 % | 0,71 |
+
+**À retenir.** Tous les seuils passent. Pour la première fois, le bruit est sous l'alerte de 1,5 sur tous les jeux.
+Sur des documents jamais vus, il reste environ 1 faux certain pour 60 à 65 écarts certains, d'où la nécessité de la
+validation humaine. La lecture par Claude (D-4001 à D-4008) n'est pas incluse : elle est inactive tant que la clé
+n'est pas fournie.
+
 ## Reproduire
 
 ```bash
@@ -285,5 +318,5 @@ CONTROLDONE_PAGES_CACHE_DIR=var/cache/g3_pages python -m controldone.bench_run \
 python -m bench.score --corpus bench/corpus_g3 --split holdout --run bench/out/g3 --gate
 ```
 
-Tests : 2 484 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
+Tests : 2 602 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
 (`scripts/demo_complete.sh --sans-serveur`) se termine sans erreur.
