@@ -29,3 +29,6 @@
   (D-4402, D-4403). Avant la réécriture de l'historique : `make corpus-verifier` (8 corpus conformes). Fait.
 - **Numéro de décision D-3709** : vérifié, une seule décision porte ce numéro (progression fine du pipeline) ;
   l'interface y renvoie sans la dupliquer. Fait.
+- **Test instable `tests/ingest/test_ingest_pages.py::test_processus_isole_echec_memoire`.** Il échoue parfois, en
+  suite complète ou seul juste après une suite, quand la machine est chargée (plafond de mémoire du processus isolé),
+  puis passe. À examiner en fin de lot, machine au repos. À faire.

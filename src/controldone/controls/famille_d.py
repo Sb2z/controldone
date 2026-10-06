@@ -441,9 +441,13 @@ def _d1_resultat(
     somme_de_lignes: bool = False,
     motifs_structure: Sequence[str] = (),
     explications_ligne: Sequence[str] = (),
+    presentations: Sequence[Decimal] = (),
 ) -> ResultatControle:
     v_imp = imprime.decimal_signe()
     candidats = [calcul, *alternatives]
+    # D-4204 : autres présentations des totaux (remise en ligne négative…) : elles expliquent un total imprimé qui
+    # les redonne exactement, mais ne servent jamais de référence au montant d'un écart.
+    candidats += [p for p in presentations if abs(v_imp - p) <= tol]
     calcul = min(candidats, key=lambda c: abs(v_imp - c))
     ecart = v_imp - calcul
     seuil = ctx.tol.s_arith()
@@ -470,10 +474,6 @@ def _d1_resultat(
     # D-4202 : un total imprimé supérieur à la somme des lignes lues n'est un écart certain que si une autre
     # identité imprimée prouve que la lecture des lignes est complète (sinon une ligne non lue l'explique).
     structure = list(motifs_structure) if somme_de_lignes and ecart > 0 else []
-    import os as _os  # TRACE-TEMP
-    if _os.environ.get("D1_TRACE") and somme_de_lignes and ecart > 0:  # TRACE-TEMP
-        with open(_os.environ["D1_TRACE"], "a") as _fh:  # TRACE-TEMP
-            _fh.write(f"{ctx.dossier.id}\t{f.ft.numero.valeur if f.ft.numero else ''}\t{sous}\t{ecart}\t{structure}\n")  # TRACE-TEMP
 
     def acc_operande(o: ValeurSourcee):
         d = o.decimal_signe()
@@ -717,11 +717,16 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
         ))
     if toutes_lisibles and montants and v_tht is not None and tht is not None:
         alternatives = [s_prest] if debours and prestations else []
+        credits = _somme(v.decimal_signe() for _, v in montants if v.decimal_signe() < 0)
+        # D-4204 : total HT imprimé avant la remise ou l'avoir porté en ligne négative (présentation « total HT,
+        # remise, net HT ») : l'écart égal aux lignes négatives n'est pas une erreur d'addition.
+        presentations = ([s_tout - credits] + ([s_prest - credits] if debours and prestations else [])
+                         if credits < 0 else [])
         complet = bool(preuves_lignes & {"ttc", "structure"}) or {"debours", "prestations"} <= preuves_lignes
         out.append(_d1_resultat(
             ctx, f, "total_ht", unite_f, tht, s_tout, [v for _, v in montants], tol.t_somme(len(montants)),
             "le total HT imprimé", f"somme des {len(montants)} montants HT", avec_montant=True,
-            alternatives=alternatives,
+            alternatives=alternatives, presentations=presentations,
             ligne_non_lue=bool(meme_ecart) or _tva_confirme_total(ctx, ft, v_tht, s_deb, s_prest, prestations),
             somme_de_lignes=True, motifs_structure=[] if complet else ["lignes_non_prouvees_completes"],
         ))
@@ -729,13 +734,14 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
         assert ft.total_ttc is not None and ft.total_ht is not None and ft.total_tva is not None
         alternatives = [ht + tva + s_deb] if debours and toutes_lisibles and abs(ht - s_prest) <= tol.t_somme(
             max(1, len(prestations))) else []
-        if v_td is not None and v_td > 0 and (v_tht is None or abs(v_tht - v_td) > tol.t_somme(2)):
-            # D-4204 : TTC = HT des prestations + TVA + total des débours imprimé (débours hors HT), même quand
-            # les lignes de débours ne sont pas toutes lues.
-            alternatives.append(ht + tva + v_td)
+        # D-4204 : TTC = HT des prestations + TVA + total des débours imprimé (débours hors HT), même quand les
+        # lignes de débours ne sont pas toutes lues.
+        pres_ttc = [ht + tva + v_td] if v_td is not None and v_td > 0 and (
+            v_tht is None or abs(v_tht - v_td) > tol.t_somme(2)) else []
         out.append(_d1_resultat(
             ctx, f, "total_ttc", unite_f, ft.total_ttc, ht + tva, [ft.total_ht, ft.total_tva], tol.t_somme(2),
             "le total TTC imprimé", "total HT + total TVA", avec_montant=True, alternatives=alternatives,
+            presentations=pres_ttc,
         ))
     net = _dec(ctx, ft.net_a_payer)
     if net is not None and ttc is not None:
@@ -748,7 +754,7 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
         out.append(_d1_resultat(
             ctx, f, "net_a_payer", unite_f, ft.net_a_payer, ttc - acompte, ops, tol.t_somme(len(ops)),
             "le net à payer imprimé", "total TTC − acomptes imprimés", avec_montant=True,
-            alternatives=alternatives_net,
+            presentations=alternatives_net,
         ))
     return out
 

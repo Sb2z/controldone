@@ -452,6 +452,23 @@ def p3_champ_cle_illisible(ctx: ControlContext) -> list[ResultatControle]:
 # --- P4 ------------------------------------------------------------------------------------------------
 
 
+def _porteur_lien_faible_partage(ctx: ControlContext, document_id: str) -> str | None:
+    """D-4210 : premier dossier (identifiant) du même lot où ce document est aussi rattaché par un lien faible, quand
+    il précède ce dossier ; ``None`` sinon (ce dossier porte le constat, ou le document n'est faible qu'ici)."""
+    lots = set(ctx.dossier.lot_ids)
+    if not lots:
+        return None
+    autres = []
+    for a in ctx.autres_dossiers:
+        if not lots & set(a.dossier.lot_ids):
+            continue
+        lien = a.dossier.lien(document_id)
+        if lien is not None and lien.force is ForceLien.faible:
+            autres.append(a.dossier.id)
+    premier = min(autres, default=None)
+    return premier if premier is not None and premier < ctx.dossier.id else None
+
+
 @control("P4")
 def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
     """P4 — un résultat par lien : ``conforme`` pour un lien solide ; les liens de force ``faible`` donnent
@@ -476,6 +493,14 @@ def p4_rattachement_faible(ctx: ControlContext) -> list[ResultatControle]:
             continue
         if lien.force is not ForceLien.faible:
             resultats.append(ctx.conforme("P4", unite=unite, documents=[doc.id], details=details))
+            continue
+        porteur = _porteur_lien_faible_partage(ctx, doc.id)
+        if porteur is not None:
+            # D-4210 : document du lot rattaché faiblement à plusieurs dossiers (relevé, avoir d'une page d'un PDF
+            # « envoi complet ») : la même vérification n'est demandée qu'une fois, par le premier de ces dossiers.
+            resultats.append(ctx.non_applicable("P4", RaisonCode.couvert_par_autre_controle, unite=unite,
+                                                documents=[doc.id], details={**details, "dossier": porteur,
+                                                                             "motif": "lien_faible_partage"}))
             continue
         faibles.append((lien, doc, signaux, details))
     if not faibles:
