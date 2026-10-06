@@ -7,9 +7,15 @@
   {% if peut_deposer %}
   <form method="post" action="/espace/depot" enctype="multipart/form-data" class="formulaire depot" data-depot>
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label for="fichiers">Fichiers ou archives ZIP</label>
-    <input id="fichiers" name="fichiers" type="file" multiple required accept=".pdf,.zip,.xml,.csv,.xlsx,.png,.jpg,.jpeg,.tif,.tiff,.eml">
-    <p class="discret" data-resume></p>
+    <label for="fichiers" class="vh">Fichiers ou archives ZIP</label>
+    <div class="zone-depot">
+      <svg class="ico-depot" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.5V4.5M12 4.5l-4 4M12 4.5l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 14.5v3a2 2 0 002 2h11a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <strong>Glissez vos fichiers ici</strong>
+      <span>ou cliquez pour choisir — PDF, scans, XML, CSV, XLSX, e-mails ou archives ZIP</span>
+      <input id="fichiers" name="fichiers" type="file" multiple required accept=".pdf,.zip,.xml,.csv,.xlsx,.png,.jpg,.jpeg,.tif,.tiff,.eml">
+    </div>
+    <ul class="liste-fichiers" aria-hidden="true"></ul>
+    <p class="discret" data-resume aria-live="polite"></p>
     <button type="submit" class="btn btn-principal">Envoyer</button>
   </form>
   {% else %}<p>Votre compte est en lecture seule : le dépôt est réservé aux administrateurs de votre société.</p>{% endif %}

@@ -1,16 +1,37 @@
 {% extends "base.html.j2" %}
+{% block corps_classe %}corps-auth{% endblock %}
 {% block contenu %}
-<section class="carte carte-etroite">
-  <h1>Connexion</h1>
-  <p class="discret">Espace sécurisé ControlDOne. Le fondateur confirme ensuite avec un code à usage unique.</p>
-  {% if erreur is defined %}<div class="message erreur" role="alert">{{ erreur }}</div>{% endif %}
-  <form method="post" action="/connexion" class="formulaire">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <label for="email">Adresse électronique</label>
-    <input id="email" name="email" type="email" autocomplete="username" required maxlength="320" value="{{ email if email is defined else '' }}" autofocus>
-    <label for="mdp">Mot de passe</label>
-    <input id="mdp" name="mot_de_passe" type="password" autocomplete="current-password" required maxlength="1024">
-    <button type="submit" class="btn btn-principal">Se connecter</button>
-  </form>
-</section>
+<div class="accueil">
+  <div class="accueil-texte">
+    <span class="surtitre"><i>Import</i> Contrôle de cohérence des documents</span>
+    <h1>Vos documents d'import, <em>réconciliés au centime.</em></h1>
+    <p class="chapeau">Facture commerciale, déclaration en douane, facture du transitaire et avoirs : ControlDOne les rapproche, chiffre chaque écart et cite la page qui le montre.</p>
+    <ol class="etapes">
+      <li><b>01</b><span><strong>Déposez vos documents</strong> — PDF, scans, XML, CSV ou archives ZIP.</span></li>
+      <li><b>02</b><span><strong>Rapprochement calculé</strong> — chaque comparaison et chaque montant sont calculés par du code testé.</span></li>
+      <li><b>03</b><span><strong>Relevé d'écarts validé</strong> — remis après validation ; vous décidez seul de son usage.</span></li>
+    </ol>
+    <div class="scanner" aria-hidden="true">
+      <div class="feuille f1"><i></i><i></i><i class="cle"></i><i></i></div>
+      <div class="feuille f2"><i></i><i class="cle"></i><i></i><i></i></div>
+      <div class="feuille f3"><i></i><i></i><i class="ecart"></i><i></i></div>
+      <div class="feuille f4"><i class="cle"></i><i></i><i></i><i></i></div>
+      <div class="faisceau"></div>
+    </div>
+  </div>
+  <section class="carte carte-connexion" aria-labelledby="titre-connexion">
+    <h2 id="titre-connexion">Connexion</h2>
+    <p class="discret">Espace sécurisé ControlDOne. Le fondateur confirme ensuite avec un code à usage unique.</p>
+    {% if erreur is defined %}<div class="message erreur" role="alert">{{ erreur }}</div>{% endif %}
+    <form method="post" action="/connexion" class="formulaire">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="email">Adresse électronique</label>
+      <input id="email" name="email" type="email" autocomplete="username" required maxlength="320" value="{{ email if email is defined else '' }}" autofocus>
+      <label for="mdp">Mot de passe</label>
+      <input id="mdp" name="mot_de_passe" type="password" autocomplete="current-password" required maxlength="1024">
+      <button type="submit" class="btn btn-principal">Se connecter</button>
+    </form>
+    <p class="securite"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.7-5 7-2.9-1.3-5-3.8-5-7v-4l5-2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.8 8.2l1.6 1.6 3-3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Documents chiffrés au repos et traités comme des données.</p>
+  </section>
+</div>
 {% endblock %}

@@ -3462,3 +3462,40 @@ Banc (même code de contrôles, D-2801 à D-2806 compris ; `c5` = contrôles + e
 
 Les gains `corpus_g4` viennent de l'extraction (découpage D-2901, OCR D-2902, recoupements D-2903 à D-2905 : C1,
 C3, D1 G13/G16 et G5) et des contrôles D-2801 à D-2806, mesurés ensemble.
+
+# Interface
+
+### D-3001 — Refonte visuelle de l'interface web (octobre 2026)
+
+Demande : une interface « fluide et très moderne », avec effets et animations. Choix :
+- **Rien d'externe** : la CSP reste `default-src 'self'` sans script en ligne. La bibliothèque d'animation Motion
+  14.0.0 (licence MIT, `static/vendor/motion.min.js`, licence jointe) et les polices Geist et Geist Mono (SIL OFL 1.1,
+  `static/vendor/fonts/`, licence jointe) sont servies par l'application. Aucun CDN, aucune police distante.
+- **Thème** sombre par défaut, thème clair au choix (bouton, palette) ou selon le système. Le choix est mémorisé
+  dans le navigateur (`localStorage`, clé `cd-theme`, aucune donnée personnelle). Il est appliqué avant le premier
+  affichage par `static/theme.js`, chargé de façon synchrone dans `<head>`.
+- **Effets** :
+  - entrées en cascade (fondu, flou, glissement) ; les éléments sous la ligne de flottaison s'animent à leur entrée
+    dans la vue ;
+  - compteurs qui défilent jusqu'au texte exact rendu par le serveur, remis tel quel à la fin, de sorte que
+    l'affichage final est toujours celui du serveur ;
+  - barres de proportion animées ;
+  - halo qui suit le pointeur sur les cartes ;
+  - pastille de navigation à ressort ;
+  - barre de progression de lecture ;
+  - boutons principaux légèrement « magnétiques » ;
+  - transitions entre pages (View Transitions entre documents, navigateurs compatibles) ;
+  - bascule de thème par dévoilement circulaire ;
+  - palette de commandes Ctrl+K / ⌘K, construite à partir des liens de la page ;
+  - zone de dépôt par glisser-déposer avec liste des fichiers ;
+  - écran de connexion avec présentation du service. Les textes sont factuels : aucun chiffre, aucun témoignage,
+    aucune promesse d'hébergement.
+- **Garde-fous** :
+  - l'interface fonctionne sans JavaScript : contenu visible, champ de fichier natif ;
+  - si le script échoue, une animation CSS de secours rend tout visible après 2,2 s ;
+  - « réduire les animations » est respecté ;
+  - la mise en page d'impression est inchangée et toujours sur fond clair ;
+  - le rapport HTML (CSP fermée, sans script) n'est pas touché.
+- **Contrôles** : 2 075 tests passent. Le parcours fondateur, le parcours client et le mobile ont été vérifiés par
+  captures (Playwright), dans les deux thèmes, sans erreur dans la console. Vidéo de démonstration (données
+  fictives) : `docs/interface/demo_interface.mp4`.
