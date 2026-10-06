@@ -4313,3 +4313,22 @@ Mesure (dev, lot 2 -> D-3710) : constats identiques sur les trois jeux (aucun co
 montants inchangés) — g4 103/0 certains, rappel 0,8311, bruit 176 ; g2 115/0, 0,8700, 226 ; d'origine 125/0,
 0,8293, 174. Les chemins fermés ne sont pas exercés par le dev : l'effet sur les jeux tenus à l'écart reste à
 mesurer (en totaux).
+
+# Décisions du fondateur (6 octobre 2026)
+
+### D-4000 — Arbitrages sur les 9 points en attente
+
+1. **Lecture par Claude : activée (A)**, avec un plafond de dépense par client. La clé sera fournie plus tard par le
+   fondateur (D-4001 et suivantes).
+2. **Dossier réel : accepté (A)**, à quatre conditions : accord écrit du client, contrat de sous-traitance RGPD,
+   anonymisation, entreprise non exclue. La règle « aucune donnée réelle » est levée pour ce dossier seulement.
+   Une recherche de dossiers d'anciens employeurs (CHANEL), même anonymisés, est refusée : exclusion explicite et
+   salle blanche.
+3. **CI à chaque push / PR : tests rapides (A)** ; le banc complet reste manuel.
+4. **Nettoyage de l'historique Git : oui (A)**, corpus et adresse d'auteur. Il sera fait en dernier, une fois tous les
+   corpus régénérables et vérifiés.
+5. **HSTS preload : non pour l'instant (B).**
+6. **A13 : regroupement (C)**, un seul « à vérifier » par dossier, « codes à rapprocher manuellement ».
+7. **Rapports en anglais : non pour l'instant (B).**
+8. **Alertes : notification sur téléphone (B)**, de type ntfy.
+9. **Mise en ligne : procédure pas à pas (A)**, exécutée par le fondateur (`docs/MISE_EN_LIGNE.md`).
