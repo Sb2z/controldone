@@ -9,3 +9,9 @@
   inconnues. Sur décision du fondateur.
 - **Serveur de démo** : la limitation de débit des connexions est en mémoire ; après une vingtaine de connexions
   de test, il faut redémarrer le serveur (vu pendant les captures de l'interface). Traité par le bloc sécurité.
+- **Jeu vierge `corpus_g6` non versionné** (décision d'allègement du dépôt). Régénération depuis `/home/user/v2`,
+  environnement actif : `python -m bench.generator2 --out bench/corpus_g6 --prefix GV --ext --all-holdout
+  --per-control 3 --count 160 --seed 20261008 --split holdout --jobs 2`. Contrôle d'intégrité, depuis
+  `bench/corpus_g6` : `find holdout -name truth.json | sort | xargs sha256sum | sha256sum` doit donner
+  `d604e7b4936af4b1473c79bd4ee557dd0702cead3d197aded56776299511b554`. 160 dossiers, 190 erreurs dont 74 attendues
+  « certain », 767 pièges. Fait.

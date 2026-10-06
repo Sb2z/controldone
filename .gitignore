@@ -19,3 +19,4 @@ build/
 deploy/.env
 bench/corpus_h2/
 bench/corpus_g2/
+bench/corpus_g6/
