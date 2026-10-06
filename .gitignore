@@ -24,11 +24,8 @@ bench/corpus_g6/
 bench/corpus_g7/
 # Corpus de banc : plus versionnés à partir de corpus_g6 (D-3904, bench/README.md) ; régénération par
 # `make corpus-g6` / `make corpus GRAINE=… PREFIXE=…`, empreintes dans bench/corpus_empreintes.json.
-# Les corpus déjà versionnés (g3, g4, g5) restent suivis : ré-inclus explicitement.
+# Plus aucun corpus versionné (D-4404) : tous régénérables, empreintes dans bench/corpus_empreintes.json.
 bench/corpus_*/
-!bench/corpus_g3/
-!bench/corpus_g4/
-!bench/corpus_g5/
 
 # Outillage (D-3902, D-3903)
 .hypothesis/

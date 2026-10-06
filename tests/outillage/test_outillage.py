@@ -170,7 +170,7 @@ def test_recette_g6_conforme_au_backlog():
         assert morceau.split()[-1] in re.sub(r"\s+", " ", backlog)
 
 
-def test_corpus_futurs_ignores_anciens_suivis():
+def test_corpus_tous_ignores():
     if not (RACINE / ".git").exists() or not shutil.which("git"):
         pytest.skip("hors dépôt git")
 
@@ -179,10 +179,9 @@ def test_corpus_futurs_ignores_anciens_suivis():
 
     assert ignore("bench/corpus_g9/holdout/GX0001/truth.json")
     assert ignore("bench/corpus_g6/manifest.json")
+    for corpus in ("corpus_g3", "corpus_g4", "corpus_g5"):  # plus versionnés depuis D-4404
+        assert ignore(f"bench/{corpus}/x.json"), corpus
     for suivi in (
-        "bench/corpus_g3/x.json",
-        "bench/corpus_g4/x.json",
-        "bench/corpus_g5/x.json",
         "bench/corpus_empreintes.json",
         "bench/README.md",
     ):

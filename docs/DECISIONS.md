@@ -4782,3 +4782,13 @@ trois. Les six appariements perdus (D-4205, D-4208) étaient des constats de sig
 corpus d'origine), les autres absents sont des récapitulatifs OCR que l'identité « somme des codes = total » ne
 confirme pas (souvent parce qu'un total est l'erreur injectée). Extraction inchangée : calibration identique.
 Tests : `tests/controls/test_bloc_m3.py`, `test_famille_d.py`, `test_precision_d28.py` (données fictives).
+
+### D-4404 — Plus aucun corpus versionné ; nettoyage de l'historique (décision du fondateur 4A)
+
+Les corpus `bench/corpus_g3`, `corpus_g4` et `corpus_g5` ne sont plus suivis par Git. Les 9 corpus sont tous
+régénérables par recette et contrôlés par empreinte : `make corpus-verifier` indique 9 conformes sur 9 avant le
+nettoyage. L'historique des deux branches de travail (`v2`, `claude/modest-allen-yyjsg9`) est ensuite réécrit pour en
+retirer `bench/corpus_g2_new`, `corpus_g3`, `corpus_g4` et `corpus_g5` (environ 690 Mo), et pour attribuer les
+enregistrements à « Claude <noreply@anthropic.com> » au lieu de l'adresse personnelle du fondateur. Les autres
+branches du dépôt ne sont pas touchées. Une copie complète de l'historique d'avant la réécriture est conservée hors du
+dépôt, le temps de vérifier.
