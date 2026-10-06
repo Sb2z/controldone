@@ -24,3 +24,10 @@
   `fdd372db62cae8bd862153e953c60de69a83b6cb8733b26eab8b10b33395f944`. 160 dossiers, 189 erreurs dont 74 attendues
   « certain », 739 pièges. Correctif du générateur (copie de fichier F1 dans un PDF fusionné), sans effet sur les
   corpus existants. Fait.
+- **Recettes de corpus incomplètes.** `bench/corpus_empreintes.json` ne connaît que `corpus_g6`. Les corpus de
+  développement et de non-régression `bench/corpus`, `corpus_h2`, `corpus_g2` et le jeu vierge `corpus_g7` ne
+  sont pas versionnés (ignorés depuis l'origine) et n'ont pas encore de recette enregistrée. Proposition : y ajouter
+  leur commande et leur empreinte (empreinte « pixels » pour les TIFF, cf. D-3904), et rendre l'écriture des TIFF
+  déterministe dans `bench/generator2/degrade.py`. À faire.
+- **Numéro de décision en double : D-3709** (progression fine côté moteur et côté interface). À renuméroter à la
+  consolidation du lot 2. À faire.
