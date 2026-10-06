@@ -146,3 +146,70 @@ def test_exercice_refuse_var_demo_web(tmp_path):
     (occupe / "garder").write_text("x")
     assert main(["--repertoire", str(occupe)]) == 2
     assert (occupe / "garder").exists()
+
+
+# --- deux sauvegardes par jour (D-4105) -------------------------------------------------------------------
+
+
+def test_si_absente_depuis_un_creneau(banc):
+    script, journal, env, tmp = banc
+    _executable(tmp / "scripts" / "backup.sh", 'echo "backup $*" >> ' + str(journal) + "\n")
+    dest = tmp / "s"
+    dest.mkdir()
+    env["BACKUP_DIR"] = str(dest)
+    jour = datetime.now(UTC).strftime("%Y%m%d")
+    (dest / f"controldone-{jour}T021500Z.tar.gz.enc").write_bytes(b"x")  # sauvegarde du matin
+    p = subprocess.run([str(script), "--si-absente-depuis", "0215"], env=env, capture_output=True, text=True)
+    assert p.returncode == 0 and "déjà présente" in p.stdout and not _appels(journal)
+    p = subprocess.run([str(script), "--si-absente-depuis", "1415"], env=env, capture_output=True, text=True)
+    assert p.returncode == 0 and _appels(journal) == [f"backup --destination {dest}"]
+    p = subprocess.run([str(script), "--si-absente-depuis", "9x"], env=env, capture_output=True, text=True)
+    assert p.returncode == 2
+
+
+def test_verification_profonde_une_seule_fois_le_jour_venu(banc):
+    script, journal, env, tmp = banc
+    _executable(tmp / "scripts" / "backup.sh", 'echo "backup $*" >> ' + str(journal) + "\n")
+    dest = tmp / "s"
+    dest.mkdir()
+    env.update({"BACKUP_DIR": str(dest), "BACKUP_VERIFICATION_PROFONDE_JOUR": str(datetime.now(UTC).isoweekday())})
+    subprocess.run([str(script)], env=env, check=True, capture_output=True)
+    (dest / f"controldone-{datetime.now(UTC):%Y%m%d}T021500Z.tar.gz.enc").write_bytes(b"x")
+    subprocess.run([str(script)], env=env, check=True, capture_output=True)
+    assert _appels(journal) == [f"backup --destination {dest} --verification-profonde",
+                                f"backup --destination {dest}"]
+
+
+def test_hors_site_seuil_de_fraicheur_par_defaut_14_h(banc):
+    script, _journal, env, tmp = banc
+    _archive_locale(tmp / "b", age_s=15 * 3600)
+    env.update({"BACKUP_HOST_DIR": str(tmp / "b"), "BACKUP_RCLONE_REMOTE": "objeu:fictif"})
+    p = subprocess.run([str(script), "--hors-site"], env=env, capture_output=True, text=True)
+    assert p.returncode == 4 and "> 14 h" in p.stderr
+
+
+def test_planificateur_sauvegarde_au_creneau_courant(tmp_path):
+    """deploy/scheduler.sh : créneau = plus récente heure passée de SCHED_BACKUP_HHMM ; valeur invalide ignorée."""
+    import time
+
+    d = tmp_path / "deploy"
+    d.mkdir()
+    shutil.copy(DEPLOY / "scheduler.sh", d / "scheduler.sh")
+    journal = tmp_path / "appels.txt"
+    _executable(d / "backup-cron.sh", f'echo "sauvegarde $*" >> {journal}\n')
+    faux_py = _executable(tmp_path / "bin" / "python", f'echo "python $*" >> {journal}\n')
+    env = {**os.environ, "CONTROLDONE_PYTHON": str(faux_py), "SCHED_TICK_S": "30",
+           "SCHED_BACKUP_HHMM": "0000,2400,abc"}
+    p = subprocess.Popen(["bash", str(d / "scheduler.sh")], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True)
+    try:
+        fin = time.monotonic() + 20
+        while time.monotonic() < fin and "sauvegarde" not in (journal.read_text() if journal.exists() else ""):
+            time.sleep(0.1)
+    finally:
+        p.terminate()
+        sortie, erreurs = p.communicate(timeout=20)
+    appels = _appels(journal)
+    assert "sauvegarde --si-absente-depuis 0000" in appels
+    assert "« 2400 » ignoré" in erreurs and "« abc » ignoré" in erreurs
+    assert '"detail":"sauvegardes a 0000 UTC"' in sortie

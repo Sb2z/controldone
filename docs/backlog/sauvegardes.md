@@ -31,7 +31,8 @@
 - **RPO de 24 h.** Constat : une seule sauvegarde par jour (`SCHED_BACKUP_HHMM`). Impact : jusqu'à une journée de
   dépôts et de décisions perdue si le volume est perdu. Proposition : deux sauvegardes par jour (coût : quelques
   secondes et un peu d'espace), ou expédition continue du WAL SQLite (outil type Litestream, licence Apache 2.0)
-  vers le stockage objet UE. À faire, sur décision du fondateur.
+  vers le stockage objet UE. **Fait (D-4105)** : deux sauvegardes par jour (02:15 et 14:15 UTC), RPO 12 h ;
+  expédition continue du journal écartée pour l'instant.
 
 - **Mise en service d'une restauration encore manuelle.** Constat : `docs/EXPLOITATION.md` § 3.2, étapes 4 et 5
   (déplacer base, coffre et traces). Impact : erreurs de manipulation possibles sous stress (RTO). Proposition :
@@ -51,7 +52,8 @@
 - **Traces d'envoi en clair sur le disque.** Constat : `src/controldone/outbox/expediteurs.py` (`ExpediteurFichier`)
   écrit `var/outbox_envoyee/<kind>/<id>.json` en clair (protégé seulement par le volume LUKS) ; elles sont désormais
   sauvegardées (chiffrées dans l'archive). Impact : copie en clair de rapports hors du coffre chiffré. Proposition :
-  passer ces traces par le coffre (`FileVault`) ou les chiffrer avec une clé dérivée. À faire (bloc sécurité).
+  passer ces traces par le coffre (`FileVault`) ou les chiffrer avec une clé dérivée. **Fait (D-4106)** : clé
+  dérivée `outbox_envoyee`, fichiers existants chiffrés par `controldone migrer`, contrôle approfondi.
 
 - **Purge lancée à la main pendant une sauvegarde.** Constat : le planificateur fait maintenant la sauvegarde avant
   la purge (D-3306), mais une purge mise en file à la main pendant la copie peut retirer un objet que l'instantané

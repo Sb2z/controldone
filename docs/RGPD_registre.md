@@ -3,7 +3,7 @@
 > **BROUILLON — À RELIRE PAR UN AVOCAT.** Document interne, non publié. Les champs
 > `[À COMPLÉTER : …]` sont à remplir par le fondateur ; rien n'y est inventé.
 > Modèle de référence : registre simplifié de la CNIL (https://www.cnil.fr/fr/RGDP-le-registre-des-activites-de-traitement).
-> Mise à jour : 2 octobre 2026.
+> Mise à jour : 6 octobre 2026 (lecture par Claude activable, D-4000 à D-4008).
 
 ## Identification
 
@@ -31,7 +31,7 @@ Un client par ligne ; mettre à jour à chaque signature d'un accord de sous-tra
 | Traitement | Description | Données personnelles concernées |
 |---|---|---|
 | Réception et stockage | Dépôt de fichiers (espace web, API, adresse dédiée, dossier surveillé, plateforme agréée), stockage chiffré par client | Noms, fonctions, coordonnées professionnelles figurant sur les documents d'import ; adresses e-mail d'expéditeurs autorisés |
-| Lecture automatisée | Découpage, classement, extraction structurée, déterministe (texte, OCR) et, si activée, par modèle de langage | Idem ; minimisation : les données personnelles ne sont pas reprises dans le modèle de dossier sauf nécessité |
+| Lecture automatisée | Découpage, classement, extraction structurée, déterministe (texte, OCR) et, si activée, par modèle de langage (Anthropic) : seulement pour un document que les règles lisent mal, seulement le texte des pages de ce document (8 pages au plus, pas le fichier PDF), réponse limitée à des valeurs recopiées et vérifiées sur la page (D-4001, D-4005) | Idem ; minimisation : les données personnelles ne sont pas reprises dans le modèle de dossier sauf nécessité ; noms de contacts, téléphones et e-mails jamais demandés au modèle |
 | Contrôles et rapports | Comparaisons et calculs, rapport de diagnostic, relevé d'écarts et modèle de courrier neutre (gabarit) que le client adapte et envoie lui-même | Nom de l'entité et des contacts dans l'en-tête du modèle de courrier |
 | Suivi des avoirs reçus | Registre des écarts, avoirs déclarés reçus par le client, rappels adressés au client seul (jamais au transitaire) | Identifiants des utilisateurs du client |
 | Anonymisation pour le référentiel | Sur instruction du client (DPA art. 3, CGV art. 14) : extraction de données tarifaires des dossiers validés, agrégation, statistiques de prix seulement ; instruction retirable à tout moment | Aucune donnée personnelle utilisée ni publiée ; le résultat est anonyme (critères G29 : individualisation, corrélation, inférence) |
@@ -44,13 +44,15 @@ Un client par ligne ; mettre à jour à chaque signature d'un accord de sous-tra
 |---|---|---|---|
 | [À COMPLÉTER : hébergeur de l'application] | Serveurs, base, coffre de fichiers chiffré | UE [À COMPLÉTER : pays] | Contrat art. 28 |
 | [À COMPLÉTER : stockage des sauvegardes] | Copie hors site des sauvegardes chiffrées | UE [À COMPLÉTER] | Contrat art. 28 ; chiffrement avant envoi |
-| Anthropic, PBC | Lecture de pages (sans outil ni accès réseau) ; les courriers sont produits par gabarits | États-Unis | CCT modules 2 et 3 (DPA Anthropic du 24/02/2025), addendum suisse ; préavis de 15 jours pour s'opposer à un nouveau sous-traitant ; TIA à rédiger [À COMPLÉTER] ; désactivable par client |
+| Anthropic, PBC — **seulement si la lecture par modèle est activée** (clé API configurée, décision D-4000) | Lecture de pages (sans outil ni accès réseau) des seuls documents que les règles lisent mal ; texte des pages du document, pas le fichier ; aucun stockage par ControlDOne chez Anthropic ; les courriers sont produits par gabarits | États-Unis | CCT modules 2 et 3 (DPA Anthropic du 24/02/2025), addendum suisse ; préavis de 15 jours pour s'opposer à un nouveau sous-traitant ; durée de conservation côté Anthropic selon ses conditions commerciales API [À VÉRIFIER : durée et option de non-conservation] ; TIA à rédiger [À COMPLÉTER] ; **désactivable par client** (réglage `llm_desactive`, D-4007) |
 | Stripe [À COMPLÉTER : entité contractante] | Paiement (données de facturation du client seulement) | [À COMPLÉTER] | [À VALIDER : Stripe responsable de traitement pour partie] |
 
 ### 1.4 Transferts hors UE
 
 Anthropic, PBC — États-Unis — CCT modules 2 et 3 (DPA Anthropic du 24/02/2025), addendum suisse ; TIA à rédiger
-[À COMPLÉTER]. Seulement pour les clients qui n'ont pas désactivé l'extracteur `llm`. Le transfert ne dépend pas du
+[À COMPLÉTER]. Seulement quand la clé API est configurée, et pour les clients qui n'ont pas désactivé l'extracteur
+`llm` (`reglages.llm_desactive`). Minimisation : texte des pages du seul document concerné, et seulement quand
+l'extraction déterministe est insuffisante ; dépense plafonnée par client et par mois. Le transfert ne dépend pas du
 Data Privacy Framework (certification d'Anthropic à vérifier sur dataprivacyframework.gov).
 
 ### 1.5 Mesures de sécurité (art. 32) — résumé de `docs/SECURITY.md`

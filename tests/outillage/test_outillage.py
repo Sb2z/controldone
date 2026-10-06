@@ -130,7 +130,7 @@ def test_recette_g6_conforme_au_backlog():
     """L'empreinte et la commande de corpus_g6 consignées par l'orchestrateur sont celles de la recette."""
     r = corpus.recettes()["corpus_g6"]
     backlog = (RACINE / "docs" / "backlog" / "orchestrateur.md").read_text(encoding="utf-8")
-    assert r["sha256"] in backlog
+    assert r.get("sha256_historique", r["sha256"]) in backlog
     cmd = " ".join(corpus.commande(r, Path("bench/corpus_g6"), 2)[1:])
     for morceau in ["-m bench.generator2", "--out bench/corpus_g6", "--prefix GV", "--count 160", "--seed 20261008",
                     "--split holdout", "--per-control 3", "--ext", "--all-holdout"]:
@@ -202,3 +202,95 @@ def test_empreinte_pixels_insensible_a_l_encodage_tiff(tmp_path, capsys):
     assert "remplissage" in capsys.readouterr().out
     assert not corpus.verifier(c, attendu, 1, pixels)
     assert not corpus.verifier(b, attendu, 2, pixels)  # nombre de dossiers différent
+
+
+# --- TIFF déterministes et recettes de tous les corpus (D-4402, D-4403) ----------------------------------------
+
+def _pixels(data: bytes) -> list:
+    import io
+
+    from PIL import Image, ImageSequence
+
+    with Image.open(io.BytesIO(data)) as im:
+        return [(p.mode, p.size, p.tobytes(), sorted((k, v) for k, v in p.tag_v2.items() if k not in (273, 279)))
+                for p in ImageSequence.Iterator(im)]
+
+
+@pytest.mark.parametrize("encodage", ["png", "png1"])
+def test_tiff_canonique_pixels_inchanges_octets_libres_a_zero(encodage):
+    """Tout octet que la structure TIFF ne référence pas (remplissage d'alignement laissé non initialisé par
+    libtiff, en-têtes de page résiduels) est mis à zéro ; pixels et étiquettes inchangés."""
+    from PIL import Image, ImageDraw
+
+    from bench.generator2 import degrade
+
+    pages = []
+    for i, (w, h) in enumerate([(37, 21), (19, 33), (25, 25)]):
+        im = Image.new("L", (w, h), 255)
+        ImageDraw.Draw(im).line((0, i, w, h - i), fill=40 * i, width=3)
+        pages.append((im, encodage))
+    canon = degrade.images_to_tiff(pages, 200)
+    assert degrade.tiff_canonique(canon) == canon
+    libres = []
+    for p in range(8, len(canon)):  # un octet libre peut valoir n'importe quoi : même TIFF canonique
+        x = bytearray(canon)
+        x[p] ^= 0xA5
+        try:
+            if degrade.tiff_canonique(bytes(x)) == canon:
+                libres.append(p)
+        except (ValueError, KeyError, __import__("struct").error):
+            pass
+    assert libres and all(canon[p] == 0 for p in libres)
+    sale = bytearray(canon)
+    for p in libres:
+        sale[p] = 0x5C
+    assert _pixels(bytes(sale)) == _pixels(canon)
+    assert degrade.tiff_canonique(bytes(sale)) == canon
+    with pytest.raises(ValueError):
+        degrade.tiff_canonique(b"%PDF-1.4")
+
+
+def _corpus_avec_tiff(racine: Path, compression: str) -> None:
+    from PIL import Image
+
+    d = racine / "holdout" / "GV0001"
+    (d / "docs").mkdir(parents=True)
+    Image.new("L", (16, 8), 200).save(d / "docs" / "scan.tif", compression=compression)
+    (d / "docs" / "a.pdf").write_bytes(b"%PDF-1.4 fictif")
+    sha = hashlib.sha256((d / "docs" / "scan.tif").read_bytes()).hexdigest()
+    verite = json.dumps({"files": [{"path": "docs/scan.tif", "sha256": sha}]}).encode()
+    (d / "truth.json").write_bytes(verite)
+    manifeste = {"dossiers": [{"truth_sha256": hashlib.sha256(verite).hexdigest(),
+                               "files": [{"path": "holdout/GV0001/docs/scan.tif", "sha256": sha}]}]}
+    (racine / "manifest.json").write_text(json.dumps(manifeste), encoding="utf-8")
+    (racine / "stats_generation.json").write_text(json.dumps({"seconds": len(compression)}), encoding="utf-8")
+
+
+def test_empreinte_arbre_complete_et_pixels(tmp_path, capsys):
+    a, b = tmp_path / "a", tmp_path / "b"
+    _corpus_avec_tiff(a, "raw")
+    _corpus_avec_tiff(b, "tiff_lzw")
+    assert corpus.empreinte_arbre(a) != corpus.empreinte_arbre(b)
+    assert corpus.empreinte_arbre(a, pixels=True) == corpus.empreinte_arbre(b, pixels=True)
+    assert corpus.empreinte_arbre(a)[1] == 4  # stats_generation.json (durée) exclu
+    e = corpus.empreintes(a)
+    assert corpus.verifier(b, e["sha256"], 1, e["sha256_pixels"], e["sha256_arbre"], e["sha256_arbre_pixels"])
+    assert "pixels" in capsys.readouterr().out
+    (b / "holdout" / "GV0001" / "docs" / "a.pdf").write_bytes(b"%PDF-1.4 autre")  # hors truth.json
+    assert not corpus.verifier(b, e["sha256"], 1, e["sha256_pixels"], e["sha256_arbre"], e["sha256_arbre_pixels"])
+    assert corpus.verifier(a, ["0" * 64, e["sha256"]], 1)  # plusieurs empreintes exactes admises
+
+
+def test_recettes_de_tous_les_corpus():
+    """Chaque corpus du banc a sa recette et toutes ses empreintes ; commande du générateur 1 sans options 2."""
+    rs = corpus.recettes()
+    assert {"corpus", "corpus_h2", "corpus_g2", "corpus_g3", "corpus_g4", "corpus_g5", "corpus_g6",
+            "corpus_g7"} <= set(rs)
+    for nom, r in rs.items():
+        assert r["sortie"] == f"bench/{nom}"
+        for cle in ("dossiers", "sha256", "sha256_pixels", "sha256_arbre", "sha256_arbre_pixels"):
+            assert re.fullmatch(r"[0-9a-f]{64}", str(r[cle])) or cle == "dossiers", (nom, cle)
+    cmd = corpus.commande(rs["corpus_h2"], Path("x"), 2)
+    assert cmd[1:3] == ["-m", "bench.generator"] and "--prefix" not in cmd and "--seed" in cmd
+    makefile = (RACINE / "Makefile").read_text(encoding="utf-8")
+    assert "corpus-tous:" in makefile and "verifier $(if $(CORPUS),$(CORPUS),--tous)" in makefile

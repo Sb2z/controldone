@@ -1,33 +1,89 @@
-# ControlDOne v2 — intégration continue. Déclenchement MANUEL uniquement (workflow_dispatch) pour ne pas
-# consommer les minutes GitHub Actions du fondateur sans son accord.
-# Activer sur push / pull request : docs/DEPLOIEMENT.md § 12.
+# ControlDOne v2 — intégration continue (D-4401, décision du fondateur 3A).
+#
+# - Job `rapide` : à chaque push et pull request. Ruff, vérifications avant enregistrement, pytest hors tests
+#   lents et PostgreSQL, tests de propriétés (profil `ci`). Objectif : moins de 10 minutes, cache pip.
+# - Job `complet` (+ `image`) : MANUEL uniquement (Actions > CI > Run workflow). Banc et sa porte, couverture,
+#   audit des dépendances, tests PostgreSQL, audit de l'image. Consomme beaucoup plus de minutes.
+# Voir docs/DEPLOIEMENT.md § 12.
 name: CI
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
     inputs:
       banc:
-        description: "Générer le corpus et appliquer la porte du banc (holdout)"
+        description: "Générer le corpus (recette vérifiée par empreinte) et appliquer la porte du banc (holdout)"
         type: boolean
         default: true
       avec_llm:
         description: "Utiliser le secret ANTHROPIC_API_KEY pour le banc (coût IA réel)"
         type: boolean
         default: false
+      image:
+        description: "Construire l'image et l'auditer (Trivy)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
+# Un nouveau push sur la même branche annule l'exécution en cours du même type d'événement.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
   CONTROLDONE_ENV: test
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
-  tests:
+  rapide:
+    if: ${{ github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            pyproject.toml
+
+      - name: Tesseract (fra, eng, osd)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-osd
+
+      - name: Dépendances (figées) + outils de dev
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+          pip install "pytest>=8.0" "ruff>=0.4" "hypothesis>=6.100" "pre-commit>=3.5"
+
+      - name: Ruff
+        run: ruff check src tests scripts
+
+      # D-3901 : mêmes vérifications qu'avant enregistrement (toutes locales, aucun dépôt de crochets téléchargé).
+      - name: Vérifications avant enregistrement (pre-commit, tout le dépôt)
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      # Tests lents (exercice de restauration de bout en bout) et PostgreSQL : job complet seulement.
+      - name: Pytest (hors lents, PostgreSQL et propriétés)
+        run: pytest -q -m "not lent and not postgresql and not proprietes" -p no:cacheprovider
+
+      # D-3903 : profil borné et déterministe (150 exemples par propriété, graine fixe).
+      - name: Tests de propriétés (Hypothesis, profil ci)
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: pytest -q tests/proprietes -p no:cacheprovider
+
+  complet:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -37,17 +93,18 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements.lock
+          cache-dependency-path: |
+            requirements.lock
+            pyproject.toml
 
       - name: Tesseract (fra, eng, osd)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-osd
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-osd
           tesseract --list-langs
 
       - name: Dépendances (figées) + outils de dev
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.lock
           pip install --no-deps -e .
           pip install "pytest>=8.0" "ruff>=0.4" "pytest-cov>=5.0" "coverage[toml]>=7.4" "hypothesis>=6.100" \
@@ -56,7 +113,6 @@ jobs:
       - name: Ruff
         run: ruff check src tests scripts
 
-      # D-3901 : mêmes vérifications qu'avant enregistrement (toutes locales, aucun dépôt de crochets téléchargé).
       - name: Vérifications avant enregistrement (pre-commit, tout le dépôt)
         run: pre-commit run --all-files --show-diff-on-failure
 
@@ -78,13 +134,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      # D-3903 : tests de propriétés à profil borné et déterministe (150 exemples par propriété, graine fixe).
       - name: Tests de propriétés (Hypothesis, profil ci)
         env:
           HYPOTHESIS_PROFILE: ci
         run: pytest -q tests/proprietes
 
-      # D-3902 : suite complète sous mesure de couverture (branches) ; résumé par paquet et HTML en artefact.
+      # D-3902 : suite complète (tests lents compris) sous mesure de couverture (branches).
       - name: Pytest avec couverture
         env:
           HYPOTHESIS_PROFILE: ci
@@ -107,9 +162,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Banc — génération du corpus (dev + holdout)
+      # D-3501, D-3610 : serveur PostgreSQL jetable (binaires PostgreSQL préinstallés sur ubuntu-24.04,
+      # scripts/pg_jetable.sh), tests marqués « postgresql », puis exercice de restauration pg_dump / pg_restore.
+      - name: Tests PostgreSQL (sécurité, restauration)
+        run: |
+          make test-pg-securite PY=python
+          make restauration-test-pg PY=python
+
+      # D-4403 : la recette du corpus est vérifiée par son empreinte (générateur déterministe).
+      - name: Banc — génération du corpus (dev + holdout), empreinte vérifiée
         if: ${{ inputs.banc }}
-        run: python -m bench.generator --split all --out bench/corpus --jobs 4
+        run: python scripts/corpus.py generer corpus --jobs 4
 
       - name: Banc — exécution sur le holdout
         if: ${{ inputs.banc }}
@@ -131,3 +194,43 @@ jobs:
             bench/out/ci/*.md
           if-no-files-found: ignore
           retention-days: 14
+
+  # D-3609 : image de production construite puis auditée (paquets Python et système, Trivy par Docker).
+  image:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            pyproject.toml
+
+      - name: Dépendances (figées)
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+
+      - name: Construction de l'image
+        run: docker build -f deploy/Dockerfile -t controldone:ci .
+
+      - name: Audit de l'image (dépendances, SBOM, licences, paquets système)
+        run: |
+          python -m venv .venv-audit
+          .venv-audit/bin/pip install --quiet "pip-audit>=2.7" "cyclonedx-bom>=4" "pip-licenses>=5"
+          python scripts/audit_dependances.py --venv "$(python -c 'import sys; print(sys.prefix)')" \
+            --outils .venv-audit --out var/audit --image controldone:ci
+
+      - name: Rapport d'audit de l'image
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-image
+          path: var/audit/
+          if-no-files-found: ignore
+          retention-days: 30

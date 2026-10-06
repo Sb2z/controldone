@@ -5,8 +5,8 @@ ici n'est urgent tant que l'application n'est pas en ligne.
 
 | # | À fournir | Pour | Où le mettre | Comment vérifier |
 |---|---|---|---|---|
-| 1 | Clé d'API Anthropic | lecture par Claude (décision 1A) | `.env` / `.env.prod`, toi-même ; jamais dans un message ni dans Git | commande donnée dans `docs/EXPLOITATION.md` (bloc LLM) |
-| 2 | Plafond mensuel de dépense IA par client | lecture par Claude | fiche client (valeur par défaut sinon) | page Finances |
+| 1 | Clé d'API Anthropic | lecture par Claude (décision 1A) | `.env` / `.env.prod`, toi-même ; jamais dans un message ni dans Git | variable `ANTHROPIC_API_KEY` ; vérifier avec `controldone llm verifier` (un appel d'essai minimal), puis mesurer le coût réel : `python scripts/mesure_llm.py --corpus bench/corpus_g4 --limit 20 --confirmer-depense` (budget plafonné à 5 €) |
+| 2 | Plafond mensuel de dépense IA par client | lecture par Claude | `CONTROLDONE_LLM_PLAFOND_CLIENT_MENSUEL_EUR` (8 € par défaut ; 20 € pour un diagnostic ; 0,50 € par dossier) | `controldone llm couts` |
 | 3 | Un vrai dossier, avec l'accord écrit du client, un contrat de sous-traitance RGPD, anonymisé, d'une entreprise non exclue | mesure réelle (décision 2A) | dépôt par toi dans l'application | rapport de mesure dédié |
 | 4 | Adresse du sujet de notification sur téléphone (type ntfy) | alertes poussées (décision 8B) | `.env.prod` | `controldone alertes essai` |
 | 5 | Choix de l'hébergeur et du nom de domaine | mise en ligne (décision 9A) | suivre `docs/MISE_EN_LIGNE.md` | liste de contrôle de mise en ligne |

@@ -45,7 +45,8 @@ make lint      # ruff
 ```
 
 Configuration : copier `.env.example` en `.env`. Sans `ANTHROPIC_API_KEY`, seuls les extracteurs
-`structure` et `deterministe` sont utilisés.
+`structure` et `deterministe` sont utilisés ; avec la clé, le modèle ne complète que les documents mal lus, dans le
+plafond de dépense du client (D-4001 à D-4008). Vérifier la clé : `controldone llm verifier`.
 
 Principe : le modèle de langage lit, le code testé compare et calcule, le fondateur valide.
 Le produit ne constate que des écarts factuels, documentaires et tarifaires (prix chiffrés de la grille

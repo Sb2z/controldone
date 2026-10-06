@@ -13,3 +13,4 @@ impact, proposition, et « fait » ou « à faire ». L'orchestrateur consolide 
 | `orchestrateur.md` | constats transverses |
 | `outillage.md` | vérifications avant enregistrement, couverture, tests de propriétés, corpus non versionnés |
 | `production.md` | fiabilité de la production : PostgreSQL, alertes poussées, migrations, verrou de maintenance |
+| `llm.md` | lecture par modèle de langage : déclenchement, ancrage, coûts, opt-out, mesure |

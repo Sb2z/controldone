@@ -15,6 +15,7 @@ Unités : ``cle_unite(ft=<facture>, ligne=<index>)`` par ligne, ``cle_unite(ft=<
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -44,6 +45,7 @@ from controldone.controls.famille_c import (
     unites_pour_ligne,
 )
 from controldone.controls.framework import (
+    Classement,
     Confusion,
     ControlContext,
     arrondi_centime,
@@ -51,6 +53,7 @@ from controldone.controls.framework import (
     cle_unite,
     control,
     preuve,
+    trier_raisons,
 )
 from controldone.formatage import format_montant, format_nombre, format_pourcentage
 from controldone.model import (
@@ -467,6 +470,10 @@ def _d1_resultat(
     # D-4202 : un total imprimé supérieur à la somme des lignes lues n'est un écart certain que si une autre
     # identité imprimée prouve que la lecture des lignes est complète (sinon une ligne non lue l'explique).
     structure = list(motifs_structure) if somme_de_lignes and ecart > 0 else []
+    import os as _os  # TRACE-TEMP
+    if _os.environ.get("D1_TRACE") and somme_de_lignes and ecart > 0:  # TRACE-TEMP
+        with open(_os.environ["D1_TRACE"], "a") as _fh:  # TRACE-TEMP
+            _fh.write(f"{ctx.dossier.id}\t{f.ft.numero.valeur if f.ft.numero else ''}\t{sous}\t{ecart}\t{structure}\n")  # TRACE-TEMP
 
     def acc_operande(o: ValeurSourcee):
         d = o.decimal_signe()
@@ -481,10 +488,7 @@ def _d1_resultat(
         confusion=[Confusion(imprime, accepte=lambda x: any(abs(x - c) <= tol for c in candidats)),
                    *(Confusion(o, accepte=acc_operande(o)) for o in operandes)],
         documents=[f.id], montant=ecart,
-        raisons_supplementaires=[RaisonCode.structure_non_validee] if structure else [],
     )
-    if structure:
-        commun["details"] = {"structure_non_validee": structure}
     if (somme_de_lignes and ecart > 0 and classement.niveau is Niveau.a_verifier
             and set(classement.raisons) & _RAISONS_LECTURE):
         # D-3703 : total imprimé supérieur à la somme des lignes lues, lecture sous le seuil (scan) : des lignes
@@ -492,6 +496,10 @@ def _d1_resultat(
         # complète (elle aurait rendu le classement certain). Comme D-2307 pour B2/B3.
         return ctx.non_verifiable("D1", RaisonCode.confiance_insuffisante, **{
             **commun, "details": {"motif": "lignes_possiblement_non_lues"}})
+    if structure and classement.niveau is Niveau.ecart_certain:
+        classement = Classement(Niveau.a_verifier,
+                                trier_raisons([*classement.raisons, RaisonCode.structure_non_validee]))
+        commun["details"] = {"structure_non_validee": structure}
     libelle = (
         f"Sur {_la_facture(f)}{_par(page_txt([imprime]))}, {objet} "
         f"({format_montant(v_imp)}) diffère du calcul des valeurs imprimées ({calcul_txt} = "
@@ -574,6 +582,22 @@ def _explications_tva_ligne(ctx: ControlContext, m: Decimal, taux: Decimal, mtva
     return []
 
 
+def _imprime(v: ValeurSourcee | None) -> bool:
+    """Total lu sur le document (ni déduit ni reconstruit) : seul un total imprimé prouve une identité."""
+    return v is not None and v.methode is not Methode.derive and not v.est_reconstruite
+
+
+def _nature_ambigue(ctx: ControlContext, montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]],
+                    ecart: Decimal) -> list[str]:
+    """D-4203 : écart du total des débours égal au montant d'une ligne lue comme prestation : la nature de cette
+    ligne (débours ou prestation, libellé mal lu ou inconnu) explique l'écart."""
+    tol = ctx.tol.t_somme(2)
+    for lg, v in montants:
+        if not lg.nature.est_debours and abs(v.decimal_signe() - ecart) <= tol:
+            return ["nature_de_ligne"]
+    return []
+
+
 def _preuves_lignes_completes(
     ctx: ControlContext, ft, montants: Sequence[tuple[LigneFactureTransitaire, ValeurSourcee]], s_deb: Decimal,
     s_prest: Decimal, s_tout: Decimal, v_td: Decimal | None, v_tht: Decimal | None, ttc: Decimal | None,
@@ -589,24 +613,34 @@ def _preuves_lignes_completes(
     tol = ctx.tol
     n = max(1, len(montants))
     preuves: set[str] = set()
-    if ttc is not None and tva is not None and montants and abs(ttc - (s_tout + tva)) <= tol.t_somme(n + 1):
+    if (ttc is not None and tva is not None and montants and _imprime(ft.total_ttc) and _imprime(ft.total_tva)
+            and abs(ttc - (s_tout + tva)) <= tol.t_somme(n + 1)):
         preuves.add("ttc")
-    if v_tht is not None and montants and abs(v_tht - s_tout) <= tol.t_somme(n):
+    if v_tht is not None and montants and _imprime(ft.total_ht) and abs(v_tht - s_tout) <= tol.t_somme(n):
         preuves.add("ht_toutes_lignes")
+    if montants and all(v.est_structuree for _, v in montants):
+        # Facture structurée (XML, CSV…) : les lignes ne sont pas lues sur une page, aucune ne peut manquer.
+        preuves.add("structure")
     debours = [v for lg, v in montants if lg.nature.est_debours]
-    if (v_td is not None and abs(v_td - s_deb) <= tol.t_somme(max(1, len(debours)))) or (
-            v_td is None and not debours):
+    td = ft.total_debours
+    if (_imprime(td) and v_td is not None and abs(v_td - s_deb) <= tol.t_somme(max(1, len(debours)))) or (
+            td is None and not debours):
         preuves.add("debours")
     prest = [lg for lg, _ in montants if not lg.nature.est_debours]
-    if tva is not None and ft.total_tva is not None and ft.total_tva.methode is not Methode.derive and prest:
-        tvas = [_dec(ctx, lg.montant_tva) for lg in prest
-                if lg.montant_tva is not None and lg.montant_tva.methode is not Methode.derive]
-        if len(tvas) == len(prest) and None not in tvas and tva != 0 and abs(
-                tva - _somme(t for t in tvas if t is not None)) <= tol.t_somme(len(tvas)):
+    if tva is not None and _imprime(ft.total_tva) and tva != 0:
+        # TVA imprimée de chaque ligne qui en porte une (débours taxés compris) ; toutes les prestations en portent.
+        tvas = {id(lg): _dec(ctx, lg.montant_tva) for lg, _ in montants
+                if lg.montant_tva is not None and lg.montant_tva.methode is not Methode.derive}
+        if prest and all(tvas.get(id(lg)) is not None for lg in prest) and abs(
+                tva - _somme(t for t in tvas.values() if t is not None)) <= tol.t_somme(max(1, len(tvas))):
             preuves.add("prestations")
-        taux = {t for lg in prest for t in [_dec(ctx, lg.taux_tva)] if t is not None}
-        if len(taux) == 1 and (r := taux.pop()) > 0 and abs(arrondi_centime(r / _CENT * s_prest) - tva) <= tol.t_somme(2):
-            preuves.add("prestations")
+        taux = {t for lg, _ in montants for t in [_dec(ctx, lg.taux_tva)] if t is not None and t > 0}
+        if len(taux) == 1:
+            r = taux.pop()
+            base = _somme(v.decimal_signe() for lg, v in montants
+                          if (t := _dec(ctx, lg.taux_tva)) is not None and t > 0)
+            if prest and abs(arrondi_centime(r / _CENT * base) - tva) <= tol.t_somme(2):
+                preuves.add("prestations")
     return preuves
 
 
@@ -677,11 +711,13 @@ def _d1_facture(ctx: ControlContext, f: Document) -> list[ResultatControle]:
             ctx, f, "total_debours", unite_f, td, s_deb, debours, tol.t_somme(len(debours)),
             "le total des débours imprimé", f"somme des {len(debours)} lignes de débours", avec_montant=True,
             ligne_non_lue=bool(meme_ecart), somme_de_lignes=True,
-            motifs_structure=[] if preuves_lignes & {"ttc", "ht_toutes_lignes"} else ["debours_non_prouves_complets"],
+            explications_ligne=_nature_ambigue(ctx, montants, v_td - s_deb),
+            motifs_structure=[] if preuves_lignes & {"ttc", "ht_toutes_lignes", "structure"}
+            else ["debours_non_prouves_complets"],
         ))
     if toutes_lisibles and montants and v_tht is not None and tht is not None:
         alternatives = [s_prest] if debours and prestations else []
-        complet = "ttc" in preuves_lignes or {"debours", "prestations"} <= preuves_lignes
+        complet = bool(preuves_lignes & {"ttc", "structure"}) or {"debours", "prestations"} <= preuves_lignes
         out.append(_d1_resultat(
             ctx, f, "total_ht", unite_f, tht, s_tout, [v for _, v in montants], tol.t_somme(len(montants)),
             "le total HT imprimé", f"somme des {len(montants)} montants HT", avec_montant=True,

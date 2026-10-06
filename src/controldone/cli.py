@@ -9,7 +9,7 @@
     controldone reinitialiser-mot-de-passe --email <adresse> [--mot-de-passe-stdin]
     controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice …
     controldone migrer [--etat] [--sans-sauvegarde]
-    controldone alertes notifier | essai | etat
+    controldone alertes notifier | essai | etat | historique [--limite N]
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
 documents est une frontière de regroupement naturelle) et écrit ``report.html``, ``report.pdf``,
@@ -197,8 +197,13 @@ def _migrer(args: argparse.Namespace) -> int:
         neuve = _base_neuve(db)
         print(f"base : {db.engine.url.render_as_string(hide_password=True)}")
         print("migrations en attente : " + (", ".join(f"{m.version:04d} {m.nom}" for m in attente) or "aucune"))
-        if args.etat or (not attente and not neuve):
+        traces = _traces_en_clair()
+        if traces:
+            print(f"traces d'envoi en clair à chiffrer : {traces}")
+        if args.etat:
             return 0
+        if not attente and not neuve:
+            return _chiffrer_traces()
         if attente and not neuve and not args.sans_sauvegarde:
             from controldone.storage.sauvegarde import main as sauvegarde
 
@@ -216,9 +221,34 @@ def _migrer(args: argparse.Namespace) -> int:
             print("colonnes encore manquantes : " + ", ".join(manquantes[:20]), file=sys.stderr)
             return 3
         print("schéma à jour.")
-        return 0
+        return _chiffrer_traces()
     finally:
         db.fermer()
+
+
+def _traces_en_clair() -> int:
+    from controldone.storage.traces_envoi import racine_par_defaut
+
+    racine = racine_par_defaut()
+    if not racine.is_dir():
+        return 0
+    return sum(1 for p in racine.glob("*/*") if p.is_file() and not p.name.startswith(".") and p.suffix != ".enc")
+
+
+def _chiffrer_traces() -> int:
+    """Étape de données de ``migrer`` (D-4106) : traces d'envoi écrites en clair avant cette version -> chiffrées.
+    Idempotent ; rien à faire (et aucune clé lue) s'il n'en reste pas."""
+    if not _traces_en_clair():
+        return 0
+    from controldone.storage.traces_envoi import chiffrer_en_clair
+
+    try:
+        n = chiffrer_en_clair()
+    except Exception as exc:
+        print(f"chiffrement des traces d'envoi en échec : {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(f"traces d'envoi chiffrées : {n}")
+    return 0
 
 
 def _base_neuve(db: object) -> bool:
@@ -239,16 +269,44 @@ def _alertes(args: argparse.Namespace) -> int:
         for c in config.canaux:
             print(f"  canal : {c.nom}")  # jamais l'URL ni le mot de passe
         return 0
-    if args.action == "essai":
+    from controldone.storage.db import Database
+
+    if args.action == "essai":  # lancé par le fondateur seulement (jamais par le planificateur)
         if not config.actif:
             print(f"notifications inactives : {config.motif_inactif()}", file=sys.stderr)
             return 2
-        reussis, rates = envoyer_essai(config)
+        try:
+            db_essai: Database | None = Database()
+        except Exception:  # base injoignable : l'essai part quand même, sans inscription
+            db_essai = None
+        try:
+            reussis, rates = envoyer_essai(config, db=db_essai)
+        finally:
+            if db_essai is not None:
+                db_essai.fermer()
         print(f"essai envoyé : {', '.join(reussis) or 'aucun'} ; en échec : {', '.join(rates) or 'aucun'}")
         return 0 if not rates else 1
-    from controldone.storage.db import Database
-
     db = Database()
+    if args.action == "historique":
+        from controldone.services.notifications import historique
+
+        try:
+            h = historique(db, limite=args.limite, config=config)
+        finally:
+            db.fermer()
+        print("notifications : " + ("actives" if h.actif else f"inactives ({h.motif_inactif})"))
+        def dernier(d: object) -> str:
+            return d.strftime("%Y-%m-%d %H:%M") if d else "jamais"  # type: ignore[attr-defined]
+
+        for etat in h.canaux.values():
+            print(f"  canal {etat.canal:9s} : {'EN ÉCHEC' if etat.en_echec else 'ok'} — dernier succès "
+                  f"{dernier(etat.dernier_succes)}, dernier échec {dernier(etat.dernier_echec)}")
+        for n in h.notifications:
+            canaux = ", ".join(f"{c} {r}" for c, r in n.canaux.items()) or "-"
+            print(f"  {n.jour}  {h.libelle(n.kind):32s} ({n.nombre})  {n.statut:8s} essais {n.essais}  [{canaux}]")
+        if not h.notifications:
+            print("  (aucune notification sur 30 jours)")
+        return 0
     try:
         rapport = notifier_alertes(db, config)
     finally:
@@ -357,14 +415,16 @@ def main(argv: list[str] | None = None) -> int:
     sg.add_argument("arguments", nargs=argparse.REMAINDER)
     sg.set_defaults(fn=_sauvegarde)
 
-    mg = sous.add_parser("migrer", help="migrations de schéma (sauvegarde préalable par défaut)")
+    mg = sous.add_parser("migrer", help="migrations de schéma (sauvegarde préalable par défaut) et chiffrement des "
+                         "traces d'envoi encore en clair")
     mg.add_argument("--etat", action="store_true", help="afficher les migrations en attente sans rien faire")
     mg.add_argument("--sans-sauvegarde", dest="sans_sauvegarde", action="store_true",
                     help="ne pas sauvegarder avant (sauvegarde déjà faite autrement)")
     mg.set_defaults(fn=_migrer)
 
-    al = sous.add_parser("alertes", help="notifications poussées des alertes : notifier | essai | etat")
-    al.add_argument("action", choices=["notifier", "essai", "etat"])
+    al = sous.add_parser("alertes", help="notifications poussées des alertes : notifier | essai | etat | historique")
+    al.add_argument("action", choices=["notifier", "essai", "etat", "historique"])
+    al.add_argument("--limite", type=int, default=30, help="historique : nombre de lignes (défaut 30)")
     al.set_defaults(fn=_alertes)
 
     ll = sous.add_parser("llm", help="lecture par modèle de langage : verifier (clé + un appel minimal) | couts")

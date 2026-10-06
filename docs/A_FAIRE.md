@@ -56,8 +56,7 @@ l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a ét�
 
 | Point | Effort |
 |---|---|
-| Recettes et empreintes des corpus `corpus`, `corpus_h2`, `corpus_g2`, `corpus_g7` dans `bench/corpus_empreintes.json` | petit |
-| Écriture déterministe des TIFF dans le générateur (empreinte octet pour octet) | petit |
+| Réécriture de l'historique Git (corpus `corpus_g3`–`g5`, anciens courriels d'auteur, décision 4A) : corpus régénérables et vérifiés (`make corpus-verifier`, D-4403) ; ensuite retirer leurs exceptions de `.gitignore` | moyen |
 | Seuil minimal de couverture (`COUV_MIN`) une fois la base stabilisée ; modules les moins couverts : `storage`, `services`, `web` | moyen |
 | Formatage automatique (`ruff format`) : 301 fichiers à reformater, à faire en un seul enregistrement isolé | petit |
 
@@ -72,4 +71,4 @@ cookies `__Host-` · totaux par code de taxe (D-3101 à D-3103, D-3710) · rédu
 D-3701 à D-3705) · outil d'analyse du bruit (D-3701) · progression fine du traitement (D-3709, D-3805) · recherche,
 filtres, pagination, filtres en SQL, retour filtré (D-3401, D-3801, D-3802) · suivi en direct, graphiques,
 accessibilité (D-3402 à D-3404) · interface en anglais (D-3803) · pre-commit, couverture, tests de propriétés,
-corpus régénérables (D-3901 à D-3904).
+corpus régénérables (D-3901 à D-3904) · CI rapide à chaque push, complète à la demande ; TIFF déterministes ; recettes et empreintes de tous les corpus (D-4401 à D-4403).

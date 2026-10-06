@@ -90,11 +90,21 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 - Les métadonnées (nom d'origine, empreinte, taille) restent en base en clair ; la base est chiffrée
   dans les sauvegardes.
 
+### 3.1 bis Traces d'envoi (`outbox_envoyee/`, D-4106)
+
+- Copies des rapports et relevés d'écarts mis à disposition (`ExpediteurFichier`) et des factures émises
+  (`ExpediteurFacture`) : chiffrées au repos (`storage.traces_envoi.TracesEnvoi`), Fernet par une clé dérivée
+  HKDF de la clé maîtresse (`info = outbox_envoyee`, `MultiFernet` : rotation comme le coffre), fichier
+  `<type>/<nom>.enc` préfixé `CDT1`, écriture atomique 0600. Une trace altérée ou d'une autre clé est refusée.
+- Traces écrites en clair avant cette version : chiffrées puis supprimées par `controldone migrer` (service
+  ponctuel `migrer` de docker-compose), idempotent. Le contrôle approfondi d'une restauration vérifie que chaque
+  trace se déchiffre avec les clés fournies.
+
 ### 3.2 Clés
 
 | Secret | Variable | Usage |
 |---|---|---|
-| Clé maîtresse (Fernet, 32 octets base64) | `CONTROLDONE_MASTER_KEY` (plusieurs valeurs séparées par des virgules : la première chiffre, toutes déchiffrent) | Dérive : clés du coffre par client, clé des sauvegardes (`sauvegarde`), clé des secrets TOTP (`secrets`) |
+| Clé maîtresse (Fernet, 32 octets base64) | `CONTROLDONE_MASTER_KEY` (plusieurs valeurs séparées par des virgules : la première chiffre, toutes déchiffrent) | Dérive : clés du coffre par client, clé des sauvegardes (`sauvegarde`), clé des secrets TOTP (`secrets`), clé des traces d'envoi (`outbox_envoyee`) |
 | Secret de signature des sessions | `CONTROLDONE_SECRET_KEY` (liste ; la dernière signe) | Jetons de session, CSRF |
 | Mode | `CONTROLDONE_ENV` = `dev` \| `test` \| `prod` (valeur inconnue = `prod`) | |
 
@@ -108,7 +118,8 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 - **Développement** : une clé est générée dans `var/dev_master.key` (0600) avec un avertissement bruyant
   à chaque chargement ; jamais en production.
 - **Rotation** de la clé maîtresse : préfixer la nouvelle clé (`CONTROLDONE_MASTER_KEY=nouvelle,ancienne`),
-  appeler `FileVault.tourner_cles([nouvelle, ancienne])` qui rechiffre tout le coffre, puis retirer
+  appeler `FileVault.tourner_cles([nouvelle, ancienne])` qui rechiffre tout le coffre (et
+  `TracesEnvoi.tourner_cles(...)` pour les traces d'envoi), puis retirer
   l'ancienne clé (les sauvegardes antérieures restent lisibles avec l'ancienne clé : la conserver hors
   ligne pendant la durée de rétention des sauvegardes). Voir `docs/EXPLOITATION.md`.
 
@@ -143,6 +154,26 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   journal sans donnée personnelle), `Permissions-Policy` restrictive, COOP/CORP `same-origin`, HSTS 2 ans (D-3204).
 - **Dépendances** : `make audit` (vulnérabilités, SBOM CycloneDX, licences permissives seulement, D-3203).
 
+### 4.1 Suivi des revues (bloc S, D-3601 à D-3605)
+
+- **Mode `dev` oublié en production (RS-16, D-3601)** : `controldone serve` refuse de démarrer (code 2) en
+  `dev`/`test` quand la configuration est celle d'une production (écoute hors boucle locale, `--https` ou
+  `--proxy`) ; `CONTROLDONE_DEV_RESEAU=1` lève le refus pour une démonstration volontaire (avertissement
+  journalisé). Le défaut `dev` reste pour la démonstration et les tests.
+- **URL publique et en-tête `Host` (RS-18, D-3602)** : liens de paiement Stripe construits depuis
+  `CONTROLDONE_URL_PUBLIQUE` ou `https://CONTROLDONE_DOMAIN`, jamais depuis l'en-tête `Host` en production ;
+  `TrustedHostMiddleware` : un `Host` étranger reçoit 400 (domaine, URL publique, `CONTROLDONE_HOTES_AUTORISES`
+  et boucle locale admis).
+- **Sessions actives (D-3603)** : table `sessions_actives` (une ligne par connexion, mise à jour à chaque
+  rotation du jeton, supprimée à la déconnexion, à la révocation et au changement de mot de passe) ; appareil
+  réduit à « navigateur · système », réseau tronqué (`/24`, `/48`) ; « fermer cette session » et « fermer mes
+  autres sessions » révoquent en base.
+- **Cookies `__Host-` (D-3604)** : `__Host-cd_2fa` et `__Host-cd_flash` en production (comme la session) ; copie
+  locale des révocations bornée à 10 000 entrées (la base fait foi).
+- **Base sur volume chiffré (RS-21, D-3605)** : au démarrage en production (SQLite), constat du chiffrement du
+  volume (dm-crypt/LUKS) ; volume non chiffré : avertissement et alerte `volume_non_chiffre` (une par mois) ;
+  `CONTROLDONE_VOLUME_CHIFFRE=1` déclare un chiffrement de l'hébergeur invisible depuis la VM.
+
 ---
 
 ## 5. Autres mesures
@@ -150,12 +181,13 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 - **Actions sortantes** : tout envoi vers l'extérieur est un brouillon (`ActionSortante`) validé par le
   fondateur ; tout texte passe `guardrails.check_text` avant approbation **et** juste avant l'envoi ;
   autonomie `manuel` par défaut pour tous les types, modifiable par le fondateur seul ; le seul expéditeur
-  livré écrit des fichiers (`var/outbox_envoyee/`) — aucun code d'envoi réel (testé).
+  livré écrit des fichiers **chiffrés** (`var/outbox_envoyee/`, D-4106) — aucun code d'envoi réel (testé).
 - **Notifications des alertes au fondateur** (D-3502, `services/notifications.py`) : seul envoi réel du code,
   hors de la file sortante ; désactivé tant que `CONTROLDONE_NOTIF_*` n'est pas défini, jamais en `dev`/`test` ;
   destination fixée par l'environnement (aucun agent ni client ne la choisit) ; contenu limité au type d'alerte,
   à un libellé fixe, au nombre, à l'heure et au chemin `/admin/alertes` (aucune donnée client, testé) ; webhook
-  en HTTPS sans suivre de redirection, SMTP en STARTTLS ou TLS ; URL et mot de passe jamais journalisés.
+  en HTTPS sans suivre de redirection, SMTP en STARTTLS ou TLS ; URL, jeton ntfy et mot de passe jamais
+  journalisés ni affichés (l'historique des notifications, D-4104, ne garde que type, nombre, canaux et résultat).
 - **Journaux** : JSON, liste blanche de champs (identifiants, durées, compteurs, codes) ; une exception est
   journalisée par son **nom de classe** seulement (son message pourrait contenir du texte de document).
 - **Coûts IA** : plafond mensuel par client (alerte à 80 %, arrêt des appels au modèle à 100 %).
@@ -191,18 +223,19 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 | Fuite de document par les journaux ou alertes | Liste blanche de champs, noms d'exception seulement | Les messages d'`ErreurDefinitive` / `ErreurTemporaire` sont écrits par notre code et ne doivent pas inclure de contenu |
 | Texte de document piégé (injection) | Aucune action déclenchée par un contenu ; garde-fous sur les textes sortants | Voir SPEC §20.2 (équipe extraction) |
 | Envoi non désiré vers l'extérieur | File de validation, mode manuel par défaut, pas d'expéditeur réel | — |
-| Rejeu d'un code TOTP, vol de cookie | Anti-rejeu, `HttpOnly`/`Secure`/`SameSite`, rotation, durée absolue, révocation en base, sessions fermées au changement de mot de passe | Pas de liste des sessions actives |
+| Rejeu d'un code TOTP, vol de cookie | Anti-rejeu, `HttpOnly`/`Secure`/`SameSite`, préfixe `__Host-`, rotation, durée absolue, révocation en base, sessions fermées au changement de mot de passe, liste des sessions actives (D-3603) | — |
 | Traversée de chemin (coffre, worker, export, restauration) | Validation stricte, résolution et vérification sous la racine, filtre `data` | — |
 | Dépassement des coûts IA | Registre `ai_usage`, plafonds, alertes | Dans un même lot, le pipeline actuel n'applique que le plafond par dossier (voir EXPLOITATION) |
 
 ### Points ouverts
 
 1. Ancrage externe périodique de la tête de chaîne d'audit (courriel au fondateur, horodatage tiers).
-2. Liste des sessions actives d'un compte (la révocation persistante est faite, D-3202).
+2. ~~Liste des sessions actives d'un compte~~ : API faite (D-3603), page « Mes sessions actives » (D-3804).
 3. ~~Limiteur de débit partagé entre processus~~ : fait (D-3201).
 4. Chiffrement du volume qui porte la base (ou PostgreSQL avec chiffrement au repos de l'hébergeur).
 5. ~~Migrations de schéma~~ : fait (D-3503) — étapes versionnées (`schema_version`), `controldone migrer` avec
-   sauvegarde préalable ; le web et le worker refusent de démarrer tant qu'une étape est en attente (production).
+   sauvegarde préalable ; en production, le web et le worker attendent le service ponctuel `migrer` puis
+   démarrent (ou sortent une fois, code 3), D-4102.
 
 Revue de sécurité indépendante (constats, preuves, correctifs, risques restants) : `docs/REVUE_SECURITE.md`,
 puis seconde revue (octobre 2026) : `docs/REVUE_SECURITE_2.md`.

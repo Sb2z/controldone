@@ -3,7 +3,7 @@ VENV ?= .venv
 PY := $(VENV)/bin/python
 
 .PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build audit restauration-test restauration-test-pg audit-image lock test-pg-securite \
-        hooks pre-commit couverture proprietes corpus corpus-g6 corpus-verifier
+        hooks pre-commit couverture proprietes corpus corpus-tous corpus-verifier corpus-dev
 
 # Installation reproductible sur un clone neuf (F-17) : crée .venv s'il manque, installe les versions figées
 # de requirements.lock, puis le paquet en mode éditable avec les outils de développement (pytest, ruff).
@@ -42,15 +42,21 @@ PROFIL ?= dev
 proprietes:
 	HYPOTHESIS_PROFILE=$(PROFIL) $(PY) -m pytest -q tests/proprietes
 
-# Corpus de banc non versionnés (bench/README.md) : recette et empreinte dans bench/corpus_empreintes.json.
-# `make corpus-g6` régénère bench/corpus_g6 (sauté s'il est déjà conforme ; FORCE=1 pour refaire) et vérifie
-# l'empreinte. Corpus quelconque : `make corpus GRAINE=20261101 PREFIXE=GU [NOMBRE=160] [PAR_CONTROLE=3]
-# [SORTIE=bench/corpus_gu]` (empreinte affichée, à consigner).
+# Corpus de banc (bench/README.md, D-3904, D-4403) : recette et empreintes de chaque corpus dans
+# bench/corpus_empreintes.json. `make corpus-tous` régénère tous les corpus absents (les présents et conformes sont
+# sautés ; FORCE=1 pour tout refaire) ; `make corpus-verifier` vérifie tous les corpus (CORPUS=corpus_g3 : un
+# seul) ; `make corpus-g6` (ou corpus-g3, corpus-h2…) : un corpus. Corpus quelconque : `make corpus
+# GRAINE=20261101 PREFIXE=GU [NOMBRE=160] [PAR_CONTROLE=3] [SORTIE=bench/corpus_gu]` (empreintes affichées, à
+# consigner).
 CORPUS_JOBS ?= 2
-corpus-g6:
-	$(PY) scripts/corpus.py generer corpus_g6 --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
+corpus-tous:
+	$(PY) scripts/corpus.py generer --tous --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
 corpus-verifier:
-	$(PY) scripts/corpus.py verifier $(or $(CORPUS),corpus_g6)
+	$(PY) scripts/corpus.py verifier $(if $(CORPUS),$(CORPUS),--tous)
+corpus-dev:
+	$(PY) scripts/corpus.py generer corpus --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
+corpus-g% corpus-h%:
+	$(PY) scripts/corpus.py generer corpus_$(patsubst corpus-%,%,$@) --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
 corpus:
 	@test -n "$(GRAINE)" -a -n "$(PREFIXE)" || { echo "Usage : make corpus GRAINE=entier PREFIXE=XX [NOMBRE=160] [PAR_CONTROLE=3] [SORTIE=bench/corpus_xx] [FORCE=1]"; exit 2; }
 	$(PY) scripts/corpus.py generer --graine $(GRAINE) --prefixe $(PREFIXE) --jobs $(CORPUS_JOBS) \

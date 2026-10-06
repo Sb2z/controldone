@@ -80,6 +80,7 @@ ok = etat.sessions.fermer_session(s.user_id, sid_vise)       # POST (CSRF) ; Fal
 - **Libellé de l'alerte `volume_non_chiffre`** (D-3605) dans l'écran Alertes. **À faire (interface).**
 - **`docs/SECURITY.md`** : y reporter D-3601 à D-3605 (refus du mode `dev` exposé, URL publique et hôtes admis,
   sessions actives, cookies `__Host-`, constat du volume chiffré). Variables documentées dans
-  `deploy/.env.prod.example`, `make lock` / `make audit-image` dans `docs/DEPLOIEMENT.md` § 13. **À faire (doc).**
+  `deploy/.env.prod.example`, `make lock` / `make audit-image` dans `docs/DEPLOIEMENT.md` § 13. **Fait (bloc P3)** :
+  `docs/SECURITY.md` § 4.1.
 - **Rendu des vignettes** : chaque vignette coûte un processus (≈ 50 ms) ; une page qui en affiche beaucoup d'un
   coup pourrait les grouper en un seul appel isolé. **À mesurer (faible).**

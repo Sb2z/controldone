@@ -136,7 +136,7 @@ def main() -> int:
         f.post("/connexion/totp", data={"csrf": _jeton(f.get("/connexion/totp").text),
                                         "code": code_totp(res.totp_secret)})
         clients["fondateur"] = f
-        print(f"{'page':58} {'médiane':>9} {'statut':>6}")
+        print(f"{'page':70} {'médiane':>9} {'statut':>6}")
         for qui, url in PAGES:
             durees = []
             statut = 0
@@ -145,7 +145,7 @@ def main() -> int:
                 r = clients[qui].get(url)
                 durees.append(time.perf_counter() - t)
                 statut = r.status_code
-            print(f"{url:58} {statistics.median(durees) * 1000:7.0f} ms {statut:>6}")
+            print(f"{url:70} {statistics.median(durees) * 1000:7.0f} ms {statut:>6}")
         pf.db.fermer()
     finally:
         shutil.rmtree(racine, ignore_errors=True)

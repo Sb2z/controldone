@@ -288,3 +288,86 @@ def test_cli_etat_et_notifier_inactifs_en_test(monkeypatch, capsys, tmp_path):
     assert "inactives" in sortie and "canal : webhook" in sortie and "SECRET-FICTIF" not in sortie
     assert main(["alertes", "notifier"]) == 0
     assert main(["alertes", "essai"]) == 2
+
+
+# --- ntfy de premier rang, historique (D-4104) -------------------------------------------------------------
+
+
+def test_ntfy_jeton_priorite_et_url_jamais_affichee(db, recepteur, monkeypatch):
+    R, url = recepteur
+    monkeypatch.setenv("CONTROLDONE_ENV", "prod")
+    monkeypatch.setenv("CONTROLDONE_NOTIF_WEBHOOK_URL", url.replace("/crochet", "/controldone-SUJET-FICTIF"))
+    monkeypatch.setenv("CONTROLDONE_NOTIF_WEBHOOK_FORMAT", "texte")
+    monkeypatch.setenv("CONTROLDONE_NOTIF_WEBHOOK_JETON", "tk_JETON_FICTIF")
+    monkeypatch.setenv("CONTROLDONE_NOTIF_NTFY_PRIORITE", "5")
+    cfg = ConfigNotifications.depuis_env()
+    assert cfg.actif and cfg.erreurs == []
+    assert "SUJET-FICTIF" not in repr(cfg) and "JETON_FICTIF" not in repr(cfg)
+    _alerte(db, "k1")
+    notifier_alertes(db, cfg, now=NOW)
+    (chemin, entetes, _), = R.recus
+    assert chemin == "/controldone-SUJET-FICTIF"
+    assert entetes["Authorization"] == "Bearer tk_JETON_FICTIF" and entetes["Priority"] == "5"
+    reussis, rates = nt.envoyer_essai(cfg, now=NOW, db=db)
+    assert reussis == ["webhook"] and rates == [] and R.recus[-1][1]["Priority"] == "3"
+    monkeypatch.setenv("CONTROLDONE_NOTIF_NTFY_PRIORITE", "9")
+    assert any("PRIORITE" in e for e in ConfigNotifications.depuis_env().erreurs)
+
+
+def test_historique_et_etat_des_canaux(db, recepteur):
+    _r, url = recepteur
+    FauxSMTP.envois = []
+
+    class SMTPEnPanne(FauxSMTP):
+        def send_message(self, msg):
+            raise OSError("relais injoignable")
+
+    courriel = CanalCourriel(hote="smtp.exemple-fictif.test", port=587, expediteur="a@exemple-fictif.test",
+                             destinataires=["b@exemple-fictif.test"], fabrique=SMTPEnPanne)
+    cfg = _cfg(courriel, CanalWebhook(url=url, format="texte"))
+    _alerte(db, "k1")
+    _alerte(db, "k2", kind="job_mort")
+    notifier_alertes(db, cfg, now=NOW)
+    nt.envoyer_essai(cfg, now=NOW + timedelta(minutes=1), db=db)
+    h = nt.historique(db, config=cfg, now=NOW + timedelta(hours=1))
+    assert h.actif and h.canaux_configures == ("courriel", "webhook")
+    assert h.notifications[0].kind == "essai"
+    assert {n.kind for n in h.notifications} == {"essai", "sauvegarde_echec", "job_mort"}
+    sauv = next(n for n in h.notifications if n.kind == "sauvegarde_echec")
+    assert sauv.envoyee and sauv.jour == "2026-10-06" and sauv.canaux == {"webhook": "ok", "courriel": "echec"}
+    assert h.libelle("sauvegarde_echec") == "Sauvegarde en échec"
+    assert h.canaux["courriel"].en_echec and not h.canaux["webhook"].en_echec
+    assert h.canaux["webhook"].dernier_succes is not None
+    texte = repr(h)
+    assert url not in texte and "exemple-fictif.test" not in texte and SECRET_CLIENT not in texte
+    # au-delà de la fenêtre demandée : rien
+    assert nt.historique(db, config=cfg, now=NOW + timedelta(days=40)).notifications == []
+
+
+def test_historique_ancien_format_des_canaux(db):
+    from controldone.storage.alertes import historique_notifications
+
+    with db.transaction_systeme() as s:
+        s.add(NotificationAlerte(cle="job_mort:2026-10-01", kind="job_mort", nombre=2, canaux="webhook",
+                                 statut="envoyee", essais=1, cree_le=NOW, envoyee_le=NOW))
+    with db.transaction_systeme() as s:
+        (n,) = historique_notifications(s)
+    assert n.canaux == {"webhook": "ok"} and n.jour == "2026-10-01"
+
+
+def test_cli_historique(monkeypatch, capsys, tmp_path):
+    from controldone.cli import main
+    from controldone.storage import Database
+
+    url = f"sqlite:///{tmp_path}/n.db"
+    monkeypatch.setenv("CONTROLDONE_DATABASE_URL", url)
+    d = Database(url)
+    d.creer_schema()
+    with d.transaction_systeme() as s:
+        s.add(NotificationAlerte(cle=f"sauvegarde_echec:{datetime.now(UTC):%Y-%m-%d}", kind="sauvegarde_echec",
+                                 nombre=1, canaux="webhook:echec", statut="echec", essais=2,
+                                 cree_le=datetime.now(UTC)))
+    d.fermer()
+    assert main(["alertes", "historique"]) == 0
+    sortie = capsys.readouterr().out
+    assert "Sauvegarde en échec" in sortie and "EN ÉCHEC" in sortie and "essais 2" in sortie

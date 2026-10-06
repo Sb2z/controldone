@@ -32,6 +32,8 @@ class RapportControle:
     objets_coffre: int = 0
     octets_coffre: int = 0
     references: int = 0
+    traces_dechiffrees: int = 0
+    traces_en_clair: int = 0
     problemes: list[str] = field(default_factory=list)
 
     @property
@@ -46,6 +48,9 @@ class RapportControle:
             f"journal d'audit     : {self.audit_entrees} entrées",
             f"coffre              : {self.objets_coffre} objets déchiffrés ({self.octets_coffre} octets en clair)",
             f"références          : {self.references} fichiers et textes référencés par la base",
+            f"traces d'envoi      : {self.traces_dechiffrees} déchiffrées"
+            + (f", {self.traces_en_clair} en clair (antérieures à D-4106 : chiffrées par « controldone migrer »)"
+               if self.traces_en_clair else ""),
             "résultat            : " + ("CONFORME" if self.ok else "EN ÉCHEC"),
         ]
         return sortie + [f"  - {p}" for p in self.problemes]
@@ -166,4 +171,16 @@ def controler(cible: Path | str, cles: Any, *, base_url: str | None = None) -> R
     rapport.problemes += [f"contenu référencé absent du coffre : {c}/{e}/{s[:12]}…" for c, e, s in manquants[:20]]
     if len(manquants) > 20:
         rapport.problemes.append(f"… et {len(manquants) - 20} autres contenus absents")
+
+    # traces d'envoi (D-4106) : chacune se déchiffre avec les clés fournies
+    from controldone.storage.traces_envoi import TracesEnvoi
+
+    traces = TracesEnvoi(cible / "outbox_envoyee", list(cles))
+    for chemin in traces.lister():
+        try:
+            traces.lire(chemin)
+            rapport.traces_dechiffrees += 1
+        except (ErreurIntegrite, OSError) as exc:
+            rapport.problemes.append(f"trace d'envoi {chemin.parent.name}/{chemin.name} : {exc}")
+    rapport.traces_en_clair = len(traces.en_clair())
     return rapport

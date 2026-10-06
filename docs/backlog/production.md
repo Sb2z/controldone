@@ -8,8 +8,10 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
   majeure que le serveur**. Impact : passer `CONTROLDONE_DATABASE_URL` à PostgreSQL en production échouerait au
   démarrage (pilote absent) puis à la sauvegarde (code 2, alerte). Proposition : argument de construction
   `AVEC_POSTGRES=1` qui ajoute `pg8000` (extra `postgres`) et `postgresql-client-<version>` (dépôt PGDG), plus
-  un contrôle au démarrage du scheduler (`pg_dump --version` contre `SHOW server_version`). À faire (avant tout
-  passage à PostgreSQL ; non testable ici : pas de Docker).
+  un contrôle au démarrage du scheduler (`pg_dump --version` contre `SHOW server_version`). **Fait (D-4101)** :
+  `PG_CLIENT_MAJOR` (défaut 16, dépôt PGDG, clé versionnée), image construite et sauvegarde / restauration
+  PostgreSQL vérifiées dans le conteneur. Reste : le contrôle de version au démarrage (pg_dump refuse déjà un
+  serveur plus récent, code 2 + alerte).
 - **`pg8000` et ses dépendances hors du fichier figé.** Constat : `python-dateutil` et `six` avaient été retirés
   du venv (nettoyage des paquets non figés) alors que `pg8000` en dépend ; réinstallés pour ce bloc. Impact :
   tests PostgreSQL et `make restauration-test-pg` cassés si le venv est reconstruit sans l'extra. Proposition :
@@ -25,7 +27,7 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
   Impact : nul avec le déploiement actuel (un hôte, volume partagé) ; avec PostgreSQL partagé entre plusieurs
   hôtes, deux machines pourraient purger et sauvegarder en même temps. Proposition : en plus du fichier,
   `pg_try_advisory_lock` sur une connexion tenue pendant l'opération. À faire (si plusieurs hôtes).
-- **Effacement RGPD d'un client sans le verrou.** Constat : `storage/retention.supprimer_client` supprime le
+- **Effacement RGPD d'un client sans le verrou.** **Fait (D-4103).** Constat : `storage/retention.supprimer_client` supprime le
   coffre d'un client sans prendre le verrou de maintenance. Impact : faible — une sauvegarde concurrente peut
   manquer des objets d'un client en cours d'effacement (le contrôle approfondi le signalerait comme « contenu
   référencé absent ») ; aucune perte pour un client conservé. Proposition : prendre le verrou (attente courte) et
@@ -34,12 +36,13 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
   `worker` sortent en code 3 et `restart: unless-stopped` les relance en boucle jusqu'à `controldone migrer`
   (procédure `docs/DEPLOIEMENT.md` § 13). Impact : indisponibilité tant que l'exploitant n'a pas migré.
   Proposition : service compose ponctuel `migrer` (profil `maintenance`) dont `web` dépend
-  (`service_completed_successfully`), avec sauvegarde vers `/backups`. À faire (décision : migration automatique
-  avec sauvegarde, ou manuelle).
+  (`service_completed_successfully`), avec sauvegarde vers `/backups`. **Fait (D-4102)** : service ponctuel
+  `migrer` (sans profil : il tourne à chaque `up`), attente puis sortie unique des processus en production.
 - **Historique des notifications invisible.** Constat : `notifications_alertes` (envoyée, échec, essais) n'est
   lisible qu'en base ; `/admin/alertes` ne dit pas si une alerte a été poussée ni si un canal est en panne.
   Proposition : colonne « notifiée » et encart « canaux : webhook OK / courriel en échec depuis … » sur
-  `/admin/alertes` (sans afficher l'URL ni l'adresse). À faire (bloc interface).
+  `/admin/alertes` (sans afficher l'URL ni l'adresse). **API faite (D-4104)** — voir « Historique des
+  notifications : mode d'emploi » ci-dessous ; page à faire (bloc interface).
 - **Bandeau des alertes de sauvegarde sur `/admin`.** Constat : les libellés sont faits (D-3505), pas le bandeau
   tant qu'une alerte `sauvegarde_*` n'est pas lue. À faire (bloc interface).
 - **Notification quand le scheduler est arrêté.** Constat : les notifications sont envoyées par le conteneur
@@ -51,3 +54,45 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
   --globals-only`). Impact : restaurer sur un serveur neuf demande de recréer l'utilisateur applicatif à la main.
   Proposition : documenter la commande dans la procédure de restauration, ou ajouter `globals.sql` (sans mots de
   passe) à l'archive. À faire (faible).
+
+## Bloc P3 (octobre 2026)
+
+Décisions D-4101 à D-4106. Faits : image avec client PostgreSQL 16 (D-4101), service `migrer` et attente au
+démarrage (D-4102), effacement sous verrou (D-4103), ntfy de premier rang et historique (D-4104), deux
+sauvegardes par jour (D-4105), traces d'envoi chiffrées (D-4106), D-3601 à D-3605 reportés dans
+`docs/SECURITY.md`.
+
+### Historique des notifications : mode d'emploi pour l'interface (D-4104)
+
+```python
+from controldone.services.notifications import historique
+h = historique(plateforme.db, limite=50, jours=30)    # lecture seule, une transaction courte
+h.actif, h.motif_inactif                  # notifications actives ? sinon pourquoi (« aucun canal configuré … »)
+h.canaux_configures                       # ("webhook",) / ("courriel", "webhook") — jamais l'URL, le jeton ni l'adresse
+h.erreurs_configuration                   # variables mal remplies (texte écrit par notre code)
+h.canaux                                  # {"webhook": EtatCanal(canal, dernier_succes, dernier_echec, en_echec)}
+for n in h.notifications:                 # storage.alertes.NotificationEnvoyee, la plus récente d'abord
+    h.libelle(n.kind), n.jour, n.nombre, n.statut, n.envoyee, n.essais, n.canaux, n.premier_essai, n.envoyee_le
+```
+
+- `n.kind == "essai"` : notification d'essai lancée par le fondateur (`controldone alertes essai`).
+- `n.canaux` : `{"webhook": "ok", "courriel": "echec"}` ; `n.statut` : `envoyee` (au moins un canal) ou `echec`
+  (retenté au passage suivant, 5 essais par jour au plus).
+- Encart suggéré sur `/admin/alertes` : « Notifications : actives (webhook) — dernier envoi réussi le … » ou
+  « canal webhook en échec depuis … » si `EtatCanal.en_echec` ; colonne « notifiée » d'une alerte :
+  `Alerte.notifiee_le` (traitée) et la ligne d'historique du même `kind` et du même jour.
+- Ligne de commande équivalente : `controldone alertes historique [--limite N]`.
+- Heures en UTC en base (`datetime` naïf sous SQLite) : afficher en Europe/Paris comme le reste de l'interface.
+
+### Constats du bloc P3, hors périmètre
+
+- **Test de bout en bout de `docker compose up` avec le service `migrer`.** Constat : la composition est
+  validée (`docker compose config`) et chaque commande vérifiée dans l'image, mais pas une montée de version
+  réelle avec Caddy et un domaine. Proposition : l'ajouter à la répétition générale de `docs/MISE_EN_LIGNE.md`.
+  À faire (procédure).
+- **Facturation modifiée a minima.** `facturation/service.py` (`ExpediteurFacture`) chiffre désormais sa copie
+  locale (D-4106). Si une relecture est voulue (« télécharger la facture émise ») : `TracesEnvoi.lire(chemin)`.
+  À faire (si besoin, bloc facturation).
+- **Contrôle de version `pg_dump` / serveur au démarrage du scheduler.** Voir plus haut. À faire (faible).
+- **Aucune étape de schéma ajoutée par ce bloc** (D-4104 réutilise la colonne `canaux` ; la 5, `langue_utilisateur`,
+  vient du bloc interface).

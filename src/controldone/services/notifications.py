@@ -46,8 +46,11 @@ __all__ = [
     "CanalCourriel",
     "CanalWebhook",
     "ConfigNotifications",
+    "HistoriqueNotifications",
     "RapportNotifications",
     "charge_utile",
+    "envoyer_essai",
+    "historique",
     "notifier_alertes",
 ]
 
@@ -66,6 +69,7 @@ LIBELLES = {
     "sauvegarde_verification_echec": "Sauvegarde non conforme",
     "sauvegarde_absente": "Aucune sauvegarde récente",
     "sauvegarde_hors_site_echec": "Copie hors site en échec",
+    "volume_non_chiffre": "Base hors volume chiffré",
     "essai": "Essai de notification",
 }
 
@@ -102,20 +106,27 @@ class Canal(Protocol):
 
 @dataclass
 class CanalWebhook:
-    url: str
+    url: str = field(repr=False)  # le nom du sujet ntfy vaut mot de passe : jamais affiché ni journalisé
     format: str = "json"  # json | texte
     transport: Any = None  # httpx.BaseTransport (essais)
     nom: str = "webhook"
+    jeton: str = field(default="", repr=False)  # ntfy : jeton d'accès (Authorization: Bearer), D-4104
+    priorite: int = 4  # ntfy (format texte) : 1 à 5 ; l'essai part en 3
 
     def envoyer(self, charge: dict[str, Any]) -> None:
         import httpx
 
+        entetes: dict[str, str] = {}
+        if self.jeton:
+            entetes["Authorization"] = f"Bearer {self.jeton}"
         with httpx.Client(timeout=10, follow_redirects=False, transport=self.transport) as client:
-            if self.format == "texte":
-                r = client.post(self.url, content=charge["text"].encode(),
-                                headers={"Content-Type": "text/plain; charset=utf-8", "Title": "ControlDOne"})
+            if self.format == "texte":  # ntfy : titre, priorité et étiquette par en-têtes
+                priorite = 3 if charge.get("kind") == "essai" else self.priorite
+                entetes.update({"Content-Type": "text/plain; charset=utf-8", "Title": "ControlDOne",
+                                "Priority": str(priorite), "Tags": "warning" if priorite >= 4 else "bell"})
+                r = client.post(self.url, content=charge["text"].encode(), headers=entetes)
             else:
-                r = client.post(self.url, json=charge)
+                r = client.post(self.url, json=charge, headers=entetes)
         if not 200 <= r.status_code < 300:
             raise RuntimeError(f"webhook : réponse {r.status_code}")
 
@@ -189,7 +200,15 @@ class ConfigNotifications:
             elif fmt not in ("json", "texte"):
                 cfg.erreurs.append("CONTROLDONE_NOTIF_WEBHOOK_FORMAT : json ou texte")
             else:
-                cfg.canaux.append(CanalWebhook(url=url, format=fmt))
+                try:
+                    priorite = int(env("CONTROLDONE_NOTIF_NTFY_PRIORITE", "4"))
+                except ValueError:
+                    priorite = 0
+                if not 1 <= priorite <= 5:
+                    cfg.erreurs.append("CONTROLDONE_NOTIF_NTFY_PRIORITE : 1 à 5 (4 retenu)")
+                    priorite = 4
+                cfg.canaux.append(CanalWebhook(url=url, format=fmt, priorite=priorite,
+                                               jeton=env("CONTROLDONE_NOTIF_WEBHOOK_JETON").strip()))
         hote = env("CONTROLDONE_NOTIF_SMTP_HOTE").strip()
         if hote:
             securite = env("CONTROLDONE_NOTIF_SMTP_SECURITE", "starttls").strip().lower()
@@ -277,7 +296,7 @@ def notifier_alertes(db: Any, config: ConfigNotifications | None = None, *,
                 continue
         reussis, rates = _envoyer(config.canaux, charge_utile(kind, len(ids), now))  # hors transaction
         with db.transaction_systeme() as s:
-            essais = enregistrer_notification(s, cle=cle, kind=kind, nombre=len(ids), canaux=reussis or rates,
+            essais = enregistrer_notification(s, cle=cle, kind=kind, nombre=len(ids), canaux=_resultats(reussis, rates),
                                               envoyee=bool(reussis), quand=now)
             if reussis or essais >= ESSAIS_MAX_PAR_JOUR:
                 marquer_notifiees(s, ids, now)
@@ -288,10 +307,65 @@ def notifier_alertes(db: Any, config: ConfigNotifications | None = None, *,
     return rapport
 
 
-def envoyer_essai(config: ConfigNotifications | None = None, *, now: datetime | None = None
+def _resultats(reussis: list[str], rates: list[str]) -> list[str]:
+    """Canaux et résultat, pour l'historique : ``["webhook:ok", "courriel:echec"]`` (D-4104)."""
+    return [f"{c}:ok" for c in reussis] + [f"{c}:echec" for c in rates]
+
+
+def envoyer_essai(config: ConfigNotifications | None = None, *, now: datetime | None = None, db: Any = None
                   ) -> tuple[list[str], list[str]]:
-    """Notification d'essai (type ``essai``) sur chaque canal configuré, sans toucher à la base."""
+    """Notification d'essai (type ``essai``) sur chaque canal configuré. Lancée **seulement** par le fondateur
+    (``controldone alertes essai``). Avec ``db`` : l'essai est inscrit dans l'historique (clé
+    ``essai:<horodatage>``, aucune alerte touchée) ; une base injoignable n'empêche pas l'essai."""
     config = config or ConfigNotifications.depuis_env()
     if not config.actif:
         return [], []
-    return _envoyer(config.canaux, charge_utile("essai", 1, now or datetime.now(UTC)))
+    now = now or datetime.now(UTC)
+    reussis, rates = _envoyer(config.canaux, charge_utile("essai", 1, now))
+    if db is not None:
+        try:
+            from controldone.storage.alertes import enregistrer_notification
+
+            with db.transaction_systeme() as s:
+                enregistrer_notification(s, cle=f"essai:{now.astimezone(UTC).isoformat(timespec='seconds')}",
+                                         kind="essai", nombre=1, canaux=_resultats(reussis, rates),
+                                         envoyee=bool(reussis), quand=now)
+        except Exception as exc:  # l'essai a eu lieu ; seule son inscription manque
+            log.warning("notification_essai_non_inscrite erreur=%s", type(exc).__name__)
+    return reussis, rates
+
+
+# --- historique (lecture, D-4104) : pour la page /admin/alertes et « controldone alertes historique » ---------
+
+
+@dataclass(frozen=True)
+class HistoriqueNotifications:
+    """Ce que l'interface affiche : la configuration (sans URL ni adresse), l'état de chaque canal et les
+    dernières notifications (``storage.alertes.NotificationEnvoyee``)."""
+
+    actif: bool
+    motif_inactif: str
+    canaux_configures: tuple[str, ...]
+    erreurs_configuration: tuple[str, ...]
+    canaux: dict[str, Any]  # {nom: storage.alertes.EtatCanal}
+    notifications: list[Any]  # [storage.alertes.NotificationEnvoyee], la plus récente d'abord
+
+    def libelle(self, kind: str) -> str:
+        return LIBELLES.get(kind, kind)
+
+
+def historique(db: Any, *, limite: int = 50, jours: int = 30, config: ConfigNotifications | None = None,
+               now: datetime | None = None) -> HistoriqueNotifications:
+    """Historique des notifications des ``jours`` derniers jours et santé des canaux. Lecture seule ; aucune
+    URL de webhook, aucun jeton ni aucune adresse dans le résultat."""
+    from controldone.storage.alertes import etat_canaux, historique_notifications
+
+    config = config or ConfigNotifications.depuis_env()
+    depuis = (now or datetime.now(UTC)) - timedelta(days=jours)
+    with db.transaction_systeme() as s:
+        lignes = historique_notifications(s, limite=limite, depuis=depuis)
+        canaux = etat_canaux(s, depuis=depuis)
+    return HistoriqueNotifications(
+        actif=config.actif, motif_inactif=config.motif_inactif(),
+        canaux_configures=tuple(c.nom for c in config.canaux), erreurs_configuration=tuple(config.erreurs),
+        canaux=canaux, notifications=lignes)

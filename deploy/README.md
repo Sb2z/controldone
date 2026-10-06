@@ -5,11 +5,12 @@ chiffré, premier fondateur, Stripe, sauvegardes hors site, supervision, mise à
 
 | Fichier | Rôle |
 |---|---|
-| `Dockerfile` | Image `python:3.11-slim`, utilisateur non root (uid 10001), tesseract fra/eng/osd, dépendances figées (`../requirements.lock`), sans outils de compilation, HEALTHCHECK `/sante`, compatible système de fichiers en lecture seule (`/app/var` et `/backups` en volumes). |
+| `Dockerfile` | Image `python:3.11-slim`, utilisateur non root (uid 10001), tesseract fra/eng/osd, pilote `pg8000` et `pg_dump` / `pg_restore` 16 (dépôt PGDG, clé `pgdg.asc` ; `--build-arg PG_CLIENT_MAJOR=…`, D-4101), dépendances figées (`../requirements.lock`), sans outils de compilation, HEALTHCHECK `/sante`, compatible système de fichiers en lecture seule (`/app/var` et `/backups` en volumes). |
 | `Dockerfile.dockerignore` | Contexte de construction minimal (ni `.venv`, ni `var/`, ni secrets). |
-| `docker-compose.yml` | Services `web`, `worker`, `scheduler`, `caddy` ; seuls 80/443 publiés. |
+| `docker-compose.yml` | Service ponctuel `migrer` (schéma, migrations après sauvegarde, chiffrement des traces ; avant tout le reste, D-4102), services `web`, `worker`, `scheduler`, `caddy` ; seuls 80/443 publiés. |
+| `pgdg.asc` | Clé publique du dépôt PostgreSQL (PGDG), empreinte `B97B 0AFC AA1A 47F0 44F2 44A0 7FCC 7D46 ACCC 4CF8`. |
 | `Caddyfile` | HTTPS automatique, en-têtes de sécurité, taille maximale des requêtes (520 Mo pour les dépôts, 60 Mo ailleurs). |
-| `scheduler.sh` | Boucle du conteneur `scheduler` : relevé des connecteurs, planificateur des agents, purge, sauvegarde, référentiel. |
+| `scheduler.sh` | Boucle du conteneur `scheduler` : relevé des connecteurs, notifications, planificateur des agents, purge, deux sauvegardes par jour (`SCHED_BACKUP_HHMM=0215,1415`), référentiel. |
 | `backup-cron.sh` | Sauvegarde chiffrée quotidienne relue (appelle `scripts/backup.sh`), restauration d'essai hebdomadaire, codes de retour, sonde externe ; `--hors-site` sur l'hôte : fraîcheur, empreinte, copie rclone vers un stockage objet UE puis `rclone check`. Voir « Sauvegardes et restauration » ci-dessous. |
 | `.env.prod.example` | Toutes les variables, documentées, **sans valeur réelle**. Copier en `.env.prod` (ignoré par git). |
 
@@ -37,7 +38,7 @@ décisions D-3301 à D-3306.
 | Base SQLite (`var/controldone.db`) | oui, `base/controldone.db` | copie **en ligne** par l'API de sauvegarde de SQLite : instantané cohérent même pendant les écritures |
 | Base PostgreSQL (si `CONTROLDONE_DATABASE_URL` en `postgresql+pg8000://…`) | oui, `base/controldone.dump` | `pg_dump --format=custom` sur un instantané exporté, le même que celui du manifeste (D-3501) ; `pg_dump` de la même version majeure que le serveur |
 | Coffre (`var/coffre/`) | oui, `coffre/` | objets déjà chiffrés par client ; copiés tels quels |
-| Traces d'envoi (`var/outbox_envoyee/`) | oui, `outbox_envoyee/` | copies des rapports et factures mis à disposition |
+| Traces d'envoi (`var/outbox_envoyee/`) | oui, `outbox_envoyee/` | copies des rapports et factures mis à disposition, **chiffrées au repos** (`*.enc`, clé dérivée de la clé maîtresse, D-4106) ; le contrôle approfondi vérifie que chacune se déchiffre |
 | Manifeste | oui, `MANIFESTE.json` (en dernier) | taille et SHA-256 de **chaque** fichier, lignes par table, tête de la chaîne d'audit |
 | `CONTROLDONE_MASTER_KEY`, `CONTROLDONE_SECRET_KEY`, `.env.prod`, `dev_master.key` | **non, jamais** | conservés **à part** : gestionnaire de secrets + copie papier sous scellé |
 | `var/tmp/`, journaux, images Docker, certificats Caddy | non | recréés au démarrage ou reconstruits depuis le dépôt |
@@ -56,7 +57,7 @@ controldone sauvegarde verifier --dernier --destination DIR [--profond] [--age-m
 controldone sauvegarde restaurer <archive> <répertoire_vide> --controler
 controldone sauvegarde restaurer <archive> <répertoire_vide> --base-cible <url_base_pg_vide> --controler   # PostgreSQL
 controldone sauvegarde controler <répertoire_restauré>
-controldone sauvegarde rotation --destination DIR [--jours 7] [--semaines 4]
+controldone sauvegarde rotation --destination DIR [--recentes 4] [--jours 7] [--semaines 4]
 make restauration-test                     # exercice complet sur une base fictive, hors ligne (≈ 15 s)
 make restauration-test-pg                  # le même sur PostgreSQL (serveur jetable local, ≈ 25 s)
 ```
@@ -84,8 +85,9 @@ make restauration-test-pg                  # le même sur PostgreSQL (serveur je
 
 ### Conservation (rotation)
 
-- Locale (`/srv/controldone/backups`) : la plus récente de chacun des **7 derniers jours** et de chacune des
-  **4 dernières semaines** ISO (`BACKUP_JOURS`, `BACKUP_SEMAINES`), soit environ 10 archives. La rotation retire
+- Locale (`/srv/controldone/backups`) : les **4 archives les plus récentes** (deux jours à deux sauvegardes par
+  jour, `BACKUP_RECENTES`), puis la plus récente de chacun des **7 derniers jours** et de chacune des
+  **4 dernières semaines** ISO (`BACKUP_JOURS`, `BACKUP_SEMAINES`), soit environ 12 archives. La rotation retire
   aussi les empreintes orphelines et les restes de plus d'un jour d'une sauvegarde interrompue.
 - Hors site : `rclone copy --immutable` (rien n'est écrasé ni supprimé à distance) ; la durée est fixée par la
   règle de cycle de vie du compartiment (**35 jours** conseillés).
@@ -98,7 +100,7 @@ make restauration-test-pg                  # le même sur PostgreSQL (serveur je
 | 1 | création de l'archive en échec (disque plein, base illisible…) |
 | 2 | configuration : clé maîtresse absente ou invalide, `pg_dump` absent, rclone ou distant absent, verrou de maintenance pris (restauration) |
 | 3 | vérification en échec : archive illisible, altérée, empreinte ou manifeste non conformes |
-| 4 | aucune sauvegarde assez récente (`--age-max-h`, `BACKUP_AGE_MAX_H`, défaut 26 h) |
+| 4 | aucune sauvegarde assez récente (`--age-max-h`, `BACKUP_AGE_MAX_H`, défaut 14 h) |
 | 5 / 6 | copie hors site en échec / copie distante incomplète ou différente (`rclone check`) |
 
 - Chaque échec côté application émet une alerte fondateur, une par jour et par type, visible dans
@@ -110,14 +112,15 @@ make restauration-test-pg                  # le même sur PostgreSQL (serveur je
 - **Limite** : une alerte dans l'application ne se voit qu'en se connectant (sauf notifications configurées), et
   ne part pas si le conteneur `scheduler` est arrêté. Pour être prévenu par courriel, y compris quand plus rien ne tourne, définir
   `BACKUP_PING_URL` (sonde « homme mort » type Healthchecks, auto-hébergeable) : `<url>/0` après chaque succès,
-  `<url>/<code>` après un échec ; la sonde alerte si aucun signal n'arrive pendant 26 h. Le contrôle hors site
-  sur l'hôte vérifie aussi, indépendamment du conteneur, que la dernière archive locale a moins de 26 h.
+  `<url>/<code>` après un échec ; la sonde (période 12 h, grâce 2 h) alerte si aucun signal n'arrive pendant 14 h. Le contrôle hors site
+  sur l'hôte vérifie aussi, indépendamment du conteneur, que la dernière archive locale a moins de 14 h.
 
 ### Objectifs de reprise (RPO / RTO) — à lire honnêtement
 
-- **RPO (perte de données maximale)** : **24 h**. Une seule sauvegarde par jour (02:15 UTC) ; tout ce qui a été
-  déposé ou décidé depuis la dernière sauvegarde est perdu si le volume est perdu. La copie hors site part à
-  02:45 UTC : en cas de perte de la VM **et** de son volume, la perte peut atteindre **environ 24 h 30**. Il n'y
+- **RPO (perte de données maximale)** : **12 h** (D-4105). Deux sauvegardes par jour (02:15 et 14:15 UTC,
+  `SCHED_BACKUP_HHMM`) ; tout ce qui a été déposé ou décidé depuis la dernière sauvegarde est perdu si le volume
+  est perdu. La copie hors site part à 02:45 et 14:45 UTC (crontab hôte `45 2,14 * * *`) : en cas de perte de
+  la VM **et** de son volume, la perte peut atteindre **environ 12 h 30**. Il n'y
   a ni réplication continue, ni journal WAL expédié hors machine. Si les alertes ne sont pas lues et que la
   sonde externe n'est pas configurée, une sauvegarde en panne peut passer inaperçue et le RPO devient non borné.
   Atténuation métier : les clients gardent leurs pièces d'origine et peuvent les redéposer.

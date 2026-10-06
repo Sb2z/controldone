@@ -419,7 +419,7 @@ section.
 | `ACME_EMAIL` | ton adresse | Contact de Let's Encrypt (avis d'expiration). **Obligatoire.** |
 | `CONTROLDONE_HOST_VAR`, `_BACKUPS`, `_CADDY` | laisser `/srv/controldone/...` | Répertoires sur le volume chiffré. |
 | `CONTROLDONE_VERSION` | `2.0.0` | Étiquette de l'image. À changer à chaque mise à jour pour pouvoir revenir en arrière (§ 6.2). |
-| `SCHED_BACKUP_HHMM` | laisser la valeur du modèle | Heure UTC de la sauvegarde quotidienne. |
+| `SCHED_BACKUP_HHMM` | laisser la valeur du modèle (`0215,1415`) | Heures UTC des deux sauvegardes quotidiennes (RPO 12 h). |
 | `CONTROLDONE_VOLUME_CHIFFRE` | laisser commenté | Utile seulement si le disque est chiffré par l'hébergeur sans LUKS visible. Ici, on a LUKS. |
 | `BACKUP_PING_URL` | facultatif | Sonde « homme mort » (type Healthchecks). Elle t'alerte si les sauvegardes s'arrêtent complètement. Voir § 4.10. |
 
@@ -465,6 +465,12 @@ Activer la clé Anthropic fait d'Anthropic, PBC (États-Unis) un **sous-traitant
 
 Dans la console Anthropic, pense aussi à fixer une **limite de dépense** du compte : c'est une seconde barrière,
 en plus des plafonds de l'application.
+
+Vérifier la clé après le démarrage (un seul appel de quelques jetons, moins d'un centime ; la clé n'est jamais
+affichée) : `docker compose exec app controldone llm verifier` — « clé Anthropic : présente » puis « appel de test :
+OK ». Sans appel : `controldone llm verifier --sans-appel`. Coût du mois et plafond de chaque client :
+`controldone llm couts`. Un client qui refuse l'envoi de ses documents à Anthropic : sur sa fiche, réglage
+`llm_desactive` = `true` (D-4007). Détails : `docs/EXPLOITATION.md` § 5 et D-4001 à D-4008.
 
 **Section 5 — Stripe** : au premier démarrage, **mode test** seulement (`sk_test_…`, `whsec_…` du webhook de
 test). Laisser `STRIPE_LIVE_OK` vide. Le passage en réel est décrit au § 5.1.

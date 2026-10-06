@@ -105,7 +105,8 @@ ValeurSourcee(
 .est_lisible  .est_structuree  .est_reconstruite  .ancrage_suffisant()  .fiable_pour_certain(c_min)
 ```
 
-Règles intégrées : une valeur `llm` non ancrée est plafonnée à 0,50 dès sa construction ; une valeur
+Règles intégrées : une valeur `llm` non ancrée est plafonnée à 0,50 dès sa construction (et l'extracteur `llm` la
+rejette ; une valeur `llm` ancrée a au plus 0,65, D-4003) ; une valeur
 `derive` doit citer ses sources. Montants toujours positifs (`signe_imprime = negatif` si imprimé
 négatif). Aides : `confiance_derivee(sources, facteur=None)` (§8.5.2 : 1,0 / 0,6 / 0,3),
 `deriver_somme(chemin, sources, document_id=, extracteur=, total_reconstruit=False)` (total reconstruit :

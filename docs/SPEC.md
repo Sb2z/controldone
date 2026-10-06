@@ -567,6 +567,7 @@ Chaque étape est un **job** de la file en base (voir `docs/DECISIONS.md`, D-004
 - Ordre de préférence des extracteurs : `structure` (XML/CSV/Factur-X) > `deterministe` (texte natif) > `llm` (si clé configurée) > `deterministe` sur OCR.
 - Qualité du texte : `natif` si ≥ 85 % des caractères de la page sont imprimables et forment des mots du dictionnaire FR/EN ou des nombres ; sinon OCR, et l'on garde la meilleure des deux sources par page.
 - Le modèle de langage reçoit le texte de la page (et optionnellement l'image), un schéma JSON fermé et la consigne de ne rien inventer. Sa réponse est validée contre le schéma ; tout champ hors schéma est ignoré. Chaque valeur renvoyée est **ancrée** (§6.3).
+- (D-4001 à D-4003) Le modèle n'est appelé que si l'extraction déterministe est faible (aucune extraction, champ requis absent, champ clé de confiance < 0,70) et ne fait que **compléter** : une valeur lisible du déterministe n'est jamais remplacée. Une valeur du modèle introuvable sur la page est **rejetée** ; une valeur retrouvée prend le texte imprimé et une confiance ≤ 0,65 : elle ne fonde jamais seule un `ecart_certain`.
 - Plusieurs extracteurs PEUVENT tourner sur le même document ; en cas de désaccord sur un champ clé, la valeur de plus haute confiance est retenue, sa confiance est plafonnée à 0,80 et la raison `extracteurs_en_desaccord` est mémorisée.
 
 ### 7.4 Normalisation
@@ -1463,7 +1464,7 @@ Indicateurs suivis sans blocage : coût IA moyen par dossier (alerte si > 0,30 E
 ### 20.4 RGPD
 
 - Le service est **sous-traitant** de ses clients (art. 28) : contrat de sous-traitance signé avec chaque client ; registre des traitements du sous-traitant (art. 30.2) tenu à jour ; liste des sous-traitants ultérieurs (hébergeur UE, fournisseur du modèle de langage, prestataire de paiement) communiquée et soumise à l'autorisation du client.
-- Hébergement dans l'Union européenne. Si le fournisseur du modèle de langage traite des données hors UE, le client en est informé et peut **désactiver l'extracteur `llm`** (les extracteurs `structure` et `deterministe` restent disponibles).
+- Hébergement dans l'Union européenne. Si le fournisseur du modèle de langage traite des données hors UE, le client en est informé et peut **désactiver l'extracteur `llm`** (les extracteurs `structure` et `deterministe` restent disponibles). Réglage du client : `reglages.llm_desactive` (D-4007). Seules les pages du document concerné sont envoyées, en texte (D-4005).
 - Minimisation : seules les données des documents d'import sont traitées ; les données personnelles (noms de contacts, téléphones) ne sont pas extraites dans le modèle sauf nécessité.
 - Conservation : fichiers bruts et textes de page purgés `retention_jours` après la clôture du dossier (défaut 180 jours) ; constats, valeurs sourcées clés et registre de recouvrement conservés pendant la durée du contrat, puis restitués (export JSON + PDF) et supprimés sous 30 jours.
 - Droits des personnes : relayés au client responsable de traitement.
@@ -1472,7 +1473,7 @@ Indicateurs suivis sans blocage : coût IA moyen par dossier (alerte si > 0,30 E
 
 - Chaque appel au modèle est mesuré (jetons, coût EUR) et rattaché au client, au lot et au dossier.
 - Plafond **par dossier** (défaut 0,50 EUR) : au-delà, les documents restants passent en extraction déterministe et le dossier est marqué « extraction partielle ».
-- Plafond **mensuel par client** (`plafond_cout_ia_mensuel_eur`, défaut 8 EUR pour l'abonnement, 20 EUR par diagnostic) : à 80 %, alerte au fondateur ; à 100 %, arrêt des appels au modèle pour ce client jusqu'à décision du fondateur.
+- Plafond **mensuel par client** (`plafond_cout_ia_mensuel_eur`, défaut 8 EUR pour l'abonnement, 20 EUR par diagnostic) : à 80 %, alerte au fondateur ; à 100 %, arrêt des appels au modèle pour ce client jusqu'à décision du fondateur. Vérifié **avant chaque appel** avec une estimation majorante ; coût réel calculé depuis l'usage renvoyé (cache de prompt compris) aux tarifs datés de `config/llm_tarifs.yaml` (D-4004).
 - Cache par `sha256` de page et version d'extracteur : une page déjà extraite n'est jamais renvoyée au modèle.
 
 ### 20.6 Idempotence, reproductibilité, robustesse
