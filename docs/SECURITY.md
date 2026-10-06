@@ -124,7 +124,9 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   du même pas ou d'un pas antérieur est refusé. Un jeton de session de rôle `fondateur` sans le drapeau
   « second facteur » est refusé.
 - **Sessions** : jetons signés (itsdangerous, HMAC), expiration d'inactivité (30 min), durée absolue (8 h),
-  rotation du jeton toutes les 15 min (`rafraichir`), révocation par identifiant de session ; cookie
+  rotation du jeton toutes les 15 min (`rafraichir`), révocation par identifiant de session **en base**
+  (table `sessions_revoquees`, valable pour tous les processus et après un redémarrage, D-3202) ; un changement
+  ou une réinitialisation du mot de passe ferme toutes les autres sessions du compte ; cookie
   `__Host-cd_session`, `HttpOnly`, `Secure`, `SameSite=Strict` en production (`parametres_cookie`). Le compte
   est relu en base à chaque requête de l'interface (`web.securite.acteur_de`) : un compte désactivé
   (`storage.comptes.desactiver_utilisateur`) ou qui n'est plus fondateur perd aussitôt ses sessions.
@@ -132,7 +134,14 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 - **Clés d'API par client** : `cdk_<préfixe>_<secret>` ; seul le SHA-256 du secret est stocké (secret de
   256 bits : un hachage lent est inutile) ; la clé complète n'est montrée qu'une fois ; révocable ;
   l'acteur obtenu est un rôle client rattaché au client de la clé (il ne peut ouvrir aucun autre client).
-- **Limitation de débit** : seau à jetons en mémoire par clé (IP, compte, clé d'API), borné (LRU).
+- **Limitation de débit** : seaux à jetons **en base** (`debit_compteurs`, D-3201), partagés par les processus et
+  conservés au redémarrage ; clés pseudonymisées (HMAC) ; table bornée ; seuls les échecs épuisent la limite ;
+  secours en mémoire si la base ne répond pas. Déblocage : `controldone debit effacer --email …` (journalisé).
+- **Réinitialisation de mot de passe** : en ligne de commande sur la machine du service seulement
+  (`controldone reinitialiser-mot-de-passe`) ; aucun lien de réinitialisation par courriel.
+- **En-têtes** : CSP sans script ni style en ligne, violations reçues sur `/csp-rapport` (débit et taille bornés,
+  journal sans donnée personnelle), `Permissions-Policy` restrictive, COOP/CORP `same-origin`, HSTS 2 ans (D-3204).
+- **Dépendances** : `make audit` (vulnérabilités, SBOM CycloneDX, licences permissives seulement, D-3203).
 
 ---
 
@@ -177,18 +186,19 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
 | Fuite de document par les journaux ou alertes | Liste blanche de champs, noms d'exception seulement | Les messages d'`ErreurDefinitive` / `ErreurTemporaire` sont écrits par notre code et ne doivent pas inclure de contenu |
 | Texte de document piégé (injection) | Aucune action déclenchée par un contenu ; garde-fous sur les textes sortants | Voir SPEC §20.2 (équipe extraction) |
 | Envoi non désiré vers l'extérieur | File de validation, mode manuel par défaut, pas d'expéditeur réel | — |
-| Rejeu d'un code TOTP, vol de cookie | Anti-rejeu, `HttpOnly`/`Secure`/`SameSite`, rotation, durée absolue | Révocation en mémoire du processus (perdue au redémarrage) |
+| Rejeu d'un code TOTP, vol de cookie | Anti-rejeu, `HttpOnly`/`Secure`/`SameSite`, rotation, durée absolue, révocation en base, sessions fermées au changement de mot de passe | Pas de liste des sessions actives |
 | Traversée de chemin (coffre, worker, export, restauration) | Validation stricte, résolution et vérification sous la racine, filtre `data` | — |
 | Dépassement des coûts IA | Registre `ai_usage`, plafonds, alertes | Dans un même lot, le pipeline actuel n'applique que le plafond par dossier (voir EXPLOITATION) |
 
 ### Points ouverts
 
 1. Ancrage externe périodique de la tête de chaîne d'audit (courriel au fondateur, horodatage tiers).
-2. Révocation des sessions persistante (table) et liste des sessions actives.
-3. Limiteur de débit partagé entre processus (aujourd'hui en mémoire de chaque processus).
+2. Liste des sessions actives d'un compte (la révocation persistante est faite, D-3202).
+3. ~~Limiteur de débit partagé entre processus~~ : fait (D-3201).
 4. Chiffrement du volume qui porte la base (ou PostgreSQL avec chiffrement au repos de l'hébergeur).
 5. Migrations de schéma (Alembic) : aujourd'hui `Database.creer_schema()` crée les tables manquantes ; une
    colonne manquante est détectée au démarrage du web et du worker, qui refusent de démarrer (D-1322), mais la
    migration reste manuelle.
 
-Revue de sécurité indépendante (constats, preuves, correctifs, risques restants) : `docs/REVUE_SECURITE.md`.
+Revue de sécurité indépendante (constats, preuves, correctifs, risques restants) : `docs/REVUE_SECURITE.md`,
+puis seconde revue (octobre 2026) : `docs/REVUE_SECURITE_2.md`.

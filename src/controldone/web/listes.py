@@ -172,7 +172,7 @@ def _entier(v: str, libelle: str, mini: int, maxi: int, defaut: int) -> int:
     v = v.strip()
     if not v:
         return defaut
-    if not v.isdigit() or len(v) > 6:
+    if not (v.isascii() and v.isdigit()) or len(v) > 6:  # « ² » est un chiffre pour isdigit, pas pour int (REV2-05)
         raise RequeteInvalide(f"{libelle} : nombre entier attendu")
     n = int(v)
     if not mini <= n <= maxi:

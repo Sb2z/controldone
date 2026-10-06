@@ -21,7 +21,6 @@ from aides_web import (
     SECRET_SESSION,
     connecter,
     connecter_client,
-    jeton,
     poster,
 )
 
@@ -468,3 +467,31 @@ def test_csv_de_grille_sans_effet_global_ni_erreur_500():
     assert csv.excel.delimiter == ","  # avant : « ; » pour tout le processus
     with pytest.raises(RequeteInvalide):
         _postes_csv("code_poste;prix\nA;" + "9" * 200_000 + "\n")
+
+
+# --- REV2-05 : paramètres de liste ------------------------------------------------------------------------------------
+
+
+def test_listes_parametres_hostiles_sans_erreur_500(monde):
+    c = monde.client()
+    connecter_client(c, monde)
+    for q in ("page=²", "page=١٢", "taille=⁵⁰", "page=99999999999", "tri=__class__", "q=" + "x" * 5000,
+              "q=%00", "page=1&page=2"):
+        r = c.get(f"/espace/dossiers?{q}", follow_redirects=False)
+        assert r.status_code in (200, 400), (q, r.status_code)
+
+
+def test_reinitialisation_du_mot_de_passe_en_ligne_de_commande(monde, monkeypatch):
+    from controldone.cli import main
+
+    c = monde.client()
+    connecter_client(c, monde)
+    monkeypatch.setenv("CONTROLDONE_DATABASE_URL", monde.pf.db.url)
+    monkeypatch.setattr("sys.stdin", io.StringIO("phrase-reinitialisee-FICTIVE\n"))
+    assert main(["reinitialiser-mot-de-passe", "--email", ADMIN_A, "--mot-de-passe-stdin"]) == 0
+    r = c.get("/espace", follow_redirects=False)
+    assert r.status_code in (302, 303)  # session ouverte avant : fermée
+    assert connecter(monde.client(), ADMIN_A, monde.comptes[ADMIN_A]).status_code == 401
+    assert connecter(monde.client(), ADMIN_A, "phrase-reinitialisee-FICTIVE").status_code == 303
+    monkeypatch.setattr("sys.stdin", io.StringIO("court\n"))
+    assert main(["reinitialiser-mot-de-passe", "--email", ADMIN_A, "--mot-de-passe-stdin"]) == 2

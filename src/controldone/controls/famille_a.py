@@ -24,6 +24,7 @@ from decimal import Decimal
 from itertools import combinations
 
 from controldone.controls._aides_befg import documents_autres, mrn_cites
+from controldone.controls._aides_befg import num as _num
 from controldone.controls.famille_p import entites_client_declaration, identifier_facture
 from controldone.controls.framework import (
     Confusion,
@@ -1495,6 +1496,20 @@ def _source_txt(ctx: ControlContext, vals: Sequence[ValeurSourcee], c: Couple) -
     return nom + (f" (page {v.page})" if v.page else "")
 
 
+def _nette_superieure_brute(ctx: ControlContext, c: Couple) -> str | None:
+    """Numéro (ou rang) d'un article d'une déclaration du couple dont la masse nette lue dépasse la masse brute lue
+    au-delà de ``T_MASSE`` (le constat B4 ``nette_brute``), sinon ``None``."""
+    for dec in c.decs:
+        for i, a in enumerate(dec.dec.articles):
+            if not (ctx.utilisable(a.masse_nette) and ctx.utilisable(a.masse_brute)):
+                continue
+            n, b = _num(a.masse_nette), _num(a.masse_brute)
+            if n is not None and b is not None and n - b > ctx.tol.t_masse(n, b):
+                return a.numero_article.valeur if a.numero_article is not None and a.numero_article.valeur \
+                    else str(i + 1)
+    return None
+
+
 def _a10(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     cid = "A10"
     out = []
@@ -1510,6 +1525,12 @@ def _a10(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
         decv = _valeurs_declaration(ctx, c, total_dec, champ_art)
         if isinstance(decv, RaisonCode):
             out.append(ctx.non_verifiable(cid, decv, **commun))
+            continue
+        if sous == "nette" and (art := _nette_superieure_brute(ctx, c)) is not None:
+            # D-3106 : une masse nette d'article supérieure à sa masse brute sur la déclaration (relevée par B4) fausse
+            # la masse nette déclarée : un second constat A10 sur la masse nette serait le même fait.
+            out.append(ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle,
+                                          details={"couvert_par": "B4 nette_brute", "article": art}, **commun))
             continue
         fs, ds = _lire_somme(ctx, ref), _lire_somme(ctx, decv)
         if isinstance(fs, RaisonCode) or isinstance(ds, RaisonCode):

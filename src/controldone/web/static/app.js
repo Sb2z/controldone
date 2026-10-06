@@ -382,15 +382,15 @@
   }
 
   /* --- filtres des listes : résultats mis à jour pendant la saisie (amélioration ; sans script, le bouton « Filtrer » suffit) ----
-     La page filtrée est demandée à la même adresse (GET, même origine) puis analysée par DOMParser (document inerte : aucun script
-     exécuté) ; seule la région [data-resultats] est remplacée par sa version produite et échappée par le serveur. */
+     La page filtrée est demandée à la même adresse (GET, même origine) et reçue en document inerte (aucun script exécuté) ;
+     seule la région [data-resultats] est remplacée par sa version produite et échappée par le serveur. */
   function filtresDirects() {
-    if (!window.fetch || !window.DOMParser || !window.history || !history.replaceState) { return; }
+    if (!window.XMLHttpRequest || !window.history || !history.replaceState) { return; }
     $$("form[data-filtres]").forEach(function (form) {
       var annonce = document.createElement("p");
       annonce.className = "vh"; annonce.setAttribute("aria-live", "polite"); annonce.setAttribute("role", "status");
       form.appendChild(annonce);
-      var minuterie = null, controleur = null;
+      var minuterie = null, requete = null;
       function adresse() {
         var params = new URLSearchParams();
         $$("input, select", form).forEach(function (c) {
@@ -406,27 +406,32 @@
         var url = adresse();
         var region = document.querySelector("[data-resultats]");
         if (!region) { return; }
-        if (controleur) { controleur.abort(); }
-        controleur = window.AbortController ? new AbortController() : null;
+        if (requete) { requete.abort(); }
+        // XMLHttpRequest « document » : le navigateur analyse la réponse en document inerte, sans passer de
+        // chaîne HTML à un point d'injection (compatible avec Trusted Types « trusted-types 'none' »).
+        var xhr = new XMLHttpRequest();
+        requete = xhr;
+        xhr.open("GET", url);
+        xhr.responseType = "document";
+        xhr.setRequestHeader("Accept", "text/html");
         region.classList.add("charge");
-        fetch(url, { credentials: "same-origin", headers: { "Accept": "text/html" }, signal: controleur ? controleur.signal : undefined })
-          .then(function (r) {
-            var type = r.headers.get("content-type") || "";
-            if (!r.ok || type.indexOf("text/html") !== 0 || new URL(r.url).origin !== window.location.origin) { throw new Error("réponse"); }
-            return r.text();
-          })
-          .then(function (html) {
-            var doc = new DOMParser().parseFromString(html, "text/html");
-            var neuve = doc.querySelector("[data-resultats]");
-            if (!neuve) { throw new Error("région"); }
-            var importee = document.importNode(neuve, true);
-            region.replaceWith(importee);
-            history.replaceState(null, "", url + (window.location.hash || ""));
-            var compte = importee.querySelector("[data-compte]");
-            annonce.textContent = compte ? compte.textContent.trim() : "";
-            anime(importee, { opacity: [0.5, 1] }, { duration: 0.3, ease: EASE });
-          })
-          .catch(function () { region.classList.remove("charge"); });
+        xhr.onload = function () {
+          requete = null;
+          var type = xhr.getResponseHeader("content-type") || "";
+          var doc = xhr.response;
+          var ok = xhr.status === 200 && type.indexOf("text/html") === 0 && doc &&
+            new URL(xhr.responseURL, window.location.href).origin === window.location.origin;
+          var neuve = ok ? doc.querySelector("[data-resultats]") : null;
+          if (!neuve) { region.classList.remove("charge"); return; }
+          var importee = document.importNode(neuve, true);
+          region.replaceWith(importee);
+          history.replaceState(null, "", url + (window.location.hash || ""));
+          var compte = importee.querySelector("[data-compte]");
+          annonce.textContent = compte ? compte.textContent.trim() : "";
+          anime(importee, { opacity: [0.5, 1] }, { duration: 0.3, ease: EASE });
+        };
+        xhr.onerror = function () { requete = null; region.classList.remove("charge"); };
+        xhr.send();
       }
       function plusTard() { window.clearTimeout(minuterie); minuterie = window.setTimeout(charger, 400); }
       $$("input[type=search], input:not([type])", form).forEach(function (c) { c.addEventListener("input", plusTard); });
@@ -440,7 +445,8 @@
     if (!M || reduit) { return; }
     $$(".graphe").forEach(function (fig) {
       var rects = $$(".g-barre", fig);
-      if (!rects.length) { return; }
+      // seulement les graphiques visibles au chargement : plus bas, ils restent tels que rendus (captures, impression)
+      if (!rects.length || fig.getBoundingClientRect().top > window.innerHeight) { return; }
       var axe = fig.classList.contains("graphe-colonnes") ? "scaleY" : "scaleX";
       rects.forEach(function (r) { r.style.transform = axe + "(0)"; });
       M.inView(fig, function () {

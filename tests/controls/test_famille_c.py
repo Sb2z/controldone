@@ -38,7 +38,7 @@ from controldone.model import (
 from controldone.testing import contexte, declaration, document, facture_transitaire, taxation, vs
 
 MRN_A = "26FR00000000000001"
-MRN_B = "26FR00000000009992"
+MRN_B = "26FRK7Q2ZX9PLM3VB2"  # distinct de MRN_A (caractères aléatoires, D-3104)
 TVA_CLIENT = "FR32000123459"
 TVA_AUTRE = "FR61000999990"
 C_IDS = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8"]

@@ -3562,3 +3562,163 @@ Demande : une interface « fluide et très moderne », avec effets et animations
   (worker) ne retire plus du coffre, pendant la copie, un contenu que l'instantané de la base référence encore. Un
   fichier purgé entre le parcours et la lecture n'est simplement pas copié ; le contrôle approfondi le signalerait
   comme « contenu référencé absent ».
+
+# Sécurité : débit partagé, sessions, en-têtes, dépendances (bloc C, octobre 2026)
+
+Revue complète : `docs/REVUE_SECURITE_2.md`. Tests : `tests/security/test_revue_securite_2.py`.
+
+### D-3201 — Limitation de débit en base, partagée et persistante
+
+- **Constat** : `auth.LimiteurDebit` était en mémoire de chaque processus. Un redémarrage remettait les compteurs
+  à zéro (un attaquant n'avait qu'à attendre un redéploiement), plusieurs processus web ne partageaient rien, et
+  chaque connexion **réussie** consommait aussi un jeton : le fondateur s'est retrouvé bloqué après une vingtaine de
+  connexions de test, débloqué seulement en relançant le serveur.
+- **Choix** : `auth.LimiteurDebitPartage`, seaux à jetons dans la table `debit_compteurs`
+  (`storage/securite.py`), même interface et **mêmes seuils** (connexion : 10 par adresse et 5 par compte sur
+  5 minutes ; second facteur et changement de mot de passe : seau du compte ; API : 120 en rafale puis 2/s, par
+  préfixe de clé et par adresse).
+  - Mise à jour atomique : `BEGIN IMMEDIATE` sous SQLite ; `SELECT … FOR UPDATE` et nouvel essai sur conflit de
+    clé sous PostgreSQL. Testé sous concurrence (6 connexions × 10 essais → exactement 20 autorisés).
+  - Clé stockée : `portée:HMAC-SHA256(sel, identifiant)`, sel dérivé de la clé maîtresse : ni adresse IP ni
+    courriel en clair, pas de force brute sur l'espace IPv4.
+  - Table bornée : une ligne expire quand son seau est de nouveau plein (elle ne porte plus d'information) ; purge
+    au plus une fois par minute et par processus, plafond de 100 000 lignes (les plus proches de l'expiration
+    partent d'abord) — des préfixes de clé d'API inventés ne font pas grossir la base.
+  - Seuls les **échecs** épuisent la limite : une connexion réussie remet le compteur du compte à zéro et rend
+    son jeton à l'adresse.
+  - Base indisponible : bascule sur un seau en mémoire aux mêmes seuils, avertissement journalisé (nom
+    d'exception seulement) ; jamais d'erreur 500 à cause du limiteur.
+  - Déblocage : `controldone debit lister` et `controldone debit effacer --email … | --ip … | --cle-api … | --tout
+    [--motif …]` (journal d'audit `debit_effacer`).
+- **Écarté** : Redis (un service de plus à exploiter pour un seul processus web) ; compter seulement les échecs
+  sans seau pour l'adresse (laisserait le bourrage d'identifiants sur de nombreux comptes).
+- Le limiteur en mémoire reste pour les tests unitaires, le secours, et le suivi en direct des dépôts (D-3402).
+
+### D-3202 — Révocation des sessions en base ; changement de mot de passe
+
+- **Constat (RS-17)** : la déconnexion n'était connue que du processus qui la servait, et perdue au redémarrage ;
+  un changement de mot de passe laissait ouvertes les autres sessions (cookie volé compris).
+- **Choix** : table `sessions_revoquees` (`sid:<id>` à la déconnexion ; `user:<id>` avec un instant de coupure au
+  changement ou à la réinitialisation du mot de passe : toute session **commencée** avant est refusée). Lue à chaque
+  requête (lecture différée, sans verrou d'écriture). Lignes purgées après la durée absolue de session (8 h).
+  Le changement de mot de passe remplace la session courante par une session neuve et ferme toutes les autres ; il
+  est limité (seau du compte : 5 essais du mot de passe actuel sur 5 minutes).
+- Réinitialisation : seulement en ligne de commande sur la machine du service (`controldone
+  reinitialiser-mot-de-passe --email …`) ; pas de « mot de passe oublié » par courriel (aucun jeton de
+  réinitialisation à voler ni à deviner). Sessions révoquées, compteurs remis à zéro, journalisé.
+- Base indisponible à la lecture : la révocation locale du processus s'applique, la requête continue (les pages
+  authentifiées relisent de toute façon le compte en base, RS-09).
+
+### D-3203 — Audit des dépendances : `make audit`
+
+- `scripts/audit_dependances.py` (outils dans `.venv-audit`, jamais dans l'image) : `pip-audit` sur
+  `requirements.lock` (PyPI puis OSV ; sans réseau, échec sauf `HORS_LIGNE=1`, l'audit n'est jamais déclaré propre
+  sans base consultée), SBOM CycloneDX 1.6 (`var/audit/sbom.cdx.json`) enrichi des licences et des composants servis
+  par l'application (Motion 14.0.0 MIT, polices Geist OFL-1.1, avec empreinte SHA-256), liste des licences
+  (`var/audit/licences.md`). Toute licence non permissive fait échouer l'audit sauf exception justifiée dans
+  `config/audit_dependances.json` (`python-stdnum` LGPL, `certifi` MPL-2.0). Un fichier de `static/vendor` non
+  déclaré fait échouer l'audit et le test permanent.
+- Ajouté à l'intégration continue (déclenchement manuel), SBOM conservé comme artefact 30 jours.
+- Résultat du 6 octobre 2026 : 68 paquets figés, **0 vulnérabilité connue** (PyPI et OSV), aucune licence non
+  permissive hors exceptions. Aucune version à relever.
+
+### D-3204 — En-têtes HTTP et rapports de violation CSP
+
+- CSP inchangée dans son principe (`default-src 'self'`, aucun script ni style en ligne, `/static/theme.js`
+  synchrone, Motion servi localement), complétée de `connect-src 'self'` explicite et de `report-uri /csp-rapport`
+  + `report-to csp` (`Reporting-Endpoints`). Le rapport HTML (CSP fermée) envoie aussi ses violations.
+- `POST /csp-rapport` : sans jeton CSRF (le navigateur n'en envoie pas), 20 rapports par minute et par adresse,
+  8 Ko au plus (lus en flux), types `application/csp-report` et `application/reports+json` seulement. Journal :
+  directive, origine de la ressource bloquée (`schéma://hôte`, jamais l'URL), chemin de la page sans requête ;
+  ni adresse IP, ni extrait de script.
+- `Permissions-Policy` : 18 fonctions refusées (caméra, micro, géolocalisation, paiement, USB, série, HID,
+  capture d'écran, capteurs, `browsing-topics`…), noms reconnus par les navigateurs seulement (un nom inconnu
+  produit un avertissement dans la console). COOP et CORP `same-origin` (déjà posés), aussi en secours dans Caddy.
+- HSTS : même valeur dans l'application et dans Caddy (`max-age=63072000; includeSubDomains`, auparavant
+  31536000 dans Caddy) ; `preload` laissé à la décision du fondateur (difficilement réversible).
+- **Écarté pour l'instant** : Trusted Types (`require-trusted-types-for 'script'`). Le filtrage en direct des listes
+  (D-3401) analyse la page filtrée de même origine avec `DOMParser`, qui est un puits Trusted Types ; l'imposer le
+  casserait. Garde-fou à la place : test permanent qui refuse tout `innerHTML`, `outerHTML`, `insertAdjacentHTML`,
+  `document.write`, `eval`, `new Function`, `srcdoc` dans le JavaScript servi, et qui exige la vérification d'origine
+  autour de `DOMParser` (backlog : politique nommée puis Trusted Types).
+
+### D-3205 — Entrées hostiles : corrections de la seconde revue
+
+- **XML de déclaration à fiche déduite** (D-2401) : le test d'appartenance aux groupes reconstruisait un ensemble à
+  chaque élément, d'où une déduction **quadratique** (4 000 articles, 0,5 Mo : 3,5 s ; 1 million de balises :
+  ≈ 1 h 30 dans le worker). Ensembles construits une fois : 64 000 articles (8 Mo) en 9 s. Sorties identiques.
+- **Images** : cadres d'un TIFF/GIF décodés un par un (au lieu de tous copiés avant de couper à 300) ; agrandissement
+  des images basse résolution plafonné à 40 Mpx (une image de 80 Mpx à 72 dpi en demandait 720). Sans effet sur les
+  pages ordinaires.
+- **CSV de grille tarifaire** : un CSV dont le dialecte n'était pas reconnu modifiait `csv.excel` **pour tout le
+  processus** (séparateur « ; » ensuite pour les exports CSV et la lecture des taux BCE) ; un champ démesuré donnait
+  une erreur 500. Dialecte dérivé, erreur lisible.
+- **Listes** (D-3401) : `?page=²` donnait une erreur 500 (`isdigit` accepte les exposants, `int` non).
+
+### D-3401 — Listes : recherche, filtres, tri et pagination côté serveur
+
+- **Où** : dossiers du client (`/espace/dossiers`), suivi des avoirs (`/espace/recouvrement`), file de validation
+  (client, contrôle, niveau, fourchette de montant, ordre), dossiers de la fiche client, journal d'audit (acteur,
+  action, client, période), tâches (statut, type, client).
+- **Comment** : paramètres GET seulement (pages utilisables sans JavaScript, adresses à garder en favori). Module
+  `web/listes.py` : noms de paramètres déclarés par liste (les autres sont ignorés et jamais réémis), valeurs
+  **validées strictement** — listes fermées pour les choix, 80 caractères sans caractère de contrôle pour le texte,
+  `montant_saisi` (Decimal) pour les montants, AAAA-MM-JJ pour les dates, `page` 1–10 000, `taille` 25/50/100,
+  `tri` dans une liste fermée. Valeur invalide : page 400 lisible ; page au-delà de la dernière : dernière page.
+- **Cloisonnement** : les listes fermées (transitaires, clients, contrôles) sont construites à partir des données
+  déjà lues dans le périmètre de l'acteur ; l'identifiant d'un transitaire d'un autre client est donc refusé comme
+  une valeur inconnue (400) sans aucune lecture. Dossiers, avoirs et file de validation sont filtrés en Python sur
+  des lignes lues par `TenantScope` (volumes par client : centaines à quelques milliers). Journal et tâches
+  (tables transverses du fondateur) : filtres passés à l'ORM en paramètres liés, `LIMIT/OFFSET`, compte en SQL
+  (`OperatorScope.rechercher_journal`, `JobStore.rechercher`) ; la sous-chaîne « acteur » échappe `%` et `_`.
+- **Index** : aucun ajouté. Le journal est parcouru par clé primaire décroissante, les tâches terminées sont purgées
+  à 30 jours ; il n'existe pas de mécanisme de migration pour créer un index sur une base existante (backlog).
+- **File de validation** : les extraits de preuve (rendus d'image) ne sont plus calculés que pour la page affichée
+  (avant : 40 par client à chaque affichage).
+- **Amélioration progressive** : saisie dans un champ de recherche ou changement d'une liste → la même adresse est
+  demandée (GET, même origine) par `XMLHttpRequest` en `responseType = "document"` (document inerte, aucun script
+  exécuté, aucune chaîne HTML passée à un puits : compatible avec Trusted Types `'none'`) ; seule la région
+  `[data-resultats]` est remplacée, l'adresse est mise à jour (`history.replaceState`), le nombre de résultats est
+  annoncé dans une région `aria-live`. En-têtes de colonnes triables avec `aria-sort`.
+
+### D-3402 — Suivi en direct du traitement d'un dépôt
+
+- **États** : reçu → lecture des documents → contrôles → terminé (ou erreur). Le worker écrit l'étape dans
+  `jobs.resultat` (`{"etape": …}`, remplacé par le résultat final à la fin) par `JobContext.etape`, seulement s'il
+  détient le bail (`JobStore.marquer_etape`, jeton de clôture). « Lecture » couvre le pipeline (extraction et
+  calculs) ; « contrôles », l'enregistrement des résultats. Un découpage plus fin demanderait un rappel de
+  progression dans le pipeline (backlog). Aucune colonne ajoutée (pas de migration).
+- **Points JSON** (même origine, session, `Cache-Control: no-store`) : `/espace/lots/{id}/etat` (404 identique pour
+  un lot d'un autre client et un lot inexistant), `/espace/suivi` (dépôts récents du client), `/admin/jobs/etat`
+  (fondateur). Codes d'état, compteurs et libellés fixes seulement : aucune donnée de document. Limite de débit par
+  compte (30 d'avance, 1 par seconde ; au-delà 429 + `Retry-After`).
+- **Navigateur** : interrogation toutes les 2 s (page du dépôt) ou 4 s (listes), ralentie après 30 tours, en pause
+  quand l'onglet est masqué, arrêtée à la fin ; rechargement automatique de la page à la fin pour afficher les
+  dossiers. Mises à jour par `textContent` et classes ; animation Motion de l'étape courante (désactivée si
+  « réduire les animations »). **Sans JavaScript** : `<meta http-equiv="refresh" content="5">` placé dans
+  `<noscript>` (la CSP ne régit pas cette balise ; ignorée quand le script tourne) et lien « Rafraîchir ».
+  Pas de SSE ni de WebSocket.
+
+### D-3403 — Graphiques des tableaux de bord
+
+- SVG produit par le serveur (`web/graphes.py` + `graphes.html.j2`), sans bibliothèque ni script : montant
+  recouvrable certain par mois (12 derniers mois, mois de traitement du dossier), constats par famille de contrôles,
+  montant certain par transitaire (client) ; à valider / validés par famille (fondateur, à partir de
+  `OperatorScope.statistiques`, même lecture journalisée). Mêmes règles de totaux que le rapport (constats publiés,
+  version courante, hors totaux exclus) ; montants en `Decimal`.
+- Accessibilité : `role="img"` avec `<title>` et `<desc>` (résumé chiffré), tableau de données dans un
+  `<details>` « Données du graphique », cadre défilant au clavier sur petit écran. Couleurs par classes CSS liées
+  aux variables des deux thèmes (aucun attribut `style`), version imprimable. Barres des graphiques visibles au
+  chargement animées (Motion), sauf « réduire les animations » ; les autres restent tels que rendus.
+
+### D-3404 — Accessibilité : audit automatique et corrections
+
+- Audit axe-core 4.10 (Playwright, Chromium, outil de développement non livré) sur 15 pages et la palette, thèmes
+  sombre et clair, règles WCAG 2.0/2.1 A et AA + bonnes pratiques. Avant : contraste insuffisant du texte discret
+  (4,2:1 en sombre, 3,6:1 en clair), bandeau « données fictives » hors repère, zone `pre` défilante non
+  atteignable au clavier, options de la palette mal structurées. Après : **0 violation**, 0 erreur de console.
+- Corrections : `--encre-3` #828896 (sombre, 5,7:1) et #5f6676 (clair, 5,4:1) ; bandeau en `<aside>` étiqueté ;
+  `pre` défilants focalisables et étiquetés ; `li role="none"` dans la liste de la palette, option vide
+  `aria-disabled` ; contraste de l'option sélectionnée ; contour de focus visible sur la zone de dépôt (le champ
+  fichier transparent ne montrait rien) ; libellés masqués complétant les boutons répétés (« Relancer », « Avoir
+  reçu », « J'ai envoyé mon courrier ») ; icône du site (`/static/favicon.svg`, supprime l'erreur 404 de console).

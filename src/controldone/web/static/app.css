@@ -662,6 +662,7 @@ dialog.palette::backdrop { background: rgba(3, 4, 8, .55); backdrop-filter: blur
 }
 .palette li a small { color: var(--encre-3); font-size: .72rem; }
 .palette li a[aria-selected="true"] { background: var(--accent-clair); color: var(--encre); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.palette li a[aria-selected="true"] small { color: var(--encre-2); }
 .palette .rien { padding: 1.2rem; color: var(--encre-3); font-size: .88rem; text-align: center; }
 
 /* --- listes : filtres, tri, pagination (D-3401) ------------------------------------------------------------------------------ */
@@ -720,14 +721,18 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 .suivi-texte { margin: .9rem 0 0; font-size: .88rem; color: var(--encre-2); }
 .badge.en-cours::before { animation: pouls 1.6s ease-out infinite; }
 @media (max-width: 560px) { .suivi-etapes { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .grille-graphes { grid-template-columns: 1fr; } }
 
 /* --- graphiques SVG (D-3403) ---------------------------------------------------------------------------------------------------- */
 .graphes > h2 { margin: .4rem 0 .9rem; }
-.grille-graphes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.4rem; }
+.grille-graphes { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 1.4rem; }
 .grille-graphes > .carte { margin-bottom: 0; }
+.grille-graphes > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.graphe-cadre { overflow-x: auto; }
+.graphe-cadre:focus-visible { outline-offset: 2px; }
 .graphe { margin: 0; }
 .graphe-titre { font-weight: 600; font-size: .95rem; letter-spacing: -.015em; margin-bottom: .6rem; }
-.graphe-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--police); }
+.graphe-svg { display: block; width: 100%; max-width: 680px; min-width: 460px; height: auto; overflow: visible; font-family: var(--police); }
 .graphe-svg .g-grille { stroke: var(--filet); stroke-width: 1; shape-rendering: crispEdges; }
 .graphe-svg .g-axe { fill: var(--encre-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .graphe-svg .g-lib { fill: var(--encre-2); font-size: 12px; }

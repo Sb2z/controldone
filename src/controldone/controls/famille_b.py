@@ -297,10 +297,34 @@ def _b2_categorie(ctx: ControlContext, dec: Document, code: str, i_total: int, l
     )
 
 
+def _lignes_completes(ctx: ControlContext, dec: Document) -> bool:
+    """Toutes les lignes de taxe sont lues (D-3102) : chaque ligne a un code de taxe lisible et la somme des montants
+    lus redonne le total des droits et taxes ou le total à payer imprimé (TVA autoliquidée incluse ou exclue). Une
+    ligne non lue aurait alors un montant nul : elle ne peut pas expliquer l'écart d'un code."""
+    c = dec.dec
+    if not c.taxations or any(not code_taxe(t) or not ctx.utilisable(t.type_taxe) for t in c.taxations):
+        return False
+    montants = [_num(montant_taxe(t)) if ctx.utilisable(montant_taxe(t)) else None for t in c.taxations]
+    if any(x is None for x in montants):
+        return False
+    tout = sum((x for x in montants if x is not None), _ZERO)
+    hors = sum((x for t, x in zip(c.taxations, montants, strict=True) if x is not None
+                and t.paiement_normalise is not PaiementNormalise.autoliquide), _ZERO)
+    t = ctx.tol.t_somme(len(montants))
+    for total in (c.total_droits_taxes, c.total_a_payer):
+        vt = _num(total) if ctx.utilisable(total) else None
+        if vt is not None and (abs(vt - tout) <= t or abs(vt - hors) <= t):
+            return True
+    return False
+
+
 def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatControle | None:
-    """B2 par code (D-3101) : Σ des lignes d'un code de taxe contre le total **imprimé** de ce code
+    """B2 par code (D-3101, D-3102) : Σ des lignes d'un code de taxe contre le total **imprimé** de ce code
     (``ChampsDeclaration.totaux_par_code``, jamais une ligne de taxation). Montant liquidé ou montant à payer
-    (TVA autoliquidée) : ``conforme`` si l'une des deux sommes concorde."""
+    (TVA autoliquidée) : ``conforme`` si l'une des deux sommes concorde. Sous-contrôle nouveau, émis seulement
+    quand la lecture peut trancher : si des lignes peuvent manquer à la somme du code (articles non lus, code sans
+    ligne pour un article, ligne sans code lisible) et que la somme de toutes les lignes ne redonne pas le total
+    des droits et taxes, ``non_verifiable``."""
     c = dec.dec
     tot = c.totaux_par_code[k]
     code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur else ""
@@ -309,42 +333,66 @@ def _b2_code_imprime(ctx: ControlContext, dec: Document, k: int) -> ResultatCont
     unite = cle_unite(dec=dec.id, total_code=code)
     lignes = [i for i, t in enumerate(c.taxations) if code_taxe(t) == code]
     details: dict = {"declaration_id": dec.id, "type_taxe": code, "total_par_code": k, "lignes": lignes}
+    commun_nv = dict(unite=unite, sous_controle="code", documents=[dec.id])
     if not lignes:
-        return ctx.non_verifiable("B2", RaisonCode.valeur_absente, unite=unite, sous_controle="code",
-                                  documents=[dec.id], details={**details, "motif": "aucune ligne du code lue"})
+        return ctx.non_verifiable("B2", RaisonCode.valeur_absente, **commun_nv,
+                                  details={**details, "motif": "aucune ligne du code lue"})
     total = tot.montant
     operandes_vs = [montant_taxe(c.taxations[i]) for i in lignes]
     for v in [total, *operandes_vs]:
         if not ctx.utilisable(v) or _num(v) is None:
             return ctx.non_verifiable(
                 "B2", ctx.raison_inutilisable(v) if not ctx.utilisable(v) else RaisonCode.valeur_absente,
-                unite=unite, sous_controle="code", documents=[dec.id], details=details,
+                **commun_nv, details=details,
             )
     v_total = _num(total) or _ZERO
     operandes = [(v, _num(v) or _ZERO) for v in operandes_vs if v is not None]
     somme = sum((x for _, x in operandes), _ZERO)
+    ecart = v_total - somme
+    t_somme = ctx.tol.t_somme(len(lignes))
     # Hypothèse « à payer » : une TVA autoliquidée imprime 0 à payer ; le total du code peut reprendre cette colonne.
     a_payer = [c.taxations[i].montant_a_payer for i in lignes]
     concorde: bool | None = None
-    if all(ctx.utilisable(v) and _num(v) is not None for v in a_payer):
-        s_payer = sum((_num(v) or _ZERO for v in a_payer), _ZERO)
-        if abs(v_total - s_payer) <= ctx.tol.t_somme(len(lignes)):
-            concorde = True
-    ecart = v_total - somme
+    if (abs(ecart) > t_somme and all(ctx.utilisable(v) and _num(v) is not None for v in a_payer)
+            and abs(v_total - sum((_num(v) or _ZERO for v in a_payer), _ZERO)) <= t_somme):
+        concorde = True
+    if abs(ecart) > t_somme and not concorde:
+        complet = _lignes_completes(ctx, dec)
+        manques: list[str] = []
+        if not complet:
+            if not _articles_tous_lus(dec):
+                manques.append("articles non tous lus")
+            if any(not code_taxe(t) or not ctx.utilisable(t.type_taxe) for t in c.taxations):
+                manques.append("ligne de taxe sans code lisible")
+        manques += motifs_structure_total_code(dec, code, lignes, _num, ctx.tol, ecart=ecart, complet=complet)
+        manques += _motif_total_negatif(v_total)
+        if manques:
+            # Sous-contrôle émis seulement quand la lecture peut trancher (D-3102) : sinon impossible de conclure.
+            return ctx.non_verifiable("B2", RaisonCode.structure_non_validee, **commun_nv,
+                                      details={**details, "motif": "structure_non_validee", "structure": manques})
     return _b2_resultat(
         ctx, dec, unite=unite, sous_controle="code", total=total, v_total=v_total, operandes=operandes,
         somme=somme, details=details, objet=f"le total imprimé de la taxe {code}",
         composante=_COMPOSANTE.get(c.taxations[lignes[0]].categorie), concorde=concorde,
-        structure=lambda: motifs_structure_total_code(dec, code, lignes, _num, ctx.tol, ecart=ecart)
-        + _motif_total_negatif(v_total),
     )
 
 
-def _meme_fait(a: ResultatControle, b: ResultatControle, tol: Decimal) -> bool:
-    """Deux constats B2 d'une même déclaration dont l'écart est le même : une ligne de taxe (lue ou imprimée) en
-    cause fausse à la fois le total du code et le total des droits et taxes ; un seul constat (D-3102)."""
-    return (a.constat is not None and b.constat is not None and a.ecart is not None and b.ecart is not None
-            and abs(a.ecart - b.ecart) <= tol)
+def _couverts_par_total(
+    ctx: ControlContext, dec: Document, par_code: list[ResultatControle], total: ResultatControle | None,
+) -> list[ResultatControle]:
+    """Un seul constat par fait (D-3102) : quand le total des droits et taxes (B2 au total) présente un écart et
+    que les écarts des codes en constat, additionnés, le redonnent, ce sont les mêmes lignes (lues ou imprimées)
+    qui faussent à la fois les totaux des codes et le total : les constats par code renvoient au constat B2 total."""
+    constats = [r for r in par_code if r.constat is not None and r.ecart is not None]
+    if total is None or total.constat is None or total.ecart is None or not constats:
+        return par_code
+    s = sum((r.ecart for r in constats if r.ecart is not None), _ZERO)
+    if abs(s - total.ecart) > ctx.tol.t_somme(len(dec.dec.taxations)):
+        return par_code
+    ids = {r.id for r in constats}
+    return [ctx.non_applicable("B2", RaisonCode.couvert_par_autre_controle, unite=r.unite, sous_controle="code",
+                               documents=[dec.id], details={**r.details, "couvert_par": "B2 total"})
+            if r.id in ids else r for r in par_code]
 
 
 def _motif_total_negatif(total: Decimal) -> list[str]:
@@ -470,7 +518,7 @@ def _b2_total(ctx: ControlContext, dec: Document, exclus: set[int]) -> ResultatC
     return _b2_resultat(
         ctx, dec, unite=unite, sous_controle="total", total=v_tot, v_total=vt, operandes=ops, somme=s,
         details={**details, "total": nom_total, "hypothese": nom_h}, objet=objet, composante=None,
-        structure=lambda: motifs_structure_taxes(dec, indices, _num, ctx.tol) + _motif_total_negatif(vt),
+        structure=lambda: motifs_structure_taxes(dec, indices, _num, ctx.tol, ecart=vt - s) + _motif_total_negatif(vt),
     )
 
 
@@ -498,6 +546,7 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
         r = _b2_total(ctx, dec, {i for i, _ in totaux.values()})
         # (c) totaux imprimés par code (D-3101), sauf un code déjà porté par une ligne de total de catégorie
         vus: set[str] = set(totaux)
+        par_code: list[ResultatControle] = []
         for k, tot in enumerate(dec.dec.totaux_par_code):
             code = (tot.type_taxe.valeur or "").strip().upper() if tot.type_taxe is not None and tot.type_taxe.valeur \
                 else ""
@@ -505,13 +554,9 @@ def b2_sommes_taxes(ctx: ControlContext) -> list[ResultatControle]:
                 continue
             vus.add(code)
             rc = _b2_code_imprime(ctx, dec, k)
-            if rc is None:
-                continue
-            if r is not None and _meme_fait(rc, r, ctx.tol.t_somme(len(dec.dec.taxations))):
-                rc = ctx.non_applicable("B2", RaisonCode.couvert_par_autre_controle, unite=rc.unite,
-                                        sous_controle="code", documents=[dec.id],
-                                        details={**rc.details, "couvert_par": "B2 total"})
-            resultats.append(rc)
+            if rc is not None:
+                par_code.append(rc)
+        resultats.extend(_couverts_par_total(ctx, dec, par_code, r))
         if r is not None:
             resultats.append(r)
     return resultats
@@ -753,6 +798,12 @@ def _b4_declaration(ctx: ControlContext, dec: Document) -> list[ResultatControle
             # D-2307 : somme lue inférieure au total alors que des articles imprimés n'ont pas été lus.
             commun["details"] = {"declaration_id": dec.id, "motif": "articles_non_lus"}
             out.append(ctx.non_verifiable("B4", RaisonCode.valeur_absente, **commun))
+        elif any(v.confiance < ctx.profil.c_min_certain for v in (total, *brutes)):
+            # D-3107 : signal interne à un seul document, sans montant, dont une masse n'est lue que sous le seuil de
+            # confiance : aucune autre identité imprimée ne confirme ces masses ; la seule explication que la lecture
+            # ne peut pas écarter est une erreur de lecture. Impossible de conclure (P8).
+            commun["details"] = {"declaration_id": dec.id, "motif": "masses_lues_sous_le_seuil"}
+            out.append(ctx.non_verifiable("B4", RaisonCode.confiance_insuffisante, **commun))
         else:
             classement = ctx.classify("B4", ecart=ecart, tolerance=t, seuil_certitude=t,
                                       valeurs_cles=[total, *brutes], eligible=False)

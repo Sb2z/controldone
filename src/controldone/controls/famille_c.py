@@ -1617,6 +1617,37 @@ def refs_confondables(a: str | None, b: str | None, *, max_differences: int = 2)
     return len(diff) <= max_differences and all(y[i] in _CONFUSIONS_REF.get(x[i], set()) for i in diff)
 
 
+#: Différences admises entre un MRN cité et le MRN d'une déclaration **du dossier** pour qu'il la désigne
+#: (D-3104) : hors « 26FR » (année, pays), un MRN porte 11 caractères aléatoires parmi 36 ; deux MRN distincts
+#: n'en partagent pas 7 par hasard (probabilité de l'ordre de 1e-8).
+_MRN_DIFFERENCES_MAX = 4
+
+
+def _distance_bornee(a: str, b: str, borne: int) -> int:
+    """Distance d'édition (substitution, insertion, suppression) de ``a`` à ``b``, plafonnée à ``borne + 1``."""
+    if abs(len(a) - len(b)) > borne:
+        return borne + 1
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cour = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cour[j] = min(prec[j] + 1, cour[j - 1] + 1, prec[j - 1] + (ca != cb))
+        if min(cour) > borne:
+            return borne + 1
+        prec = cour
+    return min(prec[-1], borne + 1)
+
+
+def mrn_designe(cite: str | None, mrn_dossier: str | None) -> bool:
+    """Le MRN cité désigne la déclaration du dossier malgré une lecture ou une saisie imparfaite (D-3104) : préfixes
+    de 15 caractères qui commencent de même (année, pays) et ne diffèrent que de ``_MRN_DIFFERENCES_MAX``
+    caractères au plus (substitutions, caractère perdu ou ajouté)."""
+    a, b = mrn_prefixe(cite), mrn_prefixe(mrn_dossier)
+    if len(a) < 12 or len(b) < 12 or a[:4] != b[:4]:
+        return False
+    return _distance_bornee(a, b, _MRN_DIFFERENCES_MAX) <= _MRN_DIFFERENCES_MAX
+
+
 def _sujette(ctx: ControlContext, v: ValeurSourcee) -> bool:
     return confusion_applicable(v, ctx.qualite_page(v))
 
@@ -1677,6 +1708,10 @@ def c7_references(ctx: ControlContext) -> list[ResultatControle]:
                 continue
             if any(refs_confondables(p, mrn_prefixe(x.valeur)) and (_sujette(ctx, v) or _sujette(ctx, x))
                    for x in prefixes_vals):
+                continue
+            if any(mrn_designe(p, q) for q in prefixes):
+                # D-3104 : proche du MRN d'une déclaration de ce dossier (ou d'un dossier qui partage la facture) :
+                # il la désigne (lecture OCR ou saisie imparfaite), ce n'est pas une référence inconnue.
                 continue
             sans.append(v)
         transports_sans: list[ValeurSourcee] = []

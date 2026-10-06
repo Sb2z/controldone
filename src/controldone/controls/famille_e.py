@@ -70,6 +70,35 @@ def _numero(av: Document) -> ValeurSourcee | None:
     return av.av.numero
 
 
+def dossier_evaluation_avoir(ctx: ControlContext, av: Document) -> str:
+    """Dossier qui porte les contrôles de niveau document (E1 à E5) d'un avoir rattaché à plusieurs dossiers
+    (D-3105, dans l'esprit de D-701) : parmi ce dossier et ceux qui contiennent le même avoir, le premier
+    (identifiant) dont une déclaration a un MRN cité par l'avoir ; à défaut, le premier de tous. Un même avoir
+    n'est ainsi relevé qu'une fois."""
+    freres = [a for a in ctx.autres_dossiers if av.id in a.documents]
+    if not freres:
+        return ctx.dossier.id
+    cites = set(aides.mrn_cites(av))
+
+    def cite(decs: Iterable[Document]) -> bool:
+        return any(getattr(d.champs, "type_document", None) == "declaration" and d.dec.mrn_prefixe in cites
+                   for d in decs)
+
+    tous = sorted([ctx.dossier.id, *(a.dossier.id for a in freres)])
+    citants = sorted(([ctx.dossier.id] if cite(ctx.declarations(dernieres_versions=False)) else [])
+                     + [a.dossier.id for a in freres if cite(a.documents.values())])
+    return (citants or tous)[0]
+
+
+def _evalue_ailleurs(ctx: ControlContext, cid: str, av: Document) -> ResultatControle | None:
+    """``non_applicable`` (``couvert_par_autre_controle``) si l'avoir partagé est évalué dans un autre dossier."""
+    ou = dossier_evaluation_avoir(ctx, av)
+    if ou == ctx.dossier.id:
+        return None
+    return ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, unite=_u(av), documents=[av.id],
+                              details={"motif": "avoir_evalue_dans_un_autre_dossier", "dossier": ou})
+
+
 # =====================================================================================================
 # Recherche des factures d'origine
 # =====================================================================================================
@@ -163,7 +192,7 @@ def e1_rattachement(ctx: ControlContext) -> list[ResultatControle]:
     avoirs = ctx.avoirs()
     if not avoirs:
         return _sans_avoir(ctx, "E1")
-    return [_e1_avoir(ctx, av) for av in avoirs]
+    return [_evalue_ailleurs(ctx, "E1", av) or _e1_avoir(ctx, av) for av in avoirs]
 
 
 # =====================================================================================================
@@ -305,7 +334,7 @@ def e2_avoir_superieur_origine(ctx: ControlContext) -> list[ResultatControle]:
     if not avoirs:
         return _sans_avoir(ctx, "E2")
     doubles = set(aides.avoirs_doubles(ctx))
-    return [_e2_avoir(ctx, av, doubles) for av in avoirs]
+    return [_evalue_ailleurs(ctx, "E2", av) or _e2_avoir(ctx, av, doubles) for av in avoirs]
 
 
 # =====================================================================================================
@@ -325,6 +354,9 @@ def e3_avoir_recu_deux_fois(ctx: ControlContext) -> list[ResultatControle]:
     out = []
     for av in avoirs:
         unite = _u(av)
+        if (ailleurs := _evalue_ailleurs(ctx, "E3", av)) is not None:
+            out.append(ailleurs)
+            continue
         d = doubles.get(av.id)
         if d is None:
             out.append(ctx.conforme("E3", unite=unite, documents=[av.id]))
@@ -453,7 +485,11 @@ def e4_arithmetique_avoir(ctx: ControlContext) -> list[ResultatControle]:
     avoirs = ctx.avoirs()
     if not avoirs:
         return _sans_avoir(ctx, "E4")
-    return [r for av in avoirs for r in _e4_avoir(ctx, av)]
+    out: list[ResultatControle] = []
+    for av in avoirs:
+        ailleurs = _evalue_ailleurs(ctx, "E4", av)
+        out.extend([ailleurs] if ailleurs is not None else _e4_avoir(ctx, av))
+    return out
 
 
 # =====================================================================================================
@@ -568,6 +604,9 @@ def e5_avoir_sans_ecart(ctx: ControlContext) -> list[ResultatControle]:
         if av.id in doubles:
             out.append(ctx.non_applicable("E5", RaisonCode.couvert_par_autre_controle, unite=unite,
                                           documents=[av.id], details={"couvert_par": "E3"}))
+            continue
+        if (ailleurs := _evalue_ailleurs(ctx, "E5", av)) is not None:
+            out.append(ailleurs)
             continue
         lignes = lignes_credit_depuis_avoir(av)
         if not lignes:
