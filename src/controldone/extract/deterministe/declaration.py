@@ -2401,12 +2401,14 @@ class _Lecteur:
                 ms = [m for m in _nombres(reste) if _a_decimales(m)]
                 if len(ms) == 1:
                     ajouter(code, self._lu_nombre(reste, ms[0]))
-            if debuts or ligne.idx in self.lignes_blocs or ligne.idx in self.lignes_tableaux or len(toks) < 2:
+            if debuts or ligne.idx in self.lignes_blocs or len(toks) < 2:
                 continue
-            # « A00 : 279,08 » (case de données comptables, D-3101) : code suivi de « : » et d'un seul montant
+            # « A00 : 279,08 » (case de données comptables, D-3101) : code suivi de « : » et d'un seul montant (une
+            # rangée de tableau de liquidation n'a pas cette forme ; un code lu deux fois avec deux valeurs, comme des
+            # rangées par article, n'est pas retenu)
             if self._totaux_deux_points(ligne, ajouter):
                 continue
-            if len(toks) < 3:
+            if ligne.idx in self.lignes_tableaux or len(toks) < 3:
                 continue
             # rangée de récapitulatif : code, libellé (mots), un seul montant à décimales en fin de ligne
             code = _code_taxe(_Span(toks[:1]), ligne)

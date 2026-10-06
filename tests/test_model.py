@@ -277,3 +277,16 @@ def test_transitions_recouvrement():
     with pytest.raises(ErreurTransition):
         transitionner(e2, StatutEcart.abandonne, auteur="u1")  # motif obligatoire
     transitionner(e2, StatutEcart.abandonne, auteur="u1", commentaire="montant trop faible")
+
+
+def test_totaux_par_code_feuilles_et_types():
+    # D-3101 : totaux imprimés par code de taxe, à part des lignes de taxation
+    from controldone.model import ChampsDeclaration, TypeValeur, type_valeur_pour
+
+    chemins = {f.chemin for f in ChampsDeclaration.feuilles()}
+    assert {"totaux_par_code[].type_taxe", "totaux_par_code[].montant", "totaux_par_code[].base_montant"} <= chemins
+    assert type_valeur_pour("declaration.totaux_par_code[0].montant") is TypeValeur.montant
+    assert type_valeur_pour("declaration.totaux_par_code[0].type_taxe") is TypeValeur.code
+    c = ChampsDeclaration()
+    c.definir("totaux_par_code[1].montant", None)
+    assert len(c.totaux_par_code) == 2 and c.taxations == []

@@ -117,6 +117,9 @@ def test_export_xml_a_attributs():
     assert {i.type for i in c.indices_autoliquidation} == {TypeIndiceAutoliquidation.code_1008,
                                                            TypeIndiceAutoliquidation.mode_paiement_tva}
     assert all(v.methode is Methode.xml_structure and v.confiance == 1.0 for v in res.valeurs)
+    # D-3101 : total imprimé par code, porté à part (jamais une ligne de taxation)
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "23.28")]
+    assert len(c.taxations) == 3
 
 
 _COLONNES = ("mrn;lrn;rang;date_acceptation;importateur;tva_importateur;eori_importateur;declarant;tva_declarant;"
@@ -202,3 +205,62 @@ def test_options_generiques_fiche_csv(tmp_path: Path):
 def test_fiches_livrees_valides():
     noms = {f.format_id for f in charger_fiches()}
     assert {"bench_x1_xml", "bench_x2_csv", "g2_m5_xml", "g2_m6_csv"} <= noms
+
+
+XML_DEDUIT = f"""<?xml version='1.0' encoding='UTF-8'?>
+<CustomsEntry xmlns="urn:fictif:test:customs-entry:9">
+  <Notice>DONNÉES FICTIVES — test</Notice>
+  <Header>
+    <MRN>{MRN}</MRN>
+    <AcceptanceDate>2026-05-04</AcceptanceDate>
+    <InvoiceCurrency>EUR</InvoiceCurrency>
+    <InvoiceTotal>300.00</InvoiceTotal>
+    <ItemCount>2</ItemCount>
+  </Header>
+  <Items>
+    <Item seq="1"><CommodityCode>8467210000</CommodityCode><InvoicedAmount currency="EUR">200.00</InvoicedAmount></Item>
+    <Item seq="2"><CommodityCode>8205200000</CommodityCode><InvoicedAmount currency="EUR">100.00</InvoicedAmount></Item>
+  </Items>
+  <Duties>
+    <Duty item="1" type="A00" label="Customs duty"><Base>200.00</Base><Rate>2.7</Rate><Amount>5.40</Amount></Duty>
+    <Duty item="1" type="B00" label="Import VAT"><Base>205.40</Base><Rate>20</Rate><Amount>41.08</Amount></Duty>
+    <Duty item="2" type="A00" label="Customs duty"><Base>100.00</Base><Rate>3.7</Rate><Amount>3.70</Amount></Duty>
+    <Duty item="2" type="B00" label="Import VAT"><Base>103.70</Base><Rate>20</Rate><Amount>20.74</Amount></Duty>
+  </Duties>
+  <Summary>
+    <TypeTotal type="A00">9.10</TypeTotal>
+    <TypeTotal type="B00">61.82</TypeTotal>
+    <TotalDutiesAndTaxes>70.92</TotalDutiesAndTaxes>
+  </Summary>
+</CustomsEntry>
+""".encode()
+
+
+def test_export_xml_deduit_totaux_par_code():
+    # D-3101 : fiche déduite des noms d'éléments ; « TypeTotal type=… » est le total imprimé du code
+    _, res = _extraire(XML_DEDUIT, "customs_entry.xml", fiches=())
+    c = res.champs
+    assert any(a.startswith("fiche_deduite") for a in res.avertissements)
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "9.10"), ("B00", "61.82")]
+    assert len(c.taxations) == 4 and all(t.article is not None for t in c.taxations)
+
+
+def test_export_csv_x2_totaux_par_code():
+    contenu = (
+        "#ENTETE;mrn;lrn;version;date_acceptation;importateur_nom;importateur_tva;importateur_eori;declarant_nom;"
+        "declarant_tva;incoterm;incoterm_lieu;pays_expedition;devise_facture;montant_total_facture;taux_change;"
+        "sens_taux;devise_taux;masse_brute_totale;nombre_colis_total;nombre_articles;total_droits_taxes;total_a_payer\n"
+        f"ENTETE;{MRN};LRN-T-3;1;04/05/2026;Atelier Fictif SARL (FICTIF);FR01000424242;FR00042424200000;"
+        "Transit Imaginaire SAS (FICTIF);FR61000515151;FOB;Ningbo;CN;EUR;200,00;;;;10,000;2;1;45,40;45,40\n"
+        "#TAXE;article;type;base_montant;base_quantite;base_unite;taux;nature_taux;montant;montant_a_payer;mode_paiement\n"
+        "TAXE;1;A00;200,00;;;2,7;ad_valorem;5,40;5,40;E\n"
+        "TAXE;1;B00;200,00;;;20;ad_valorem;40,00;40,00;E\n"
+        "#TOTAL;type;montant\n"
+        "TOTAL;A00;5,40\n"
+        "TOTAL;B00;40,00\n"
+    ).encode()
+    _, res = _extraire(contenu, "export_declaration.csv")
+    c = res.champs
+    assert "fiche:bench_x2_csv@1.1.0" in res.avertissements
+    assert [(t.type_taxe.valeur, t.montant.valeur) for t in c.totaux_par_code] == [("A00", "5.40"), ("B00", "40.00")]
+    assert len(c.taxations) == 2

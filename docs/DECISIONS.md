@@ -3726,3 +3726,112 @@ Revue complète : `docs/REVUE_SECURITE_2.md`. Tests : `tests/security/test_revue
   `aria-disabled` ; contraste de l'option sélectionnée ; contour de focus visible sur la zone de dépôt (le champ
   fichier transparent ne montrait rien) ; libellés masqués complétant les boutons répétés (« Relancer », « Avoir
   reçu », « J'ai envoyé mon courrier ») ; icône du site (`/static/favicon.svg`, supprime l'erreur 404 de console).
+
+# Moteur (bloc A) : totaux imprimés par code de taxe ; bruit « à vérifier » (dev seulement, octobre 2026)
+
+Constat : depuis D-2903, l'extracteur lisait les totaux par code (« Total A00 : … », « A00 Droits de douane 96,65 »)
+pour recouper d'autres valeurs, mais le modèle ne les portait pas : B2 ne pouvait pas relever un total de code faux
+(3 erreurs attendues « certain » du dev `corpus_g4`, 3 de `corpus_g2`, 2 du corpus d'origine). Ensuite, le bruit
+« à vérifier » non apparié (1,39 à 1,46 par dossier sur le dev, 1,95 sur un jeu neuf) a été ventilé par contrôle et
+par raison sur les seuls jeux de développement (`details` de `metrics.json`) : plusieurs familles ne correspondaient
+presque jamais à une erreur réelle. Règles générales seulement : aucune ne lit un nom de gabarit, de fichier, de
+client ou de transitaire.
+
+## D-3101 — Modèle : `ChampsDeclaration.totaux_par_code`
+
+- `TotalTaxeCode` (`type_taxe`, `montant`, `base_montant` facultatif), liste `totaux_par_code` : **jamais** une ligne
+  de taxation (la famille C et B2 au total additionnent les lignes ; un total ajouté aux lignes serait compté deux
+  fois).
+- Extraction PDF (`extract/deterministe/declaration.py`) : les lectures de D-2903 (« Total A00 : … », récapitulatif
+  « A00 Droits de douane 96,65 ») et deux formes nouvelles : « Total droits (A00) 1009,66 » (code entre parenthèses
+  après un libellé court) et « A00 : 279,08   B00 : 2 295,68 » (code suivi de « : » et d'un seul montant à décimales,
+  case de données comptables). Seuls les codes des lignes de taxation lues ; un code lu deux fois avec deux valeurs
+  n'est pas retenu. Un total de code est confirmé (OCR) quand la somme des lignes du code le redonne, ou quand la
+  somme des totaux par code redonne le total des droits et taxes ; un désaccord n'abaisse rien (le total du code
+  peut être la valeur fausse).
+- Exports : fiches `bench_x1_xml` (`TotalParType`), `bench_x2_csv` (`TOTAL`), `g2_m5_xml` (`recapitulatif/total`),
+  version 1.1.0 ; fiche déduite (`ingest/structure_deduite.py`) : feuille hors des groupes reconnus, au nom de total
+  (« total », « Summe », « recap »…), qui porte en attribut un code des taxations lues et un seul nombre.
+- Réseau d'identités (D-1700) : Σ lignes du code = total du code (`dec:code:<code>`) ; Σ totaux par code = total
+  des droits et taxes / total à payer (`dec:codes:<total>`).
+- Mesure (`scripts/mesure_extraction.py`, champ comparé à `totaux_par_type` de la vérité) : valeurs ≥ 0,90 toutes
+  justes (287 sur `corpus_g4`, 297 sur `corpus_g2`, 508 sur le corpus d'origine) ; une à deux valeurs fausses par
+  jeu, toutes sous 0,90. Calibration des déclarations inchangée : ≥ 0,90 justes à 99,99 % (1 fausse sur 14 293),
+  99,97 % (5 sur 16 499, les mêmes qu'avant), 100 % (23 436).
+
+## D-3102 — B2 par code (`sous_controle="code"`), un seul constat par fait
+
+- Σ des lignes d'un code contre le total imprimé du code ; `conforme` aussi si la somme des montants « à payer »
+  concorde (TVA autoliquidée). Un code qui porte déjà une ligne de total sans article (D-301) n'est pas repris.
+- Sous-contrôle nouveau, émis seulement quand la lecture peut trancher : s'il y a écart et qu'un motif de structure
+  existe (articles non tous lus, ligne sans code lisible, code sans ligne pour un article quand l'écart est positif,
+  doublon, ligne incohérente, total général retrouvé par Σ des totaux par code et non par Σ des lignes, total
+  négatif), `non_verifiable` (`structure_non_validee`, motifs dans `details.structure`) au lieu d'un constat.
+- Un seul constat par fait : quand B2 au total présente un écart et que les écarts des codes en constat,
+  additionnés, le redonnent (une ligne mal lue ou mal imprimée fausse les deux), les constats par code deviennent
+  `non_applicable` (`couvert_par_autre_controle`, `details.couvert_par = "B2 total"`).
+- Certitude inchangée : D-1700 (les lignes sommées doivent être confirmées ; le total du code est la valeur mise en
+  cause), D-2210, D-2711, D-2805 ; valeurs XML/CSV valides dispensées de corroboration (§6.3).
+
+## D-3103 — B2 au total : complétude des lignes d'un code
+
+Constat (dev `corpus_g4`, GZ0091) : avec D-3101, le total des droits et taxes d'un scan devenait confirmé par la
+somme des totaux par code ; trois lignes A00 n'étaient pas lues et B2 au total serait devenu certain faux (20,37).
+Règle (`structure_declaration.motifs_structure_taxes`, paramètre `ecart`) : écart positif (total imprimé > somme
+lue) et un code sans ligne lue pour un article qui a d'autres lignes -> motif de structure, **sauf** si le total
+imprimé de ce code est retrouvé par la somme de ses lignes lues (elles sont alors complètes). Réciproquement (B2 par
+code), quand la somme de **toutes** les lignes lues redonne le total des droits et taxes, une ligne non lue vaut zéro
+et n'explique aucun écart de code (GX0246, vrai écart relevé « à vérifier »).
+
+## D-3104 — C7 : MRN cité proche de celui d'une déclaration du dossier
+
+Hors « 26FR » (année, pays), un MRN porte 11 caractères aléatoires parmi 36 ; deux MRN distincts n'en partagent pas
+sept par hasard (probabilité de l'ordre de 1e-8). Un MRN cité dont le préfixe de 15 caractères commence de même et ne
+diffère de celui d'une déclaration **de ce dossier** (ou d'un dossier qui partage la facture) que de 4 caractères au
+plus (substitutions, caractère perdu ou ajouté : `famille_c.mrn_designe`) la désigne : il n'est pas « sans
+correspondance ». Mesure (dev, trois jeux) : parmi les 19 C7 appariés à une erreur réelle, ceux qui citent un MRN le
+citent à 9 caractères ou plus des MRN du dossier ; les C7 non appariés, à 1 à 4 caractères pour la plupart. Les MRN d'autres dossiers du client restent signalés (pièges
+« facture d'un autre envoi rangée ici »). C7 non apparié 52 -> 22.
+
+## D-3105 — Document rattaché à plusieurs dossiers : contrôles E1 à E5, F1, F2, F4 portés une fois
+
+Un relevé ou un avoir rattaché à plusieurs dossiers d'un même lot donnait le même constat dans chacun (même
+libellé : E5 jusqu'à 4 fois). Dans l'esprit de D-701 : un avoir partagé est évalué par E1 à E5 dans le premier
+dossier (identifiant) dont une déclaration a un MRN cité par l'avoir, à défaut dans le premier de tous
+(`famille_e.dossier_evaluation_avoir`) ; F1, F2 et F4 sur un document partagé, dans le premier dossier qui le
+contient. Les autres dossiers : `non_applicable` (`couvert_par_autre_controle`, `details.dossier`). E6 (avoir
+partiel, par écart du dossier) inchangé. Constats en double (même contrôle, même libellé, même lot) sur le dev des
+trois jeux : E 66 et F 20 -> 0 ; restent P1 (19) et P4 (5), signaux de dossier non touchés.
+
+## D-3106 — A10 masse nette : couverte par B4 quand la déclaration se contredit
+
+Une masse nette d'article supérieure à sa masse brute (B4 `nette_brute`) fausse la masse nette déclarée : A10
+`nette` donne `non_applicable` (`couvert_par_autre_controle`) au lieu d'un second constat du même fait. Les
+générateurs n'injectent aucune erreur A10 sur la masse nette ; 7 des 21 A10 `nette` non appariés venaient de ce cas.
+
+## D-3107 — B4 `somme_brute` : masse lue sous le seuil
+
+Signal interne à un seul document, sans montant, sans aucune autre identité imprimée sur les masses : quand une des
+masses comparées n'est lue que sous `C_MIN_CERTAIN`, la lecture ne peut pas trancher -> `non_verifiable`
+(`confiance_insuffisante`, motif `masses_lues_sous_le_seuil`). Les 14 B4 `somme_brute` non appariés du dev étaient
+tous dans ce cas (masses lues « 184 295 » pour 184,295…), aucun n'était une erreur réelle.
+
+## D-3108 — Mesures (dev seulement)
+
+Bancs `*_dev_blocA_base` (code du dépôt, identique à `*_dev_c3fin`) -> `*_dev_blocA` :
+
+| dev | VP / FP certains | rappel | rappel certain | bruit / dossier | violations de pièges | sous-classements | montants justes |
+|---|---|---|---|---|---|---|---|
+| `corpus_g4` | 98 / 0 -> 103 / 0 | 0,821 -> 0,831 | 0,692 -> 0,733 | 1,457 -> 1,143 | 50 -> 46 | 24 -> 22 | 0,957 -> 0,958 |
+| `corpus_g2` | 113 / 0 -> 115 / 0 | 0,860 -> 0,870 | 0,763 -> 0,777 | 1,392 -> 1,194 | 35 -> 29 | 25 -> 26 | 0,965 -> 0,966 |
+| corpus d'origine | 120 / 0 -> 125 / 0 | 0,827 -> 0,832 | 0,785 -> 0,813 | 1,154 -> 0,951 | 28 -> 28 | 18 -> 16 | 0,953 -> 0,953 |
+
+Seuils bloquants : PASSE sur les trois. Aucune erreur détectée avant ne l'est plus. Gagnées : les 8 erreurs B2
+« total de code faux » (7 certaines, GX0246 scanné « à vérifier »), et 6 C5/C6 devenus certains à montant juste (le
+total liquidé confirmé par la somme des totaux par code). Bruit non apparié par contrôle (trois jeux) : E5 67 -> 24,
+C7 52 -> 22, E1 19 -> 4, B4 17 -> 3, A10 28 -> 19, F1 15 -> 7, F2 9 -> 3, F4 9 -> 3, E2 15 -> 9, E3/E4 7 -> 0 ;
+B1 29 -> 31 (deux lectures de base tronquées sur scan, montant désormais confirmé par le total de son code : la
+confusion de lecture ne s'applique plus au montant, D-2303). Total 811 -> 669. Tests : `tests/controls/test_famille_b.py`,
+`test_famille_a.py`, `test_famille_c.py`, `test_famille_e.py`, `test_famille_f.py`, `test_corroboration.py`,
+`tests/extract/test_totaux_categories_d29.py`, `tests/ingest/test_ingest_structure_exports_attributs.py`,
+`tests/test_model.py` (données fictives).
