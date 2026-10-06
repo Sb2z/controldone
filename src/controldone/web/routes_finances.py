@@ -166,7 +166,7 @@ def lien_paiement(request: Request, facture_id: str) -> Response:
         session = service_pour(_pf(request)).lien_paiement(facture_id, f, url_base=_url_base(request))
     except ValueError as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message="Lien de paiement à transmettre au client : {url}", url=session.url)
+    return redirection(request, _RETOUR, message="Lien de paiement à transmettre au client : {lien}", lien=session.url)
 
 
 @routeur.post("/abonnement/lien")
@@ -178,7 +178,7 @@ def lien_abonnement(request: Request) -> Response:
                                                              url_base=_url_base(request))
     except (KeyError, ValueError) as exc:
         return _erreur(request, exc)
-    return redirection(request, _RETOUR, message="Lien d'abonnement à transmettre au client : {url}", url=session.url)
+    return redirection(request, _RETOUR, message="Lien d'abonnement à transmettre au client : {lien}", lien=session.url)
 
 
 @routeur.post("/pa/synchroniser")

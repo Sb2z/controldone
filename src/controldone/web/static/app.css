@@ -834,3 +834,6 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 .bascule-theme::view-transition-old(root), .bascule-theme::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 .bascule-theme::view-transition-old(root) { z-index: 1; }
 .bascule-theme::view-transition-new(root) { z-index: 2; }
+
+/* en-tête du fondateur (9 liens) : le rôle cède la place aux liens sur écran moyen (D-3804) */
+@media (max-width: 1360px) { .compte .role { display: none; } }

@@ -4203,3 +4203,84 @@ d'une étape, sinon au plus toutes les 2 s (une écriture en base par appel). Le
 de `executer_avec_delai` envoie ses étapes par le tube du résultat (`("progression", …)`), relayées dans le parent ;
 `options.progression` reste `None` à travers le tube (rien d'impicklable). L'affichage relève du bloc interface
 (`web/suivi.py`, D-3805). Tests : `tests/assembly/test_pipeline.py`, `tests/platform/test_relais_progression.py`.
+
+# Interface (bloc I) : listes en SQL, retour filtré, sessions actives, interface en anglais (octobre 2026)
+
+## D-3801 — Listes filtrées en SQL : dossiers, suivi des avoirs, file de validation
+
+- **Où** : `storage/listes_sql.py` (requêtes : `dossiers_page`, `lignes_dossiers`, `ecarts_page`,
+  `totaux_ecarts`, `transitaires_ecarts`), `OperatorScope.rechercher_file_validation` et `points_attention`
+  (`storage/scope.py`) ; mise en forme de la seule page affichée dans `web/listes_sql.py` et `routes_admin.py`.
+  Aucun accès base hors de `controldone.storage` : `TenantScope.lister_parmi` (`IN` par paquets de 500) et
+  `executer_lecture` (lecture construite dans `storage` à partir de `TenantScope.requete`).
+- **Cloisonnement** : toutes les requêtes partent du `SELECT` cloisonné de `TenantScope` (ce client ; constats
+  publiés seuls pour un rôle client) ; filtres validés par `lire_requete` puis passés en paramètres liés
+  (sous-chaînes échappées) ; page bornée (25/50/100), page au-delà de la dernière ramenée à la dernière.
+- **Mêmes résultats que les filtres Python** (gardés comme référence, `web/listes_vues.py`) : statut « client »
+  par `CASE` sur les agrégats des constats de la version courante ; montants en texte exact triés et comparés par
+  `CAST … AS NUMERIC` (clé de tri, bornes passées en texte), affichages et totaux recalculés en `Decimal` ;
+  écarts : composante et transitaire rapprochés sur leurs listes fermées puis passés comme ensembles de codes.
+  Tests d'équivalence sur un client fictif grossi (`tests/web/test_listes_sql.py`, 56 cas) ; seuls les ex aequo
+  peuvent changer d'ordre (et le tri par âge des écarts est à l'instant, non au jour).
+- **File de validation** : filtrée et triée avant la limite (avant : 500 constats lus puis filtrés) ; libellés de
+  documents, références et extraits seulement pour la page ; points d'attention lus en colonnes (liste `liens`
+  extraite du JSON), au plus 200 affichés avec le total. `services.reclamations.registre(ecart_ids=…)` : une page
+  d'écarts, événements lus en une requête (avant : une par écart).
+- **Mesure** (`scripts/mesure_listes.py`, 5 000 dossiers fictifs, médiane de 3, client HTTP de test, SQLite) :
+  `/espace/dossiers` 1 180 → 247 ms ; recherche 1 037 → 228 ms ; filtre + tri montant 1 119 → 205 ms ;
+  `/espace/recouvrement` 2 350 → 175 ms ; `/admin/validation` 33 700 → 700 ms, filtrée 33 300 → 500 ms.
+  Aucun index ajouté (backlog).
+
+## D-3802 — Retour après action dans une liste filtrée
+
+`rendu.retour_sur` accepte une requête encodée, chemin interne seulement : ASCII imprimable sans espace,
+2 000 caractères au plus ; ni schéma ni hôte (`//`, `/\`, `https:`) ; chemin `[A-Za-z0-9_-./]` sans `//` ni
+segment `..` (donc sans `%2F` déguisé) ; requête en caractères non réservés, `+ = &` et `%XX` hexadécimaux, sans
+caractère de contrôle encodé ; ancre `[A-Za-z0-9_-]`. L'adresse de retour des listes est recomposée par le serveur
+(`Requete.url`). Validation, rejet et rétrogradation dans la file filtrée, « J'ai envoyé mon courrier » et « Avoir
+reçu » dans le suivi des avoirs filtré, « Relancer » dans les tâches filtrées reviennent à la même liste. Tests de
+redirection ouverte (`test_interface_bloc_i.py`, propriétés `tests/proprietes/test_prop_web.py`).
+
+## D-3803 — Interface en anglais
+
+- **Catalogue maison** (aucune dépendance) : textes français source marqués `_()` (gabarits, code web) ou `N_()`
+  (libellés traduits à l'affichage) ; `web/i18n_en.py` donne l'anglais (786 entrées) ; paramètres `str.format`.
+  Langue portée par une `ContextVar` posée par le middleware de session (et par `rendu.page`) ; textes du
+  JavaScript transmis dans un bloc `<script type="application/json">` inerte (CSP et Trusted Types inchangés).
+- **Choix** : cookie `cd_langue` (`__Host-` en production, `HttpOnly`, un an, aucune donnée personnelle) posé par
+  `POST /preferences/langue` (jeton CSRF, retour validé par `retour_sur`) ; sans cookie, `Accept-Language` pour les
+  pages sans session (connexion) ; français sinon. Bouton FR/EN dans l'en-tête. Page d'erreur : le bouton renvoie
+  à l'accueil, jamais à l'adresse demandée (une 404 reste identique pour un objet d'un autre client).
+- **Formats** : dates « 6 Oct 2026, 15:49 », montants « 1,234.56 EUR », tailles en KB/MB (mêmes chiffres exacts).
+- **Hors traduction** : `AVERTISSEMENT` et `PHRASE_RENVOI` exacts restent en français dans les deux langues
+  (SPEC §3.3–3.4) ; en anglais, l'avertissement est suivi d'une traduction **de courtoisie** signalée « Courtesy
+  translation (the French text above prevails) ». Textes des constats, noms des contrôles, rapports, relevés,
+  messages d'alerte et du journal : français, marqués `lang="fr"`. Le module de garde-fous ne vise que le
+  français ; les traductions sont contrôlées par `check_text` et par une liste d'équivalents anglais interdits.
+- **Tests** : chaque texte marqué a sa traduction et les mêmes paramètres ; chaque gabarit est rendu dans les deux
+  langues (parcours client et fondateur, 2e facteur et paiement simulé rendus directement), garde-fous propres,
+  avertissement exact présent.
+
+## D-3804 — Mes sessions actives
+
+Page `/compte/sessions` (tous les rôles) sur l'API du bloc sécurité (D-3603) : appareil (navigateur · système
+réduits), réseau tronqué, ouverture, dernière activité, « Cette session ». « Fermer » une session et « Fermer mes
+autres sessions » (POST avec jeton CSRF). Une session est désignée par une référence HMAC tronquée de son
+identifiant : ni identifiant ni jeton dans le HTML ; une référence d'un autre compte est sans effet. Lien dans
+l'en-tête et la palette de commandes.
+
+## D-3805 — Étapes fines du traitement d'un dépôt
+
+Le suivi (`web/suivi.py`) affiche les étapes du pipeline (D-3709) : reçu, lecture des pages, classement,
+extraction, regroupement, contrôles, terminé ; compteur « fait/total » de l'étape courante (page et JSON :
+`fait`, `total`, `texte` traduit). « lecture » (worker sans étapes fines) = lecture des pages ; valeur inconnue
+idem. Barre de progression au prorata du compteur, par pas de 5 %. Rang, pourcentage et texte viennent du
+serveur ; le JavaScript n'a plus de liste d'étapes.
+
+## D-3806 — Libellés des alertes
+
+`web/listes_vues.LIBELLES_ALERTES` : un libellé par type émis dans le code (tâche morte, coûts IA, sauvegardes :
+`sauvegarde_echec`, `_verification_echec`, `_absente`, `_hors_site_echec`, volume non chiffré, facturation,
+quarantaine, agents) ; repli sur les libellés des notifications puis sur le nom technique. Badge « grave » pour
+les alertes qui exigent une action. Un test relève les types émis dans les sources et exige leur libellé.
+Tâches : colonnes « Créée » (`JobInfo.cree_le`) et « Prochain essai » séparées.
