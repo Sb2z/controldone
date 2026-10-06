@@ -167,6 +167,25 @@
       "sha256_pixels": "08ee3e30308a42703ff7d7a4054aa7b09aed8cef87fe8b657a8e2585c28879a1",
       "sha256_arbre": "8f10b35d78476bcd4034563ce043927ba4c245a4cf9ca321447b8c9b716caff5",
       "sha256_arbre_pixels": "af674a1c46b8e9be11b385e693db61cae6e10296ab77b06ce1d38818988cd059"
+    },
+    "corpus_g9": {
+      "sortie": "bench/corpus_g9",
+      "generateur": "bench.generator2",
+      "prefixe": "GS",
+      "graine": 20261011,
+      "nombre": 160,
+      "par_controle": 3,
+      "split": "holdout",
+      "options": [
+        "ext",
+        "all-holdout"
+      ],
+      "version_generateur": "2.1.0",
+      "dossiers": 160,
+      "sha256": "419f73df1ab6fe4f950dc0e7a328bfb6acecc02217c94f6ee5491da2daeb6235",
+      "sha256_pixels": "886573d6bbd5bffd5cf91857691947959f7d186c5fc089c2a1e595ba78146a73",
+      "sha256_arbre": "8fae244abe76bd64254e51890f40f6459ea5d9a1aa52bd15465c341334ae896a",
+      "sha256_arbre_pixels": "df5655c5e48d2ba7377eb773240771b147a790c4e6ad841282693c04fd4deada"
     }
   }
 }
