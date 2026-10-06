@@ -204,6 +204,42 @@ Tous les jeux, même code (OCR 1.1.1) :
   Le modèle de données n'a pas de champ pour ces totaux.
 - **Durée par dossier, OCR compris** : 5 à 9 s en moyenne selon le jeu, p95 entre 15 et 30 s.
 
+## Quatrième mesure : lot moteur, sécurité, sauvegardes, interface — `corpus_g6` vierge (6 octobre 2026)
+
+**Le jeu.** `bench/corpus_g6` compte 160 dossiers, tous tenus à l'écart, générés avec `--ext --per-control 3` et la
+graine 20261008. Il contient 190 erreurs, dont 74 attendues « certain », et 767 pièges. Il n'est pas versionné : la
+commande de régénération et l'empreinte de contrôle sont dans `docs/backlog/orchestrateur.md`. Personne ne l'a
+ouvert ; seuls les totaux ont été lus.
+
+| `corpus_g6` (vierge) | Avant le lot | Après |
+|---|---|---|
+| Écarts certains vrais / faux | 56 / 1 | **59 / 1** |
+| Précision des écarts certains | 98,2 % (Wilson 90,7 %) | **98,3 %** (Wilson 91,1 %) |
+| Rappel (toutes erreurs) | 74,7 % | 75,3 % |
+| Rappel des erreurs attendues « certain » | 64,9 % | 68,9 % |
+| Exactitude des montants | 96,3 % | 96,5 % |
+| « À vérifier » sans erreur, par dossier | 2,06 | 1,89 |
+| Pièges déclenchés (« à vérifier ») | 56 | 50 |
+| Seuil bloquant | passe | **passe** |
+
+Autres jeux tenus à l'écart, même code. Aucun faux certain nouveau ; tous les seuils passent.
+
+| Jeu | Vrais / faux certains | Précision | Rappel | Bruit / dossier |
+|---|---|---|---|---|
+| `corpus_g5` (110) | 37 / 1 (35 / 1 avant) | 97,4 % | 81,3 % | 1,79 (1,95 avant) |
+| `corpus_g4` (45) | 31 / 0 | 100 % | 80,3 % | 0,80 |
+| `corpus_g3` (80) | 66 / 0 | 100 % | 88,8 % | 0,81 |
+| `corpus_g2` (68) | 39 / 0 | 100 % | 83,1 % | 0,78 |
+| `corpus_h2` (48) | 46 / 0 | 100 % | 81,1 % | 1,40 |
+| `corpus` (48) | 45 / 0 | 100 % | 85,2 % | 0,96 |
+
+**À retenir.**
+- Sur des documents jamais vus, le bruit « à vérifier » reste au-dessus de l'alerte (1,8 à 1,9 par dossier, pour
+  1,0 à 1,2 sur les jeux de développement). Les pistes restantes sont dans `docs/A_FAIRE.md` § 3 : P4 au
+  regroupement, D1 sur scans, A13 sur décision.
+- La marge du seuil reste faible sur les jeux de type `--ext` : 1 faux certain sur 60. La validation humaine reste
+  la règle.
+
 ## Reproduire
 
 ```bash
@@ -213,5 +249,5 @@ CONTROLDONE_PAGES_CACHE_DIR=var/cache/g3_pages python -m controldone.bench_run \
 python -m bench.score --corpus bench/corpus_g3 --split holdout --run bench/out/g3 --gate
 ```
 
-Tests : 2 075 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
+Tests : 2 185 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
 (`scripts/demo_complete.sh --sans-serveur`) se termine sans erreur.
