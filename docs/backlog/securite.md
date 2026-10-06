@@ -2,12 +2,10 @@
 
 Constats repérés pendant le bloc C (`docs/REVUE_SECURITE_2.md`) et non traités, ou traités ici en passant.
 
-- **Trusted Types non imposés.** `static/app.js` (filtrage en direct des listes, D-3401) analyse la page filtrée avec
-  `DOMParser.parseFromString`, puits Trusted Types : imposer `require-trusted-types-for 'script'` le casserait.
-  Impact : défense en profondeur contre une future injection DOM (aujourd'hui aucun `innerHTML`, test permanent).
-  Proposition : créer une politique nommée (`trustedTypes.createPolicy("controldone-html", …)`) réservée à ce seul
-  appel, puis ajouter `require-trusted-types-for 'script'; trusted-types controldone-html` à la CSP. **À faire**
-  (bloc interface + sécurité).
+- **Trusted Types.** Imposés (`trusted-types 'none'`, D-3204) après le passage du filtrage en direct à
+  `XMLHttpRequest` (`responseType = "document"`). Non vérifié ici dans un navigateur (aucun navigateur dans
+  l'environnement du bloc sécurité) : l'essai réel est celui du bloc interface (0 erreur). Proposition : ajouter un
+  parcours Playwright sous cette CSP à la CI. **Fait / vérification navigateur à faire.**
 - **HSTS `preload`.** `max-age=63072000; includeSubDomains` posé par l'application et Caddy, sans `preload`.
   Impact : la toute première visite reste exposée à une rétrogradation HTTP. Proposition : décision du fondateur
   (l'inscription sur la liste de préchargement engage tout le domaine et se retire lentement). **À décider.**

@@ -139,7 +139,7 @@ avec `hash = SHA-256(prev_hash | JSON canonique de l'entrée)`.
   secours en mémoire si la base ne répond pas. Déblocage : `controldone debit effacer --email …` (journalisé).
 - **Réinitialisation de mot de passe** : en ligne de commande sur la machine du service seulement
   (`controldone reinitialiser-mot-de-passe`) ; aucun lien de réinitialisation par courriel.
-- **En-têtes** : CSP sans script ni style en ligne, violations reçues sur `/csp-rapport` (débit et taille bornés,
+- **En-têtes** : CSP sans script ni style en ligne, Trusted Types sans politique (aucun puits HTML du DOM), violations reçues sur `/csp-rapport` (débit et taille bornés,
   journal sans donnée personnelle), `Permissions-Policy` restrictive, COOP/CORP `same-origin`, HSTS 2 ans (D-3204).
 - **Dépendances** : `make audit` (vulnérabilités, SBOM CycloneDX, licences permissives seulement, D-3203).
 

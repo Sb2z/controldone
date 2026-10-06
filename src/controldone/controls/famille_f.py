@@ -87,6 +87,16 @@ def _ou(o: _Occ) -> str:
     return "dans ce dossier" if o.dossier_id is None else f"dans le dossier {o.dossier_id}"
 
 
+def _porte_ailleurs(ctx: ControlContext, cid: str, unite: str, document_id: str) -> ResultatControle | None:
+    """Document rattaché à plusieurs dossiers (relevé, facture « par MRN ») : son constat F n'est porté que par le
+    premier dossier (identifiant) qui le contient, un même fait n'est signalé qu'une fois (D-3105, D-701)."""
+    freres = sorted(a.dossier.id for a in ctx.autres_dossiers if document_id in a.documents)
+    if not freres or ctx.dossier.id < freres[0]:
+        return None
+    return ctx.non_applicable(cid, RaisonCode.couvert_par_autre_controle, unite=unite, documents=[document_id],
+                              details={"motif": "document_evalue_dans_un_autre_dossier", "dossier": freres[0]})
+
+
 # =====================================================================================================
 # F1 — Document en double
 # =====================================================================================================
@@ -124,6 +134,9 @@ def f1_document_en_double(ctx: ControlContext) -> list[ResultatControle]:
             premier = min(anterieurs, key=lambda o: o.doc.id) if anterieurs else None
         if premier is None and not d.doublon_de:
             out.append(ctx.conforme("F1", unite=unite, documents=[d.id]))
+            continue
+        if (ailleurs := _porte_ailleurs(ctx, "F1", unite, d.id)) is not None:
+            out.append(ailleurs)
             continue
         classement = ctx.classify("F1", ecart=None, tolerance=None, seuil_certitude=None, valeurs_cles=[],
                                   documents=[d.id], raisons_supplementaires=_raisons_ailleurs([premier] if premier else []))
@@ -194,6 +207,9 @@ def f2_numero_reutilise(ctx: ControlContext) -> list[ResultatControle]:
         if plus_recente.id != ft.id:
             out.append(ctx.non_applicable("F2", RaisonCode.couvert_par_autre_controle, unite=unite, documents=[ft.id],
                                           details={"porte_par": plus_recente.id}))
+            continue
+        if (ailleurs := _porte_ailleurs(ctx, "F2", unite, ft.id)) is not None:
+            out.append(ailleurs)
             continue
         o, to = differents[0]
         assert tot is not None
@@ -469,6 +485,9 @@ def f4_prestation_facturee_deux_fois(ctx: ControlContext) -> list[ResultatContro
             if recent.id != ft.id:
                 out.append(ctx.non_applicable("F4", RaisonCode.couvert_par_autre_controle, unite=unite,
                                               documents=[ft.id], details={**details, "porte_par": recent.id}))
+                continue
+            if (ailleurs := _porte_ailleurs(ctx, "F4", unite, ft.id)) is not None:
+                out.append(ailleurs)
                 continue
             o, j = max(doublons, key=lambda x: aides.cle_chrono(x[0].doc))
             v_autre = aides.montant_ht(o.doc.ft.lignes[j])

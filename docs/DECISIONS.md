@@ -3636,11 +3636,15 @@ Revue complète : `docs/REVUE_SECURITE_2.md`. Tests : `tests/security/test_revue
   produit un avertissement dans la console). COOP et CORP `same-origin` (déjà posés), aussi en secours dans Caddy.
 - HSTS : même valeur dans l'application et dans Caddy (`max-age=63072000; includeSubDomains`, auparavant
   31536000 dans Caddy) ; `preload` laissé à la décision du fondateur (difficilement réversible).
-- **Écarté pour l'instant** : Trusted Types (`require-trusted-types-for 'script'`). Le filtrage en direct des listes
-  (D-3401) analyse la page filtrée de même origine avec `DOMParser`, qui est un puits Trusted Types ; l'imposer le
-  casserait. Garde-fou à la place : test permanent qui refuse tout `innerHTML`, `outerHTML`, `insertAdjacentHTML`,
-  `document.write`, `eval`, `new Function`, `srcdoc` dans le JavaScript servi, et qui exige la vérification d'origine
-  autour de `DOMParser` (backlog : politique nommée puis Trusted Types).
+- **Trusted Types imposés** : `require-trusted-types-for 'script'; trusted-types 'none'` — aucune politique, donc
+  aucun puits HTML du DOM (`innerHTML`, `insertAdjacentHTML`, `document.write`, `DOMParser`…) dans les navigateurs
+  qui les appliquent. Possible depuis que le filtrage en direct (D-3401) reçoit la page filtrée par
+  `XMLHttpRequest` (`responseType = "document"`) au lieu de `DOMParser` ; essai réel du bloc interface sous cette
+  CSP : 0 erreur dans la console (palette, zone de dépôt, suivi d'un dépôt, graphiques). Garde-fou permanent : le
+  test refuse ces puits, `createPolicy` et toute création de `<script>` dans le JavaScript servi (Motion compris).
+- Le limiteur des points JSON de suivi en direct (D-3402, 30 en rafale puis 1/s par compte) reste **en mémoire** :
+  il ne protège que la charge du processus qui répond (aucun enjeu d'authentification), et le passer en base
+  ajouterait une écriture par interrogation et par onglet ouvert.
 
 ### D-3205 — Entrées hostiles : corrections de la seconde revue
 

@@ -274,6 +274,7 @@ def test_en_tetes_durcis(monde):
     csp = h["content-security-policy"]
     assert csp.startswith("default-src 'self'") and "unsafe-inline" not in csp and "unsafe-eval" not in csp
     assert "report-uri /csp-rapport" in csp and "report-to csp" in csp
+    assert "require-trusted-types-for 'script'" in csp and "trusted-types 'none'" in csp
     assert h["reporting-endpoints"] == 'csp="/csp-rapport"'
     statique = monde.client().get("/static/theme.js")
     assert statique.status_code == 200 and "cache-control" not in statique.headers
@@ -335,21 +336,19 @@ def test_rapport_csp_borne(monde):
 # --- JavaScript de l'interface -----------------------------------------------------------------------------------------
 
 _PUITS = re.compile(r"\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write|\beval\s*\(|new\s+Function\b|"
-                    r"\bsrcdoc\b|createContextualFragment|setTimeout\(\s*[\"']|setInterval\(\s*[\"']|javascript:")
+                    r"\bsrcdoc\b|createContextualFragment|setTimeout\(\s*[\"']|setInterval\(\s*[\"']|javascript:|"
+                    r"DOMParser|parseFromString|setHTMLUnsafe|createPolicy|createElement\(\s*[\"']script")
 
 
 def test_javascript_sans_puits_html():
-    """Le JavaScript servi n'écrit que du texte (``textContent``) : aucun puits HTML ni évaluation de chaîne.
-    ``DOMParser`` (filtrage en direct) n'est admis qu'avec la vérification de l'origine de la réponse."""
+    """Le JavaScript servi n'écrit que du texte (``textContent``) : aucun puits HTML ni évaluation de chaîne, aucune
+    politique Trusted Types (la CSP impose ``trusted-types 'none'``, D-3204)."""
     statique = RACINE / "src/controldone/web/static"
     fichiers = sorted(statique.glob("*.js")) + sorted((statique / "vendor").glob("*.js"))
     assert fichiers
     for f in fichiers:
         texte = f.read_text(encoding="utf-8")
         assert not _PUITS.search(texte), (f.name, _PUITS.search(texte).group(0))
-    app_js = (statique / "app.js").read_text(encoding="utf-8")
-    if "DOMParser" in app_js:
-        assert "window.location.origin" in app_js and "text/html" in app_js
     for gabarit in (RACINE / "src/controldone/web/templates").rglob("*.j2"):
         texte = gabarit.read_text(encoding="utf-8")
         assert not re.search(r"<script(?![^>]*\bsrc=)", texte), gabarit.name  # aucun script en ligne

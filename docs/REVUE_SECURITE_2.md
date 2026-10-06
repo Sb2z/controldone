@@ -39,7 +39,7 @@ Sévérité comme dans la première revue (Élevée, Moyenne, Faible, Info).
 | REV2-04 | Faible | `services/admin.py` (`_postes_csv`, import de grille) | Un CSV dont le séparateur n'était pas reconnu **modifiait `csv.excel` pour tout le processus** (`csv.excel.delimiter = ";"`) : exports CSV et lecture des taux BCE faussés ensuite. Un champ de plus de 128 Ko levait une `csv.Error` non rattrapée (erreur 500). Route réservée au fondateur. | `test_csv_de_grille_sans_effet_global_ni_erreur_500` | corrigé : dialecte dérivé, erreur lisible |
 | REV2-05 | Faible | `web/listes.py` (`_entier`) | `?page=²` (ou `taille=⁵⁰`) : `str.isdigit` accepte les exposants, `int` les refuse → erreur 500 sur toutes les listes. | `test_listes_parametres_hostiles_sans_erreur_500` | corrigé : chiffres ASCII seulement |
 | REV2-06 | Faible | Changement de mot de passe | Vérification du mot de passe actuel sans limite de débit (un cookie volé permettait de deviner le mot de passe pour le réutiliser ailleurs). | `test_changement_de_mot_de_passe_limite` | corrigé : seau du compte (5 essais / 5 min) |
-| REV2-07 | Info | En-têtes | `Permissions-Policy` limitée à 4 fonctions ; HSTS différent entre Caddy (1 an) et l'application (2 ans) ; aucun retour des violations de CSP. | `test_en_tetes_durcis`, `test_rapport_csp_*`, `test_cookie_de_session_en_production` | corrigé (D-3204) |
+| REV2-07 | Info | En-têtes | `Permissions-Policy` limitée à 4 fonctions ; HSTS différent entre Caddy (1 an) et l'application (2 ans) ; aucun retour des violations de CSP ; pas de Trusted Types. | `test_en_tetes_durcis`, `test_rapport_csp_*`, `test_cookie_de_session_en_production` | corrigé (D-3204) |
 | REV2-08 | Info | Dépendances | `pip-audit` n'était lancé qu'à la main ; ni SBOM, ni vérification des licences, ni inventaire des fichiers servis (`static/vendor`). | `test_classement_des_licences`, `test_composants_embarques_declares` | corrigé : `make audit`, étape de CI (D-3203) |
 
 ## 4. Points vérifiés sans constat
@@ -60,8 +60,9 @@ Sévérité comme dans la première revue (Élevée, Moyenne, Faible, Info).
   `new Function` dans `app.js`, `theme.js` ni Motion 14.0.0 (test permanent `test_javascript_sans_puits_html`).
   La palette navigue vers des liens lus dans la page (rendus par le serveur) ; un `javascript:` serait de toute
   façon bloqué par la CSP. `theme.js` n'accepte que `clair` ou `sombre` depuis `localStorage`. Le filtrage en direct
-  ne charge que des réponses `text/html` de même origine et les insère via `DOMParser` (document inerte, scripts non
-  exécutés, CSP sans script en ligne). Gabarits : aucun script ni gestionnaire en ligne, aucun `|safe`.
+  reçoit la page filtrée de même origine par `XMLHttpRequest` (`responseType = "document"`) et en importe la région
+  de résultats (document inerte, aucun texte HTML vers un puits). **Trusted Types imposés** (`trusted-types 'none'`,
+  D-3204). Gabarits : aucun script ni gestionnaire en ligne, aucun `|safe`.
 - **Listes** (`listes.py`) : paramètres validés strictement (choix fermés, montants par l'analyseur strict, dates
   bornées, 200 caractères, caractères de contrôle refusés, une seule valeur par paramètre, tri sur liste fermée,
   taille 25/50/100, page ≤ 10 000) ; recherche par sous-chaîne normalisée, sans expression régulière fournie par
@@ -89,7 +90,7 @@ Sévérité comme dans la première revue (Élevée, Moyenne, Faible, Info).
 ## 6. Risques restants
 
 1. RS-16, RS-18, RS-19, RS-20, RS-21 de la première revue restent ouverts (RS-17 est corrigé).
-2. Trusted Types non imposés (filtrage en direct par `DOMParser`) ; garde-fou par test en attendant (D-3204).
+2. Trusted Types appliqués par les navigateurs Chromium seulement ; ailleurs, le garde-fou est le test permanent.
 3. Chemin PostgreSQL du débit et des révocations écrit mais non testé (suite sous SQLite).
 4. Rendu OCR des PDF démesurés borné seulement par `RLIMIT_AS` du processus isolé.
 5. HSTS sans `preload` (décision du fondateur).
