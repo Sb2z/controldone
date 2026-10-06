@@ -208,20 +208,30 @@ def plan_files(dos: Dossier) -> list:
     if dos.has("fichier_double"):
         singles = [f for f in files if f["kind"] == "single" and docs[f["docs"][0]]["kind"] in ("ci", "ft", "dec")]
         singles.sort(key=lambda f: {"ft": 0, "ci": 1, "dec": 2}[docs[f["docs"][0]]["kind"]])
+        if not singles:
+            # (2.1, corpus_g7) facture, déclaration et facture transitaire toutes fusionnées dans un même PDF :
+            # on copie un autre fichier isolé, sinon le PDF fusionné entier (chemin jamais atteint auparavant).
+            singles = [f for f in files if f["kind"] == "single"] or [f for f in files if f["kind"] == "merged"]
         src = singles[0]
-        od = src["docs"][0]
+        ods = list(src["docs"])
+        od = ods[0]
         cd = f"{od}_copie"
-        cdoc = copy.copy(docs[od])
-        cdoc["doc_id"] = cd
-        docs[cd] = cdoc
-        dos.order.append(cd)
+        for o in ods:
+            cdoc = copy.copy(docs[o])
+            cdoc["doc_id"] = f"{o}_copie"
+            docs[f"{o}_copie"] = cdoc
+            dos.order.append(f"{o}_copie")
         fname = src["path"].rsplit("/", 1)[1]
         sub = rng.choice(["copies/", "renvoi_mail/", "archive/"])
-        files.append({"path": uniq(f"docs/{sub}{fname}"), "docs": [cd], "kind": "copy", "of_doc": od})
+        entry = {"path": uniq(f"docs/{sub}{fname}"), "docs": [f"{o}_copie" for o in ods], "kind": "copy", "of_doc": od}
+        if len(ods) > 1:
+            entry["of_docs"] = ods
+        files.append(entry)
         dos.err("fichier_double", [od, cd], None, [], f"Le fichier {fname} est présent deux fois dans le dossier.")
-        for ln in list(dos.links):
-            if ln["from"] == od:
-                dos.links.append({**ln, "from": cd})
+        for o in ods:
+            for ln in list(dos.links):
+                if ln["from"] == o:
+                    dos.links.append({**ln, "from": f"{o}_copie"})
         dos.tags.append("fichier_en_double")
     for f in files:
         for d in f["docs"]:
@@ -277,8 +287,11 @@ def write_dossier(dos: Dossier, out_dir: Path) -> dict:
             if spath.rsplit(".", 1)[1] != path.rsplit(".", 1)[1]:
                 path = f["path"] = path.rsplit(".", 1)[0] + "." + spath.rsplit(".", 1)[1]
                 docs[d]["file"] = path
-            docs[d]["final_format"] = docs[src]["final_format"]
-            docs[d]["pages"] = list(docs[src]["pages"])
+            for o in f.get("of_docs", [src]):
+                c = f"{o}_copie"
+                docs[c]["final_format"] = docs[o]["final_format"]
+                docs[c]["pages"] = list(docs[o]["pages"])
+                docs[c]["file"] = path
         elif f["kind"] == "merged":
             w = pypdf.PdfWriter()
             page = 1

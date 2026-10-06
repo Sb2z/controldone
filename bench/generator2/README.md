@@ -267,3 +267,12 @@ relevé (D1, D2, G15). Les pièges qui contrediraient une erreur injectée sont 
   `tva_sur_debours` exige une TVA payée en douane (sinon aucune ligne de débours n'existe).
 - Corrections de robustesse atteintes seulement par `--ext` : FAF déjà au plafond de la grille (l'injection C6
   devient un piège C6 au lieu d'une erreur fatale) ; adresse longue en G11 imprimée sur deux lignes.
+
+### Correction 2.1 (génération de `corpus_g7`) — F1 sans fichier isolé
+
+`emit.plan_files` choisissait le fichier à dupliquer (injection `fichier_double`, F1) parmi les fichiers
+**isolés** de facture commerciale, déclaration ou facture transitaire, et échouait (`IndexError`) quand ces trois
+documents étaient tous dans un même PDF fusionné (cas GU0119, seed 20261009). Repli : un autre fichier isolé,
+sinon le PDF fusionné entier (chaque document du fichier copié reçoit un `doc_id` `<doc>_copie`, mêmes pages).
+Chemin jamais atteint par les corpus existants : `corpus_g2` et `corpus_g4` (dossiers F1 vérifiés) restent
+identiques à l'octet.

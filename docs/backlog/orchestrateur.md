@@ -18,3 +18,9 @@
 - **Trusted Types vérifiés dans un navigateur** (Chromium, Playwright) après activation par le bloc sécurité :
   parcours fondateur et client, palette Ctrl+K, bascule de thème, filtrage en direct des dossiers, page de suivi d'un
   dépôt — 0 erreur console, 0 rapport CSP. Fait. Reste à faire : ce contrôle en CI (cf. backlog sécurité).
+- **Jeu vierge `corpus_g7` non versionné.** Régénération : `python -m bench.generator2 --out bench/corpus_g7
+  --prefix GU --ext --all-holdout --per-control 3 --count 160 --seed 20261009 --split holdout --jobs 2`. Empreinte
+  (depuis `bench/corpus_g7`, `find holdout -name truth.json | sort | xargs sha256sum | sha256sum`) :
+  `fdd372db62cae8bd862153e953c60de69a83b6cb8733b26eab8b10b33395f944`. 160 dossiers, 189 erreurs dont 74 attendues
+  « certain », 739 pièges. Correctif du générateur (copie de fichier F1 dans un PDF fusionné), sans effet sur les
+  corpus existants. Fait.
