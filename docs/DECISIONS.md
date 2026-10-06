@@ -3420,3 +3420,45 @@ gabarit, de fichier, de client ou de transitaire.
   120 → 314 (natif), sans valeur fausse.
 - Σ TVA des lignes lues = total TVA imprimé confirme ces TVA ; une ligne dont HT × taux imprimé = TVA confirmée
   voit son HT confirmé (chaîne d'identités imprimées, D-2904), même quand le total HT est la valeur contestée (D1).
+
+## D-2906 — Total des droits et taxes confirmé seulement si toutes les lignes attendues sont lues ; déclarations au même titre
+
+- `_lignes_taxes_completes` : chaque article attendu (numéros lus, `1..nombre_articles`) a une ligne pour chaque
+  code rattaché à des articles, avec un code et un montant lisibles. Sinon ni Σ des lignes ni Σ des totaux par
+  code (D-2903) ne confirme le total des droits et taxes ou le total à payer (GX0026 : ligne A00 de l'article 2
+  non lue, total confirmé à 0,93 par les totaux par code).
+- Découpage : une page de déclaration intitulée, sans annonce de suite ni numéro de page, au **même titre** que la
+  page de tête du document en cours (après au moins une page de suite) ouvre une autre déclaration (BX0244 :
+  deux DAU + DAU-bis dans un PDF, MRN de la seconde illisible). Tests : `test_totaux_categories_d29.py`,
+  `test_decoupage_d29.py`.
+
+## D-2907 — Signes : ligne de crédit dans une facture ; tiret détaché devant un total
+
+- Facture de transitaire : un montant déduit d'un seul montant imprimé négatif (prix unitaire, TVA d'une ligne
+  « Gutschrift zu Rechnung … -18.50 ») porte le même signe imprimé (avant : positif, d'où un prix « +18,50 » lu
+  par les contrôles). Le montant HT gardait déjà son signe (D-2505).
+- Facture commerciale : total lu par OCR « - 161 827,40 » (tiret détaché, trait de tableau) : pas un signe ; la
+  lecture reste sous le seuil (≤ 0,70). Tests : `test_ft_sommes_ocr_d29.py`.
+- **Non corrigé** : GZ0179, deuxième ligne de débours « Btw bij invoer € 1.580,20 » lue « ee 8020 » sur un TIFF
+  200 dpi : montant illisible ; la reconstruire par différence avec le total des débours ne donnerait qu'une
+  valeur déduite (jamais une base d'écart certain).
+
+## D-2908 — Mesures (dev seulement)
+
+`scripts/mesure_extraction.py`, cinq types, valeurs de confiance ≥ 0,90 fausses (avant → après, OCR 1.1.0 →
+1.1.1) : `corpus_g4` 1+3+0+0+0 → 1+3+0+0+0 (FT : 4 269 → 4 680 valeurs ≥ 0,90), `corpus_g2` 6+3+0+0+0 → 5+3+0+0+0,
+corpus d'origine 0+2+1+0+0 → 0+2+1+0+0 : aucune valeur fausse nouvelle, toutes ≥ 99,9 % justes par type. Gains
+`corpus_g4` (scans) : montants HT de ligne justes 343 → 389 dont ≥ 0,90 163 → 235 ; TVA de ligne ≥ 0,90 95 → 148 ;
+taux lus ≥ 0,90 (natif) 120 → 314 ; totaux des droits et taxes des déclarations ≥ 0,90 10 → 17 sur 52.
+
+Banc (même code de contrôles, D-2801 à D-2806 compris ; `c5` = contrôles + extraction en cours, `x5` = final) :
+
+| dev | VP / FP certains | rappel certain | rappel | montants justes | bruit / dossier | seuil |
+|---|---|---|---|---|---|---|
+| `corpus_g4` avant (`d27b`) | 84 / 0 | 0,600 | 0,805 | 0,956 | 1,57 | passe |
+| `corpus_g4` après (`x5`) | 98 / 0 | 0,692 | 0,821 | 0,957 | 1,46 | passe |
+| `corpus_g2` avant / après | 111 / 0 → 113 / 0 | 0,755 → 0,763 | 0,840 → 0,860 | 0,971 → 0,965 | 1,42 → 1,39 | passe |
+| corpus d'origine avant / après | 120 / 0 → 120 / 0 | 0,785 → 0,785 | 0,827 → 0,827 | 0,953 → 0,953 | 1,19 → 1,15 | passe |
+
+Les gains `corpus_g4` viennent de l'extraction (découpage D-2901, OCR D-2902, recoupements D-2903 à D-2905 : C1,
+C3, D1 G13/G16 et G5) et des contrôles D-2801 à D-2806, mesurés ensemble.

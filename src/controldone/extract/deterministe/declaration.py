@@ -2606,19 +2606,20 @@ class _Lecteur:
             # une égalité entre deux lectures du même nombre n'est pas un recoupement (erreurs corrélées)
             if any(ajouts) and abs(attendu - tvas[0].base_montant.decimal()) <= demi:  # type: ignore[union-attr]
                 self._confirmer(tvas[0].base_montant, droit.base_montant, *(t.montant for t in autres))
-        # totaux des taxes
+        # totaux des taxes : seulement si toutes les lignes attendues sont lues (D-2906)
         montants = [tx.montant for tx in c.taxations]
-        if _plusieurs(montants) and lisibles(c.total_droits_taxes, *montants):
+        complet = self._lignes_taxes_completes()
+        if complet and _plusieurs(montants) and lisibles(c.total_droits_taxes, *montants):
             ok = abs(sum(m.decimal() for m in montants) - c.total_droits_taxes.decimal()) <= demi  # type: ignore
             (self._confirmer if ok else self._infirmer)(c.total_droits_taxes, *montants)
-        if _plusieurs(montants) and lisibles(c.total_a_payer, *montants) and all(
+        if complet and _plusieurs(montants) and lisibles(c.total_a_payer, *montants) and all(
                 tx.paiement_normalise is not PaiementNormalise.inconnu for tx in c.taxations
                 if tx.categorie is CategorieTaxe.tva):
             dus = sum(tx.montant.decimal() for tx in c.taxations  # type: ignore[union-attr]
                       if tx.paiement_normalise is not PaiementNormalise.autoliquide)
             ok = abs(dus - c.total_a_payer.decimal()) <= demi  # type: ignore[union-attr]
             (self._confirmer if ok else self._infirmer)(c.total_a_payer)
-        self._recouper_totaux_categories(demi)
+        self._recouper_totaux_categories(demi, complet)
         # montant total facturé = somme des articles (même devise)
         mts = [a.montant_facture_article for a in c.articles]
         if _plusieurs(mts) and lisibles(c.montant_total_facture, *mts) and all(
@@ -2668,7 +2669,34 @@ class _Lecteur:
             elif vs.id in self._infirmees:
                 self._remplacer(vs, min(vs.confiance, PLAFOND_INCOHERENT))
 
-    def _recouper_totaux_categories(self, demi: Decimal) -> None:
+    def _lignes_taxes_completes(self) -> bool:
+        """Toutes les lignes de taxation attendues sont lues (D-2906) : chaque article attendu (numéros lus,
+        ``1..nombre_articles``) a une ligne pour chaque code rattaché à des articles, chacune avec un montant
+        lisible et un code lu. Sinon un total ne se confirme pas (une ligne manque à la somme des contrôles)."""
+        c = self.champs
+        if any(t.type_taxe is None or not t.type_taxe.valeur for t in c.taxations):
+            return False
+        if any((t.montant or t.montant_a_payer) is None or not (t.montant or t.montant_a_payer).est_lisible
+               for t in c.taxations):
+            return False
+        par_article = [t for t in c.taxations if t.article is not None and t.article.valeur]
+        if not par_article:
+            return True
+        attendus = {str(a.numero_article.valeur).lstrip("0") for a in c.articles
+                    if a.numero_article is not None and a.numero_article.valeur}
+        if c.nombre_articles is not None and c.nombre_articles.est_lisible:
+            try:
+                n = int(c.nombre_articles.decimal())
+                if 0 < n <= 999:
+                    attendus |= {str(k) for k in range(1, n + 1)}
+            except (ArithmeticError, ValueError):
+                pass
+        attendus |= {str(t.article.valeur).lstrip("0") for t in par_article}
+        codes = {t.type_taxe.valeur for t in par_article}
+        presents = {(str(t.article.valeur).lstrip("0"), t.type_taxe.valeur) for t in par_article}
+        return all((a, code) in presents for a in attendus for code in codes)
+
+    def _recouper_totaux_categories(self, demi: Decimal, complet: bool = True) -> None:
         """Recoupements par les totaux imprimés de chaque code de taxe (D-2903), qui ne confirment que :
 
         - Σ des totaux par code (au moins deux codes, tous lus sûrement) = total des droits et taxes imprimé :
@@ -2684,7 +2712,7 @@ class _Lecteur:
             return
         td = c.total_droits_taxes
         somme = sum(tot.values(), Decimal(0))
-        if len(tot) >= 2 and td is not None and td.est_lisible and abs(td.decimal() - somme) <= demi:
+        if complet and len(tot) >= 2 and td is not None and td.est_lisible and abs(td.decimal() - somme) <= demi:
             self._confirmer(td)
             ap = c.total_a_payer
             if ap is not None and ap.est_lisible:

@@ -78,7 +78,14 @@ from controldone.extract.deterministe._mise_en_page import (
 )
 from controldone.model.champs import ChampsFactureCommerciale, LigneFactureCommerciale, SousTotal
 from controldone.model.documents import Document, Page
-from controldone.model.enums import Methode, TotalOrigine, TypeDocument, TypeSousTotal, TypeValeur
+from controldone.model.enums import (
+    Methode,
+    SigneImprime,
+    TotalOrigine,
+    TypeDocument,
+    TypeSousTotal,
+    TypeValeur,
+)
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, deriver_somme
 from controldone.normalize import (
     DEVISE_INCONNUE,
@@ -1446,6 +1453,11 @@ def _pied(e: _Etat) -> None:
                        type_valeur=TypeValeur.montant)
         if v is not None:
             v = v.model_copy(update={"total_origine": TotalOrigine.imprime})
+            if v.signe_imprime is SigneImprime.negatif and v.methode is Methode.ocr and re.match(
+                    r"^\s*[-−–—]\s", v.valeur_brute or ""):
+                # tiret détaché devant le total d'une facture (trait de tableau lu par l'OCR) : pas un signe ;
+                # la lecture reste sous le seuil (D-2907)
+                v = v.model_copy(update={"signe_imprime": None, "confiance": min(v.confiance, 0.7)})
         ch.total_facture = v
     elif somme_lignes is not None:
         sources = [ln.montant_ligne for ln in ch.lignes if ln.montant_ligne is not None]

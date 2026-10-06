@@ -74,7 +74,15 @@ from controldone.model.champs import (
     type_valeur_pour,
 )
 from controldone.model.documents import Document, Page
-from controldone.model.enums import Methode, NatureLigne, QualiteTexte, TotalOrigine, TypeDocument, TypeValeur
+from controldone.model.enums import (
+    Methode,
+    NatureLigne,
+    QualiteTexte,
+    SigneImprime,
+    TotalOrigine,
+    TypeDocument,
+    TypeValeur,
+)
 from controldone.model.valeur import ExtracteurInfo, ValeurSourcee, confiance_derivee, deriver_somme
 from controldone.normalize import normalize_vat, parse_amount, parse_date
 from controldone.normalize.fiscal import siren_depuis_tva, tva_fr_valide
@@ -502,7 +510,13 @@ class _Extraction:
                 plafond: float = C_DEDUITE, total_reconstruit: bool = False) -> ValeurSourcee:
         conf = confiance_derivee(sources) if sources else plafond
         tv = type_valeur_pour(chemin)
+        # montant déduit d'un seul montant imprimé négatif (prix unitaire, TVA d'une ligne de crédit
+        # « Gutschrift zu Rechnung … -18.50 ») : même signe imprimé (D-2907)
+        montants = [x for x in sources if x.type is TypeValeur.montant]
+        signe = (SigneImprime.negatif if tv is TypeValeur.montant and not total_reconstruit and len(montants) == 1
+                 and montants[0].signe_imprime is SigneImprime.negatif and not valeur.startswith("-") else None)
         return ValeurSourcee(
+            signe_imprime=signe,
             id=self.ctx.ids.nouveau(_prefixe_valeur()) if self.ctx.ids is not None else _nouvel_id(),
             chemin=chemin_complet(self.td, chemin), valeur=valeur, type=tv,
             unite="EUR" if tv is TypeValeur.montant else None, document_id=self.document_id,

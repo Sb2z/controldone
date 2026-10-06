@@ -129,3 +129,17 @@ def test_texte_qui_touche_la_coupure_page_unique():
     lignes = [_ligne(("Désignation", 0.05, 0.2, 0.3)), _ligne(("—", 0.499, 0.501, 0.5)),
               _ligne(("Montant", 0.6, 0.7, 0.3))]
     assert moities_separees(lignes, 0.5)
+
+
+def test_deux_declarations_au_meme_titre_dans_un_pdf():
+    d = TypeDocument.declaration
+
+    def page(n, titre, suite, mrns=()):
+        c = _page(n, d, suite=suite, mrns=mrns)
+        c.titre = titre
+        return c
+
+    groupes = _regrouper([page(1, "document administratif unique", False, ("26FR000000000000A1",)),
+                          page(2, "dau-bis (suite)", True), page(3, "document administratif unique", False),
+                          page(4, "dau-bis (suite)", True)])
+    assert [g.pages for g in groupes] == [[1, 2], [3, 4]]

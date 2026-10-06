@@ -80,3 +80,24 @@ def test_lignes_de_prestations_confirmees_par_leur_total():
     assert [lg.montant_ht.valeur for lg in prest] == ["65.00", "125.00"]
     assert all(lg.montant_ht.confiance >= 0.9 for lg in prest)
     assert MRN_1  # en-tête commun aux tests de facture de transitaire
+
+
+def test_ligne_de_credit_valeurs_deduites_negatives():
+    from test_facture_transitaire import _extraire
+
+    from controldone.model.enums import SigneImprime
+
+    el = _entete("RECHNUNG", "Nr. F-2610778")
+    el += [
+        (0.08, 0.23, "Bezeichnung", "g"), (0.62, 0.23, "Menge", "d"), (0.76, 0.23, "Betrag", "d"),
+        (0.08, 0.25, "Verzollung", "g"), (0.62, 0.25, "1", "d"), (0.76, 0.25, "65.00", "d"),
+        (0.08, 0.27, "Gutschrift zu Rechnung FIC-26-0001", "g"), (0.62, 0.27, "1", "d"),
+        (0.76, 0.27, "-18.50", "d"),
+        (0.60, 0.31, "Total netto", "g"), (0.93, 0.31, "46.50", "d"),
+    ]
+    c = _extraire(_pdf(el))
+    credit = next(lg for lg in c.lignes if lg.libelle is not None and "Gutschrift" in lg.libelle.valeur)
+    assert credit.montant_ht.signe_imprime is SigneImprime.negatif
+    for v in (credit.prix_unitaire, credit.montant_tva):
+        if v is not None:
+            assert v.signe_imprime is SigneImprime.negatif and v.decimal_signe() < 0

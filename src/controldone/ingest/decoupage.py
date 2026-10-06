@@ -137,6 +137,8 @@ class _EnCours:
     langues: list[str] = field(default_factory=list)
     #: Références imprimées sur les pages du document (D-2901).
     jetons: set[str] = field(default_factory=set)
+    #: Titre de la page de tête (première page intitulée, sans annonce de suite) : D-2906.
+    titre_tete: str | None = None
 
 
 def _proches(a: str, b: str) -> bool:
@@ -226,6 +228,9 @@ def _meme_document(cur: _EnCours, c: ClassementPage) -> bool:
     if r.page_n and r.page_n > 1 and (not cur.page_total or not r.page_total or r.page_total == cur.page_total):
         return True
     if cur.type is TypeDocument.declaration:
+        if c.intitulee and not c.suite and r.page_n is None and c.titre and c.titre == cur.titre_tete \
+                and len(cur.pages) > 1:
+            return False  # nouvelle page de tête au même titre après des pages de suite : autre déclaration
         if c.intitulee and r.mrns and cur.mrns and not any(_proches(r.mrns[0], m) for m in cur.mrns) \
                 and not _suite_de_declaration(cur, c):
             return False  # nouvelle page de tête d'un autre MRN complet (version rectificative du même préfixe)
@@ -269,6 +274,8 @@ def _absorber(e: _EnCours, c: ClassementPage) -> None:
     if c.langue:
         e.langues.append(c.langue)
     e.jetons.update(c.refs.jetons)
+    if not e.pages[:-1] and c.intitulee and not c.suite and c.titre:
+        e.titre_tete = c.titre
 
 
 def _regrouper(classements: Sequence[ClassementPage]) -> list[_EnCours]:

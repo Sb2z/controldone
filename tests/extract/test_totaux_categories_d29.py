@@ -126,3 +126,11 @@ def test_separateur_decimal_lu_deux_points():
     c = _extraire_ocr(_page([tuple(t) for t in taxes], None, total="77,47"))
     m = _taxe(c, "2", "A00").montant
     assert m.valeur == "3.89" and m.confiance < 0.9  # relecture : jamais certaine seule
+
+
+def test_ligne_de_taxe_manquante_aucun_total_confirme():
+    # D-2906 : la ligne 2 / A00 n'est pas imprimée-lue : ni la somme des lignes ni celle des totaux par code ne
+    # confirme le total (une ligne manque à la somme que font les contrôles)
+    taxes = [t for t in TAXES if not (t[0] == "2" and t[1] == "A00")]
+    c = _extraire_ocr(_page(taxes, "Total A00: 12,56   Total B00: 64,91", total="77,47"))
+    assert c.total_droits_taxes.confiance < 0.9 and c.total_a_payer.confiance < 0.9
