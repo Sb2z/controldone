@@ -220,9 +220,8 @@ def _pixels(data: bytes) -> list:
 def test_tiff_canonique_pixels_inchanges_octets_libres_a_zero(encodage):
     """Tout octet que la structure TIFF ne référence pas (remplissage d'alignement laissé non initialisé par
     libtiff, en-têtes de page résiduels) est mis à zéro ; pixels et étiquettes inchangés."""
-    from PIL import Image, ImageDraw
-
     from bench.generator2 import degrade
+    from PIL import Image, ImageDraw
 
     pages = []
     for i, (w, h) in enumerate([(37, 21), (19, 33), (25, 25)]):

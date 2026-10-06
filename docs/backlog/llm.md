@@ -23,7 +23,7 @@ Bloc : activation de l'extracteur `llm` (décision du fondateur D-4000, point 1)
   Impact : le choix `low` (D-4002) n'est pas encore mesuré.
 - **Interface : case « lecture par Claude » sur la fiche client** — aujourd'hui l'opt-out s'écrit dans
   `reglages["llm_desactive"]` (pas de case dédiée ; `web/routes_admin.py` écrit déjà `reglages` pour le plafond).
-  Équipe interface. Impact : le fondateur doit passer par la base ou l'API pour désactiver.
+  Équipe interface. **Fait (D-4305)** : case sur la fiche client, badge sur `/admin`.
 - **Alerte 100 % quand un appel est refusé par anticipation** — `CostGuard` refuse un appel dont l'estimation
   dépasserait le plafond alors que le coût réel est encore sous 100 % : aucune alerte `cout_ia_plafond` n'est émise
   dans ce cas (le lot est seulement « extraction partielle »). Proposition : remonter l'avertissement

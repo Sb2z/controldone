@@ -23,7 +23,7 @@ from controldone.auth.cles_api import CleApiCreee, creer_cle_api
 from controldone.auth.motdepasse import hacher_mot_de_passe
 from controldone.auth.roles import ROLES_CLIENT, Acteur, Role
 from controldone.ids import Prefixe, id_stable, nouvel_id
-from controldone.jobs.couts import etat_plafond
+from controldone.jobs.couts import etat_plafond, llm_desactive
 from controldone.model.referentiel import Entite as EntiteModele
 from controldone.model.referentiel import GrilleTarifaire
 from controldone.model.referentiel import Transitaire as TransitaireModele
@@ -275,6 +275,7 @@ class LigneClient:
     stats: dict[str, Any]
     cout_ia: Decimal
     plafond: Decimal
+    llm_desactive: bool = False
 
     @property
     def ratio_ia(self) -> int:
@@ -296,7 +297,7 @@ def tableau_de_bord(plateforme: Plateforme, fondateur: Acteur) -> dict[str, Any]
             lignes.append(LigneClient(id=t.id, raison_sociale=t.raison_sociale, offre=t.offre,
                                       demo=bool((t.reglages or {}).get("demo")), actif=t.actif,
                                       stats=stats.get(t.id, {}), cout_ia=couts.get(t.id, Decimal(0)),
-                                      plafond=plafond))
+                                      plafond=plafond, llm_desactive=llm_desactive(t.reglages)))
         alertes_l = [{"id": a.id, "kind": a.kind, "tenant_id": a.tenant_id, "message": a.message,
                       "cree_le": a.cree_le} for a in alertes]
     store = JobStore(plateforme.db)

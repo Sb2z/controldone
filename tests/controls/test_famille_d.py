@@ -11,6 +11,7 @@ from controldone.model import (
     CategorieTaxe,
     GrilleTarifaire,
     LigneFactureTransitaire,
+    Methode,
     ModePoste,
     NatureLigne,
     NatureMontant,
@@ -148,12 +149,78 @@ def test_d1_conforme_et_arrondi():
 
 
 def test_d1_total_ht_superieur_a_la_somme():
-    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00")
+    # D-4202 : débours prouvés complets (total des débours imprimé) et prestations (TVA de chaque ligne).
+    f = ft(ligne(N.frais_dedouanement, "50.00", taux_tva="20", montant_tva="10.00"), ligne(N.debours_droits, "100.00"),
+           total_debours="100.00", total_ht="155.00", total_tva="10.00", total_ttc="165.00")
     r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
     c = r.constat
     assert r.outcome is Outcome.ecart_certain and c.montant_en_jeu == D("5.00")
     assert c.nature_montant is NatureMontant.recouvrable and "155,00 EUR" in lib(c)
     textes_propres([r])
+
+
+def test_d1_total_ht_lignes_non_prouvees_completes():
+    # D-4202 : rien ne prouve que toutes les lignes sont lues : une ligne non lue de 5,00 expliquerait l'écart.
+    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.outcome is Outcome.a_verifier and RaisonCode.structure_non_validee in r.constat.raisons
+    assert r.details["structure_non_validee"] == ["lignes_non_prouvees_completes"]
+
+
+def test_d1_total_ht_prouve_par_le_ttc():
+    # TTC imprimé = somme des lignes + TVA : les lignes sont complètes, le total HT est la valeur isolée.
+    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00",
+           total_tva="10.00", total_ttc="160.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.outcome is Outcome.ecart_certain
+
+
+def test_d1_total_prouve_seulement_par_un_total_imprime():
+    # Un total TTC déduit ne prouve rien (D-4202).
+    f = ft(ligne(N.frais_dedouanement, "50.00"), ligne(N.debours_droits, "100.00"), total_ht="155.00",
+           total_tva="10.00", total_ttc="160.00")
+    f.ft.total_ttc = f.ft.total_ttc.model_copy(update={"methode": Methode.derive, "regle_derivation": "ht + tva"})
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ht")
+    assert r.outcome is Outcome.a_verifier
+
+
+def test_d1_total_debours_nature_de_ligne_ambigue():
+    # D-4203 : l'écart du total des débours est le montant d'une ligne lue comme prestation (libellé mal lu).
+    f = ft(ligne(N.debours_droits, "100.00"), ligne(N.autre_prestation, "80.00", libelle="TVA al'imp FICTIF"),
+           ligne(N.transport, "50.00", taux_tva="20", montant_tva="10.00"),
+           total_debours="180.00", total_ht="230.00", total_tva="10.00", total_ttc="240.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_debours")
+    assert r.outcome is Outcome.non_verifiable and r.details["explications"] == ["nature_de_ligne"]
+
+
+def test_d1_ttc_avec_total_des_debours_hors_ht():
+    # D-4204 : TTC = HT des prestations + TVA + total des débours imprimé, lignes de débours non toutes lues.
+    f = ft(ligne(N.transport, "50.00", taux_tva="20", montant_tva="10.00"), total_debours="300.00",
+           total_ht="50.00", total_tva="10.00", total_ttc="360.00")
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "total_ttc")
+    assert r.outcome is Outcome.conforme
+
+
+def test_d1_tva_ligne_colonne_ttc():
+    # D-4203 : TVA lue = montant TVA comprise de la ligne (colonne « TTC » lue comme TVA).
+    f = ft(ligne(N.frais_dedouanement, "59.00", taux_tva="20", montant_tva="70.80"))
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "tva_ligne")
+    assert r.outcome is Outcome.non_verifiable and r.raison_code is RaisonCode.montant_tva_comprise
+
+
+def test_d1_ligne_colonne_ttc_ou_quantite_du_libelle():
+    f = ft(ligne(N.transport, "36.00", quantite="1", prix_unitaire="30.00", taux_tva="20"),
+           ligne(N.manutention, "15.00", quantite="2", prix_unitaire="3.00", libelle="Manutention 5 colis FICTIF"))
+    rs = [r for r in d1_arithmetique(contexte([f])) if r.sous_controle == "ligne"]
+    assert [r.outcome for r in rs] == [Outcome.non_verifiable, Outcome.non_verifiable]
+    assert rs[0].details["explications"] == ["colonne_ttc"] and rs[1].details["explications"] == ["quantite_libelle"]
+
+
+def test_d1_ligne_de_debours_non_jugee():
+    # D-4203 : le produit d'une ligne de débours (forfait par article) est celui de la déclaration (G1).
+    f = ft(ligne(N.debours_forfait_petits_envois, "15.00", quantite="2", prix_unitaire="3.00"))
+    r = next(x for x in d1_arithmetique(contexte([f])) if x.sous_controle == "ligne")
+    assert r.outcome is Outcome.non_applicable and r.details["motif"] == "ligne_de_debours_reproduite"
 
 
 def test_d1_total_ht_presentation_sans_debours():

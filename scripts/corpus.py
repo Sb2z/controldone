@@ -14,7 +14,8 @@ Empreintes consignées (voir ``bench/README.md``) :
   aléatoires), quand elle diffère ;
 - ``sha256_pixels`` : même calcul, l'empreinte de chaque TIFF cité étant remplacée par celle de ses pixels ;
 - ``sha256_arbre`` / ``sha256_arbre_pixels`` : tous les fichiers du corpus (sauf ``stats_generation.json``, qui
-  contient une durée), octets exacts / TIFF par leurs pixels.
+  contient une durée), octets exacts / TIFF par leurs pixels ; ``sha256_arbre_historique`` : octets exacts de la
+  copie antérieure à D-4402.
 
 Commandes :
 
@@ -30,7 +31,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -38,6 +41,9 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parents[1]
 RECETTES = RACINE / "bench" / "corpus_empreintes.json"
+# Dépendances propres au banc (numpy pour le générateur 1), hors de l'environnement de l'application :
+# `make corpus-deps` les installe ici (uv pip install --target).
+DEPS_BANC = RACINE / "var" / "bench_deps"
 TIFF = (".tif", ".tiff")
 HORS_ARBRE = {"stats_generation.json"}  # contient la durée de génération
 
@@ -152,7 +158,8 @@ def commande(r: dict, sortie: Path, jobs: int) -> list[str]:
 
 
 def verifier(dossier: Path, attendu: str | list[str], nb_attendu: int | None = None,
-             attendu_pixels: str | None = None, arbre: str | None = None, arbre_pixels: str | None = None) -> bool:
+             attendu_pixels: str | None = None, arbre: str | list[str] | None = None,
+             arbre_pixels: str | None = None) -> bool:
     """Empreinte exacte (``attendu`` : une valeur ou plusieurs admises), ou à défaut empreinte des pixels
     (``attendu_pixels``) ; idem pour l'arbre complet si ``arbre`` / ``arbre_pixels`` sont donnés."""
     if not dossier.is_dir():
@@ -170,9 +177,10 @@ def verifier(dossier: Path, attendu: str | list[str], nb_attendu: int | None = N
     else:
         print(f"{dossier} : {n} dossier(s), empreinte {obtenu} — NON CONFORME, attendu {' ou '.join(admis)}")
         return False
-    if arbre or arbre_pixels:
+    arbres = [a for a in ([arbre] if isinstance(arbre, str) else (arbre or [])) if a]
+    if arbres or arbre_pixels:
         a_obtenu, nf = empreinte_arbre(dossier)
-        if a_obtenu != arbre:
+        if a_obtenu not in arbres:
             if arbre_pixels and empreinte_arbre(dossier, pixels=True)[0] == arbre_pixels:
                 mode = "pixels"
             else:
@@ -180,7 +188,8 @@ def verifier(dossier: Path, attendu: str | list[str], nb_attendu: int | None = N
                       f"(truth.json conformes, autres fichiers différents)")
                 return False
     if mode == "octets":
-        print(f"{dossier} : {n} dossier(s), empreinte {obtenu} — conforme")
+        histo = " (copie antérieure à D-4402)" if admis and obtenu != admis[0] else ""
+        print(f"{dossier} : {n} dossier(s), empreinte {obtenu} — conforme{histo}")
     else:
         print(f"{dossier} : {n} dossier(s), empreinte {obtenu} différente, mais empreinte des pixels conforme "
               "(seuls des octets de remplissage TIFF diffèrent : écriture antérieure à D-4402)")
@@ -189,7 +198,8 @@ def verifier(dossier: Path, attendu: str | list[str], nb_attendu: int | None = N
 
 def verifier_recette(r: dict, dossier: Path | None = None) -> bool:
     return verifier(dossier or RACINE / r["sortie"], [r["sha256"], r.get("sha256_historique", "")],
-                    r.get("dossiers"), r.get("sha256_pixels"), r.get("sha256_arbre"), r.get("sha256_arbre_pixels"))
+                    r.get("dossiers"), r.get("sha256_pixels"), [r.get("sha256_arbre", ""), r.get("sha256_arbre_historique", "")],
+                    r.get("sha256_arbre_pixels"))
 
 
 def generer(r: dict, sortie: Path, jobs: int, force: bool) -> int:
@@ -201,16 +211,31 @@ def generer(r: dict, sortie: Path, jobs: int, force: bool) -> int:
             print(f"{sortie} existe et n'est pas conforme : FORCE=1 pour l'effacer et régénérer.")
             return 1
         shutil.rmtree(sortie)
-    for i, split in enumerate(r.get("splits") or [r.get("split", "holdout")]):
+    env = dict(os.environ)
+    if DEPS_BANC.is_dir():
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(DEPS_BANC), env.get("PYTHONPATH")]))
+    manquantes = [d for d in r.get("dependances", []) if not _importable(d.split("==")[0], env)]
+    if manquantes:
+        print(f"{sortie} : dépendance(s) du générateur absente(s) : {', '.join(manquantes)} — `make corpus-deps` "
+              f"(installation dans {DEPS_BANC.relative_to(RACINE)}) ou `uv pip install {' '.join(manquantes)}`")
+        return 2
+    for split in r.get("splits") or [r.get("split", "holdout")]:
         cmd = commande({**r, "split": split}, sortie, jobs)
         print("$ " + " ".join(cmd[1:]), flush=True)
-        rc = subprocess.run(cmd, cwd=RACINE, check=False).returncode
+        rc = subprocess.run(cmd, cwd=RACINE, check=False, env=env).returncode
         if rc != 0:
             return rc
     if r.get("sha256"):
         return 0 if verifier_recette(r, sortie) else 1
     print(json.dumps(empreintes(sortie), indent=2) + "\n(à consigner dans bench/corpus_empreintes.json)")
     return 0
+
+
+def _importable(module: str, env: dict) -> bool:
+    if importlib.util.find_spec(module) is not None:
+        return True
+    code = f"import importlib.util, sys; sys.exit(importlib.util.find_spec({module!r}) is None)"
+    return subprocess.run([sys.executable, "-c", code], env=env, check=False).returncode == 0
 
 
 def empreintes(dossier: Path) -> dict:

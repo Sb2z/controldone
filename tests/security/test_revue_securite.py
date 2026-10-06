@@ -223,8 +223,14 @@ def test_rs07_effacement_client_supprime_ses_traces_d_envoi(monde):
     autre.parent.mkdir(parents=True, exist_ok=True)
     autre.write_text(json.dumps({"id": "out_fictif_b", "tenant_id": B, "payload": {}}), encoding="utf-8")
 
+    from controldone.storage.traces_envoi import TracesEnvoi
+
+    chiffrees = TracesEnvoi(racine, monde.pf.cles_maitresses)  # traces chiffrées au repos (D-4106)
+
     def traces(t):
-        return [p for p in racine.rglob("*.json") if json.loads(p.read_text("utf-8")).get("tenant_id") == t]
+        return ([p for p in racine.rglob("*.json") if json.loads(p.read_text("utf-8")).get("tenant_id") == t]
+                + [p for p in chiffrees.lister() if p.name.endswith(".json.enc")
+                   and chiffrees.lire_json(p).get("tenant_id") == t])
 
     assert traces(A) and traces(B)
     supprimer_client(monde.pf.db, monde.pf.vault, A, FONDATEUR, "demande RGPD (test)", dossier_sorties=racine)

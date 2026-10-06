@@ -3,8 +3,8 @@
 - **Dépôt Git lourd (609 Mo).** Les corpus de banc sont versionnés, alors qu'ils sont reproductibles à l'octet près
   par leur graine. Proposition : ne plus versionner les prochains corpus, les régénérer par `make` ; nettoyer
   l'historique seulement avec l'accord du fondateur (réécriture irréversible). À faire.
-- **CI en déclenchement manuel** (`.github/workflows/ci.yml`) : activer sur push/PR demande l'accord du fondateur
-  (minutes GitHub). À faire, sur décision.
+- **CI en déclenchement manuel** (`.github/workflows/ci.yml`) : décision 3A appliquée, job rapide à chaque push et
+  pull request, banc complet à la demande (D-4401). Fait.
 - **Lecture par modèle de langage inactive** (pas de clé d'API) : c'est la réponse prévue aux mises en page vraiment
   inconnues. Sur décision du fondateur.
 - **Serveur de démo** : la limitation de débit des connexions est en mémoire ; après une vingtaine de connexions
@@ -24,10 +24,8 @@
   `fdd372db62cae8bd862153e953c60de69a83b6cb8733b26eab8b10b33395f944`. 160 dossiers, 189 erreurs dont 74 attendues
   « certain », 739 pièges. Correctif du générateur (copie de fichier F1 dans un PDF fusionné), sans effet sur les
   corpus existants. Fait.
-- **Recettes de corpus incomplètes.** `bench/corpus_empreintes.json` ne connaît que `corpus_g6`. Les corpus de
-  développement et de non-régression `bench/corpus`, `corpus_h2`, `corpus_g2` et le jeu vierge `corpus_g7` ne
-  sont pas versionnés (ignorés depuis l'origine) et n'ont pas encore de recette enregistrée. Proposition : y ajouter
-  leur commande et leur empreinte (empreinte « pixels » pour les TIFF, cf. D-3904), et rendre l'écriture des TIFF
-  déterministe dans `bench/generator2/degrade.py`. À faire.
+- **Recettes de corpus incomplètes.** Toutes les recettes (`corpus`, `corpus_h2`, `corpus_g2` … `corpus_g7`) et leurs
+  empreintes sont dans `bench/corpus_empreintes.json`, rejouées et conformes ; TIFF désormais déterministes
+  (D-4402, D-4403). Avant la réécriture de l'historique : `make corpus-verifier` (8 corpus conformes). Fait.
 - **Numéro de décision D-3709** : vérifié, une seule décision porte ce numéro (progression fine du pipeline) ;
   l'interface y renvoie sans la dupliquer. Fait.

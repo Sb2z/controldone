@@ -206,7 +206,9 @@ def statut_global_depuis_resultats(
         return StatutGlobal.a_verifier
     if any(r.controle_id == "P5" and r.details.get("non_concerne") for r in rs):
         return StatutGlobal.non_concerne
-    if any(r.controle_id == "P1" and r.outcome.est_constat for r in rs):
+    # D-4206 : un manque commun au lot est signalé par un seul dossier ; les autres restent incomplets.
+    if any(r.controle_id == "P1" and (r.outcome.est_constat or r.details.get("motif") == "manque_commun_du_lot")
+           for r in rs):
         return StatutGlobal.document_manquant
 
     def compte(r: ResultatControle) -> bool:

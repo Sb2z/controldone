@@ -18,9 +18,10 @@ Le module expose aussi l'identification des entités du client (``identifier_par
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from controldone.controls.context import AutreDossier
 from controldone.controls.framework import Classement, ControlContext, cle_unite, control
 from controldone.model import (
     CHAMPS_CLES,
@@ -263,6 +264,26 @@ def entites_client_declaration(ctx: ControlContext, dec: Document) -> dict[str, 
 # --- P1 ------------------------------------------------------------------------------------------------
 
 
+def _a_exploitable(docs: Iterable[Document], t: TypeDocument) -> bool:
+    return any(d.type is t and d.champs is not None and not d.doublon_de for d in docs)
+
+
+def _freres_meme_manque(ctx: ControlContext, manquants: Sequence[TypeDocument]) -> list[AutreDossier]:
+    """D-4206 : autres dossiers du même lot auxquels manquent exactement les mêmes types, quand **aucun**
+    dossier du lot n'a de document exploitable de ces types (le manque est un fait du lot, pas un défaut
+    d'appariement). Vide sinon."""
+    lots = set(ctx.dossier.lot_ids)
+    if not lots:
+        return []
+    freres = [a for a in ctx.autres_dossiers if lots & set(a.dossier.lot_ids)]
+    if not freres or any(_a_exploitable(a.documents.values(), t) for a in freres for t in manquants):
+        return []
+    types = (TypeDocument.facture_commerciale, TypeDocument.declaration)
+    attendu = set(manquants)
+    return sorted((a for a in freres if {t for t in types if not _a_exploitable(a.documents.values(), t)} == attendu),
+                  key=lambda a: a.dossier.id)
+
+
 @control("P1")
 def p1_completude(ctx: ControlContext) -> list[ResultatControle]:
     """P1 — au moins une facture commerciale exploitable **et** au moins une déclaration (§9).
@@ -307,10 +328,31 @@ def p1_completude(ctx: ControlContext) -> list[ResultatControle]:
             phrases.append(f"aucune {nom} exploitable")
     libelle = "Le dossier est incomplet : " + " ; ".join(phrases) + "."
     details["documents_manquants"] = [t.value for t in manquants]
+    docs_freres: list[str] = []
+    if not any(non_exploitables.get(t) for t in manquants):
+        freres_d = _freres_meme_manque(ctx, manquants)
+        freres = [a.dossier.id for a in freres_d]
+        if freres:
+            porteur = min([ctx.dossier.id, *freres])
+            details["dossiers_du_lot_meme_manque"] = len(freres)
+            if porteur != ctx.dossier.id:
+                # D-4206 : le lot entier n'a aucun document de ce type ; le manque est signalé une fois, par le
+                # premier dossier du lot qui le partage (comme D-3105). Le dossier reste incomplet (statut).
+                return [ctx.non_applicable("P1", RaisonCode.couvert_par_autre_controle, details={
+                    **details, "dossier": porteur, "motif": "manque_commun_du_lot"})]
+            # Le constat porté cite les documents restés sans contrepartie dans chacun de ces dossiers.
+            docs_freres = [d.id for a in freres_d for d in a.documents.values()
+                           if d.type in (TypeDocument.facture_commerciale, TypeDocument.declaration)
+                           and d.champs is not None and not d.doublon_de]
+            libelle = libelle[:-1] + (
+                f" (même manque pour {len(freres)} autre{'s' if len(freres) > 1 else ''} dossier"
+                f"{'s' if len(freres) > 1 else ''} du lot : aucun document de ce type dans le lot)."
+            )
     # Documents concernés : ceux qui restent sans contrepartie (facture sans déclaration, déclaration sans
     # facture) et les documents non exploitables tenant lieu du document manquant (D-801).
     concernes = [d.id for d in (*ctx.factures_commerciales(), *ctx.declarations())]
     concernes += [d.id for t in manquants for d in non_exploitables.get(t, [])]
+    concernes += docs_freres
     return [
         ctx.constat(
             "P1",

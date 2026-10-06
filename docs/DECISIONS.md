@@ -4534,6 +4534,9 @@ d'envoi du client sont supprimées après déchiffrement de leur champ `tenant_i
   Restauration d'essai hebdomadaire : première sauvegarde du jour seulement. Rotation : les 4 plus récentes
   (`BACKUP_RECENTES`), puis 7 jours et 4 semaines (≈ 12 archives). Fraîcheur hors site 14 h
   (`BACKUP_AGE_MAX_H`), crontab hôte `45 2,14 * * *`, sonde « homme mort » période 12 h, grâce 2 h.
+- Corrigé en passant dans `deploy/scheduler.sh` : un `SIGTERM` reçu avant la première attente faisait
+  `kill 0` (tout le groupe de processus) ; un arrêt demandé pendant une tâche repartait pour une attente
+  complète (`SCHED_TICK_S`) avant de sortir.
 - RPO 12 h (≈ 12 h 30 hors site). **Écarté pour l'instant** : expédition continue du journal (Litestream) —
   outil et procédure de restauration de plus, pour un gain qui ne se justifie pas au volume actuel.
 
@@ -4547,3 +4550,115 @@ d'envoi du client sont supprimées après déchiffrement de leur champ `tenant_i
   quels) ; le contrôle approfondi déchiffre chaque trace (`traces d'envoi : N déchiffrées`).
 - **Écarté** : passer les traces par le coffre (`FileVault`) — adressage par contenu, purge et effacement par
   client à revoir, sans gain de sécurité (même clé maîtresse).
+
+# Outillage (bloc O3) : CI à chaque push, TIFF déterministes, tous les corpus régénérables (octobre 2026)
+
+## D-4401 — CI : job rapide à chaque push et pull request, banc complet à la demande
+
+Décision du fondateur 3A. `.github/workflows/ci.yml` : job `rapide` sur `push` et `pull_request` (ruff,
+pre-commit sur tout le dépôt, `pytest -m "not lent and not postgresql and not proprietes"`, tests de propriétés
+en profil `ci`, cache pip, Tesseract installé ; environ 1 min 30 de tests en local, cible < 10 min). Jobs
+`complet` (audit des dépendances, couverture sur toute la suite, tests PostgreSQL par serveur jetable —
+`make test-pg-securite`, `make restauration-test-pg` —, banc et sa porte) et `image` (construction et audit Trivy)
+sur `workflow_dispatch` seulement. `concurrency` par workflow, type d'événement et branche, avec annulation de
+l'exécution en cours. Syntaxe vérifiée par actionlint 1.7.12. Pas de marqueur `bench` : aucun test ne dépend d'un
+corpus généré (les tests du correcteur et de `bench_run` fabriquent leurs mini-corpus).
+
+## D-4402 — TIFF du générateur 2 écrits de façon déterministe
+
+Cause : libtiff (via Pillow, LZW et G4) aligne le répertoire et les valeurs hors ligne sur un mot en sautant un
+octet qu'il n'initialise pas ; sa valeur dépend du tas, d'où des TIFF aux mêmes pixels mais aux octets différents
+(D-3904). Correction : `bench/generator2/degrade.py`, `tiff_canonique` appliquée à la sortie de `images_to_tiff` :
+parcours de la structure TIFF (en-tête, chaîne des répertoires, valeurs hors ligne, bandes et tuiles) et mise à zéro
+de tout octet non référencé (remplissage, en-têtes de page résiduels de l'écriture multipage de Pillow) et de la
+fin inutilisée des valeurs en ligne. Les pixels et les étiquettes décodés sont identiques (vérifié sur les 149 TIFF
+de `corpus_g2` à `corpus_g7`) ; `tiff_canonique(ancien) == régénéré` à l'octet pour chacun d'eux. Pas de changement
+de compression (un TIFF non compressé aurait changé la taille et le chemin de lecture des fichiers du banc). Le
+générateur 1 n'écrit pas de TIFF. Version du générateur inchangée (les sorties ne changent que sur des octets que
+nul lecteur ne lit).
+
+## D-4403 — Recettes et empreintes de tous les corpus ; `make corpus-tous`, `make corpus-verifier`
+
+Préalable à la réécriture de l'historique (décision 4A). `bench/corpus_empreintes.json` contient la recette de
+`corpus`, `corpus_h2`, `corpus_g2` … `corpus_g7`, retrouvée dans les manifestes (graine, nombre, version), les
+README du banc et le backlog de l'orchestrateur (`corpus_g5` : préfixe `GW`, `--ext --all-holdout`, nombre
+d'erreurs par contrôle par défaut, déduit de `stats_generation.json`). Chaque recette a été rejouée le 2026-10-06
+avec le générateur actuel, dans un répertoire temporaire, et comparée à la copie présente : **tous les corpus se
+régénèrent** — à l'octet près pour `corpus` et `corpus_h2` (générateur 1, arbre complet), aux pixels près pour
+`corpus_g2` à `corpus_g7` (seuls les octets de remplissage des TIFF et les empreintes qui les citent diffèrent ;
+arbre complet identique aux pixels). Aucun ancien commit du générateur n'est nécessaire : les corrections 2.0.1 et
+2.1 (repli F1) ne touchent pas ces graines. Empreintes : `sha256` (truth.json, générateur actuel), `sha256_historique`
+(copie antérieure à D-4402), `sha256_pixels`, `sha256_arbre` / `sha256_arbre_historique` / `sha256_arbre_pixels`
+(tous les fichiers sauf `stats_generation.json`, qui contient une durée). Une régénération donne désormais les mêmes
+octets (deux générations de `corpus_g3` avec un nombre de processus différent : arbres identiques).
+Le générateur 1 importe numpy, retiré des dépendances de l'application (audit final) : version figée
+`numpy==2.4.6` dans la recette, installée à part par `make corpus-deps` (`var/bench_deps`, jamais dans
+l'environnement de l'application) et par la CI juste avant le banc. Le banc de la CI passait par
+`python -m bench.generator` sans numpy : il échouait ; il passe désormais par la recette, empreinte vérifiée.
+
+# Interface (bloc I3, octobre 2026) : tableaux de bord en SQL, langue par compte, alertes graves, notifications
+
+## D-4301 — Tableau de bord client et fiche client du fondateur en SQL
+
+- **Avant** : `/espace` relisait tous les dossiers et constats (`lister_dossiers`, `constats_courants`,
+  `reclamations.registre` complet, graphiques sur objets ORM) ; `/admin/clients/{id}` relisait tous les dossiers
+  (`lister_dossiers`) puis filtrait et paginait en Python.
+- **Après** : `storage/listes_sql.py` `compter_dossiers` (`COUNT`) et `constats_indicateurs` (constats visibles de
+  la version courante, **lecture en colonnes** jointe au dossier, jamais le JSON `contenu` entier) ;
+  `web/listes_sql.indicateurs` additionne en `Decimal` avec les règles de `ligne_dossier` et du rapport (hors
+  totaux exclus, certain = validé, à vérifier = non rejeté) ; les mêmes lignes alimentent les graphiques
+  (`graphes.donnees_client(scope, lignes)`). Reste à recouvrer / avoirs reçus : `totaux_ecarts` (D-3801). Les
+  8 « Derniers dossiers » viennent de `dossiers_page` (tri par date décroissante ; avant : 8 premiers par
+  référence, contraire au titre). Fiche : `services.admin.fiche_client(lire_dossiers=…)` lit la page filtrée
+  (`page_dossiers`) et les indicateurs **dans le périmètre déjà ouvert** (une seule entrée de journal).
+- **Cloisonnement** : tout part de `TenantScope.requete` (rôle client : constats publiés seuls) ; jointure au
+  dossier par `TenantScope.requete(Dossier)` en sous-requête. Tests d'équivalence avec l'ancien calcul (client,
+  lecteur, fondateur) et d'isolation (`tests/web/test_interface_bloc_i3.py`).
+- **Mesure** (`scripts/mesure_listes.py --dossiers 5000`, médiane de 3, SQLite) : `/espace` 3 617 → 246 ms ;
+  `/admin/clients/demo_ateliers` 1 376 → 283 ms ; filtrée (`q` + statut) 1 306 → 151 ms. Pages ajoutées au script.
+
+## D-4302 — Langue de l'interface enregistrée sur le compte
+
+- Colonne `users.langue` (`fr` | `en` | nulle), **étape de migration 5** `langue_utilisateur` (idempotente,
+  colonne nullable) et déclarée dans le modèle. `storage.comptes.definir_langue` : le compte lui-même seulement
+  (le fondateur ne choisit pas pour un autre), valeur fermée, journal `choisir_langue`.
+- Page **« Mon compte »** (`/compte`, icône dans l'en-tête, palette) : choix FR/EN enregistré sur le compte ; liens
+  vers les sessions et le mot de passe. Le bouton FR/EN de l'en-tête, connecté, enregistre aussi sur le compte.
+- **Lue à la connexion** : si le compte a une langue, le cookie `cd_langue` est reposé (donc suivie d'un navigateur
+  à l'autre) ; sans préférence de compte, le cookie du navigateur n'est pas touché. Pages sans session : cookie
+  puis `Accept-Language` (inchangé, D-3803). Rapports et constats restent en français (décision 7B).
+
+## D-4303 — Bandeau des alertes graves non lues sur `/admin`
+
+Types : `sauvegarde_*`, `volume_non_chiffre`, `cout_ia_plafond`, `job_mort` (`listes_vues.alerte_du_bandeau`).
+Une ligne par type (nombre, date de la plus récente ; `OperatorScope.alertes_non_lues_par_type`, `GROUP BY`),
+sauvegardes d'abord. « Marquer comme lu » par type ou « Tout marquer comme lu » (`POST /admin/alertes/bandeau/lues`,
+CSRF, fondateur) : `OperatorScope.marquer_alertes_lues`, une transaction, une entrée `alerte_lue` par alerte ;
+un type hors bandeau n'est jamais marqué par ce formulaire. Le bandeau disparaît quand tout est lu.
+
+## D-4304 — Historique des notifications poussées (`/admin/notifications`)
+
+Lien depuis `/admin/alertes`. Configuration vue par le serveur web (actives / mode hors production / aucun canal ;
+noms des canaux et erreurs de variables, **jamais** l'URL du webhook ni les adresses), état par canal (dernier
+succès, dernier échec, « en échec depuis »), historique paginé de `notifications_alertes`. Lecture par une
+**interface mince** (`web/notifications_vues.py` → `storage.listes_sql.notifications_page`) : l'API de lecture
+annoncée par le bloc production n'existait pas à la fin du bloc ; la brancher là sans toucher au gabarit.
+Limite : une notification réussie n'inscrit que les canaux réussis (`notifier_alertes`), l'échec d'un canal
+quand l'autre a réussi n'apparaît pas.
+
+## D-4305 — Coût IA et lecture par modèle sur la fiche client
+
+Le coût IA du mois face au plafond était déjà sur `/admin` (jauge par client) et en indicateur de la fiche.
+Ajouts : jauge, pourcentage et état (80 %, plafond atteint = appels arrêtés ; plafond nul = 100 %, comme
+`EtatPlafond.arret`) sur la fiche ; **case « Autoriser la lecture par modèle de langage »** (`POST
+/admin/clients/{id}/llm`) qui écrit `reglages["llm_desactive"]` (lu par `jobs.couts.llm_desactive`, D-4007),
+journalisée par `modifier_client` ; badge « Lecture par modèle désactivée » dans la liste des clients de `/admin`.
+
+## D-4306 — Corrections relevées pendant la vérification navigateur
+
+- Graphiques : `minmax(440px, 1fr)` écrasait la règle mobile (déclarée avant) → débordement horizontal à 375 px ;
+  désormais `minmax(min(440px, 100%), 1fr)`.
+- Palette de commandes : un lien `.carte-tete` hors `.carte` (bandeau) levait une erreur ; recherche du bloc
+  parent tolérante. Entrée « Mon compte » ajoutée.
+- Vérification (Chromium, démo, 0 erreur de console, axe-core 0 violation, FR/EN, deux thèmes) : `/admin`,
+  fiche client, `/admin/notifications`, `/admin/alertes`, `/compte`, `/espace`.

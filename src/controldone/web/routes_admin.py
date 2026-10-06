@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, Response
 
 from controldone.auth.roles import Acteur, Role
 from controldone.outbox import ActionBloquee, FileSortante, ModeAutonomie, TransitionInterdite, TypeAction
+from controldone.jobs.couts import llm_desactive
 from controldone.services import admin as svc_admin
 from controldone.services import publication, reclamations, validation
 from controldone.services.lecture import (
@@ -148,7 +149,8 @@ def _fiche(request: Request, f: Acteur, tenant_id: str, **extra: Any) -> Respons
     p, ind = d["dossiers"]
     sorties = FileSortante(pf.db).lister(f, tenant_id=tenant_id)
     return page(request, "admin/client.html.j2", titre=d["info"]["raison_sociale"], nav="clients", c=d, p=p, req=req,
-                ind=ind, ratio_ia=_ratio(d["cout_ia"], d["plafond"]), statuts=STATUTS_DOSSIER,
+                ind=ind, ratio_ia=_ratio(d["cout_ia"], d["plafond"]),
+                llm_desactive=llm_desactive(d["info"]["reglages"]), statuts=STATUTS_DOSSIER,
                 sorties=list(reversed(sorties))[:30], libelles_sortie=LIBELLES_SORTIE, libelles_lot=LIBELLES_LOT,
                 demo=d["info"]["demo"], **extra)
 
@@ -282,6 +284,25 @@ def plafond(request: Request, tenant_id: str) -> Response:
         reglages.pop("plafond_cout_ia_mensuel_eur", None)
         op.modifier_client(tenant_id, plafond_cout_ia_mensuel_eur=montant, reglages=reglages)
     return redirection(request, f"/admin/clients/{tenant_id}", message="Plafond IA mensuel modifié.")
+
+
+@routeur.post("/clients/{tenant_id}/llm")
+def lecture_llm(request: Request, tenant_id: str) -> Response:
+    """Opt-out du client pour la lecture par modèle de langage (D-4007) : case cochée = lecture autorisée ;
+    décochée = ``reglages["llm_desactive"] = true`` (aucun document de ce client envoyé au modèle). Journalisé
+    (``modifier_client``)."""
+    f = _fondateur(request)
+    form = formulaire_sync(request)
+    desactive = form.get("llm_autorise") != "1"
+    with _pf(request).db.operateur(f) as op:
+        reglages = next((dict(t.reglages or {}) for t in op.lister_clients() if t.id == tenant_id), None)
+        if reglages is None:
+            raise AccesRefuse("introuvable ou hors périmètre")
+        reglages["llm_desactive"] = desactive
+        op.modifier_client(tenant_id, reglages=reglages)
+    return redirection(request, f"/admin/clients/{tenant_id}",
+                       message="Lecture par modèle de langage désactivée pour ce client." if desactive
+                       else "Lecture par modèle de langage autorisée pour ce client.")
 
 
 @routeur.post("/clients/{tenant_id}/publier")

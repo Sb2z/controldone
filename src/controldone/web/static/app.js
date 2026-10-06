@@ -192,9 +192,12 @@
     $$(".nav a").forEach(function (a) { entrees.push({ lib: a.textContent.trim(), aide: T("Aller à"), url: a.getAttribute("href") }); });
     $$(".ancres a").forEach(function (a) { entrees.push({ lib: a.textContent.trim(), aide: T("Sur cette page"), url: a.getAttribute("href") }); });
     $$(".carte-tete a.petit-lien, .carte h2 a.petit-lien").forEach(function (a) {
-      var h = a.closest(".carte").querySelector("h2");
+      var bloc = a.closest(".carte, .bandeau-alertes");
+      var h = bloc && bloc.querySelector("h2");
       entrees.push({ lib: (h ? h.firstChild.textContent.trim() + " — " : "") + a.textContent.trim(), aide: T("Lien"), url: a.getAttribute("href") });
     });
+    var moncompte = document.querySelector('.compte a[href="/compte"]');
+    if (moncompte) { entrees.push({ lib: T("Mon compte"), aide: T("Compte"), url: moncompte.getAttribute("href") }); }
     var compte = document.querySelector('.compte a[href="/compte/mot-de-passe"]');
     if (compte) { entrees.push({ lib: T("Changer de mot de passe"), aide: T("Compte"), url: compte.getAttribute("href") }); }
     var sessions = document.querySelector('.compte a[href="/compte/sessions"]');

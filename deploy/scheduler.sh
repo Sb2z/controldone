@@ -49,7 +49,8 @@ tache() {  # tache <nom> <commande…>
 }
 
 arret=0
-trap 'arret=1; log "arret_demande"; kill "${dormeur:-0}" 2>/dev/null || true' TERM INT
+# (jamais « kill 0 » : sans attente en cours, aucun processus à réveiller — kill 0 viserait tout le groupe)
+trap 'arret=1; log "arret_demande"; [ -n "${dormeur:-}" ] && kill "$dormeur" 2>/dev/null; true' TERM INT
 
 log "demarrage" "sauvegardes a ${CRENEAUX[*]} UTC"
 dernier_releve="" ; dernier_plan="" ; dernier_creneau="" ; dernier_mois=""
@@ -83,6 +84,7 @@ while [ "$arret" -eq 0 ]; do
     tache referentiel "$PY" -c "from controldone.jobs import enqueue; enqueue('referentiel_recalculer', {}, 'referentiel:${mois}')"
   fi
 
+  [ "$arret" -eq 0 ] || break   # arrêt demandé pendant une tâche : ne pas repartir pour une attente complète
   sleep "$TICK" & dormeur=$!
   wait "$dormeur" 2>/dev/null || true
 done

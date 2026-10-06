@@ -142,7 +142,7 @@ def test_planificateur_rattrape_le_referentiel_du_mois(tmp_path):
         p.send_signal(signal.SIGTERM)
         p.wait(10)
     lignes = journal.read_text().splitlines()
-    assert "backup-cron.sh --si-absente" in lignes
+    assert "backup-cron.sh --si-absente-depuis 0000" in lignes  # créneau du jour (D-4105)
     now = datetime.now(UTC)
     ref = [x for x in lignes if "referentiel_recalculer" in x]
     if now.day > 2 or (now.day == 2 and now.strftime("%H%M") >= "0300"):

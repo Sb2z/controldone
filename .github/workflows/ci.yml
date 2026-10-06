@@ -169,10 +169,13 @@ jobs:
           make test-pg-securite PY=python
           make restauration-test-pg PY=python
 
-      # D-4403 : la recette du corpus est vérifiée par son empreinte (générateur déterministe).
+      # D-4403 : la recette du corpus est vérifiée par son empreinte (générateur déterministe). numpy sert au
+      # générateur 1 seulement (pas une dépendance de l'application) : installé après les tests, version figée.
       - name: Banc — génération du corpus (dev + holdout), empreinte vérifiée
         if: ${{ inputs.banc }}
-        run: python scripts/corpus.py generer corpus --jobs 4
+        run: |
+          pip install "numpy==2.4.6"
+          python scripts/corpus.py generer corpus --jobs 4
 
       - name: Banc — exécution sur le holdout
         if: ${{ inputs.banc }}

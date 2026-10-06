@@ -201,7 +201,7 @@ def test_planificateur_sauvegarde_au_creneau_courant(tmp_path):
     env = {**os.environ, "CONTROLDONE_PYTHON": str(faux_py), "SCHED_TICK_S": "30",
            "SCHED_BACKUP_HHMM": "0000,2400,abc"}
     p = subprocess.Popen(["bash", str(d / "scheduler.sh")], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         text=True)
+                         text=True, start_new_session=True)
     try:
         fin = time.monotonic() + 20
         while time.monotonic() < fin and "sauvegarde" not in (journal.read_text() if journal.exists() else ""):

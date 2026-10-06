@@ -276,3 +276,11 @@ documents étaient tous dans un même PDF fusionné (cas GU0119, seed 20261009).
 sinon le PDF fusionné entier (chaque document du fichier copié reçoit un `doc_id` `<doc>_copie`, mêmes pages).
 Chemin jamais atteint par les corpus existants : `corpus_g2` et `corpus_g4` (dossiers F1 vérifiés) restent
 identiques à l'octet.
+
+## TIFF déterministes (D-4402)
+
+`images_to_tiff` passe sa sortie par `degrade.tiff_canonique` : tout octet que la structure TIFF ne référence pas
+(octet d'alignement laissé non initialisé par libtiff, en-têtes de page résiduels de l'écriture multipage) est mis
+à zéro. Pixels et étiquettes inchangés ; une même graine donne désormais les mêmes octets. Les copies de corpus
+écrites avant ne diffèrent d'une régénération que par ces octets (empreintes `*_historique` et `*_pixels` de
+`bench/corpus_empreintes.json`).

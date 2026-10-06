@@ -741,7 +741,7 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 
 /* --- graphiques SVG (D-3403) ---------------------------------------------------------------------------------------------------- */
 .graphes > h2 { margin: .4rem 0 .9rem; }
-.grille-graphes { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 1.4rem; }
+.grille-graphes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); gap: 1.4rem; }
 .grille-graphes > .carte { margin-bottom: 0; }
 .grille-graphes > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 .graphe-cadre { overflow-x: auto; }

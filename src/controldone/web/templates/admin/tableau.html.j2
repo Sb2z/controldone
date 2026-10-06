@@ -105,7 +105,7 @@
         <td class="num">{{ c.stats.get("recouvrable_a_verifier", 0)|montant }}</td>
         <td class="num">{{ c.stats.get("ecarts_ouverts", 0) }}</td>
         <td><span class="jauge{% if c.ratio_ia >= 100 %} jauge-stop{% elif c.ratio_ia >= 80 %} jauge-alerte{% endif %}" role="img" aria-label="{{ _("{n} % du plafond", n=c.ratio_ia) }}"><span class="w-{{ (([c.ratio_ia, 100]|min) / 5)|round|int * 5 }}"></span></span>
-          <span class="num">{{ c.cout_ia|montant }} / {{ c.plafond|montant }}</span></td>
+          <span class="num">{{ c.cout_ia|montant }} / {{ c.plafond|montant }}</span>{% if c.llm_desactive %} <span class="badge b-neutre">{{ _("Lecture par modèle désactivée") }}</span>{% endif %}</td>
       </tr>
     {% else %}
       <tr><td colspan="8" class="vide">{{ _("Aucun client.") }} <a href="/admin/clients">{{ _("Créer un client") }}</a>.</td></tr>

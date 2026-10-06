@@ -47,10 +47,8 @@ l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a ét�
 
 | Point | Effort |
 |---|---|
-| Tableau de bord client et fiche client du fondateur encore chargés en Python (gros clients) | moyen |
-| Préférence de langue par compte (aujourd'hui par navigateur) : migration de schéma | petit |
 | Messages d'erreur des services et page de documentation de l'API encore en français seulement | petit |
-| Bandeau des alertes de sauvegarde non lues sur `/admin` | petit |
+| Brancher `/admin/notifications` sur l'API de lecture du bloc production (interface mince en place, D-4304) | petit |
 
 ## 5. Dépôt et outillage
 

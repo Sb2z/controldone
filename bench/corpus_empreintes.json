@@ -1,6 +1,112 @@
 {
-  "_description": "Recettes des corpus de banc non versionnés (D-3904) : régénération à l'octet près par `make corpus-g6` (scripts/corpus.py). Empreinte : find holdout -name truth.json | sort | xargs sha256sum | sha256sum, depuis la racine du corpus. Ajouter ici chaque nouveau corpus avec son empreinte. sha256_pixels : empreinte de secours où les TIFF sont comparés par leurs pixels (Pillow laisse un octet de remplissage non initialisé dans les TIFF LZW : python scripts/corpus.py empreinte --pixels).",
+  "_description": "Recettes et empreintes de tous les corpus du banc (D-3904, D-4403) : `make corpus-tous` régénère, `make corpus-verifier` vérifie (scripts/corpus.py). Clés : bench/README.md § Empreintes. sha256 : find dev holdout -name truth.json | LC_ALL=C sort | xargs sha256sum | sha256sum, depuis la racine du corpus, pour une régénération par le générateur actuel (TIFF déterministes, D-4402) ; sha256_historique / sha256_arbre_historique : copie écrite avant D-4402 (octets de remplissage TIFF aléatoires) ; *_pixels : TIFF comparés par leurs pixels (identiques entre les deux) ; *_arbre* : tous les fichiers sauf stats_generation.json. Recettes rejouées le 2026-10-06.",
   "corpus": {
+    "corpus": {
+      "sortie": "bench/corpus",
+      "generateur": "bench.generator",
+      "graine": 20261002,
+      "nombre": 250,
+      "split": "all",
+      "dependances": [
+        "numpy==2.4.6"
+      ],
+      "version_generateur": "1.0.0",
+      "dossiers": 250,
+      "sha256": "7e4aff9db2356b4e71f4a6fb069e735255d9fad925945cb9f7132b5d6d4331e7",
+      "sha256_pixels": "6acd29f3cecc8bef492dec395724094e3e5338b7004c07b0ab5f381e3ec4e4f1",
+      "sha256_arbre": "55db3776b198f17ab8cf18281688b20ece049ae8f29d3aad9efbf5400cd71eab",
+      "sha256_arbre_pixels": "55db3776b198f17ab8cf18281688b20ece049ae8f29d3aad9efbf5400cd71eab"
+    },
+    "corpus_h2": {
+      "sortie": "bench/corpus_h2",
+      "generateur": "bench.generator",
+      "graine": 20261003,
+      "nombre": 250,
+      "split": "holdout",
+      "dependances": [
+        "numpy==2.4.6"
+      ],
+      "version_generateur": "1.0.0",
+      "dossiers": 48,
+      "sha256": "c966f3b3f43d0ebbbb734cb529cebc1fc819c3a9f7d93063c37852415f07fe6b",
+      "sha256_pixels": "4d37b567416e00ecef20d8b398b9bcbd17674d0a8a03310cb4d5fd5abe4ff8f6",
+      "sha256_arbre": "f1fa57de9fe5a60933e763bbedcd0e3824eb66b811adb6d6851f068f2f4e0291",
+      "sha256_arbre_pixels": "f1fa57de9fe5a60933e763bbedcd0e3824eb66b811adb6d6851f068f2f4e0291"
+    },
+    "corpus_g2": {
+      "sortie": "bench/corpus_g2",
+      "generateur": "bench.generator2",
+      "graine": 777,
+      "nombre": 300,
+      "split": "all",
+      "version_generateur": "2.0.1",
+      "dossiers": 300,
+      "sha256": "8732d7e22de7927fe346dd32c2ee767a337af654e32c1f9e40949b3a20d3e457",
+      "sha256_historique": "32f1d1ee5fcd48f1337e661d9ab7a73eafe73c35ca746244711576c8c8e5f241",
+      "sha256_pixels": "f6dce71d3d725144badb40f00aaae4f4abc0149c6475436286967ed5f799d877",
+      "sha256_arbre": "9fe7f76248608c48e6d6ca332a8d26789cf7a7e82f9cd9dd87f8a7bd28f922ee",
+      "sha256_arbre_historique": "b48be9347b157ca1f1fc1fcf3a4d9b4eb1282f405023ef17afbb22c4f82ce0d6",
+      "sha256_arbre_pixels": "127175d73008369991ae416011e5fa72177189ed98d65fac15f5b6476c47e317"
+    },
+    "corpus_g3": {
+      "sortie": "bench/corpus_g3",
+      "generateur": "bench.generator2",
+      "prefixe": "GY",
+      "graine": 20261005,
+      "nombre": 80,
+      "par_controle": 3,
+      "split": "holdout",
+      "options": [
+        "all-holdout"
+      ],
+      "version_generateur": "2.0.1",
+      "dossiers": 80,
+      "sha256": "e2274725237686d81c203938e9de138ca33eb6b0dbb0692d158af7ed73518575",
+      "sha256_historique": "a34d91028e0762a3f27662daed2ba528eb18d825a80c39f2fd1bb86342ce43cd",
+      "sha256_pixels": "f4b2cd9a90cb08fc929a30613eca9bd505fce249143702f2db19e48c1d11b93f",
+      "sha256_arbre": "59671d7bdbd770f37f5e7e0a6f798641c465ec60147c23381eda24a4aa82b4d0",
+      "sha256_arbre_historique": "b642db77612225e80d70dc2c750a9760ff3ff76a2ee1ba0d7e8b3f521af6cb32",
+      "sha256_arbre_pixels": "3db2cbbb83f083c8a901d9fc761e00eaa9ef632e1505167bace02e6219caddc9"
+    },
+    "corpus_g4": {
+      "sortie": "bench/corpus_g4",
+      "generateur": "bench.generator2",
+      "prefixe": "GZ",
+      "graine": 20261006,
+      "nombre": 220,
+      "split": "all",
+      "options": [
+        "ext"
+      ],
+      "version_generateur": "2.1.0",
+      "dossiers": 220,
+      "sha256": "8a555fc12100e75c2a410002f743d1fcfa1233e2d12bba39d690f0dbbca6ebbf",
+      "sha256_historique": "5dce17212998a26682f22b58dc5b5066dc4dc56c580113b313221bc5dc6b58d8",
+      "sha256_pixels": "efd259ede6f4a0f59aac2813ffbc39f86d55b904893eda1c0904a3675d5c80b7",
+      "sha256_arbre": "e94498a2e3772e91552766e128e58bd68f3bb4f7f8a7ce9e664cb4ccea5f2345",
+      "sha256_arbre_historique": "481ac1496cbfe7f4c8a020f735e9179f81ea5fe949075a78351eed63504fe0b3",
+      "sha256_arbre_pixels": "9fcd48becb9a88b2c3e8b7112548014b96de7d4ab71694c70db6c29674679f17"
+    },
+    "corpus_g5": {
+      "sortie": "bench/corpus_g5",
+      "generateur": "bench.generator2",
+      "prefixe": "GW",
+      "graine": 20261007,
+      "nombre": 110,
+      "split": "holdout",
+      "options": [
+        "ext",
+        "all-holdout"
+      ],
+      "version_generateur": "2.1.0",
+      "dossiers": 110,
+      "sha256": "53358340924e3688e661a0f8f9fb5f807214638f9f2667ba19e74267273b4862",
+      "sha256_historique": "3c80f93044b15a36b38e3f43e9344338a1e579742c5862d551ea1c343b52e65c",
+      "sha256_pixels": "db2c85e1dd08bc8a15c03d6d22380c60ef72cf0bb03a2a7ccd94177bfc6c20f6",
+      "sha256_arbre": "a292cfd82b2793e1ca6ea37b1c948d9a6f8633d7ee43f105163b0063604b792f",
+      "sha256_arbre_historique": "d5355312fb4f5c2e1e3488257c24f5e29b863aa977a47d66f30bbe2d25ca98c5",
+      "sha256_arbre_pixels": "22334316cf932931bd131c117a2a292a37e6998633ede5aed8cb858684304a97"
+    },
     "corpus_g6": {
       "sortie": "bench/corpus_g6",
       "generateur": "bench.generator2",
@@ -13,9 +119,35 @@
         "ext",
         "all-holdout"
       ],
+      "version_generateur": "2.1.0",
       "dossiers": 160,
-      "sha256": "d604e7b4936af4b1473c79bd4ee557dd0702cead3d197aded56776299511b554",
-      "sha256_pixels": "27aa9daa11594624237d16f9aef1b8249d5f1d96cb8c0fff487c0e0d4e00c8e9"
+      "sha256": "c3555ce81b70674af0f81654cc218965ed3d8ec710b2921ea0f02de6c5f69067",
+      "sha256_historique": "d604e7b4936af4b1473c79bd4ee557dd0702cead3d197aded56776299511b554",
+      "sha256_pixels": "27aa9daa11594624237d16f9aef1b8249d5f1d96cb8c0fff487c0e0d4e00c8e9",
+      "sha256_arbre": "36bfaf290f7c7a785ea3cec16b9656a480528da6b7546529a46ee2f91795e1c6",
+      "sha256_arbre_historique": "3ab8f6ec911a6fcde6aeffe14f265ff8a215a5c579d41bc7d63c526a4b1d9bc6",
+      "sha256_arbre_pixels": "be664f631f97b32597164615c52a027f7f6b1b6d48da70a44769df8c3017d92d"
+    },
+    "corpus_g7": {
+      "sortie": "bench/corpus_g7",
+      "generateur": "bench.generator2",
+      "prefixe": "GU",
+      "graine": 20261009,
+      "nombre": 160,
+      "par_controle": 3,
+      "split": "holdout",
+      "options": [
+        "ext",
+        "all-holdout"
+      ],
+      "version_generateur": "2.1.0",
+      "dossiers": 160,
+      "sha256": "8050ecae7c98269ca0b709c670dc17f23f72b67dc38224016aec86d351820c4a",
+      "sha256_historique": "fdd372db62cae8bd862153e953c60de69a83b6cb8733b26eab8b10b33395f944",
+      "sha256_pixels": "058d21972153f65e0742bddac30636852ac96d81ae02bcba2f2d4fc023f4528e",
+      "sha256_arbre": "ece9201919ce5389b2deb209217a291932700f1d5db226612b54839cb15c7679",
+      "sha256_arbre_historique": "83dac90e812726aa25a0691beedd2046b3fc1c89d75de26ff95f70aa7d4b259b",
+      "sha256_arbre_pixels": "9b0befa9a89365288ef166b41b69ee92a07aa802b4b9dd04f1369884477bec75"
     }
   }
 }

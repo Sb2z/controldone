@@ -313,3 +313,31 @@ def test_historique_des_notifications(monde, monkeypatch):
 
 def test_user_model_a_la_colonne_langue():
     assert "langue" in User.__table__.c
+
+
+# --- 5. lecture par modèle de langage : opt-out du client (D-4007) -------------------------------------------------
+
+
+def test_opt_out_lecture_llm_sur_la_fiche(monde):
+    from controldone.jobs.couts import etat_plafond
+    from controldone.storage.models import AuditLog
+
+    f = monde.client()
+    connecter_fondateur(f, monde)
+    fiche = f"/admin/clients/{A}"
+    assert 'name="llm_autorise" value="1" checked' in f.get(fiche).text
+    r = poster(f, fiche, f"{fiche}/llm", {})  # case décochée
+    assert r.status_code == 303
+    assert etat_plafond(A, db=monde.pf.db).desactive is True
+    assert etat_plafond(B, db=monde.pf.db).desactive is False
+    page = f.get(fiche).text
+    assert "Désactivée pour ce client" in page and 'value="1" checked' not in page.split('id="lecture-llm"')[1][:900]
+    assert "Lecture par modèle désactivée" in f.get("/admin").text
+    poster(f, fiche, f"{fiche}/llm", {"llm_autorise": "1"})
+    assert etat_plafond(A, db=monde.pf.db).desactive is False
+    with monde.pf.db.transaction_systeme() as s:
+        assert s.query(AuditLog).filter(AuditLog.action == "modifier_client", AuditLog.tenant_id == A).count() == 2
+    c = monde.client()
+    connecter_client(c, monde, ADMIN_A)
+    assert poster(c, "/espace", f"{fiche}/llm", {}).status_code in (403, 404)
+    assert etat_plafond(A, db=monde.pf.db).desactive is False

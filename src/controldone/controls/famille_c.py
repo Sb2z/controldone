@@ -52,6 +52,7 @@ from controldone.model import (
     Document,
     GrilleTarifaire,
     LigneFactureTransitaire,
+    Methode,
     MethodeAllocation,
     ModePoste,
     NatureLigne,
@@ -1121,6 +1122,51 @@ def _c3_declenche(ctx: ControlContext, unite: str) -> bool:
     return any(r.outcome.est_constat for r in ctx.anterieurs("C3", unite=unite))
 
 
+#: Raisons qui disent qu'une lecture ne suffit pas à trancher (D-3703, D-4205).
+_RAISONS_LECTURE_C5 = frozenset({RaisonCode.confiance_insuffisante, RaisonCode.lecture_non_corroboree,
+                                 RaisonCode.valeur_non_ancree})
+
+
+def _debours_prouves_complets(ctx: ControlContext, u: UniteC) -> bool:
+    """Chaque facture de l'unité imprime un total des débours (lu, non déduit) égal à la somme de ses lignes de
+    débours lues : aucune ligne de débours n'a échappé à la lecture."""
+    for f in u.factures:
+        ft = f.ft
+        td = ft.total_debours
+        if td is None or td.methode is Methode.derive or td.est_reconstruite:
+            return False
+        v = _dec(ctx, td)
+        montants = [m for lg in ft.lignes if lg.nature.est_debours
+                    for m in [_dec(ctx, lg.montant_ht)]]
+        if v is None or None in montants or abs(v - _somme(m for m in montants if m is not None)) > ctx.tol.t_somme(
+                max(1, len(montants))):
+            return False
+    return True
+
+
+def _c5_sous_facturation_expliquee(
+    ctx: ControlContext, u: UniteC, refs: dict[str, ReferenceDeclaration], lignes: list[LigneDebours],
+    exclues: set[CategorieTaxe], ecart: Decimal, tol: Decimal, classement: Classement,
+) -> str | None:
+    """D-4205 : écart de C5 en faveur du client (refacturé < liquidé) qu'une lecture explique.
+
+    - ``tva_non_refacturee`` : aucune ligne de TVA refacturée, et l'écart est la TVA liquidée des déclarations
+      (TVA autoliquidée dont l'indice n'est pas lu, ou TVA acquittée directement) : ce n'est pas un écart de
+      débours ; la TVA relève de C3/C4 ;
+    - ``debours_possiblement_non_lus`` : lecture sous le seuil, et aucun total des débours imprimé ne prouve que
+      toutes les lignes de débours sont lues : une ligne non lue explique l'écart dans ce sens (comme D-3703).
+    Un écart certain n'est jamais concerné ; un écart en défaveur du client non plus."""
+    if ecart >= 0 or classement.niveau is not Niveau.a_verifier:
+        return None
+    if CategorieTaxe.tva not in exclues and not any(x.categorie in (CategorieTaxe.tva, None) for x in lignes):
+        tva = _somme(refs[x.id].liquide.get(CategorieTaxe.tva, ZERO) for x in u.declarations)
+        if tva > 0 and abs(-ecart - tva) <= tol:
+            return "tva_non_refacturee"
+    if set(classement.raisons) & _RAISONS_LECTURE_C5 and not _debours_prouves_complets(ctx, u):
+        return "debours_possiblement_non_lus"
+    return None
+
+
 @control("C5")
 def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
     """C5 — ``Σ refacture − liquide_total`` (débours combinés inclus), exécuté pour chaque unité.
@@ -1211,6 +1257,11 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
             raisons_supplementaires=([RaisonCode.valeur_absente] if incompletes else [])
             + ([RaisonCode.attribution_non_univoque] if u.attribution_incertaine else []),
         )
+        sous_facture = _c5_sous_facturation_expliquee(ctx, u, refs, lignes, exclues, ecart, tol, classement)
+        if sous_facture is not None:
+            out.append(ctx.non_verifiable("C5", RaisonCode.confiance_insuffisante if sous_facture.startswith(
+                "debours") else RaisonCode.valeur_absente, **{**commun, "details": {**details, "motif": sous_facture}}))
+            continue
         ailleurs = _unite_portee_ailleurs(ctx, "C5", u, lignes, classement, details)
         if ailleurs is not None:
             out.append(ailleurs)

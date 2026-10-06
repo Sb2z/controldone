@@ -44,7 +44,7 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
   `/admin/alertes` (sans afficher l'URL ni l'adresse). **API faite (D-4104)** — voir « Historique des
   notifications : mode d'emploi » ci-dessous ; page à faire (bloc interface).
 - **Bandeau des alertes de sauvegarde sur `/admin`.** Constat : les libellés sont faits (D-3505), pas le bandeau
-  tant qu'une alerte `sauvegarde_*` n'est pas lue. À faire (bloc interface).
+  tant qu'une alerte `sauvegarde_*` n'est pas lue. **Fait (D-4303).**
 - **Notification quand le scheduler est arrêté.** Constat : les notifications sont envoyées par le conteneur
   `scheduler` ; s'il ne tourne plus, rien ne part. Impact : seul `BACKUP_PING_URL` couvre ce cas. Proposition :
   faire de la sonde « homme mort » un point obligatoire de la liste de contrôle d'ouverture (`docs/DEPLOIEMENT.md`

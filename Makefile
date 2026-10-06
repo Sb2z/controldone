@@ -3,7 +3,7 @@ VENV ?= .venv
 PY := $(VENV)/bin/python
 
 .PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build audit restauration-test restauration-test-pg audit-image lock test-pg-securite \
-        hooks pre-commit couverture proprietes corpus corpus-tous corpus-verifier corpus-dev
+        hooks pre-commit couverture proprietes corpus corpus-tous corpus-verifier corpus-dev corpus-deps
 
 # Installation reproductible sur un clone neuf (F-17) : crée .venv s'il manque, installe les versions figées
 # de requirements.lock, puis le paquet en mode éditable avec les outils de développement (pytest, ruff).
@@ -49,13 +49,17 @@ proprietes:
 # GRAINE=20261101 PREFIXE=GU [NOMBRE=160] [PAR_CONTROLE=3] [SORTIE=bench/corpus_gu]` (empreintes affichées, à
 # consigner).
 CORPUS_JOBS ?= 2
-corpus-tous:
+# numpy (générateur 1 seulement) n'est pas une dépendance de l'application : installé à part, version figée (D-4403).
+NUMPY_BANC ?= numpy==2.4.6
+corpus-deps:
+	@test -d var/bench_deps/numpy || uv pip install --python $(PY) --target var/bench_deps "$(NUMPY_BANC)"
+corpus-tous: corpus-deps
 	$(PY) scripts/corpus.py generer --tous --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
 corpus-verifier:
 	$(PY) scripts/corpus.py verifier $(if $(CORPUS),$(CORPUS),--tous)
-corpus-dev:
+corpus-dev: corpus-deps
 	$(PY) scripts/corpus.py generer corpus --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
-corpus-g% corpus-h%:
+corpus-g% corpus-h%: corpus-deps
 	$(PY) scripts/corpus.py generer corpus_$(patsubst corpus-%,%,$@) --jobs $(CORPUS_JOBS) $(if $(FORCE),--force,)
 corpus:
 	@test -n "$(GRAINE)" -a -n "$(PREFIXE)" || { echo "Usage : make corpus GRAINE=entier PREFIXE=XX [NOMBRE=160] [PAR_CONTROLE=3] [SORTIE=bench/corpus_xx] [FORCE=1]"; exit 2; }

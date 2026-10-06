@@ -32,7 +32,8 @@
   `lister_dossiers` + `reclamations.registre` complets) et `/admin/clients/{id}` (`services.admin.fiche_client`)
   relisent tous les dossiers et constats ; mesure non faite sur ces pages, les listes filtrées (D-3801) passaient de
   1,2 s à 0,25 s sur 5 000 dossiers. Proposition : indicateurs agrégés en SQL (`storage/listes_sql.py`), liste des
-  dossiers de la fiche via `dossiers_page`. À faire.
+  dossiers de la fiche via `dossiers_page`. **Fait (bloc I3, D-4301)** : 5 000 dossiers, `/espace` 3,6 s → 0,25 s,
+  fiche 1,4 s → 0,28 s.
 - **Index des listes en SQL.** Constat : les requêtes de D-3801 s'appuient sur les index existants (`tenant_id`,
   `constats.dossier_id`, `ecarts.constat_id`) ; mesuré suffisant à 5 000 dossiers. Proposition : au-delà (50 000),
   index `constats(tenant_id, dossier_id, dossier_version)` comme étape de `storage/migrations.py`. À faire si besoin.
@@ -41,8 +42,8 @@
   numéros). Proposition : colonne normalisée si des clés accentuées apparaissent. À faire (faible).
 - **Préférence de langue par compte.** Constat : la langue est un cookie du navigateur (`cd_langue`, D-3803), pas
   une préférence du compte (aucune colonne `users.langue`). Proposition : colonne par étape de migration, lue à la
-  connexion. À faire (faible).
-- **Libellés des contrôles et textes des constats en français.** Constat : en anglais, les textes des constats
+  connexion. **Fait (D-4302)** : migration 5, page « Mon compte ».
+- **Libellés des contrôles et textes des constats en français.** Décision 7B : restent en français. Constat : en anglais, les textes des constats
   (libellé, raisons, prochaine action, nom du contrôle), rapports et relevés restent en français, marqués
   `lang="fr"` (garde-fous écrits pour le français, SPEC §3). Proposition : version anglaise validée des gabarits
   de texte, avec une liste de formulations interdites anglaise, avant de les traduire. À décider (fondateur).
@@ -50,3 +51,22 @@
   montants, transitions d'écart, facturation) restent en français dans l'interface anglaise, sauf s'ils figurent
   au catalogue. Proposition : codes d'erreur + libellés côté web. À faire (faible).
 - **Documentation de l'API (`/api/v1/docs`)** : en français seulement. À faire (faible).
+
+# Bloc I3 — interface (octobre 2026)
+
+- **API de lecture des notifications (bloc production).** Constat : `/admin/notifications` lit
+  `notifications_alertes` par `storage.listes_sql.notifications_page` (interface mince, D-4304). Proposition :
+  remplacer par l'API du bloc production dans `web/notifications_vues.historique` dès sa livraison. À faire.
+- **Échec partiel d'un canal invisible.** Constat : `notifier_alertes` n'inscrit que les canaux réussis quand au
+  moins un réussit. Impact : courriel en panne masqué si le webhook marche. Proposition : colonne des canaux en
+  échec (bloc production). À faire.
+- **Configuration des notifications vue par le web.** Constat : la page lit `CONTROLDONE_NOTIF_*` dans le processus
+  web ; les envois partent du planificateur. Proposition : le planificateur inscrit un battement (date, canaux
+  actifs) que la page affiche. À faire (faible).
+- **Préférence de langue d'un autre navigateur déjà connecté.** Constat : la langue du compte est reposée à la
+  connexion seulement ; une session ouverte ailleurs garde son cookie jusqu'à la reconnexion. Faible.
+- **Fiche client : actions sortantes complètes.** Constat : `FileSortante.lister(tenant_id)` lit toutes les actions
+  du client puis en garde 30. Impact : faible aujourd'hui. Proposition : limite en SQL. À faire (faible).
+- **Pages encore en Python** : API `/api/v1` et MCP (`lister_dossiers` complet). À mesurer.
+- **Migration 5 et blocs parallèles.** La colonne `users.langue` est l'étape 5 : un autre bloc qui ajoute une étape
+  en parallèle doit prendre le numéro suivant (jamais réordonner). À vérifier à l'intégration.
