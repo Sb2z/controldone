@@ -53,7 +53,7 @@ Mesures sur les seuls jeux de développement (`bench/out/*_dev_blocA`), sauf men
 - **`docs/DECISIONS.md` : bloc dupliqué.** Constat : la fin de la section D-2908 (« Les gains `corpus_g4` viennent
   de l'extraction… ») et l'en-tête « # Interface / D-3001 » apparaissent deux fois (lignes ~3459–3475). Impact :
   lecture. Proposition : supprimer la copie (fichier partagé avec les autres blocs : à faire par l'orchestrateur).
-  **À faire.**
+  **Fait** (vérifié par l'orchestrateur : plus de doublon dans `docs/DECISIONS.md`).
 
 - **Banc : outil d'analyse du bruit.** Constat : la ventilation du bruit par contrôle et raison (classe, motif,
   piège) a demandé des scripts ad hoc joignant `metrics.json` et `findings.json`. Proposition : une option
