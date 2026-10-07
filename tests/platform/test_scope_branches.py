@@ -9,7 +9,6 @@ from decimal import Decimal
 
 import pytest
 from aides_plateforme import FONDATEUR, SYSTEME
-from sqlalchemy import select
 
 from controldone.auth.roles import Acteur, Role
 from controldone.model.dossier import Dossier as DossierModele
@@ -21,7 +20,6 @@ from controldone.model.resultats import ResultatControle
 from controldone.storage import AccesRefuse, TenantScope
 from controldone.storage.models import (
     Alerte,
-    AuditLog,
     CleApi,
     Constat,
     Document,
@@ -115,9 +113,9 @@ def test_membre_au_mauvais_role_refuse(monde):
 
 
 def test_utilisateur_inconnu_refuse(monde):
-    with pytest.raises(AccesRefuse, match="non membre"):
-        with monde.db.tenant("cli_a", Acteur("usr_fantome", Role.client_lecteur, "cli_a")):
-            pass
+    fantome = Acteur("usr_fantome", Role.client_lecteur, "cli_a")
+    with pytest.raises(AccesRefuse, match="non membre"), monde.db.tenant("cli_a", fantome):
+        pass
 
 
 def _cle(monde, tenant, cle_id, **champs):
@@ -147,9 +145,9 @@ def test_acteur_cle_api_valide(monde):
 def test_acteur_cle_api_non_valable(monde, cle_id, role_acteur, motif):
     _cle(monde, "cli_a", "key_rev_a", role="client_admin", revoquee_le=datetime(2026, 9, 2, tzinfo=UTC))
     _cle(monde, "cli_a", "key_lec_a", role="client_lecteur")
-    with pytest.raises(AccesRefuse, match="clé d'API"):
-        with monde.db.tenant("cli_a", Acteur(f"api:{cle_id}", role_acteur, "cli_a")):
-            pass
+    acteur = Acteur(f"api:{cle_id}", role_acteur, "cli_a")
+    with pytest.raises(AccesRefuse, match="clé d'API"), monde.db.tenant("cli_a", acteur):
+        pass
 
 
 # --- API générique : filtres et écritures --------------------------------------------------------------------------
@@ -309,7 +307,7 @@ def _resultat(cid, niveau=Niveau.ecart_certain, montant="120.00", version=1):
         niveau=niveau,
         montant_en_jeu=Decimal(montant),
         nature_montant=NatureMontant.recouvrable,
-        raisons=[] if niveau is Niveau.ecart_certain else [list(RaisonCode)[0]],
+        raisons=[] if niveau is Niveau.ecart_certain else [next(iter(RaisonCode))],
     )
     return ResultatControle(
         id=f"res_{cid}",
@@ -438,7 +436,7 @@ def test_correction_appliquee_incremente_la_version(monde):
         )
         assert d.version == 2 and d.contenu["version"] == 2
         assert sc.obtenir(Document, "doc_a").contenu["client_id"] == "cli_a"  # jamais celui fourni
-        cor = [c for c in sc.corrections("dos_a") if c.id == "cor_nv"][0]
+        cor = next(c for c in sc.corrections("dos_a") if c.id == "cor_nv")
         assert len(cor.chemin) == 300 and cor.auteur == "usr_admin_a"
 
 
@@ -485,9 +483,8 @@ def test_client_lit_sa_fiche(monde):
 
 def test_operateur_reserve_au_fondateur(monde):
     for acteur in (SYSTEME, monde.acteurs["admin_a"]):
-        with pytest.raises(AccesRefuse, match="fondateur"):
-            with monde.db.operateur(acteur):
-                pass
+        with pytest.raises(AccesRefuse, match="fondateur"), monde.db.operateur(acteur):
+            pass
 
 
 def test_acces_client_exige_un_motif(monde):

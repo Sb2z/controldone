@@ -364,16 +364,9 @@ def executer_exercice_mensuel(
             return instantane_base(cible / "base" / "controldone.db")
 
         if cr.moteur == "postgresql":  # lecture seule imposée par le serveur pour toute nouvelle session
-            from sqlalchemy import text
+            from controldone.storage.sauvegarde import base_pg_lecture_seule
 
-            from controldone.storage.sauvegarde import _moteur_pg
-
-            moteur = _moteur_pg(pg_serveur).execution_options(isolation_level="AUTOCOMMIT")  # type: ignore[arg-type]
-            try:
-                with moteur.connect() as conn:
-                    conn.execute(text(f'ALTER DATABASE "{nom_pg}" SET default_transaction_read_only = on'))
-            finally:
-                moteur.dispose()
+            base_pg_lecture_seule(pg_serveur, nom_pg)  # type: ignore[arg-type]
         etat["avant"] = figer()
 
         def demarrage() -> str:

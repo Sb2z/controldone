@@ -83,6 +83,7 @@ __all__ = [
     "TAILLE_SEGMENT",
     "OutilAbsent",
     "RapportVerification",
+    "base_pg_lecture_seule",
     "creer_base_pg",
     "derniere_sauvegarde",
     "empreinte_fichier",
@@ -573,6 +574,20 @@ def supprimer_base_pg(url_serveur: str, nom: str) -> None:
     try:
         with moteur.connect() as conn:
             conn.execute(text(f'DROP DATABASE IF EXISTS "{nom}" WITH (FORCE)'))
+    finally:
+        moteur.dispose()
+
+
+def base_pg_lecture_seule(url_serveur: str, nom: str) -> None:
+    """Base jetable ``nom`` en lecture seule pour toute nouvelle session (exercice mensuel, D-4702)."""
+    from sqlalchemy import text
+
+    if not _NOM_BASE_RE.match(nom):
+        raise ValueError(f"nom de base refusé : {nom!r}")
+    moteur = _moteur_pg(url_serveur).execution_options(isolation_level="AUTOCOMMIT")
+    try:
+        with moteur.connect() as conn:
+            conn.execute(text(f'ALTER DATABASE "{nom}" SET default_transaction_read_only = on'))
     finally:
         moteur.dispose()
 

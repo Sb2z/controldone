@@ -48,7 +48,7 @@ def env_vide(monkeypatch):
         "https://controle-fictif.test/chemin",
         "https://controle-fictif.test?x=1",
         "https://controle-fictif.test#ancre",
-        "https://moi:secret@controle-fictif.test",  # pragma: allowlist secret
+        "https://moi:mdp@controle-fictif.test",
     ],
 )
 def test_url_publique_invalide(env_vide, valeur):
@@ -145,7 +145,10 @@ def test_mode_dev_reseau_volontaire_journalise(monkeypatch, caplog):
 
 def _appeler(app, *, chemin="/x", entetes=(), morceaux=(b"",), type_="http"):
     envoyes: list[dict] = []
-    file = [{"type": "http.request", "body": m, "more_body": i < len(morceaux) - 1} for i, m in enumerate(morceaux)]
+    file = [
+        {"type": "http.request", "body": m, "more_body": i < len(morceaux) - 1}
+        for i, m in enumerate(morceaux)
+    ]
 
     async def recevoir():
         return file.pop(0) if file else {"type": "http.disconnect"}
@@ -154,7 +157,9 @@ def _appeler(app, *, chemin="/x", entetes=(), morceaux=(b"",), type_="http"):
         envoyes.append(message)
 
     scope = {"type": type_, "path": chemin, "headers": list(entetes)}
-    asyncio.run(ws.LimiteCorps(app, limite=10, limite_depot=100, chemins_depot=("/depot",))(scope, recevoir, envoyer))
+    asyncio.run(
+        ws.LimiteCorps(app, limite=10, limite_depot=100, chemins_depot=("/depot",))(scope, recevoir, envoyer)
+    )
     return envoyes
 
 
@@ -191,7 +196,9 @@ def test_corps_annonce_trop_gros_refuse_sans_lecture():
 
 def test_content_length_mensonger_ou_illisible_compte_en_flux():
     for entete in (b"3", b"pas-un-nombre"):
-        envoyes = _appeler(_application_qui_lit(), entetes=[(b"content-length", entete)], morceaux=(b"123456", b"78901"))
+        envoyes = _appeler(
+            _application_qui_lit(), entetes=[(b"content-length", entete)], morceaux=(b"123456", b"78901")
+        )
         assert _statut(envoyes) == 413
 
 
@@ -234,7 +241,13 @@ def test_langue_de_la_reponse_413(cookie, accept, attendu):
 
 @pytest.mark.parametrize(
     "valeur, attendu",
-    [("script-src-elem", "script-src-elem"), ("Script-Src", "script-src"), ("script src", "?"), (None, "?"), ("é", "?")],
+    [
+        ("script-src-elem", "script-src-elem"),
+        ("Script-Src", "script-src"),
+        ("script src", "?"),
+        (None, "?"),
+        ("é", "?"),
+    ],
 )
 def test_jeton_sur(valeur, attendu):
     assert ws._jeton_sur(valeur) == attendu
@@ -245,7 +258,7 @@ def test_jeton_sur(valeur, attendu):
     [
         ("inline", "inline"),
         ("EVAL", "eval"),
-        ("https://cdn-fictif.test/a.js?token=secret#x", "https://cdn-fictif.test"),  # pragma: allowlist secret
+        ("https://cdn-fictif.test/a.js?jeton=XYZ#x", "https://cdn-fictif.test"),
         ("https://moi:mdp@cdn-fictif.test:8443/x", "https://cdn-fictif.test:8443"),
         ("https://controle-fictif.test/page", "self"),
         ("data:image/png;base64,AAAA", "data"),
@@ -290,7 +303,9 @@ def test_rapport_csp_de_bout_en_bout(monde, caplog):
     c = monde.client()
     url = "/csp-rapport"
     assert c.post(url, content=b"{}", headers={"content-type": "text/plain"}).status_code == 415
-    assert c.post(url, content=b"{pas du json", headers={"content-type": "application/json"}).status_code == 400
+    assert (
+        c.post(url, content=b"{pas du json", headers={"content-type": "application/json"}).status_code == 400
+    )
     trop = b"[" + b" " * ws.TAILLE_MAX_RAPPORT_CSP + b"]"
     assert c.post(url, content=trop, headers={"content-type": "application/reports+json"}).status_code == 413
     rapport = {

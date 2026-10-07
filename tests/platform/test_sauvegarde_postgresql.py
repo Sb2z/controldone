@@ -86,7 +86,17 @@ def test_dump_illisible_refuse(tmp_path):
         sv.restaurer(archive, tmp_path / "r", cles)
 
 
+def _sans_verrou_pg(monkeypatch) -> None:
+    """Serveur fictif injoignable : le verrou consultatif PostgreSQL (D-4701, testé à part) est neutralisé."""
+    import contextlib
+
+    from controldone.storage import verrou
+
+    monkeypatch.setattr(verrou, "_verrou_pg", lambda *a, **k: contextlib.nullcontext())
+
+
 def test_cli_choisit_pg_dump_pour_une_base_postgresql(tmp_path, monkeypatch, capsys):
+    _sans_verrou_pg(monkeypatch)
     monkeypatch.setenv("CONTROLDONE_DATABASE_URL", URL_FICTIVE)
     monkeypatch.setenv("CONTROLDONE_DATA_DIR", str(tmp_path / "var"))
     pytest.importorskip("pg8000")  # Database() ouvre le moteur (sans se connecter)
@@ -107,6 +117,7 @@ def test_cli_choisit_pg_dump_pour_une_base_postgresql(tmp_path, monkeypatch, cap
 
 
 def test_pg_dump_absent_code_configuration(tmp_path, monkeypatch):
+    _sans_verrou_pg(monkeypatch)
     pytest.importorskip("pg8000")
     monkeypatch.setenv("CONTROLDONE_DATABASE_URL", URL_FICTIVE)
     monkeypatch.setenv("CONTROLDONE_PG_DUMP", "pg_dump_introuvable_fictif")

@@ -134,7 +134,9 @@ def test_reinitialiser_mot_de_passe_faible(base, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO("court\n"))
     assert _lancer("reinitialiser-mot-de-passe", "--email", EMAIL, "--mot-de-passe-stdin") == 2
     assert "refusé" in capsys.readouterr().err
-    assert verifier_mot_de_passe(utilisateur_par_email(base, EMAIL).mot_de_passe_hash, "ancienne-phrase-FICTIVE")
+    assert verifier_mot_de_passe(
+        utilisateur_par_email(base, EMAIL).mot_de_passe_hash, "ancienne-phrase-FICTIVE"
+    )
 
 
 def test_reinitialiser_confirmation_differente(base, monkeypatch, capsys):
@@ -145,7 +147,9 @@ def test_reinitialiser_confirmation_differente(base, monkeypatch, capsys):
 
 
 def test_reinitialiser_revoque_les_sessions_et_debloque(base, monkeypatch, capsys):
-    sec.enregistrer_session(base, sid="sid_ouverte", user_id="usr_exploitant", debut=T - 60, vu=T, expire=T + 600)
+    sec.enregistrer_session(
+        base, sid="sid_ouverte", user_id="usr_exploitant", debut=T - 60, vu=T, expire=T + 600
+    )
     s = _seau(base, "connexion_compte", EMAIL)
     monkeypatch.setattr("getpass.getpass", lambda invite="": "nouvelle-phrase-FICTIVE-1")
     assert _lancer("reinitialiser-mot-de-passe", "--email", EMAIL) == 0
@@ -160,7 +164,9 @@ def test_reinitialiser_revoque_les_sessions_et_debloque(base, monkeypatch, capsy
 # --- clés maîtresses -------------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("valeur, attendu", [("PROD", "prod"), (" test ", "test"), ("staging", "prod"), ("", "prod")])
+@pytest.mark.parametrize(
+    "valeur, attendu", [("PROD", "prod"), (" test ", "test"), ("staging", "prod"), ("", "prod")]
+)
 def test_mode_inconnu_le_plus_strict(monkeypatch, valeur, attendu):
     monkeypatch.setenv("CONTROLDONE_ENV", valeur)
     assert mod_cles.mode_execution() == attendu
@@ -183,7 +189,9 @@ def test_plusieurs_cles_la_premiere_chiffre(monkeypatch):
     monkeypatch.setenv("CONTROLDONE_MASTER_KEY", f" {k2.decode()} ,, {k1.decode()} ")
     assert mod_cles.charger_cles_maitresses() == [k2, k1]
     jeton = mod_cles.chiffrer_secret([k1], "secret TOTP FICTIF")
-    assert mod_cles.dechiffrer_secret([k2, k1], jeton) == "secret TOTP FICTIF"  # rotation : l'ancienne déchiffre
+    assert (
+        mod_cles.dechiffrer_secret([k2, k1], jeton) == "secret TOTP FICTIF"
+    )  # rotation : l'ancienne déchiffre
     with pytest.raises(ErreurIntegrite):
         mod_cles.dechiffrer_secret([k2], jeton)
     with pytest.raises(ErreurIntegrite):

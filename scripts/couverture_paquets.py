@@ -2,7 +2,8 @@
 
 Sortie Markdown (stdout et ``--out``) : un tableau par paquet de ``controldone`` (lignes, branches, total), puis les
 modules **critiques** les moins couverts (contrôles, normalisation des montants, authentification, sécurité web,
-stockage), pour orienter les tests à écrire. ``--min`` : taux global minimal (échec en dessous).
+stockage), pour orienter les tests à écrire. ``--min`` : taux global minimal (échec en dessous) ;
+``--min-paquet paquet=taux`` (répétable) : taux minimal d'un paquet (D-4903).
 """
 
 from __future__ import annotations
@@ -39,6 +40,40 @@ def paquet(chemin: str) -> str:
 
 def taux(couverts: int, total: int) -> float:
     return 100.0 * couverts / total if total else 100.0
+
+
+def taux_par_paquet(donnees: dict) -> dict[str, float]:
+    """Taux total (lignes + branches) de chaque paquet, comme dans le tableau."""
+    acc: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for chemin, f in donnees["files"].items():
+        s = f["summary"]
+        a = acc[paquet(chemin)]
+        a[0] += s["covered_lines"] + s.get("covered_branches", 0)
+        a[1] += s["num_statements"] + s.get("num_branches", 0)
+    return {nom: taux(c, n) for nom, (c, n) in acc.items()}
+
+
+def seuils_paquets(valeurs: list[str]) -> dict[str, float]:
+    """``["controls=85", "auth=92.5"]`` -> ``{"controls": 85.0, "auth": 92.5}`` (``ValueError`` si mal formé)."""
+    seuils = {}
+    for v in valeurs:
+        nom, sep, brut = v.partition("=")
+        if not sep or not nom.strip():
+            raise ValueError(f"--min-paquet attend paquet=taux : {v!r}")
+        seuils[nom.strip()] = float(brut.replace(",", "."))
+    return seuils
+
+
+def paquets_sous_le_seuil(donnees: dict, seuils: dict[str, float]) -> list[str]:
+    """Messages des paquets sous leur seuil (un paquet absent du rapport est une erreur : seuil mal nommé)."""
+    par_paquet = taux_par_paquet(donnees)
+    erreurs = []
+    for nom, mini in sorted(seuils.items()):
+        if nom not in par_paquet:
+            erreurs.append(f"paquet {nom!r} absent du rapport de couverture")
+        elif par_paquet[nom] < mini:
+            erreurs.append(f"Couverture de {nom} {par_paquet[nom]:.1f} % < minimum {mini:.1f} %")
+    return erreurs
 
 
 def resumer(donnees: dict, nb_critiques: int = 10) -> tuple[str, float]:
@@ -92,15 +127,31 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=Path("var/couverture/paquets.md"))
     ap.add_argument("--critiques", type=int, default=10)
     ap.add_argument("--min", type=float, default=0.0, help="taux global minimal, en %%")
+    ap.add_argument(
+        "--min-paquet",
+        action="append",
+        default=[],
+        metavar="PAQUET=TAUX",
+        help="taux minimal d'un paquet (répétable), ex. controls=85",
+    )
     a = ap.parse_args(argv)
-    texte, global_ = resumer(json.loads(a.json.read_text(encoding="utf-8")), a.critiques)
+    try:
+        seuils = seuils_paquets([x for v in a.min_paquet for x in v.split() if x])
+    except ValueError as exc:
+        ap.error(str(exc))
+    donnees = json.loads(a.json.read_text(encoding="utf-8"))
+    texte, global_ = resumer(donnees, a.critiques)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(texte, encoding="utf-8")
     sys.stdout.write(texte)
+    echec = 0
     if global_ < a.min:
         sys.stderr.write(f"Couverture {global_:.1f} % < minimum {a.min:.1f} %\n")
-        return 1
-    return 0
+        echec = 1
+    for message in paquets_sous_le_seuil(donnees, seuils):
+        sys.stderr.write(message + "\n")
+        echec = 1
+    return echec
 
 
 if __name__ == "__main__":

@@ -240,7 +240,25 @@ def _reconnaitre_entete(li: VueLigne) -> list[ColonneFt] | None:
     if not any(r in ("ht", "pu", "ttc", "pu_ttc") or r.startswith("nat:") for r in roles):
         return None
     # D-4602 : colonne « montant » dont l'en-tête, découpé par l'OCR (« Total : c/ IVA », « Total | TTC »), porte une
-    # mention TVA comprise rattachée au mot reconnu : montant TTC, jamais lu comme hors taxe
+    # mention TVA comprise rattachée au mot reconnu : montant TTC, jamais lu comme hors taxe. « IVA » reconnu seul
+    # comme colonne de TVA juste après « … c/ » (« com », « incl. ») en est la fin, pas une colonne.
+    fusion: list[ColonneFt] = []
+    for c in cols:
+        prec = fusion[-1] if fusion else None
+        if (
+            prec is not None
+            and c.role in ("tva", "tva_mt")
+            and len(c.mots) == 1
+            and prec.libelle.split()
+            and _cle_mot(prec.libelle.split()[-1]) in _QUALIFICATIFS_TTC_OUVERTS
+            and c.x0 - prec.x1 < 0.03
+        ):
+            prec.x1 = max(prec.x1, c.x1)
+            prec.libelle = f"{prec.libelle} {c.libelle}"
+            prec.mots = (*prec.mots, *c.mots)
+            continue
+        fusion.append(c)
+    cols = fusion
     for c in cols:
         if c.role == "ht" and _mention_ttc(c.libelle):
             c.role = "ttc"
@@ -259,6 +277,10 @@ _MENTION_TTC_RE = re.compile(
     r"(?:^|\s)(?:c/\s*iva|com\s+iva|con\s+iva|ivato|ivainc\w*|iva\s+inc\w*|t\.?t\.?c\.?|incl\.?|inkl\.?|"
     r"inclusief|brutto|gross|tva\s+comprise)(?:\s|$)"
 )
+
+
+#: Fin d'en-tête qui annonce « TVA » au mot suivant (« Total c/ IVA », « Betrag inkl. MwSt »), D-4602.
+_QUALIFICATIFS_TTC_OUVERTS = {"c/", "com", "con", "incl", "inkl", "inclusief", "including"}
 
 
 def _mention_ttc(libelle: str) -> bool:
