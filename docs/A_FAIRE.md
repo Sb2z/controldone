@@ -1,22 +1,23 @@
 # ControlDOne — ce qui reste à faire
 
 Ce fichier consolide les constats notés en cours de route dans `docs/backlog/` : un fichier par bloc, avec le détail
-de chaque point (fichiers, mesures). Il est mis à jour le 7 octobre 2026, à la fin du lot 3. Les points sont classés par priorité. **Décision** signale ce qui demande l'accord ou
+de chaque point (fichiers, mesures). Il est mis à jour le 7 octobre 2026, à la fin du lot 4. Les points sont classés par priorité. **Décision** signale ce qui demande l'accord ou
 l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a été fait est listé en fin de fichier.
 
-## 1. Décisions du fondateur
+## 1. Décisions et actions du fondateur
+
+Les neuf arbitrages d'octobre sont tranchés (D-4000). Reste ce qui ne peut venir que du fondateur
+(détail : `docs/RAPPELS_FONDATEUR.md`) :
 
 | Point | Pourquoi | Source |
 |---|---|---|
-| Activer l'extraction par modèle de langage (clé d'API) | réponse prévue aux mises en page vraiment inconnues | orchestrateur |
-| Mesurer sur un premier dossier réel anonymisé, avec l'accord du client | seule mesure qui vaut pour le vrai monde | orchestrateur |
-| Lancer la CI à chaque push / PR (avec PostgreSQL, audit d'image, navigateur) | consomme les minutes GitHub | orchestrateur, sécurité, production |
-| Nettoyer l'historique Git (609 Mo de corpus ; adresse personnelle comme auteur des anciens enregistrements) | réécriture irréversible de l'historique déjà poussé | orchestrateur |
-| HSTS `preload` | engagement difficile à retirer pour le domaine | sécurité |
-| A13 (codes marchandise à sens unique) : 65 « à vérifier » de bruit pour 1 vrai | les réduire ferait perdre le vrai cas | moteur |
-| Constats, rapports et relevés en anglais | formulations anglaises à valider contre les garde-fous juridiques | interface |
-| Prestataire de courriel et adresse des alertes poussées (désactivées par défaut) | envoi vers l'extérieur | production |
-| Hébergement, domaine, paiement réel, déploiement | actions extérieures | — |
+| Fournir la clé d'API Anthropic, puis `controldone llm verifier` et `scripts/mesure_llm.py` (dépense confirmée) | la lecture par Claude est prête mais inactive (D-4001 à D-4008) | orchestrateur |
+| Premier dossier réel : accord écrit du client, contrat RGPD, anonymisation, entreprise non exclue | seule mesure qui vaut pour le vrai monde (D-4000 point 2) | orchestrateur |
+| **Décision** : un avoir illisible peut-il solder un écart de prix (pièges D3 sur avoirs) ? | règle métier, pas technique | moteur |
+| Adresse ntfy secrète et sonde de sauvegarde (`CONTROLDONE_NOTIF_WEBHOOK_URL`, `BACKUP_PING_URL`) | alertes sur téléphone (D-4000 point 8) | production |
+| Activer l'exercice mensuel et contrôler la copie papier de la clé (§ 2) | procédure sur le serveur réel | production |
+| Hébergement, domaine, Stripe en réel, mise en ligne (`docs/MISE_EN_LIGNE.md`) | actions extérieures et dépenses | — |
+| Plus tard : HSTS `preload` (non pour l'instant), rapports en anglais (non pour l'instant), tests PostgreSQL dans la CI (minutes GitHub) | décisions 5B, 7B, 3A | — |
 
 ## 2. Fiabilité et sécurité de la production
 
@@ -50,24 +51,32 @@ mensuel des vulnérabilités de l'image, sans réseau (D-4704).
 
 | Point | Constat | Effort |
 |---|---|---|
-| D1 : deux faux certains restants sur les jeux `--ext` (un piège, un non apparié) | antérieurs au lot 2 | moyen |
-| Bruit encore au-dessus de l'alerte sur deux jeux tenus à l'écart (1,49 et 1,55) | P4 restants, C5 sur relevés et TVA autoliquidée, doublons P1, A2, B2 total | moyen |
-| Rappel des erreurs attendues « certain » : 55 à 75 % selon les jeux | F3 rattachement faible, B1 sur scans, A5 taux OCR | moyen |
-| Totaux par code non lus sur certaines mises en page dégradées (encore 34 à 133 manquants selon les jeux) | rappel B2 par code | moyen |
+| Un faux certain C1 (montant inexact) sur `corpus_g9`, non expliqué par le correctif D-4603 | à reproduire sur un nouveau jeu de développement, sans ouvrir `corpus_g9` | moyen |
+| Rappel des erreurs attendues « certain » : 61 % sur le dernier jeu vierge | A5 (taux lu entre 0,86 et 0,89, sans seconde lecture), B1 et F3 sous 0,70, A6 taux imprimé illisible | moyen |
+| Rappel global stable autour de 73 à 88 % : 39 erreurs manquées sur 188 au dernier jeu vierge | analyser les FN par contrôle sur les jeux de développement | moyen |
+| Bruit 0,6 à 1,35 par dossier (sous l'alerte de 1,5 partout) ; `corpus_g5` et `corpus_g6` les plus bruités | P4, C5 sur relevés, TVA autoliquidée | moyen |
+| Totaux par code non lus sur certaines mises en page dégradées | rappel B2 par code | moyen |
+| Lignes de régularisation lues sans signe moins : aujourd'hui le montant C passe « non établi » ; les lire signées | extraction | petit |
+
+Fait (lots M3 et M4) : A13 regroupé (D-4201) · garde-fous D3/D4 (D-4212 à D-4215) étendus à D6/D7 (D-4601) ·
+lignes imprimées seulement TTC signalées à l'extraction (D-4602) · montant C1–C5 « non établi » quand un avoir,
+une version de déclaration ou un total par code le rend incertain ; avoir d'un autre envoi plus déduit dans chaque
+dossier (D-4603) · rappel certain par seconde lecture indépendante F3, A6, B1 (D-4604 à D-4606).
 
 ## 4. Interface
 
-| Point | Effort |
-|---|---|
-| ~~Messages d'erreur des services et page de documentation de l'API encore en français seulement~~ — fait (bloc I4, D-4801 à D-4803) ; reste au backlog : codes d'erreur portés par l'exception et champ `code` des erreurs de l'API REST (à décider) | petit |
+Rien d'ouvert de prioritaire (détail et petites pistes : `docs/backlog/interface.md`).
 
 ## 5. Dépôt et outillage
 
 | Point | Effort |
 |---|---|
-| Réécriture de l'historique Git (corpus `corpus_g3`–`g5`, anciens courriels d'auteur, décision 4A) : corpus régénérables et vérifiés (`make corpus-verifier`, D-4403) ; ensuite retirer leurs exceptions de `.gitignore` | moyen |
-| ~~Seuil minimal de couverture (`COUV_MIN`)~~ — fait (bloc O4, D-4901 à D-4903 : 89,7 %, seuils 88 % global, `controls` 89 %, `auth` 97 %) ; reste : tests de `storage/verrou.py`, `services/exercice_restauration.py`, `storage/sauvegarde.py` une fois livrés par leurs blocs, puis relever les seuils | petit |
-| Formatage automatique (`ruff format`) : 301 fichiers à reformater, à faire en un seul enregistrement isolé | petit |
+| Tests de `storage/verrou.py` (70 %), `services/exercice_restauration.py`, `storage/sauvegarde.py`, `services/exercice_mensuel.py` (≈ 80 %), puis relever les seuils de couverture | petit |
+| Codes d'erreur portés par l'exception et champ `code` dans les erreurs de l'API REST (aujourd'hui message français reconnu par motif) | petit |
+
+Fait : historique Git nettoyé, plus aucun corpus versionné (D-4404) · `ruff format` appliqué à tout le dépôt ·
+couverture 89,7 %, seuils 88 % global, `controls` 89 %, `auth` 97 % (D-4901 à D-4903) · messages des services et
+documentation de l'API en anglais, détection des textes restés en français (D-4801 à D-4803).
 
 ## Fait pendant les lots 1 et 2
 
@@ -82,13 +91,6 @@ filtres, pagination, filtres en SQL, retour filtré (D-3401, D-3801, D-3802) · 
 accessibilité (D-3402 à D-3404) · interface en anglais (D-3803) · pre-commit, couverture, tests de propriétés,
 corpus régénérables (D-3901 à D-3904) · CI rapide à chaque push, complète à la demande ; TIFF déterministes ; recettes et empreintes de tous les corpus (D-4401 à D-4403).
 
-## Ajouts du lot 3 (7 octobre 2026)
+## Information
 
-| Point | Nature |
-|---|---|
-| **Décision** : un avoir illisible peut-il solder un écart de prix (pièges D3 sur avoirs) ? | moteur |
-| Étendre aux contrôles D6 / D7 les garde-fous D3 / D4 (D-4212 à D-4215) | moteur, petit |
-| Signaler dès l'extraction les lignes imprimées seulement TTC | extraction, petit |
-| Un C1 certain au montant inexact sur le dernier jeu vierge (`corpus_g9`) | moteur, à étudier sur les jeux de développement |
-| Mesurer la lecture par Claude dès la clé fournie (`scripts/mesure_llm.py`) | dès la clé |
-| GitHub conserve un temps l'ancien historique (objets non référencés) : sans action de notre part | information |
+GitHub conserve un temps l'ancien historique (objets non référencés) : sans action de notre part.

@@ -309,6 +309,45 @@ Sur des documents jamais vus, il reste environ 1 faux certain pour 60 à 65 éca
 validation humaine. La lecture par Claude (D-4001 à D-4008) n'est pas incluse : elle est inactive tant que la clé
 n'est pas fournie.
 
+## Septième mesure : lot 4 — `corpus_g10` vierge (7 octobre 2026)
+
+**Jeu.** `corpus_g10` (graine 20261012, préfixe GR) compte 160 dossiers générés avec `--ext --per-control 3` : 188
+erreurs, dont 72 attendues « certain ». Ni ses documents ni sa vérité n'ont été ouverts avant la mesure. Recette et
+empreintes dans `bench/corpus_empreintes.json`.
+
+**Avant / après sur le jeu vierge** (code de fin du lot 3, `ab489a1`, contre code du lot 4, mêmes pages lues) :
+
+| `corpus_g10` | Fin du lot 3 | Lot 4 |
+|---|---|---|
+| Vrais / faux certains | 49 / 0 | **51 / 0** |
+| Borne basse de Wilson 95 % | 92,7 % | 93,0 % |
+| Rappel | 79,3 % | 79,3 % |
+| Rappel des erreurs attendues « certain » | 59,7 % | 61,1 % |
+| Bruit / dossier | 1,13 | 1,10 |
+| Violations de pièges | 32 | 30 |
+
+**Tous les jeux tenus à l'écart, code du lot 4** (entre parenthèses : mesure du lot 3) :
+
+| Jeu tenu à l'écart | Vrais / faux certains | Rappel | Bruit / dossier |
+|---|---|---|---|
+| `corpus_g10` (vierge) | 51 / 0 | 79,3 % | 1,10 |
+| `corpus_g9` | 62 / 1 (63 / 1) | 73,2 % | 1,13 (1,14) |
+| `corpus_g8` | 54 / 0 (54 / 0) | 82,5 % | 0,96 (0,98) |
+| `corpus_g7` | 53 / 0 (52 / 0) | 76,7 % | 1,21 (1,23) |
+| `corpus_g6` | 62 / 0 (61 / 0) | 75,8 % | 1,31 |
+| `corpus_g5` | 38 / 0 (37 / 0) | 80,5 % | 1,35 |
+| `corpus_g4` | 33 / 0 (32 / 0) | 80,3 % | 0,67 |
+| `corpus_g3` | 69 / 0 (66 / 0) | 88,3 % | 0,60 (0,63) |
+| `corpus_g2` | 42 / 0 (40 / 0) | 83,1 % | 0,57 |
+| `corpus_h2` | 46 / 0 (46 / 0) | 79,7 % | 1,25 |
+| `corpus` | 45 / 0 (45 / 0) | 85,2 % | 0,71 |
+
+**À retenir.** Tous les seuils passent ; aucun faux certain nouveau ; plus de certains sur huit jeux sur onze, un de
+moins sur `corpus_g9`. Le faux certain C1 de `corpus_g9` (montant inexact) **reste** : la cause trouvée sur les jeux
+de développement (avoir déduit dans chaque dossier d'une facture multi-envois, D-4603) n'était donc pas la sienne, ou
+pas la seule. Il n'a pas été étudié sur `corpus_g9` lui-même, qui reste tenu à l'écart. Le rappel global ne bouge
+pas : le lot 4 rend certains des écarts déjà trouvés, il n'en trouve pas de nouveaux.
+
 ## Reproduire
 
 ```bash
@@ -318,5 +357,5 @@ CONTROLDONE_PAGES_CACHE_DIR=var/cache/g3_pages python -m controldone.bench_run \
 python -m bench.score --corpus bench/corpus_g3 --split holdout --run bench/out/g3 --gate
 ```
 
-Tests : 2 602 passent ; `ruff check src tests scripts` est propre ; la démonstration complète
+Tests : 2 946 passent (10 ignorés sans PostgreSQL de test), couverture 89,7 % ; `ruff check src tests scripts` est propre ; la démonstration complète
 (`scripts/demo_complete.sh --sans-serveur`) se termine sans erreur.
