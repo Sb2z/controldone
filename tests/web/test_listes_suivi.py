@@ -336,7 +336,11 @@ def test_depot_suivi_etapes_et_page(monde):
     assert "2/5" in c.get(url).text  # compteur de l'étape courante dans la page (sans JavaScript)
     store.echouer(job.id, "w-test", "essai", tentative=job.attempts)  # nouvel essai dans 30 s
     d = c.get(url + "/etat").json()
-    assert d["etape"] == "recu" and d["detail"] == "Nouvel essai programmé." and not d["fini"]
+    assert (
+        d["etape"] == "recu"
+        and d["detail"] == "Un nouvel essai est programmé, sans action de votre part."
+        and not d["fini"]
+    )
     assert 'http-equiv="refresh"' in c.get(url).text
 
 

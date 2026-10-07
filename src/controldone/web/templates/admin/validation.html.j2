@@ -4,7 +4,7 @@
 {% block contenu %}
 <div class="titre-page">
   <h1>{{ _("File de validation") }}</h1>
-  <p class="discret">{{ _("Rien ne sort vers un client sans décision ici. Ordre : écarts certains par montant décroissant, puis à vérifier, puis points à faire vérifier par un professionnel.") }}</p>
+  <p class="discret">{{ _("Rien n'est publié à un client sans votre décision ici. Les écarts certains viennent en premier, du plus gros au plus petit, puis les « à vérifier », puis les points à faire vérifier par un professionnel.") }}</p>
 </div>
 <nav class="ancres" aria-label="{{ _("Sections") }}"><a href="#constats">{{ _("Constats proposés") }} ({{ total_file }})</a><a href="#sorties">{{ _("Actions sortantes") }} ({{ sorties|length }})</a><a href="#attention">{{ _("Points d'attention") }} ({{ nb_attention }})</a></nav>
 
@@ -41,7 +41,7 @@
     {{ constat_carte(it.c, it.extraits, "/admin/clients/" ~ it.tenant_id, csrf, retour, True, it.tenant_id, it.client, it.dossier) }}
     <p class="lien-dossier"><a href="/admin/clients/{{ it.tenant_id }}/dossiers/{{ it.c.dossier_id }}#constat-{{ it.c.id }}">{{ _("Ouvrir le dossier {ref} (corriger une valeur, voir les pages)", ref=it.dossier) }}</a></p>
   {% else %}
-    <p class="vide carte">{% if req.actif %}{{ _("Aucun constat ne correspond à ces critères.") }} <a href="/admin/validation#constats">{{ _("Afficher toute la file") }}</a>.{% else %}{{ _("Aucun constat en attente.") }}{% endif %}</p>
+    <p class="vide carte">{% if req.actif %}{{ _("Aucun constat ne correspond à ces critères.") }} <a href="/admin/validation#constats">{{ _("Afficher toute la file") }}</a>.{% else %}{{ _("Aucun constat à valider. La file est vide.") }}{% endif %}</p>
   {% endfor %}
   {{ pagination(p, req, _("Pages de la file de validation")) }}
   </div>
@@ -49,7 +49,7 @@
 
 <section id="sorties" aria-labelledby="t-s">
   <h2 id="t-s">{{ _("Actions sortantes à approuver") }}</h2>
-  <p class="discret">{{ _("Les rapports et relevés d'écarts approuvés sont mis à disposition du client dans son espace ; rien n'est envoyé à un transitaire.") }}</p>
+  <p class="discret">{{ _("Une fois approuvés, les rapports et relevés d'écarts s'affichent dans l'espace du client. Rien n'est envoyé à un transitaire.") }}</p>
   {% for s in sorties %}
   <article class="carte sortie">
     <header class="sortie-tete">
@@ -73,7 +73,7 @@
         </form></details>
     </div>
   </article>
-  {% else %}<p class="vide carte">{{ _("Aucune action en attente.") }}</p>{% endfor %}
+  {% else %}<p class="vide carte">{{ _("Aucune action à approuver.") }}</p>{% endfor %}
 </section>
 
 <section id="attention" class="carte" aria-labelledby="t-a">

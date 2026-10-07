@@ -172,7 +172,7 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
             "erreur.html.j2",
             titre="Page introuvable",
             statut=404,
-            message="Cette page n'existe pas ou n'est pas accessible avec votre compte.",
+            message="Cette page n'existe pas ou n'est pas accessible avec votre compte. Vérifiez l'adresse, ou revenez à l'accueil.",
         )
 
     @app.exception_handler(Interdit)
@@ -182,7 +182,7 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
             "erreur.html.j2",
             titre="Action non autorisée",
             statut=403,
-            message="Cette action n'est pas autorisée pour votre compte.",
+            message="Votre compte ne permet pas cette action. Si vous en avez besoin, demandez-la à l'administrateur de votre société.",
         )
 
     @app.exception_handler(CsrfInvalide)
@@ -192,8 +192,7 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
             "erreur.html.j2",
             titre="Formulaire expiré",
             statut=403,
-            message="Le formulaire a expiré ou n'a pas été émis par cette application. "
-            "Rechargez la page puis recommencez.",
+            message="Le formulaire a expiré ou ne vient pas de cette application. Rechargez la page, puis recommencez.",
         )
 
     @app.exception_handler(RequeteInvalide)
@@ -207,7 +206,7 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
             "erreur.html.j2",
             titre="Page introuvable",
             statut=404,
-            message="Cette page n'existe pas ou n'est pas accessible avec votre compte.",
+            message="Cette page n'existe pas ou n'est pas accessible avec votre compte. Vérifiez l'adresse, ou revenez à l'accueil.",
         )
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=_middleware_session(app))

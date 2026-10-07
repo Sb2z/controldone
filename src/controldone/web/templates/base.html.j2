@@ -36,22 +36,22 @@
     <nav class="nav" aria-label="{{ _("Navigation principale") }}">
       {% if acteur.role.value == "fondateur" %}
         {% set liens = [("tableau", "/admin", _("Tableau de bord")), ("validation", "/admin/validation", _("File de validation")), ("clients", "/admin/clients", _("Clients")), ("finances", "/admin/finances", _("Finances")), ("prospection", "/admin/prospection", _("Marketing"))] %}
-        {% set autres = [("jobs", "/admin/jobs", _("Tâches")), ("journal", "/admin/journal", _("Journal")), ("alertes", "/admin/alertes", _("Alertes")), ("autonomie", "/admin/autonomie", _("Autonomie"))] %}
+        {% set liens_plus = [("jobs", "/admin/jobs", _("Tâches")), ("journal", "/admin/journal", _("Journal")), ("alertes", "/admin/alertes", _("Alertes")), ("autonomie", "/admin/autonomie", _("Autonomie"))] %}
       {% else %}
         {% set liens = [("tableau", "/espace", _("Tableau de bord")), ("depot", "/espace/depot", _("Déposer")), ("dossiers", "/espace/dossiers", _("Dossiers")), ("rapports", "/espace/rapports", _("Rapports")), ("recouvrement", "/espace/recouvrement", _("Suivi des avoirs"))] %}
-        {% set autres = [] %}
+        {% set liens_plus = [] %}
       {% endif %}
       <ul>
       {% for cle, url, lib in liens %}
         <li><a href="{{ url }}"{% if nav == cle %} aria-current="page"{% endif %}>{{ lib }}</a></li>
       {% endfor %}
       </ul>
-      {% if autres %}
-      {% set actif_autre = autres|selectattr(0, "equalto", nav)|list %}
+      {% if liens_plus %}
+      {% set actif_autre = liens_plus|selectattr(0, "equalto", nav)|list %}
       <details class="nav-plus" data-nav-plus>
         <summary{% if actif_autre %} class="actif"{% endif %}>{{ actif_autre[0][2] if actif_autre else _("Plus") }}<span class="vh"> : {{ _("autres pages") }}</span></summary>
         <ul class="nav-menu">
-        {% for cle, url, lib in autres %}
+        {% for cle, url, lib in liens_plus %}
           <li><a href="{{ url }}"{% if nav == cle %} aria-current="page"{% endif %}>{{ lib }}</a></li>
         {% endfor %}
         </ul>
@@ -85,7 +85,7 @@
 </header>
 <main id="contenu" class="page">
   {% if flash %}
-  <div class="message {{ 'erreur' if flash.e else 'succes' }}" role="{{ 'alert' if flash.e else 'status' }}"><span class="texte">{{ flash.m }}</span></div>
+  <div class="message {{ 'erreur' if flash.e else 'succes' }}" role="{{ 'alert' if flash.e else 'status' }}">{{ flash.m }}</div>
   {% endif %}
   {% block contenu %}{% endblock %}
 </main>

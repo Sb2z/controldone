@@ -78,7 +78,7 @@ def connexion(request: Request) -> Response:
             "connexion.html.j2",
             titre="Connexion",
             statut=429,
-            erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.",
+            erreur="Trop d'essais en peu de temps. Attendez quelques minutes, puis réessayez.",
         )
     pf = request.app.state.plateforme
     try:
@@ -96,7 +96,7 @@ def connexion(request: Request) -> Response:
             titre="Connexion",
             statut=401,
             email=email,
-            erreur="Identifiants invalides.",
+            erreur="Adresse ou mot de passe incorrect. Vérifiez la saisie, puis réessayez.",
         )
     return _ouvrir_session(request, acteur, deux_facteurs=False)
 
@@ -114,14 +114,18 @@ def totp(request: Request) -> Response:
     etat = _etat(request)
     user_id = etat.lire_2fa_requete(request)
     if user_id is None:
-        return redirection(request, "/connexion", erreur="Étape expirée : reconnectez-vous.")
+        return redirection(
+            request,
+            "/connexion",
+            erreur="La vérification a pris trop de temps. Reconnectez-vous pour recevoir un nouveau code.",
+        )
     if not etat.limiteur_connexion_compte.autoriser("2fa:" + user_id):
         return page(
             request,
             "totp.html.j2",
             titre="Code de vérification",
             statut=429,
-            erreur="Trop de tentatives. Patientez quelques minutes.",
+            erreur="Trop d'essais en peu de temps. Attendez quelques minutes, puis réessayez.",
         )
     pf = request.app.state.plateforme
     try:
@@ -134,7 +138,11 @@ def totp(request: Request) -> Response:
         )
     except EchecAuthentification:
         return page(
-            request, "totp.html.j2", titre="Code de vérification", statut=401, erreur="Code invalide."
+            request,
+            "totp.html.j2",
+            titre="Code de vérification",
+            statut=401,
+            erreur="Ce code ne correspond pas. Saisissez le code affiché en ce moment dans votre application.",
         )
     etat.limiteur_connexion_compte.effacer("2fa:" + user_id)
     return _ouvrir_session(request, acteur, deux_facteurs=True)
@@ -147,7 +155,7 @@ def deconnexion(request: Request) -> Response:
     s = getattr(request.state, "session", None)
     if s is not None:
         etat.sessions.revoquer(s.sid, debut=s.debut)  # tous les processus, jusqu'à l'expiration (D-3202)
-    rep = redirection(request, "/connexion", message="Vous êtes déconnecté.")
+    rep = redirection(request, "/connexion", message="Vous êtes déconnecté. À bientôt.")
     etat.effacer_session(rep)
     return rep
 
@@ -170,7 +178,7 @@ def mdp(request: Request) -> Response:
             "mot_de_passe.html.j2",
             titre="Changer de mot de passe",
             statut=429,
-            erreur="Trop de tentatives. Patientez quelques minutes avant de réessayer.",
+            erreur="Trop d'essais en peu de temps. Attendez quelques minutes, puis réessayez.",
         )
     actuel, nouveau, confirmation = (
         str(form.get(k) or "")[:1024] for k in ("actuel", "nouveau", "confirmation")
@@ -182,7 +190,7 @@ def mdp(request: Request) -> Response:
             "mot_de_passe.html.j2",
             titre="Changer de mot de passe",
             statut=400,
-            erreur="Mot de passe actuel incorrect.",
+            erreur="Le mot de passe actuel ne correspond pas. Vérifiez la saisie.",
         )
     if nouveau != confirmation:
         return page(
@@ -190,7 +198,7 @@ def mdp(request: Request) -> Response:
             "mot_de_passe.html.j2",
             titre="Changer de mot de passe",
             statut=400,
-            erreur="Les deux saisies du nouveau mot de passe diffèrent.",
+            erreur="Les deux saisies du nouveau mot de passe ne sont pas identiques. Saisissez-les de nouveau.",
         )
     try:
         empreinte = hacher_mot_de_passe(nouveau)
@@ -200,7 +208,7 @@ def mdp(request: Request) -> Response:
             "mot_de_passe.html.j2",
             titre="Changer de mot de passe",
             statut=400,
-            erreur="Le nouveau mot de passe doit comporter au moins 12 caractères.",
+            erreur="Le nouveau mot de passe est trop court : il faut au moins 12 caractères.",
         )
     changer_mot_de_passe(pf.db, acteur.id, empreinte, acteur=acteur)
     # Toutes les sessions ouvertes avec l'ancien mot de passe sont révoquées (autres navigateurs, cookie volé) ;
@@ -208,6 +216,6 @@ def mdp(request: Request) -> Response:
     s = request.state.session
     etat.sessions.revoquer_utilisateur(acteur.id)
     etat.limiteur_connexion_compte.effacer("mdp:" + acteur.id)
-    rep = redirection(request, "/", message="Mot de passe modifié. Vos autres sessions sont fermées.")
+    rep = redirection(request, "/", message="Mot de passe enregistré. Vos autres sessions ont été fermées.")
     etat.ouvrir_session(request, rep, Acteur(s.user_id, s.role, s.tenant_id), deux_facteurs=s.deux_facteurs)
     return rep

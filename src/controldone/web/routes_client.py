@@ -3,6 +3,7 @@ route ne reçoit d'identifiant de client. Un rôle client ne voit que les consta
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter
@@ -157,7 +158,11 @@ def deposer(request: Request) -> Response:
         msg += ", " + _("{n} déjà reçu(s)", n=r.doublons)
     if r.refuses:
         msg += ", " + _("{n} refusé(s)", n=len(r.refuses))
-    return redirection(request, f"/espace/lots/{r.lot_id}", message=msg + ".")
+    return redirection(
+        request,
+        f"/espace/lots/{r.lot_id}",
+        message=msg + ". " + _("Le traitement a commencé : suivez-le sur cette page."),
+    )
 
 
 @routeur.get("/lots/{lot_id}")
@@ -257,6 +262,23 @@ def dossiers(request: Request) -> Response:
     )
 
 
+def _bilan_dossier(scope: Any, lu: Any) -> dict[str, Any]:
+    """Ce que le dossier a permis d'obtenir (D-5205) : écarts suivis, avoirs enregistrés par le client et reste, lus
+    dans le suivi des avoirs pour les seuls constats publiés de ce dossier. Rien n'est estimé."""
+    from controldone.services.reclamations import registre
+    from controldone.storage.models import Ecart
+
+    ids_constats = [c.id for c in lu.constats]
+    ids = [e.id for e in scope.lister_parmi(Ecart, "constat_id", ids_constats)] if ids_constats else []
+    lignes = registre(scope, ecart_ids=ids) if ids else []
+    return {
+        "n": len(lignes),
+        "initial": sum((x.montant_initial for x in lignes), Decimal(0)),
+        "credite": sum((x.montant_credite for x in lignes), Decimal(0)),
+        "reste": sum((x.reste for x in lignes if x.statut_code not in ("credite", "abandonne")), Decimal(0)),
+    }
+
+
 @routeur.get("/dossiers/{dossier_id}")
 def dossier(request: Request, dossier_id: str) -> Response:
     a = _client(request)
@@ -265,6 +287,7 @@ def dossier(request: Request, dossier_id: str) -> Response:
         info = client_info(scope)
         lu = detail_dossier(scope, dossier_id)
         images = images_dossier(pf.vault, scope, lu)
+        bilan = _bilan_dossier(scope, lu)
     return page(
         request,
         "dossier.html.j2",
@@ -275,6 +298,7 @@ def dossier(request: Request, dossier_id: str) -> Response:
         base="/espace",
         client=info,
         fondateur=False,
+        bilan=bilan,
         demo=info["demo"],
         retour=request.url.path,
         **_contexte(a),
@@ -379,7 +403,7 @@ def declarer_envoi(request: Request, ecart_id: str) -> Response:
         )
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
-    return redirection(request, retour, message="Envoi de votre courrier enregistré.")
+    return redirection(request, retour, message="C'est noté : votre courrier est enregistré dans le suivi.")
 
 
 @routeur.post("/recouvrement/{ecart_id}/avoir")
@@ -408,4 +432,4 @@ def avoir(request: Request, ecart_id: str) -> Response:
         )
     except RequeteInvalide as exc:
         return redirection(request, retour, erreur=str(exc))
-    return redirection(request, retour, message="Avoir enregistré.")
+    return redirection(request, retour, message="Avoir enregistré. Il est déduit du reste à obtenir.")

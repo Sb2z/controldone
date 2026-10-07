@@ -130,7 +130,7 @@ h3 { font-family: var(--police); font-size: .95rem; font-weight: 600; letter-spa
 code { font-family: var(--mono); font-size: .82em; background: var(--surface-2); border: 1px solid var(--filet-2); padding: .08em .4em; border-radius: 5px; word-break: break-all; color: var(--encre); }
 pre { font-family: var(--mono); }
 .num, td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-td.num, .constat-montant .num, .kpi-val { font-family: var(--mono); }
+td.num, .constat-montant .num { font-family: var(--mono); }
 td.num { font-size: .86em; }
 .discret { color: var(--encre-3); }
 .vh { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -171,20 +171,37 @@ td.num { font-size: .86em; }
 .logo .trace { stroke: var(--accent); stroke-dasharray: 40; stroke-dashoffset: 0; }
 .js .marque:hover .logo .trace { animation: trace var(--duree-section) var(--courbe-entree); }
 @keyframes trace { from { stroke-dashoffset: 40; } to { stroke-dashoffset: 0; } }
-.nav { flex: 1; min-width: 0; }
-.nav ul {
+.nav { flex: 1; min-width: 0; display: flex; align-items: center; gap: .1rem; }
+.nav > ul { min-width: 0; }
+.nav-plus { position: relative; flex: 0 0 auto; }
+.nav-plus > summary {
+  color: var(--encre-2); font-size: .875rem; font-weight: 500; padding: .38rem .72rem; border-radius: 999px; gap: .35rem;
+  transition: color var(--duree-micro) var(--courbe-standard), background-color var(--duree-micro) var(--courbe-standard);
+}
+.nav-plus > summary::before { order: 2; margin: -.2rem 0 0 .15rem; }
+.nav-plus > summary:hover, .nav-plus[open] > summary { color: var(--encre); background: var(--surface-2); }
+.nav-plus > summary.actif { color: var(--encre); background: var(--surface); box-shadow: inset 0 0 0 1px var(--filet); }
+.nav-menu {
+  position: absolute; z-index: 70; top: calc(100% + .4rem); right: 0; min-width: 12rem; list-style: none; margin: 0; padding: .35rem;
+  background: var(--surface-pleine); border: 1px solid var(--filet); border-radius: 10px; box-shadow: var(--ombre-haute);
+}
+.nav-menu a {
+  display: block; padding: .5rem .7rem; border-radius: 6px; color: var(--encre-2); font-size: .875rem; text-decoration: none !important;
+}
+.nav-menu a:hover, .nav-menu a[aria-current="page"] { color: var(--encre); background: var(--surface-2); }
+.nav > ul {
   list-style: none; margin: 0; padding: .15rem; display: flex; gap: .1rem; flex-wrap: nowrap; position: relative; overflow-x: auto;
   scrollbar-width: none;
 }
-.nav ul::-webkit-scrollbar { display: none; }
-.nav li { position: relative; z-index: 1; }
+.nav > ul::-webkit-scrollbar { display: none; }
+.nav > ul > li { position: relative; z-index: 1; }
 .nav a {
   display: block; padding: .38rem .72rem; border-radius: 999px; color: var(--encre-2); font-size: .875rem; font-weight: 500; text-decoration: none !important;
   transition: color var(--duree-micro) var(--courbe-standard), background-color var(--duree-micro) var(--courbe-standard); white-space: nowrap;
 }
 .nav a:hover { color: var(--encre); background: var(--surface-2); }
 .nav a[aria-current="page"] { color: var(--encre); background: var(--surface); box-shadow: inset 0 0 0 1px var(--filet); }
-.js .nav.avec-pastille a[aria-current="page"], .js .nav.avec-pastille a:hover { background: transparent; box-shadow: none; }
+.js .nav.avec-pastille > ul > li > a[aria-current="page"], .js .nav.avec-pastille > ul > li > a:hover { background: transparent; box-shadow: none; }
 .pastille {
   position: absolute; z-index: 0; top: 0; left: 0; height: 0; width: 0; border-radius: 999px; pointer-events: none;
   background: var(--surface); box-shadow: inset 0 0 0 1px var(--filet-fort), var(--ombre); opacity: 0;
@@ -223,7 +240,7 @@ td.num { font-size: .86em; }
 .titre-dossier h1 { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
 .titre-dossier h1 .badge { font-family: var(--police); }
 .fil { font-size: .82rem; color: var(--encre-3); margin-bottom: 1rem; }
-.fil a { color: var(--encre-2); text-decoration: none; }
+.fil a { color: var(--encre-2); text-decoration: underline; text-decoration-color: var(--filet-fort); text-underline-offset: 3px; }
 .fil a:hover { color: var(--encre); }
 .carte {
   position: relative; background: var(--surface); border: 1px solid var(--filet); border-radius: var(--rayon);
@@ -257,7 +274,7 @@ form.depot .liste-fichiers:empty, form.depot [data-resume]:empty { display: none
 section > h2 { margin-top: .5rem; }
 
 /* --- indicateurs ------------------------------------------------------------------------------------------------ */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
 .kpi {
   position: relative; background: var(--surface); border: 1px solid var(--filet); border-radius: var(--rayon);
   padding: 1.15rem 1.25rem 1.2rem; box-shadow: var(--ombre);
@@ -265,7 +282,7 @@ section > h2 { margin-top: .5rem; }
 }
 .kpi:hover { border-color: var(--filet-fort); }
 .kpi-lib { font-size: .72rem; color: var(--encre-3); font-weight: 550; letter-spacing: .06em; text-transform: uppercase; }
-.kpi-val { font-size: clamp(1.3rem, 1rem + .8vw, 1.65rem); overflow-wrap: anywhere; font-weight: 500; margin-top: .5rem; text-align: left; letter-spacing: -.02em; line-height: 1.1; }
+.kpi-val { font-size: clamp(1.35rem, 1rem + .9vw, 1.75rem); overflow-wrap: anywhere; font-weight: 500; margin-top: .5rem; text-align: left; letter-spacing: -.025em; line-height: 1.1; }
 .kpi-val a { color: inherit; text-decoration: none; }
 .kpi-val a:hover { color: var(--accent); }
 .kpi-note { font-size: .78rem; color: var(--encre-3); margin-top: .45rem; }
@@ -276,20 +293,20 @@ section > h2 { margin-top: .5rem; }
 
 /* --- valeur, prochaine étape, premiers pas (D-5205) ------------------------------------------------------------- */
 .bilan {
-  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;
+  align-items: start; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 1.5rem; margin-bottom: 1.5rem;
 }
 .bilan-valeur {
   background: var(--surface); border: 1px solid var(--filet); border-radius: var(--rayon); padding: 1.6rem 1.75rem 1.5rem;
   box-shadow: var(--ombre);
 }
 .bilan-chiffre {
-  display: block; font-family: var(--mono); font-weight: 500; font-size: clamp(2rem, 1.4rem + 2vw, 3rem); letter-spacing: -.035em;
+  display: block; font-family: var(--police); font-weight: 500; font-size: clamp(2.2rem, 1.5rem + 2.2vw, 3.25rem); letter-spacing: -.035em;
   line-height: 1.05; margin: .7rem 0 .4rem; color: var(--encre); overflow-wrap: anywhere;
 }
 .bilan-phrase { margin: 0; color: var(--encre-2); max-width: 52ch; }
 .bilan-detail { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 1.4rem 0 0; padding-top: 1.1rem; border-top: 1px solid var(--filet-2); }
 .bilan-detail dt { font-size: .72rem; color: var(--encre-3); letter-spacing: .05em; text-transform: uppercase; font-weight: 550; }
-.bilan-detail dd { margin: .3rem 0 0; font-family: var(--mono); font-size: 1rem; font-weight: 500; }
+.bilan-detail dd { margin: .3rem 0 0; font-size: 1rem; font-weight: 500; }
 .bilan-detail .kpi-val { font-size: 1rem; margin: .3rem 0 0; }
 .bilan-detail .kpi-note { margin-top: .2rem; }
 .prochaine {
@@ -327,7 +344,7 @@ table.donnees { width: 100%; border-collapse: separate; border-spacing: 0; font-
   border-bottom: 1px solid var(--filet); white-space: nowrap; padding-top: .3rem;
 }
 .donnees tbody th { font-weight: 550; }
-.donnees tbody th a { font-family: var(--mono); font-size: .86em; font-weight: 500; }
+.donnees tbody th a { font-weight: 550; }
 .donnees tbody tr { transition: background-color var(--duree-micro) var(--courbe-standard); }
 .donnees tbody tr:hover { background: var(--surface-2); }
 .donnees tbody tr:last-child > * { border-bottom: 0; }
@@ -378,10 +395,8 @@ td.vide { padding: 1.4rem .75rem; }
 .message::before {
   content: ""; flex: 0 0 auto; width: 8px; height: 8px; margin-top: .5rem; border-radius: 50%; background: currentColor;
 }
-.message > .texte { flex: 1; min-width: 0; }
 .message.succes { border-color: var(--conforme-filet); color: var(--conforme); }
 .message.erreur { border-color: var(--certain-filet); color: var(--certain); background: color-mix(in srgb, var(--certain-fond) 60%, var(--surface)); }
-.message .texte { color: var(--encre); }
 .message ul { margin: .4rem 0 0; }
 .message .fermer {
   flex: 0 0 auto; border: 0; background: transparent; color: var(--encre-3); cursor: pointer; width: 26px; height: 26px; border-radius: 6px;
@@ -540,7 +555,7 @@ h2.en-ligne { display: inline; }
 .bilan-dossier { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: baseline; }
 .bilan-dossier div { display: flex; flex-direction: column; gap: .2rem; }
 .bilan-dossier dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--encre-3); font-weight: 550; }
-.bilan-dossier dd { margin: 0; font-family: var(--mono); font-size: 1.15rem; font-weight: 500; letter-spacing: -.02em; }
+.bilan-dossier dd { margin: 0; font-size: 1.15rem; font-weight: 500; letter-spacing: -.02em; }
 .bilan-dossier .principal dd { font-size: 1.6rem; color: var(--encre); }
 
 /* --- constats ------------------------------------------------------------------------------------------------------------- */
@@ -604,11 +619,11 @@ pre.corps {
 .donnees tbody th a { white-space: nowrap; }
 
 /* --- connexion ------------------------------------------------------------------------------------------------------------ */
-.accueil { display: grid; grid-template-columns: 1.2fr .8fr; gap: clamp(2rem, 6vw, 6rem); align-items: center; min-height: calc(100vh - 15rem); padding: 1rem 0 2rem; }
+.accueil { display: grid; grid-template-columns: 1.2fr .8fr; gap: clamp(2rem, 6vw, 6rem); align-items: start; min-height: calc(100vh - 15rem); padding: 1rem 0 2rem; }
 .accueil-texte .etiquette { margin-bottom: 1.4rem; }
 .accueil-texte h1 {
-  font-size: clamp(2.4rem, 1.5rem + 3.2vw, 4.25rem); line-height: 1.03; letter-spacing: -.028em; margin: 0 0 1.4rem; font-weight: 450;
-  max-width: 16ch;
+  font-size: clamp(2.3rem, 1.5rem + 2.4vw, 3.6rem); line-height: 1.05; letter-spacing: -.026em; margin: 0 0 1.3rem; font-weight: 450;
+  max-width: 19ch;
 }
 .accueil-texte h1 .attenue { color: var(--encre-3); }
 .accueil-texte p.chapeau { font-size: 1.06rem; line-height: 1.6; color: var(--encre-2); max-width: 50ch; margin: 0 0 2rem; }
@@ -617,7 +632,7 @@ pre.corps {
 .etapes li b { grid-row: span 2; font-family: var(--mono); font-size: .72rem; font-weight: 500; color: var(--encre-3); padding-top: .2rem; }
 .etapes li strong { color: var(--encre); font-weight: 600; }
 .exemple {
-  margin-top: 2.4rem; max-width: 540px; border: 1px solid var(--filet); border-radius: var(--rayon); background: var(--surface);
+  margin: 2.4rem 0 0; max-width: 540px; border: 1px solid var(--filet); border-radius: var(--rayon); background: var(--surface);
   padding: 1.1rem 1.25rem 1.2rem; box-shadow: var(--ombre);
 }
 .exemple-tete { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .8rem; }
@@ -628,7 +643,7 @@ pre.corps {
 .exemple-trait { height: 1px; margin: .6rem 0; background: var(--filet-fort); transform-origin: 0 50%; }
 .exemple-lignes dt.ecart { color: var(--encre); font-weight: 600; }
 .exemple-lignes .ecart dd, .exemple-lignes dd.ecart { color: var(--certain); font-weight: 500; }
-.accueil .carte-connexion { margin: 0; padding: 2rem 2rem 1.75rem; border-radius: 16px; box-shadow: var(--ombre-haute); }
+.accueil .carte-connexion { margin: 3.2rem 0 0; position: sticky; top: 6rem; padding: 2rem 2rem 1.75rem; border-radius: 16px; box-shadow: var(--ombre-haute); }
 .carte-connexion h2 { font-size: 1.6rem; margin-bottom: .35rem; display: block; }
 .carte-connexion .formulaire { max-width: none; }
 .carte-connexion .formulaire input { width: 100%; }
@@ -688,7 +703,7 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 }
 .pagination a:hover { border-color: var(--filet-fort); color: var(--encre); }
 .pagination a[aria-current="page"] { background: var(--primaire); border-color: var(--primaire); color: var(--sur-primaire); font-weight: 600; }
-.pagination .inactif { opacity: .45; }
+.pagination .inactif { color: var(--encre-3); border-style: dashed; }
 .pagination .ellipse { border-color: transparent; }
 [data-resultats].charge { opacity: .55; transition: opacity var(--duree-courte) var(--courbe-standard); }
 
@@ -782,6 +797,7 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 /* --- adaptation ------------------------------------------------------------------------------------------------------------------ */
 @media (max-width: 980px) {
   .accueil { grid-template-columns: 1fr; min-height: 0; gap: 2.5rem; }
+  .accueil .carte-connexion { position: static; margin-top: 0; }
   .accueil-texte h1 { max-width: 20ch; }
   .exemple { display: none; }
   .bilan { grid-template-columns: 1fr; }
@@ -804,14 +820,14 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
   .constat-montant { align-items: flex-start; text-align: left; }
   .entete-int { padding: .55rem 1rem; }
   .nav { order: 3; flex: 1 1 100%; }
-  .nav ul { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .nav > ul { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
   .compte { width: auto; flex: 1; justify-content: flex-end; gap: .2rem; }
   .compte .role { display: none; }
   .titre-dossier { flex-direction: column; }
   .titre-page { margin-bottom: 1.6rem; }
   .imprimer { display: none; }
   .accueil-texte h1 { font-size: 2.3rem; }
-  .accueil .carte-connexion { padding: 1.4rem; }
+  .accueil .carte-connexion { padding: 1.4rem; order: -1; }
   .bilan-valeur, .prochaine { padding: 1.25rem 1.1rem; }
   .bilan-detail { grid-template-columns: 1fr 1fr; }
   [data-palette-ouvrir] kbd { display: none; }
@@ -844,4 +860,4 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 .bascule-theme::view-transition-new(root) { z-index: 2; }
 
 /* en-tête du fondateur (9 liens) : le rôle cède la place aux liens sur écran moyen (D-3804) */
-@media (max-width: 1360px) { .compte .role { display: none; } }
+@media (max-width: 1600px) { .compte .role { display: none; } }

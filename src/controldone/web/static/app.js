@@ -76,6 +76,8 @@
   function compteurs() {
     if (!bouge()) { return; }
     $$(".kpi-val, [data-compteur]").forEach(function (bloc) {
+      // seulement ce qui est visible au chargement : plus bas, la valeur exacte reste affichée (captures, impression)
+      if (bloc.getBoundingClientRect().top > window.innerHeight) { return; }
       var cible = bloc.querySelector("a") || bloc;
       var texte = cible.textContent.trim();
       var m = MOTIF_NOMBRE.exec(texte);
@@ -116,7 +118,7 @@
     p.className = "pastille"; p.setAttribute("aria-hidden", "true");
     ul.appendChild(p);
     nav.classList.add("avec-pastille");
-    var actif = ul.querySelector('a[aria-current="page"]');
+    var actif = ul.querySelector(':scope > li > a[aria-current="page"]');
     function place(a, instant) {
       if (!a) { M.animate(p, { opacity: 0 }, { duration: D.courte }); return; }
       var li = a.parentElement; // les <li> sont positionnés : offsetLeft du lien est relatif à son <li>
@@ -132,12 +134,26 @@
     // Les largeurs changent quand la police Inter est chargée : on recale la pastille.
     if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function () { place(actif, true); }); }
     if (window.ResizeObserver) { new ResizeObserver(function () { place(actif, true); }).observe(ul); }
-    $$("a", ul).forEach(function (a) {
+    $$(":scope > li > a", ul).forEach(function (a) {
       a.addEventListener("pointerenter", function () { place(a); });
       a.addEventListener("focus", function () { place(a); });
     });
     ul.addEventListener("pointerleave", function () { place(actif); });
     window.addEventListener("resize", function () { place(actif, true); });
+  }
+
+  /* --- menu « Plus » de la navigation : fermé par Échap ou par un clic ailleurs ---------------------------------------- */
+  function menuPlus() {
+    $$("details[data-nav-plus]").forEach(function (d) {
+      var menu = d.querySelector(".nav-menu");
+      d.addEventListener("toggle", function () {
+        if (d.open && menu) { anime(menu, { opacity: [0, 1], y: [-4, 0] }, { duration: D.courte, ease: EASE }); }
+      });
+      document.addEventListener("click", function (e) { if (d.open && !d.contains(e.target)) { d.open = false; } });
+      d.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && d.open) { d.open = false; var s = d.querySelector("summary"); if (s) { s.focus(); } }
+      });
+    });
   }
 
   /* --- barre de lecture (pages longues seulement) ------------------------------------------------------------------- */
@@ -534,7 +550,7 @@
   });
 
   function demarrer() {
-    entrees(); lignes(); compteurs(); barres(); pastille(); progression(); messages(); preuves(); exemple(); palette(); depot();
+    entrees(); lignes(); compteurs(); barres(); pastille(); menuPlus(); progression(); messages(); preuves(); exemple(); palette(); depot();
     suiviLot(); suiviListes(); filtresDirects(); graphes();
   }
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", demarrer); } else { demarrer(); }

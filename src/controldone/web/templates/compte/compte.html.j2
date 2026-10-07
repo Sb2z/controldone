@@ -6,7 +6,7 @@
 <div class="grille-2">
 <section class="carte" aria-labelledby="t-langue">
   <h2 id="t-langue">{{ _("Langue de l'interface") }}</h2>
-  <p class="discret">{{ _("Enregistrée sur votre compte : elle s'applique à chaque connexion, quel que soit le navigateur. Les rapports, relevés d'écarts et textes des constats restent en français.") }}</p>
+  <p class="discret">{{ _("Elle est enregistrée sur votre compte et s'applique à chaque connexion, quel que soit le navigateur. Les rapports, les relevés d'écarts et le texte des constats restent en français.") }}</p>
   <form method="post" action="/compte/langue" class="formulaire">{{ csrf_champ(csrf) }}
     <fieldset class="choix-radio">
       <legend>{{ _("Langue") }}</legend>

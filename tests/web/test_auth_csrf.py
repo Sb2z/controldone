@@ -49,7 +49,7 @@ def test_mauvais_mot_de_passe_message_unique(monde):
     r1 = connecter(c, ADMIN_A, "mauvais-mot-de-passe-123")
     r2 = connecter(c, "inconnu@exemple-fictif.test", "mauvais-mot-de-passe-123")
     assert r1.status_code == r2.status_code == 401
-    assert "Identifiants invalides" in r1.text and "Identifiants invalides" in r2.text
+    assert "Adresse ou mot de passe incorrect" in r1.text and "Adresse ou mot de passe incorrect" in r2.text
 
 
 def test_fondateur_exige_totp(monde):

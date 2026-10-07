@@ -4,7 +4,7 @@
 <section class="carte carte-etroite">
   <h1>{{ _("Code de vérification") }}</h1>
   <p class="discret">{{ _("Ouvrez votre application d'authentification et saisissez le code à six chiffres affiché pour ControlDOne.") }}</p>
-  {% if erreur is defined %}<div class="message erreur" role="alert"><span class="texte">{{ erreur }}</span></div>{% endif %}
+  {% if erreur is defined %}<div class="message erreur" role="alert">{{ erreur }}</div>{% endif %}
   <form method="post" action="/connexion/totp" class="formulaire">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="code">{{ _("Code") }}</label>

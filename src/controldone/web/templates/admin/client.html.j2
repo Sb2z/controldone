@@ -61,7 +61,7 @@
   <ul class="liste-simple">
   {% for s in sorties %}
     <li><span class="badge {{ 'b-valide' if s.statut.value == 'envoye' else ('b-rejete' if s.statut.value == 'refuse' else 'b-propose') }}">{{ {"brouillon": _("À approuver"), "approuve": _("Approuvé"), "corrige": _("Corrigé"), "refuse": _("Refusé"), "envoye": _("Mis à disposition")}[s.statut.value] }}</span>
-      {{ _(libelles_sortie.get(s.kind.value, s.kind.value)) }} — <span lang="fr">{{ s.payload_effectif.get("objet", "") }}</span> <span class="discret">{{ s.cree_le|date }}</span>
+      {{ _(libelles_sortie.get(s.kind.value, s.kind.value)) }} · <span lang="fr">{{ s.payload_effectif.get("objet", "") }}</span> <span class="discret">{{ s.cree_le|date }}</span>
       {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</li>
   {% endfor %}
   </ul>

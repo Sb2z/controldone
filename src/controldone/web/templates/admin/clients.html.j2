@@ -27,7 +27,7 @@
     <input id="rs" name="raison_sociale" required maxlength="300">
     <label for="offre">{{ _("Offre") }}</label>
     <select id="offre" name="offre"><option value="diagnostic">{{ _("Diagnostic (390 EUR)") }}</option><option value="continu">{{ _("Contrôle continu") }}</option></select>
-    <label for="plafond">{{ _("Plafond IA mensuel (EUR)") }} <span class="discret">— {{ _("défaut 20 (diagnostic) ou 8") }}</span></label>
+    <label for="plafond">{{ _("Plafond IA mensuel (EUR)") }} <span class="discret">({{ _("20 par défaut pour un diagnostic, 8 sinon") }})</span></label>
     <input id="plafond" name="plafond" inputmode="decimal" maxlength="12">
     <label class="case"><input type="checkbox" name="demo" value="1"> {{ _("Client de démonstration (données fictives)") }}</label>
     <button type="submit" class="btn btn-principal">{{ _("Créer le client") }}</button>

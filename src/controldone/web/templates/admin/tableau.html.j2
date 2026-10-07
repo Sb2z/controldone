@@ -5,7 +5,7 @@
 {% block contenu %}
 <div class="titre-page">
   <h1>{{ _("Tableau de bord") }}</h1>
-  <p class="discret">{{ _("Tous clients — coûts IA du mois {mois}.", mois=d.mois) }}</p>
+  <p class="discret">{{ _("Tous les clients. Coûts IA du mois {mois}.", mois=d.mois) }}</p>
 </div>
 {% if bandeau %}
 <section class="bandeau-alertes" aria-labelledby="t-bandeau">
@@ -56,7 +56,7 @@
   {% if d.alertes %}
   <ul class="liste-alertes">
   {% for a in d.alertes[:6] %}
-    <li><span class="badge {{ 'b-alerte' if a.kind in ALERTES_GRAVES else 'b-neutre' }}">{{ _(libelle_alerte(a.kind)) }}</span> <span lang="fr">{{ a.message }}</span> <span class="discret">— {{ a.cree_le|date }}</span></li>
+    <li><span class="badge {{ 'b-alerte' if a.kind in ALERTES_GRAVES else 'b-neutre' }}">{{ _(libelle_alerte(a.kind)) }}</span> <span lang="fr">{{ a.message }}</span> <span class="discret">{{ a.cree_le|date }}</span></li>
   {% endfor %}
   </ul>
   {% else %}<p class="vide">{{ _("Aucune alerte non lue.") }}</p>{% endif %}
@@ -108,7 +108,7 @@
           <span class="num">{{ c.cout_ia|montant }} / {{ c.plafond|montant }}</span>{% if c.llm_desactive %} <span class="badge b-neutre">{{ _("Lecture par modèle désactivée") }}</span>{% endif %}</td>
       </tr>
     {% else %}
-      <tr><td colspan="8" class="vide">{{ _("Aucun client.") }} <a href="/admin/clients">{{ _("Créer un client") }}</a>.</td></tr>
+      <tr><td colspan="8" class="vide">{{ _("Aucun client pour l'instant.") }} <a href="/admin/clients">{{ _("Créer un client") }}</a></td></tr>
     {% endfor %}
     </tbody>
   </table>

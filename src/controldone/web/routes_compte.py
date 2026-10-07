@@ -104,7 +104,7 @@ def fermer_autres(request: Request) -> Response:
         return redirection(request, "/compte/sessions", message="{n} autre(s) session(s) fermée(s).", n=n)
     # repli sans registre des sessions : toutes les sessions sont coupées, celle-ci est remplacée (D-3202)
     etat.sessions.revoquer_utilisateur(acteur.id)
-    rep = redirection(request, "/compte/sessions", message="Vos autres sessions sont fermées.")
+    rep = redirection(request, "/compte/sessions", message="Vos autres sessions ont été fermées.")
     etat.ouvrir_session(request, rep, acteur, deux_facteurs=s.deux_facteurs)
     return rep
 
@@ -120,7 +120,11 @@ def fermer_une(request: Request, ref: str) -> Response:
     )
     fermer = getattr(etat.sessions, "fermer_session", None)
     if cible is None or fermer is None or not fermer(acteur.id, cible.sid):
-        return redirection(request, "/compte/sessions", erreur="Session introuvable ou déjà fermée.")
+        return redirection(
+            request,
+            "/compte/sessions",
+            erreur="Cette session est introuvable ou déjà fermée. La liste ci-dessous est à jour.",
+        )
     return redirection(request, "/compte/sessions", message="Session fermée.")
 
 
@@ -200,6 +204,6 @@ def langue_compte(request: Request) -> Response:
         return redirection(request, "/compte", erreur="Langue inconnue.")
     _enregistrer(request, langue)
     request.state.langue = langue
-    rep = redirection(request, "/compte", message="Langue de l'interface enregistrée.")
+    rep = redirection(request, "/compte", message="Langue enregistrée. Elle s'appliquera à chaque connexion.")
     poser_langue(request, rep, langue)
     return rep

@@ -72,7 +72,10 @@ def etat_traitement(lot_statut: str, job: Any, langue: str | None = None) -> dic
     elif lot_statut == "en_erreur":
         code, detail = "erreur", N_("Aucun fichier exploitable dans ce dépôt.")
     elif statut == "dead":
-        code, detail = "erreur", N_("Le traitement a échoué ; le fondateur est alerté.")
+        code, detail = (
+            "erreur",
+            N_("Le traitement n'a pas abouti. Le fondateur en est averti automatiquement."),
+        )
     elif statut == "done":
         code = "termine"
     elif statut == "running":
@@ -80,7 +83,7 @@ def etat_traitement(lot_statut: str, job: Any, langue: str | None = None) -> dic
     else:
         code = "recu"
         if essais:
-            detail = N_("Nouvel essai programmé.")
+            detail = N_("Un nouvel essai est programmé, sans action de votre part.")
         elif statut == "pending":
             detail = N_("En attente de traitement.")
     if code == "erreur":
@@ -91,7 +94,7 @@ def etat_traitement(lot_statut: str, job: Any, langue: str | None = None) -> dic
     detail_t = traduire(detail, langue) if detail else ""
     compteur = traduire("{fait} sur {total}", langue, fait=fait, total=total) if fait is not None else ""
     if code == "erreur":
-        texte = (traduire("Traitement en erreur.", langue) + " " + detail_t).strip()
+        texte = (traduire("Traitement interrompu.", langue) + " " + detail_t).strip()
     elif code == "termine":
         texte = traduire("Traitement terminé.", langue)
     else:

@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="{{ langue }}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ _("API — ControlDOne") }}</title><link rel="stylesheet" href="/static/app.css"></head>
+<title>{{ _("API · ControlDOne") }}</title><link rel="stylesheet" href="/static/app.css"></head>
 <body>
-<header class="entete"><div class="entete-int"><a class="marque" href="/">Control<span>DOne</span></a><span class="discret">API v1 — <a href="/api/v1/openapi.json">openapi.json</a></span>
+<header class="entete"><div class="entete-int"><a class="marque" href="/">Control<span>DOne</span></a><span class="discret">API v1 · <a href="/api/v1/openapi.json">openapi.json</a></span>
 <nav class="langues" aria-label="{{ _("Langue") }}">{% for code, nom in LANGUES.items() %}{% if code == langue %}<span aria-current="true" lang="{{ code }}">{{ nom }}</span>{% else %}<a href="/api/v1/docs?langue={{ code }}" lang="{{ code }}" hreflang="{{ code }}">{{ nom }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</nav></div></header>
 <main class="page">
 <div class="titre-page"><h1>{{ _("API REST v1") }}</h1></div>

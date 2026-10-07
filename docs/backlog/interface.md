@@ -84,3 +84,16 @@
 - **Repérage du français limité à une liste de mots.** Constat : `tests/web/francais_visible.py` signale les mots
   outils, mots d'interface et accents français ; une phrase française sans accent ni mot de la liste passerait.
   Proposition : compléter la liste au fil des revues. Faible.
+
+# Refonte visuelle et textes (octobre 2026, D-5201 à D-5206)
+
+- **Surlignage de la preuve sur la vignette (RECHERCHE §4.7, motif 5).** Non fait : il faut la boîte de la valeur
+  lue dans la page (déjà dessinée dans l'extrait) côté vignette du document. À faire avec l'équipe moteur.
+- **Progression réelle de l'envoi.** Le bouton annonce l'envoi sans barre : une barre fidèle demanderait un envoi
+  par `XMLHttpRequest` (événements `upload.progress`) sans perdre le message de confirmation. À étudier.
+- **Valeur par dossier dans la liste des dossiers.** La fiche du dossier affiche avoirs reçus et reste ; la liste
+  pourrait ajouter une colonne « avoirs reçus » (agrégat SQL sur `ecarts`). À faire si les clients le demandent.
+- **Textes du fondateur.** Les pages du fondateur ont reçu une passe (incises, états vides) mais pas une réécriture
+  complète ; les libellés de graphiques (`web/graphes.py`) gardent « montant recouvrable certain ». À reprendre.
+- **Libellés des rapports.** Les objets de rapport produits par le moteur contiennent encore « — » (hors périmètre de
+  l'interface, `rapport/`).
