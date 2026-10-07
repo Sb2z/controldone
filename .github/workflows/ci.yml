@@ -145,8 +145,8 @@ jobs:
       - name: Pytest avec couverture
         env:
           HYPOTHESIS_PROFILE: ci
-          COUV_MIN: "87"
-          COUV_MIN_PAQUETS: "controls=85 auth=97"
+          COUV_MIN: "88"
+          COUV_MIN_PAQUETS: "controls=89 auth=97"
         run: |
           mkdir -p var/couverture
           pytest -q --cov --cov-report=html --cov-report=json --cov-report=term:skip-covered

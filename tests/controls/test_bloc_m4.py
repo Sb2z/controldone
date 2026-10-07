@@ -12,6 +12,9 @@ from controldone.guardrails import check_text
 from controldone.model import (
     CategorieTaxe,
     ChampsAvoir,
+    ChampsDeclaration,
+    ChampsFactureCommerciale,
+    Entite,
     GrilleTarifaire,
     LigneFactureTransitaire,
     ModePoste,
@@ -23,7 +26,6 @@ from controldone.model import (
     ProfilTolerances,
     RaisonCode,
     StatutGrille,
-    TauxChangeSens,
     Transitaire,
     TypeDocument,
 )
@@ -34,7 +36,6 @@ from controldone.testing import (
     declaration,
     document,
     dossier_pour,
-    facture_commerciale,
     facture_transitaire,
     taxation,
     vs,
@@ -46,6 +47,7 @@ TVA_CLIENT = "FR68000458570"  # entité FICTIVE du client
 MRN_A = "26FRAAAAAAAAAAAAA1"  # MRN FICTIFS
 MRN_B = "26FRBBBBBBBBBBBBB2"
 TRANSITAIRES = [Transitaire(id="tra_1", nom="Transit FICTIF", tva=TVA_TRANSITAIRE)]
+ENTITE = Entite(id="ent_a", raison_sociale="IMPORT FICTIF", tva=TVA_CLIENT, siren=TVA_CLIENT[4:])
 
 GRILLE = GrilleTarifaire(
     transitaire_id="tra_1",
@@ -419,45 +421,62 @@ def test_f3_mrn_sous_le_seuil_sans_seconde_lecture():
     assert r2.outcome is Outcome.a_verifier
 
 
-def _a6(conf_devise, taux, sens="devise_par_eur"):
-    d = declaration(id="doc_dec", mrn=MRN_A)
-    d.dec.devise_facture = vs("declaration.devise_facture", "EUR", document_id="doc_dec")
-    d.dec.montant_total_facture = vs("declaration.montant_total_facture", "12500.00", document_id="doc_dec")
-    d.dec.taux_change = vs("declaration.taux_change", taux, document_id="doc_dec")
-    d.dec.taux_change_sens = vs("declaration.taux_change_sens", sens, document_id="doc_dec")
-    d.dec.date_acceptation = vs("declaration.date_acceptation", "2026-09-10", document_id="doc_dec")
-    d.dec.references_factures = [
-        vs("declaration.references_factures[]", "INV-FICTIF-1", document_id="doc_dec")
-    ]
-    fc = facture_commerciale(
-        id="doc_fc",
-        numero=vs("facture_commerciale.numero", "INV-FICTIF-1", document_id="doc_fc"),
-        devise=vs(
-            "facture_commerciale.devise",
-            "USD",
-            document_id="doc_fc",
-            confiance=conf_devise,
-            methode=Methode.ocr,
+def _a6(conf_devise, taux, sens="eur_par_devise"):
+    """Facture FICTIVE en USD (devise lue par OCR à ``conf_devise``), déclaration en EUR du même nombre, taux imprimé
+    ``taux`` (1 USD = taux EUR) ; taux de référence fictif 1 EUR = 1,15 USD."""
+    fc = document(
+        TypeDocument.facture_commerciale,
+        ChampsFactureCommerciale(
+            numero=vs("facture_commerciale.numero", "INV-FICTIF-1", document_id="doc_fc"),
+            total_facture=vs("facture_commerciale.total_facture", "12540.00", document_id="doc_fc"),
+            devise=vs(
+                "facture_commerciale.devise",
+                "USD",
+                document_id="doc_fc",
+                confiance=conf_devise,
+                methode=Methode.ocr,
+            ),
+            acheteur=Partie(tva=vs("facture_commerciale.acheteur.tva", TVA_CLIENT, document_id="doc_fc")),
         ),
-        total_facture=vs("facture_commerciale.total_facture", "12500.00", document_id="doc_fc"),
+        id="doc_fc",
     )
-    table = TableTauxReference({"USD": {date(2026, 9, 10): D("1.1500")}})
-    rs = run_controls(contexte([d, fc], taux=table), controles=["A6"])
-    return [r for r in rs if r.controle_id == "A6" and r.constat is not None]
+    d = document(
+        TypeDocument.declaration,
+        ChampsDeclaration(
+            mrn=vs("declaration.mrn", MRN_A, document_id="doc_dec"),
+            montant_total_facture=vs("declaration.montant_total_facture", "12540.00", document_id="doc_dec"),
+            devise_facture=vs("declaration.devise_facture", "EUR", document_id="doc_dec"),
+            taux_change=vs("declaration.taux_change", taux, document_id="doc_dec"),
+            taux_change_sens=vs("declaration.taux_change_sens", sens, document_id="doc_dec"),
+            importateur=Partie(tva=vs("declaration.importateur.tva", TVA_CLIENT, document_id="doc_dec")),
+            date_acceptation=vs("declaration.date_acceptation", "2026-08-14", document_id="doc_dec"),
+        ),
+        id="doc_dec",
+    )
+    docs = [fc, d]
+    ctx = ControlContext.construire(
+        dossier_pour(docs),
+        docs,
+        ProfilTolerances(id="tol_test"),
+        entites=[ENTITE],
+        execution_id="exe_test",
+        taux_reference=TableTauxReference({"USD": {date(2026, 8, 14): D("1.1500")}}),
+    )
+    return [r for r in run_controls(ctx, controles=["A6"]) if r.controle_id == "A6" and r.constat is not None]
 
 
 def test_a6_devise_corroboree_par_le_taux_imprime():
-    (r,) = _a6(0.92, "1.1100")
+    (r,) = _a6(0.92, "0.90090")  # 1 USD = 0,9009 EUR, soit 1,11 USD pour 1 EUR (référence 1,15)
     assert r.outcome is Outcome.ecart_certain and r.details["devise_corroboree_par_taux"] is True
-    assert TauxChangeSens.devise_par_eur.value == "devise_par_eur"
+    assert r.constat.montant_en_jeu == D("1242.71")  # 12 540 − 12 540 × 0,9009
 
 
 def test_a6_taux_imprime_sans_rapport_avec_la_devise_lue():
     # 1,40 s'écarte de plus de BANDE_DEVISE_PAR_TAUX du taux de référence du dollar : pas de corroboration.
-    assert abs(D("1.40") - D("1.15")) / D("1.15") > BANDE_DEVISE_PAR_TAUX
-    (r,) = _a6(0.92, "1.4000")
+    assert abs(1 / D("0.70") - D("1.15")) / D("1.15") > BANDE_DEVISE_PAR_TAUX
+    (r,) = _a6(0.92, "0.70000")
     assert r.outcome is Outcome.a_verifier and RaisonCode.devise_incertaine in r.constat.raisons
-    (r2,) = _a6(0.85, "1.1100")  # devise lue sous c_min_certain : jamais corroborée
+    (r2,) = _a6(0.85, "0.90090")  # devise lue sous c_min_certain : jamais corroborée
     assert r2.outcome is Outcome.a_verifier
 
 

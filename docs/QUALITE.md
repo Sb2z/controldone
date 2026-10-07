@@ -28,25 +28,23 @@ formaté par ruff (301 fichiers sur 363), voir le backlog.
 
 Mesure : `make couverture` (`pytest --cov`, branches comprises), suite complète hors tests de propriétés. Trois
 mesures : 2026-10-06 (première base, D-3902) ; 2026-10-07 avant le bloc O4 (2 602 tests, 2 échecs web en cours de
-correction par leur bloc) ; 2026-10-07 après les tests du bloc O4 (2 912 tests, 2 échecs PostgreSQL dus à
-`storage/sauvegarde.py`, en cours de modification par le bloc production). Les blocs moteur, production et
-interface modifiaient `controls/`, `storage/sauvegarde.py`, `storage/verrou.py`, `services/exercice_mensuel.py`,
-`web/i18n*.py` pendant les mesures : leurs chiffres sont indicatifs (ex. `controls/corroboration.py` et
-`controls/famille_f.py` mesurés à 58–59 % dans la dernière exécution, modifiés pendant celle-ci ; 88,9 % et 85,6 %
-sur les seuls tests des contrôles juste après).
+correction par leur bloc) ; 2026-10-07 après les tests du bloc O4 (**mesure de référence** : 2 910 tests, aucun
+échec, aucun fichier modifié pendant l'exécution). Une mesure intermédiaire, faite pendant que les blocs moteur et
+production modifiaient `controls/` et `storage/sauvegarde.py`, donnait 88,1 % (`controls` 85,3 %) : un fichier
+modifié pendant l'exécution fausse sa mesure, d'où une seule mesure de référence prise au calme.
 
 | Paquet (total, lignes + branches) | 2026-10-06 | 2026-10-07 avant O4 | 2026-10-07 après O4 |
 |---|---:|---:|---:|
 | `ingest` | 77,6 % | 84,4 % | 84,4 % |
-| `controls` | 91,1 % | 86,3 % | 85,3 % |
 | `extract` | 86,2 % | 86,4 % | 86,4 % |
 | racine (`cli`, `pipeline`, `formatage`…) | 84,0 % | 84,9 % | 86,7 % |
 | `agents` | 86,2 % | 86,7 % | 86,7 % |
-| `storage` | 64,5 % | 81,7 % | **86,8 %** |
-| `services` | 73,2 % | 71,5 % | **88,1 %** |
+| `services` | 73,2 % | 71,5 % | **89,3 %** |
 | `connecteurs` | 89,3 % | 89,3 % | 89,3 % |
 | `jobs` | 91,1 % | 90,0 % | 90,0 % |
 | `referentiel` | 90,6 % | 90,6 % | 90,6 % |
+| `controls` | 91,1 % | 86,3 % | 90,8 % |
+| `storage` | 64,5 % | 81,7 % | **91,3 %** |
 | `web` | 77,8 % | 82,9 % | **92,4 %** |
 | `rapport` | 93,2 % | 93,2 % | 93,2 % |
 | `outbox` | 92,9 % | 93,5 % | 93,5 % |
@@ -59,18 +57,18 @@ sur les seuls tests des contrôles juste après).
 | `model` | 97,0 % | 97,0 % | 97,0 % |
 | `demo` | 97,9 % | 97,9 % | 97,9 % |
 | `auth` | 85,6 % | 93,5 % | **98,3 %** |
-| **Total** (lignes / branches) | **84,6 %** (87,5 / 76,2) | **86,2 %** (89,2 / 77,6) | **88,1 %** (91,1 / 79,6) |
+| **Total** (lignes / branches) | **84,6 %** (87,5 / 76,2) | **86,2 %** (89,2 / 77,6) | **89,7 %** (92,1 / 82,7) |
 
-Une part de la hausse de `services` (`services/exercice_mensuel.py`, 0 -> 72 %) et de `web` (`web/i18n.py`) vient
-des tests livrés en même temps par les blocs production et interface ; la part du bloc O4 est détaillée au § 3.
+Une part des hausses de `services` (`services/exercice_mensuel.py` 0 -> 81 %), `storage` (`storage/sauvegarde.py`,
+`storage/retention.py`) et `web` (`web/i18n.py`, `web/routes_finances.py`) vient des tests livrés en même temps par
+les blocs production et interface ; la part du bloc O4 est détaillée au § 3.
 
-**Seuils bloquants (D-4903)** : mesure après O4 moins 1 point, arrondie à l'entier inférieur. `make couverture`
-(défauts du Makefile) et le job `complet` de la CI échouent sous **COUV_MIN=87** (total) ou sous un minimum de
-paquet : `controls` ≥ 85 % (mesure perturbée 85,3 %, valeurs stables 86 à 91 %), `auth` ≥ 97 %. Valeurs
-identiques dans `Makefile` (`COUV_MIN`, `COUV_MIN_PAQUETS`) et `.github/workflows/ci.yml`, vérifiées par
-`tests/outillage/test_couverture_seuils.py`. Mesurer sans bloquer : `make couverture COUV_MIN=0 COUV_MIN_PAQUETS=`.
-Relever les seuils quand une mesure stable (aucun bloc en cours) les dépasse de plus de 2 points ; ne jamais les
-baisser pour faire passer une livraison sans décision.
+**Seuils bloquants (D-4903)** : mesure de référence moins 1 point, arrondie à l'entier inférieur. `make couverture`
+(défauts du Makefile) et le job `complet` de la CI échouent sous **COUV_MIN=88** (total 89,7 %) ou sous un minimum
+de paquet : `controls` ≥ 89 % (90,8 %), `auth` ≥ 97 % (98,3 %). Valeurs identiques dans `Makefile` (`COUV_MIN`,
+`COUV_MIN_PAQUETS`) et `.github/workflows/ci.yml`, vérifiées par `tests/outillage/test_couverture_seuils.py`.
+Mesurer sans bloquer : `make couverture COUV_MIN=0 COUV_MIN_PAQUETS=`. Relever les seuils quand une mesure stable
+les dépasse de plus de 2 points ; ne jamais les baisser pour faire passer une livraison sans décision.
 
 ## 3. Modules critiques les moins couverts
 
@@ -125,9 +123,9 @@ après, mesures du § 2) :
 Défaut trouvé et corrigé (D-4902) : `services.admin.ajouter_entite` dérivait l'identifiant de l'entité de la TVA
 **telle que saisie** ; « fr 40 303 265 045 » puis « FR40303265045 » créaient deux entités de même TVA. Identifiant
 désormais dérivé de la TVA normalisée (test de non-régression
-`test_entite_tva_ecrite_autrement_pas_de_doublon`). Restent peu couverts, modules en cours de modification par
-d'autres blocs (non traités ici) : `storage/sauvegarde.py` (53 %), `storage/verrou.py` (70 %),
-`services/exercice_mensuel.py` (72 %), `web/routes_finances.py`, `storage/retention.py`.
+`test_entite_tva_ecrite_autrement_pas_de_doublon`). Restent les moins couverts, modules modifiés par
+d'autres blocs pendant O4 (non traités ici) : `storage/verrou.py` (70 %), `services/exercice_restauration.py`
+(78 %), `storage/sauvegarde.py` (79 %), `web/routes_finances.py` (80 %), `services/exercice_mensuel.py` (81 %).
 
 ## 4. Tests de propriétés (D-3903)
 

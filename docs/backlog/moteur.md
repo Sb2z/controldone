@@ -115,7 +115,7 @@ Mesures sur les seuls jeux de développement (`bench/out/*_dev_m3base` -> `*_dev
 - **Rappel certain.** F3 : lien établi par le MRN (D-4209), +2 certains (corpus d'origine). Restent : F3 (9) et B1 (5)
   avec une valeur lue sous le seuil sur scan ; A5 (3) taux OCR ; A6 (7 « à vérifier » : devise de facture lue à 0,90–0,93, sous
   `a6_confiance_devise_min` = 0,95, ou sous le seuil : à corroborer par la devise du taux imprimé de la déclaration, que l'extraction
-  ne porte pas encore). **À faire** (extraction).
+  ne porte pas encore). **Fait en partie** (bloc M4 : F3 D-4604, A6 D-4605, B1 D-4606 ; voir ci-dessous).
 - **Totaux par code absents (34 / 46 / 133).** L4 n'imprime aucun total par code (36 des 133 du corpus d'origine) ;
   les autres sont des récapitulatifs OCR non confirmés par l'identité « somme des codes = total ». Rien de sûr sans
   lecture nouvelle. **Constat.**
@@ -131,12 +131,34 @@ Mesures sur les seuls jeux de développement (`bench/out/*_dev_m3g` -> `*_dev_d3
   ligne d'un autre envoi, grilles concurrentes, version de facture, ligne répétée (D-4213). **Fait**, à confirmer sur
   les jeux tenus à l'écart (orchestrateur).
 - **D6 / D7 (même comparaison `_comparer_tarif`).** Les gardes D-4212 / D-4213 ne s'appliquent qu'à D3 et D4 ; à
-  étendre à D6 (magasinage) et D7 (surcharges) après mesure. **À faire.**
+  étendre à D6 (magasinage) et D7 (surcharges) après mesure. **Fait** (D-4601, bloc M4).
 - **Bruit D3 sur pièges « écart entièrement soldé par un avoir » (GZ0103, GX0035).** L'avoir rattaché n'est pas
   ventilé (lignes illisibles) : « à vérifier » au lieu de conforme. Piste : total crédité lu égal à l'écart et seul
   écart ouvert de la facture -> conforme expliqué. **À faire** (décision du fondateur : un avoir non ventilé peut-il
   solder un écart ?).
 - **Extraction G13 (montants TTC seuls).** GZ0125 : la colonne TTC est lue comme montant HT sans marque
   `montant_tva_comprise` ; D-4213 rattrape l'écart par l'identité Σ lignes = TTC, mais l'extraction devrait marquer la
-  ligne (D-2701). **À faire** (extraction).
+  ligne (D-2701). **Fait** (D-4602 : `LigneFactureTransitaire.tva_comprise`, en-tête « Total : c/ IVA » reconnu).
 
+
+## Bloc M4 (D6 / D7, TTC à l'extraction, montant des écarts de débours, rappel certain) — 7 octobre 2026
+
+Mesures sur les seuls jeux de développement (`bench/out/*_dev_d34` -> `*_dev_m4d`). Détail : D-4601 à D-4607.
+
+- **D6 / D7 : gardes du tarif.** Avoirs non imputés, tarif non établi, TVA comprise, autre envoi, ligne répétée,
+  attestation de la grille, devise ; assiette des pourcentages (débours et lignes de transport) (D-4601). **Fait.**
+- **Lignes seulement TTC marquées à l'extraction** (`tva_comprise`, D-4602). **Fait.** Reste possible : marquer aussi une
+  facture dont seule une mention de pied (« Preços de serviços com IVA incluído ») dit TVA comprise, quand l'en-tête
+  n'est pas lu ; aucun cas sur le dev.
+- **C1 certain au montant inexact (jeu tenu à l'écart).** Montant établi exigé (avoir rattaché sûrement, aucun avoir
+  non imputé ou orphelin, une seule version, totaux par code concordants, une facture par numéro, euros) ; avoir d'un
+  autre envoi plus déduit dans chaque dossier d'une facture répartie (GX0236) (D-4603). **Fait**, à confirmer sur les
+  jeux tenus à l'écart (orchestrateur).
+- **Rappel certain.** F3 (+5, MRN confirmé par la déclaration), A6 (+3, devise confirmée par le taux imprimé), B1
+  (+1, base de TVA) (D-4604 à D-4606). **Fait.** Reste (dev) : A5 (3 : taux et montant déclaré lus 0,86–0,89, aucune
+  seconde lecture du taux), A6 (2 : taux lu sous le seuil), B1 (4 : montant du droit non confirmé, lectures 0,55, taux
+  mal lu), F3 (5 : MRN ou montants sous 0,70, débours différents). Piste : seconde lecture OCR ciblée (autre
+  binarisation) des seules valeurs clés d'un constat « à vérifier » pour confiance insuffisante — bloc extraction.
+  **À faire.**
+- **Interface : raison `montant_non_etabli`** (libellé français dans `RAISON_LIBELLES`) ; traduction anglaise éventuelle
+  et présentation du montant comme estimation dans le rapport : bloc interface. **À vérifier par le bloc interface.**

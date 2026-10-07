@@ -31,8 +31,8 @@ pre-commit:
 # HTML dans var/couverture/html/. Base de référence : docs/QUALITE.md. Seuils bloquants (D-4903, mesure de référence
 # moins 1 point, mêmes valeurs dans la CI) : COUV_MIN (taux global) et COUV_MIN_PAQUETS (paquet=taux, séparés par
 # des espaces). `make couverture COUV_MIN=0 COUV_MIN_PAQUETS=` mesure sans bloquer.
-COUV_MIN ?= 87
-COUV_MIN_PAQUETS ?= controls=85 auth=97
+COUV_MIN ?= 88
+COUV_MIN_PAQUETS ?= controls=89 auth=97
 couverture:
 	@mkdir -p var/couverture
 	@# le résumé est produit même si des tests échouent ; le code de sortie reste celui de pytest

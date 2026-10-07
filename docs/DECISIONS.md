@@ -4854,6 +4854,126 @@ D3 / D4 hors erreur protégés uniquement par une lecture OCR douteuse sont ceux
 D-4213 quand toutes les lignes sont lues. Tests : `tests/controls/test_precision_d42.py` (23 cas, données fictives) ;
 `test_famille_d.py` (unitaire sans prix unitaire) et `test_precision_c_d.py` (avoir d'un autre MRN) mis à jour.
 
+## D-4601 — D6 / D7 : gardes du tarif de D3 / D4
+
+Les conditions de D-4212 à D-4214 s'appliquent désormais à tout écart au tarif (`famille_d._CONTROLES_TARIF` : D3, D4,
+D6, D7) :
+- avoir ou crédit du dossier non imputé, ligne négative, avoir orphelin du lot (`avoir_non_impute`) ; TVA comprise non
+  marquée (`montant_tva_comprise`) ; ligne d'un autre envoi (`attribution_non_univoque`, `envoi_hors_dossier`) ; autre
+  grille applicable, autre version de la facture, forfait facturé plusieurs fois, unitaire sans quantité ou prix lus
+  (`tarif_non_etabli`) ; émetteur qui n'atteste pas la grille (`grille_non_attestee`) ; devise illisible
+  (`devise_incertaine`) ;
+- magasinage dont l'attendu vient de la **période imprimée** (dates de début et de fin) : la quantité et le prix
+  unitaire de la ligne ne fondent pas l'attendu, les motifs « unitaire » ne s'appliquent pas (`periode`) ;
+- ligne répétée (même facture, nature, libellé, montant, référence d'envoi) comparée une fois, les copies
+  `non_applicable` (`couvert_par_autre_controle`, D5) ;
+- pourcentage : les conditions d'assiette de D4 (débours complets, rattachement, ambiguïtés, assiettes alternatives)
+  valent pour tout pourcentage de débours (surcharge D7 comprise) ; attestation et devise pour tout pourcentage au
+  tarif ; surcharge sur les lignes de transport (D7) : l'assiette n'est établie que si toutes les lignes sont lues
+  (Σ lignes = total HT imprimé, ou facture structurée), sinon `valeur_absente`, `assiette_non_confirmee =
+  total_ht_non_retrouve` (sauf attendu au maximum de la grille).
+
+Dev : aucun D6 / D7 certain perdu ni gagné (g4 2 + 1, g2 et origine inchangés). `test_famille_d.py` (D7 en pourcentage :
+total HT ajouté à la donnée), `tests/controls/test_bloc_m4.py`.
+
+## D-4602 — Lignes imprimées seulement TVA comprise : marquées dès l'extraction
+
+- Modèle : `LigneFactureTransitaire.tva_comprise` (booléen, défaut faux) : la ligne n'imprime que des montants TVA
+  comprise, aucun hors-taxe. L'extracteur déterministe le pose sur chaque ligne d'un tableau dont la seule colonne de
+  montant est TTC (`ttc_seul`, D-2502).
+- `recouvrement.imputation.montant_net_ligne` (D-2701) : ligne marquée et taxée -> montant toujours marqué
+  `montant_tva_comprise` (confiance plafonnée à 0,60), quelle que soit la colonne où le montant a été rangé ; ligne
+  exonérée (taux ou TVA lus nuls) : montant tel quel.
+- Reconnaissance de l'en-tête (`_reconnaitre_entete`) : une colonne « montant » dont l'en-tête porte une mention TVA
+  comprise (« c/ IVA », « TTC », « incl. », « inkl. », « brutto »… ; `_mention_ttc`) est une colonne TTC ; « IVA »
+  (« TVA », « MwSt ») reconnu seul comme colonne de TVA juste après « … c/ » (« com », « incl. ») en est la fin. Cas
+  trouvé : GZ0125 (G13 scanné) : « Total : c/ IVA » lu « Total : c/ » (montant HT) + « IVA » (colonne de TVA) ; les
+  montants TTC étaient lus comme hors taxe.
+- Calibration (`scripts/mesure_extraction.py`, valeurs ≥ 0,90) : facture du transitaire g4 4 677/4 680 -> 4 678/4 681
+  (99,94 %), g2 6 748/6 751 et origine 8 172/8 174 inchangés ; avoirs inchangés (100 %).
+Tests : `tests/extract/test_bloc_m4_ttc.py`.
+
+## D-4603 — C1 à C5 : un écart de débours n'est certain que si son montant est établi
+
+Constat (jeu tenu à l'écart, symptôme agrégé seulement) : un C1 certain apparié à une vraie erreur, au montant
+inexact. Étude des 24 C1 certains du dev (`*_dev_d34`) : tous au montant juste ; tous sur une seule déclaration, sans
+version antérieure, une ligne de droits, facture en euros ; 6 avec un avoir partiel déduit (rattaché par le MRN ou sur
+une facture d'un seul envoi), 8 sur une facture de plusieurs envois (lignes ventilées par MRN). Un montant faux sur
+une erreur réelle vient donc d'un élément qui déplace le montant sans créer l'écart. Cas trouvé sur le dev : GX0236
+(facture de quatre envois répartie entre quatre dossiers) : l'avoir de 180,00 qui cite le MRN d'un envoi était déduit
+dans **chaque** dossier (un C1 « à vérifier » de −180,00 dans trois dossiers) ; sur une erreur réelle d'un autre envoi,
+le C1 aurait été certain au montant faux.
+
+Règles :
+- imputation (`famille_c._imputer_avoirs`) : une ligne d'avoir qui cite le MRN (aux confusions OCR près) d'un envoi
+  d'un autre dossier et d'aucune déclaration du dossier n'est pas déduite ici ; rattachement par numéro de facture :
+  filtré par le MRN de la ligne d'avoir (clés de confusion) ; sans correspondance, ou sans MRN sur une facture de
+  plusieurs envois -> crédit `incertain` ; lignes non ventilées (avoir sans ligne lisible), lignes de débours
+  rattachées à plusieurs unités, lignes de débours d'avoir illisibles -> `UniteC.credits_non_imputes` ;
+- `famille_c.montant_non_etabli` (C1, C2, C4 par composante ; C3 ; C5 sur le total) : raison nouvelle
+  `montant_non_etabli`, `details.montant_non_etabli` = `avoir_rattachement_non_etabli`, `avoir_non_impute`,
+  `avoir_hors_dossier` (avoir d'un émetteur compatible orphelin dans un autre dossier du lot sans facture du
+  transitaire), `ligne_de_credit_sans_signe` (ligne de débours « régularisation », « avoir », « refund »… lue
+  positive), `versions_de_la_declaration` (une version antérieure liquide un autre montant), `totaux_par_code_
+  discordants` (total imprimé d'un code de la composante ≠ somme de ses lignes ; sans objet pour C5 fondé sur le total
+  à payer), `factures_de_meme_numero` ; devise de la facture du transitaire autre que l'euro ou illisible ->
+  `devise_incertaine`, `details.devise_de_la_facture` ;
+- le constat reste émis, « à vérifier », le montant présenté comme une estimation (« Ce montant est une estimation :
+  les documents ne permettent pas de l'établir exactement. ») ; libellé de la raison sans formulation interdite.
+Déjà en place et vérifié : ligne « droits et taxes » combinée (`non_verifiable`), répartition au prorata
+(`allocation_prorata`), rattachement de ligne non établi (`attribution_non_univoque`), arrondi (tolérance).
+Dev : aucun C certain perdu (une première version comparait les totaux par code d'un C5 fondé sur le total à payer :
+GZ0209 C5 perdu, corrigé) ; GX0236 : les trois C1/C5 « à vérifier » de −180,00 disparaissent.
+
+## D-4604 — F3 : MRN confirmé par une seconde lecture indépendante
+
+Un MRN de facture lu sous `C_MIN_CERTAIN` (au moins `C_LECTURE_CONFIRMABLE` = 0,70, ancré, lu, 18 caractères) dont
+les 18 caractères sont ceux du MRN d'une déclaration (du dossier ou d'un autre dossier du client), lu sur un **autre
+document**, est confirmé (`famille_f._mrn_confirme`) : deux lectures indépendantes d'une chaîne en grande partie
+aléatoire concordent. D-4209 (lien établi par le MRN) s'applique alors. Gain dev : 5 F3 certains (GZ0035, GZ0082,
+GX0019, GX0060, GX0270 ; MRN lus 0,75–0,85), montants justes. Un MRN de déclaration lu autrement, ou sous 0,70 : inchangé.
+
+## D-4605 — A6 : devise de la facture confirmée par le taux imprimé de la déclaration
+
+Devise de la facture lue sous `a6_confiance_devise_min` (0,95) mais au moins `c_min_certain` (0,90), code ISO lu tel
+quel : confirmée quand le taux de change **imprimé sur la déclaration** correspond, à `BANDE_DEVISE_PAR_TAUX` (15 %)
+près, au taux de référence de cette devise à la date d'acceptation (dans le sens imprimé, sinon dans l'un des deux) :
+le déclarant a converti depuis cette devise, la facture n'est pas en euros (`famille_a._devise_corroboree_par_taux`,
+`details.devise_corroboree_par_taux`). Le taux de référence ne sert jamais au montant. Gain dev : GX0147 (INR lu 0,90,
+taux 111,05 contre 107,06), BX0211 (USD 0,93) certains ; GZ0162 (USD 0,90, attendu « à vérifier » par la vérité)
+devient certain au montant juste (surclassement, pas un faux certain). Taux imprimé lu sous le seuil (BX0129, BX0159) :
+inchangés.
+
+## D-4606 — B1 : base de TVA = valeur en douane + droits calculés
+
+Identité nouvelle du réseau de la déclaration (`corroboration._identites_base_tva`, nature `base_tva`) : pour un
+article dont les lignes sont des droits ad valorem de même base et une ligne de TVA, base de TVA imprimée = base +
+Σ base × taux des droits (au centime par ligne). Elle confirme la base et le taux lus des droits (D-2314) — trois
+lectures indépendantes — sans faire intervenir le montant imprimé du droit (l'objet de B1). Elle ne confirme pas la
+colonne du montant de sa rangée (`lecture_confirmee` : la règle de la rangée ne s'applique pas à cette identité ; un
+premier essai rendait certain GZ0052 par la seule rangée, et le test `test_b1_colonne_a_payer_prise_pour_le_montant`
+l'a relevé). Gain dev : GZ0135 B1 certain (base et taux lus 0,80). GX0157 (taux « 47 » pour 4,7) : l'identité ne
+tient pas, reste « à vérifier » (montant faux). Coût : BX0245 B1 −0,03 (écart sous le seuil, désormais émis « à
+vérifier » : la base est confirmée, la confusion de lecture ne l'explique plus).
+
+## D-4607 — Mesures (dev seulement)
+
+Bancs `*_dev_d34` -> `*_dev_m4d` (même cache de pages) :
+
+| dev | VP / FP certains | rappel | rappel certain | montants justes | bruit (par dossier) | pièges | sur / sous-classements |
+|---|---|---|---|---|---|---|---|
+| `corpus_g4` (175) | 103 / 0 -> 107 / 0 | 0,8212 -> 0,8212 | 0,733 -> 0,758 | 0,979 -> 0,979 | 150 (0,857) -> 148 (0,846) | 27 -> 26 | 15 / 20 -> 16 / 17 |
+| `corpus_g2` (232) | 115 / 0 -> 119 / 0 | 0,8700 -> 0,8700 | 0,777 -> 0,806 | 0,966 -> 0,966 | 193 (0,832) -> 190 (0,819) | 13 -> 13 | 7 / 26 -> 7 / 22 |
+| d'origine (202) | 127 / 0 -> 128 / 0 | 0,8238 -> 0,8238 | 0,826 -> 0,833 | 0,973 -> 0,973 | 159 (0,787) -> 160 (0,792) | 27 -> 27 | 8 / 13 -> 8 / 12 |
+
+Certains par contrôle : A6 7 -> 10, B1 1 -> 2 (g4), F3 0 -> 5 ; tous les autres inchangés (C1 24, D3 / D4 25,
+D6 / D7 inchangés). Seuils bloquants : PASSE sur les trois. Restent « à vérifier » sur le dev : F3 GZ0088, GZ0143,
+GZ0197, GX0038, BX0156 (MRN ou montants sous 0,70, ou débours différents), B1 GZ0052 (montant du droit non confirmé),
+GZ0199 (lectures 0,55), GX0157, GZ0017 ; A5 GZ0073, GZ0091, GX0022 (taux et montant déclaré lus 0,86–0,89 : aucune
+seconde lecture du taux, le taux de référence ne pouvant fonder un montant) ; A6 BX0129, BX0159 (taux lu sous le
+seuil). Tests : `tests/controls/test_bloc_m4.py` (24 cas), `tests/extract/test_bloc_m4_ttc.py` (12 cas), données
+fictives.
+
 ### D-4404 — Plus aucun corpus versionné ; nettoyage de l'historique (décision du fondateur 4A)
 
 Les corpus `bench/corpus_g3`, `corpus_g4` et `corpus_g5` ne sont plus suivis par Git. Les 9 corpus sont tous
@@ -5018,9 +5138,10 @@ Tests seulement (aucune ligne de remplissage) : chemins d'erreur, droits et cloi
 `services/validation.py`, `services/vignettes.py` (rendu exécuté dans le processus courant : le service l'exécute
 dans le processus isolé, que la mesure ne voit pas). Les modules que d'autres blocs modifiaient au même moment
 (`storage/verrou.py`, `storage/sauvegarde.py`, `services/notifications.py`, `services/exercice_mensuel.py`,
-`web/i18n*.py`, `web/routes_finances.py`, `storage/retention.py`, `controls/`) ne sont pas traités. Effet : total
-86,2 % -> 88,1 % ; `storage` 81,7 -> 86,8 %, `services` 71,5 -> 88,1 %, `web` 82,9 -> 92,4 %, `auth` 93,5 -> 98,3 %
-(détail : `docs/QUALITE.md` § 2 et § 3).
+`web/i18n*.py`, `web/routes_finances.py`, `storage/retention.py`, `controls/`) ne sont pas traités. Effet (avec
+les tests livrés en même temps par ces blocs) : total 86,2 % -> 89,7 % ; `storage` 81,7 -> 91,3 %, `services`
+71,5 -> 89,3 %, `web` 82,9 -> 92,4 %, `auth` 93,5 -> 98,3 % (détail et part du bloc O4 : `docs/QUALITE.md` § 2 et
+§ 3).
 
 ## D-4902 — Identifiant d'une entité dérivé de la TVA normalisée
 
@@ -5034,10 +5155,11 @@ normalisé (doublon existant à fusionner à la main s'il y en a, aucun connu). 
 
 ## D-4903 — Seuils de couverture bloquants : global et par paquet
 
-`make couverture` et le job `complet` de la CI échouent sous `COUV_MIN=87` (mesure du 2026-10-07 après O4, 88,1 %,
-moins 1 point, arrondi à l'entier inférieur) et sous les minimums par paquet `COUV_MIN_PAQUETS="controls=85
-auth=97"` (option `--min-paquet paquet=taux` de `scripts/couverture_paquets.py` ; un paquet mal nommé est une
-erreur). `controls` : 85 et non 84 (mesure perturbée par les modifications en cours du bloc moteur, 85,3 % ; valeurs
-stables 86 à 91 %). Valeurs identiques dans le Makefile, la CI et `docs/QUALITE.md`, vérifiées par
+`make couverture` et le job `complet` de la CI échouent sous `COUV_MIN=88` (mesure de référence du 2026-10-07
+après O4, 89,7 %, moins 1 point, arrondi à l'entier inférieur) et sous les minimums par paquet
+`COUV_MIN_PAQUETS="controls=89 auth=97"` (90,8 % et 98,3 % moins 1 point ; option `--min-paquet paquet=taux` de
+`scripts/couverture_paquets.py`, un paquet mal nommé est une erreur). Mesure de référence prise sans fichier modifié
+pendant l'exécution : une mesure faite pendant les modifications du bloc moteur donnait `controls` 85,3 %. Valeurs
+identiques dans le Makefile, la CI et `docs/QUALITE.md`, vérifiées par
 `tests/outillage/test_couverture_seuils.py`. Le job `rapide` ne mesure pas la couverture (durée). Relever les
 seuils quand une mesure stable les dépasse de plus de 2 points ; ne jamais les baisser sans décision.
