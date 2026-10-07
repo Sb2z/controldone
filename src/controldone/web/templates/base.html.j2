@@ -35,15 +35,28 @@
     {% if acteur %}
     <nav class="nav" aria-label="{{ _("Navigation principale") }}">
       {% if acteur.role.value == "fondateur" %}
-        {% set liens = [("tableau", "/admin", _("Tableau de bord")), ("validation", "/admin/validation", _("File de validation")), ("clients", "/admin/clients", _("Clients")), ("finances", "/admin/finances", _("Finances")), ("jobs", "/admin/jobs", _("Tâches")), ("journal", "/admin/journal", _("Journal")), ("alertes", "/admin/alertes", _("Alertes")), ("autonomie", "/admin/autonomie", _("Autonomie")), ("prospection", "/admin/prospection", _("Marketing"))] %}
+        {% set liens = [("tableau", "/admin", _("Tableau de bord")), ("validation", "/admin/validation", _("File de validation")), ("clients", "/admin/clients", _("Clients")), ("finances", "/admin/finances", _("Finances")), ("prospection", "/admin/prospection", _("Marketing"))] %}
+        {% set autres = [("jobs", "/admin/jobs", _("Tâches")), ("journal", "/admin/journal", _("Journal")), ("alertes", "/admin/alertes", _("Alertes")), ("autonomie", "/admin/autonomie", _("Autonomie"))] %}
       {% else %}
         {% set liens = [("tableau", "/espace", _("Tableau de bord")), ("depot", "/espace/depot", _("Déposer")), ("dossiers", "/espace/dossiers", _("Dossiers")), ("rapports", "/espace/rapports", _("Rapports")), ("recouvrement", "/espace/recouvrement", _("Suivi des avoirs"))] %}
+        {% set autres = [] %}
       {% endif %}
       <ul>
       {% for cle, url, lib in liens %}
         <li><a href="{{ url }}"{% if nav == cle %} aria-current="page"{% endif %}>{{ lib }}</a></li>
       {% endfor %}
       </ul>
+      {% if autres %}
+      {% set actif_autre = autres|selectattr(0, "equalto", nav)|list %}
+      <details class="nav-plus" data-nav-plus>
+        <summary{% if actif_autre %} class="actif"{% endif %}>{{ actif_autre[0][2] if actif_autre else _("Plus") }}<span class="vh"> : {{ _("autres pages") }}</span></summary>
+        <ul class="nav-menu">
+        {% for cle, url, lib in autres %}
+          <li><a href="{{ url }}"{% if nav == cle %} aria-current="page"{% endif %}>{{ lib }}</a></li>
+        {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
     </nav>
     <div class="compte">
       <button type="button" class="btn-icone seulement-js" data-palette-ouvrir aria-label="{{ _("Recherche rapide (Ctrl+K)") }}" title="{{ _("Recherche rapide (Ctrl+K)") }}">
