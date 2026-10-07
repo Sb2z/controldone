@@ -17,7 +17,7 @@
   </div>
   <div class="filtre">
     <label for="j-action">{{ _("Action") }}</label>
-    <select id="j-action" name="action"><option value="">{{ _("Toutes") }}</option>{% for a in actions %}<option value="{{ a }}"{% if req.brut.get('action') == a %} selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+    <select id="j-action" name="action"><option value="">{{ _("Toutes") }}</option>{% for a in actions %}<option lang="fr" value="{{ a }}"{% if req.brut.get('action') == a %} selected{% endif %}>{{ a }}</option>{% endfor %}</select>
   </div>
   <div class="filtre">
     <label for="j-client">{{ _("Client") }}</label>
@@ -35,8 +35,8 @@
   <thead><tr>{{ th_tri(req, "id", _("N°"), "num") }}<th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Acteur") }}</th><th scope="col">{{ _("Action") }}</th><th scope="col">{{ _("Client") }}</th><th scope="col">{{ _("Cible") }}</th><th scope="col">{{ _("Détails") }}</th><th scope="col">{{ _("Empreinte") }}</th></tr></thead>
   <tbody>
   {% for e in p.elements %}
-  <tr><td class="num">{{ e.id }}</td><td>{{ e.ts|date }}</td><td><code>{{ e.actor }}</code><br><span class="discret">{{ e.role }}</span></td><td>{{ e.action }}</td><td><code>{{ e.tenant_id or "—" }}</code></td><td><code>{{ e.target or "—" }}</code></td>
-    <td class="details">{% for k, v in e.details.items() %}<span>{{ k }} : {{ v }}</span>{% endfor %}</td><td><code>{{ e.hash }}…</code></td></tr>
+  <tr><td class="num">{{ e.id }}</td><td>{{ e.ts|date }}</td><td><code>{{ e.actor }}</code><br><span class="discret">{{ e.role }}</span></td><td><code>{{ e.action }}</code></td><td><code>{{ e.tenant_id or "—" }}</code></td><td><code>{{ e.target or "—" }}</code></td>
+    <td class="details" lang="fr">{% for k, v in e.details.items() %}<span>{{ k }} : {{ v }}</span>{% endfor %}</td><td><code>{{ e.hash }}…</code></td></tr>
   {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}{{ _("Aucune entrée ne correspond à ces critères.") }}{% else %}{{ _("Journal vide.") }}{% endif %}</td></tr>
   {% endfor %}
   </tbody>

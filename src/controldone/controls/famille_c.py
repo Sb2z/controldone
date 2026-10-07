@@ -19,6 +19,7 @@ d'interprétation sont notés dans ``docs/DECISIONS.md`` (D-2xx, « Contrôles C
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import Decimal
@@ -62,6 +63,7 @@ from controldone.model import (
     RaisonCode,
     ResultatControle,
     RolePreuve,
+    TypeDocument,
     TypeIndiceAutoliquidation,
     ValeurSourcee,
 )
@@ -514,6 +516,10 @@ class CreditAvoir:
     valeur: ValeurSourcee
     montant: Decimal
     categorie: CategorieTaxe | None
+    #: D-4603 : rattachement de la ligne d'avoir à cette unité non établi (MRN de la ligne d'avoir sans correspondance
+    #: dans l'unité, ou rattachement par le seul numéro de facture sur une facture de plusieurs envois) : le montant
+    #: déduit, donc celui de l'écart, n'est pas établi.
+    incertain: bool = False
 
 
 @dataclass
@@ -528,6 +534,10 @@ class UniteC:
     #: Une ligne de débours d'une facture de l'unité n'a pu être rattachée à aucune déclaration (MRN de ligne
     #: lu sous la confiance de certitude, inconnu du lot) : elle peut appartenir à cette unité (D-2702).
     lignes_non_rattachees: bool = False
+    #: D-4603 : lignes d'avoir de débours (ou d'avoir non ventilé) du même émetteur, rattachées à une facture de
+    #: l'unité, qui n'ont été déduites d'aucune unité (montant illisible, nature ou rattachement non établis) : elles
+    #: peuvent couvrir une partie de l'écart. ``(identifiant de l'avoir, catégorie ou None)``.
+    credits_non_imputes: list[tuple[str, CategorieTaxe | None]] = field(default_factory=list)
 
     @property
     def attribution_incertaine(self) -> bool:
@@ -836,15 +846,34 @@ def _imputer_avoirs(ctx: ControlContext, unites: list[UniteC]) -> None:
     def mrns(u: UniteC) -> list[str | None]:
         return [d.dec.mrn_prefixe for d in u.declarations]
 
+    # D-4603 : clés de confusion OCR des MRN du dossier et des autres dossiers du lot ou du client.
+    ici = {cle_confusion_ocr(p) for u in unites for p in mrns(u) if p}
+    ailleurs = {cle_confusion_ocr(p) for p in _prefixes_autres_dossiers(ctx)} - ici
     for lc in aides.lignes_credit_du_dossier(ctx):
-        if lc.nature is None or not lc.nature.est_debours or lc.ligne is None:
+        if lc.nature is not None and not lc.nature.est_debours:
+            continue
+        cles_lc = {cle_confusion_ocr(p) for m in lc.mrns if len(p := mrn_prefixe(m)) == 15}
+        if cles_lc and not cles_lc & ici and cles_lc & ailleurs:
+            # Ligne d'avoir qui cite le MRN d'un envoi d'un autre dossier (facture de plusieurs envois répartie entre
+            # dossiers) : elle n'est pas déduite ici.
             continue
         cibles = [u for u in unites if any(aides.memes_emetteurs(lc.emetteur, e) for e in emetteurs[id(u)])]
         palier, cands = choisir_par_paliers(lc, cibles, factures=factures, mrns=mrns)
-        if palier == "facture" and len(cands) > 1:
-            prefixes = {mrn_prefixe(m) for m in lc.mrns}
-            cands = [u for u in cands if any(p in prefixes for p in mrns(u))] or cands
+        incertain = False
+        if palier == "facture" and cles_lc:
+            par_mrn = [u for u in cands if any(p and cle_confusion_ocr(p) in cles_lc for p in mrns(u))]
+            # MRN de la ligne d'avoir sans correspondance dans les unités de la facture : rattachement non établi.
+            incertain = not par_mrn
+            cands = par_mrn or cands
+        elif palier == "facture":
+            # Rattachement par le seul numéro de facture : non établi sur une facture de plusieurs envois.
+            incertain = any(facture_multi_envois(ctx, f) for u in cands for f in u.factures)
         avoir = ctx.document(lc.avoir_id)
+        if lc.nature is None or lc.ligne is None:
+            # Avoir non ventilé (aucune ligne lisible) rattaché à une facture de l'unité : il peut couvrir l'écart.
+            for u in cands:
+                u.credits_non_imputes.append((lc.avoir_id, None))
+            continue
         if len(cands) == 1 and avoir is not None and lc.valeur is not None:
             cands[0].credits.append(
                 CreditAvoir(
@@ -853,8 +882,45 @@ def _imputer_avoirs(ctx: ControlContext, unites: list[UniteC]) -> None:
                     valeur=lc.valeur,
                     montant=lc.montant,
                     categorie=_NATURE_CATEGORIE[lc.nature],
+                    incertain=incertain,
                 )
             )
+        else:
+            for u in cands:
+                u.credits_non_imputes.append((lc.avoir_id, _NATURE_CATEGORIE[lc.nature]))
+    _credits_illisibles(ctx, unites, emetteurs)
+
+
+def _credits_illisibles(ctx: ControlContext, unites: list[UniteC], emetteurs: dict[int, list]) -> None:
+    """D-4603 : ligne de débours d'un avoir du dossier (même émetteur, rattaché à une facture de l'unité par son numéro
+    ou un MRN de l'unité) dont le montant n'est pas utilisable : elle n'a pu être déduite, et peut couvrir l'écart."""
+    for a in aides.avoirs_imputables(ctx):
+        ea = aides.emetteur_de(ctx, a)
+        av = a.av
+        illisibles = [
+            lg
+            for lg in av.lignes
+            if lg.nature.est_debours and _dec(ctx, montant_net_ligne(lg, ctx.utilisable)) is None
+        ]
+        if not illisibles:
+            continue
+        origines = [x.valeur for x in av.refs_facture_origine if x.valeur and ctx.utilisable(x)]
+        cles = {
+            cle_confusion_ocr(p)
+            for v in [*av.refs_mrn, *(lg.mrn for lg in illisibles)]
+            if v is not None and v.valeur and ctx.utilisable(v) and len(p := mrn_prefixe(v.valeur)) == 15
+        }
+        for u in unites:
+            if not any(aides.memes_emetteurs(ea, e) for e in emetteurs[id(u)]):
+                continue
+            nums = [f.ft.numero.valeur for f in u.factures if f.ft.numero is not None and f.ft.numero.valeur]
+            par_facture = any(ref_compatibles(o, n) for o in origines for n in nums)
+            par_mrn = any(
+                d.dec.mrn_prefixe and cle_confusion_ocr(d.dec.mrn_prefixe) in cles for d in u.declarations
+            )
+            if par_facture or par_mrn:
+                for lg in illisibles:
+                    u.credits_non_imputes.append((a.id, _NATURE_CATEGORIE[lg.nature]))
 
 
 def _donnees(
@@ -933,6 +999,166 @@ def _explication_version(
             if abs(refacture - (total - b + alt)) <= tol:
                 return RaisonCode.version_rectificative
     return None
+
+
+# =====================================================================================================
+# D-4603 — montant d'un écart de débours établi
+# =====================================================================================================
+
+
+def montant_non_etabli(
+    ctx: ControlContext,
+    u: UniteC,
+    refs: dict[str, ReferenceDeclaration],
+    cats: set[CategorieTaxe | None],
+    valeur: Callable[[ReferenceDeclaration], Decimal | None],
+    *,
+    total_c5: bool = False,
+) -> tuple[list[RaisonCode], dict]:
+    """D-4603 : l'écart de débours d'une unité (C1 à C5) peut être réel sans que son **montant** soit établi. Retourne
+    les raisons et les détails à ajouter (vides quand le montant est établi) ; le constat reste émis, « à vérifier »,
+    son montant présenté comme une estimation.
+
+    - ``avoir_rattachement_non_etabli`` : un avoir déduit dans l'unité n'y est rattaché ni par un MRN de l'unité ni sans
+      ambiguïté (seul numéro de facture d'une facture de plusieurs envois) ;
+    - ``avoir_non_impute`` : une ligne d'avoir de débours (ou un avoir non ventilé) rattachée à une facture de l'unité
+      n'a été déduite nulle part (montant illisible, plusieurs unités possibles) ;
+    - ``versions_de_la_declaration`` : une version antérieure d'une déclaration de l'unité liquide un autre montant :
+      l'écart dépend de la version refacturée ;
+    - ``totaux_par_code_discordants`` : le total imprimé d'un code de taxe de la composante ne redonne pas la somme de
+      ses lignes lues : le montant liquidé n'est pas établi (C5 fondé sur le total à payer imprimé, ``total_c5`` :
+      sans objet) ;
+    - ``factures_de_meme_numero`` : deux factures additionnées dans l'unité portent le même numéro (copie, version) ;
+    - devise de la facture du transitaire autre que l'euro, ou lue mais illisible : raison ``devise_incertaine``."""
+    raisons: list[RaisonCode] = []
+    motifs: list[str] = []
+    tol = ctx.tol
+    if any(c.incertain and (c.categorie in cats or c.categorie is None) for c in u.credits):
+        motifs.append("avoir_rattachement_non_etabli")
+    if any(cat is None or cat in cats for _, cat in u.credits_non_imputes):
+        motifs.append("avoir_non_impute")
+    if _avoirs_orphelins_du_lot(ctx, u):
+        motifs.append("avoir_hors_dossier")
+    if any(
+        x.categorie in cats
+        and x.ligne.libelle is not None
+        and _RX_CREDIT.search(cle_texte(x.ligne.libelle.valeur or ""))
+        and (x.montant is None or x.montant > 0)
+        for x in u.lignes
+    ):
+        motifs.append("ligne_de_credit_sans_signe")
+    for d in u.declarations:
+        base = valeur(refs[d.id])
+        if base is None:
+            continue
+        for ancienne in ctx.versions_anterieures(d):
+            alt = valeur(reference_declaration(ctx, ancienne))
+            if alt is not None and abs(alt - base) > tol.t_somme(2):
+                motifs.append("versions_de_la_declaration")
+                break
+        if "versions_de_la_declaration" in motifs:
+            break
+    for d in u.declarations:
+        if total_c5 and refs[d.id].total_utilise:
+            # C5 fondé sur le total à payer imprimé : la lecture des lignes de taxation ne fixe pas le montant.
+            continue
+        if _totaux_par_code_discordants(ctx, d, cats):
+            motifs.append("totaux_par_code_discordants")
+            break
+    numeros = [
+        norm_ref(f.ft.numero.valeur) for f in u.factures if f.ft.numero is not None and f.ft.numero.valeur
+    ]
+    if len(numeros) != len(set(numeros)):
+        motifs.append("factures_de_meme_numero")
+    if motifs:
+        raisons.append(RaisonCode.montant_non_etabli)
+    devises = []
+    for f in u.factures:
+        dv = f.ft.devise
+        if dv is None:
+            continue
+        if not ctx.utilisable(dv) or (dv.valeur or "").strip().upper() not in ("", "EUR"):
+            devises.append(f.id)
+    if devises:
+        raisons.append(RaisonCode.devise_incertaine)
+    det: dict = {}
+    if motifs:
+        det["montant_non_etabli"] = motifs
+    if devises:
+        det["devise_de_la_facture"] = devises
+    return raisons, det
+
+
+#: Libellé d'une ligne de débours qui crédite (régularisation, remboursement) : imprimée en négatif ; lue positive,
+#: son signe est perdu (D-4603).
+_RX_CREDIT = re.compile(
+    r"\b(avoir|credit(?! d.?enlevement)|credito|gutschrift|regularisation|regularization|remboursement|refund|"
+    r"storno|creditnota|abono)\b"
+)
+
+
+def _avoirs_orphelins_du_lot(ctx: ControlContext, u: UniteC) -> list[str]:
+    """D-4603 (comme D-4212 pour D3 / D4) : avoir d'un émetteur compatible, rangé dans un autre dossier du même lot qui
+    ne contient aucune facture du transitaire, avec des lignes de débours ou sans ligne ventilée : resté orphelin au
+    regroupement, il peut couvrir une partie de l'écart."""
+    lots = set(ctx.dossier.lot_ids)
+    if not lots:
+        return []
+    emetteurs = [aides.emetteur_de(ctx, f) for f in u.factures]
+    out: list[str] = []
+    for autre in ctx.autres_dossiers:
+        if not lots & set(autre.dossier.lot_ids):
+            continue
+        docs = list(autre.documents.values())
+        if any(d.type is TypeDocument.facture_transitaire for d in docs):
+            continue
+        for d in docs:
+            if d.type is not TypeDocument.avoir or d.champs is None:
+                continue
+            ea = aides.emetteur_de(ctx, d)
+            if not any(aides.memes_emetteurs(ea, e) for e in emetteurs):
+                continue
+            natures = [lg.nature for lg in d.av.lignes]
+            if not natures or any(n.est_debours for n in natures):
+                out.append(d.id)
+    return out
+
+
+def _totaux_par_code_discordants(ctx: ControlContext, d: Document, cats: set[CategorieTaxe | None]) -> bool:
+    """D-4603 : un total imprimé par code (lu, non déduit) d'un code dont les lignes lues sont toutes de l'une des
+    catégories ``cats`` diffère de la somme de ces lignes."""
+    c = d.dec
+    for tot in c.totaux_par_code:
+        if tot.deduit or tot.type_taxe is None or not tot.type_taxe.valeur:
+            continue
+        m = _dec(ctx, tot.montant)
+        if m is None:
+            continue
+        code = tot.type_taxe.valeur.strip().upper()
+        lignes = [
+            t
+            for t in c.taxations
+            if t.type_taxe is not None
+            and (t.type_taxe.valeur or "").strip().upper() == code
+            and t.paiement_normalise is not PaiementNormalise.autoliquide
+        ]
+        if not lignes or any(t.categorie not in cats for t in lignes):
+            continue
+        vals = [
+            _dec(ctx, t.montant_a_payer if ctx.utilisable(t.montant_a_payer) else t.montant) for t in lignes
+        ]
+        if any(v is None for v in vals):
+            continue
+        if abs(_somme(v for v in vals if v is not None) - m) > ctx.tol.t_somme(len(vals)):
+            return True
+    return False
+
+
+def _texte_estimation(det: dict) -> str:
+    """Phrase ajoutée au libellé quand le montant de l'écart n'est pas établi (D-4603)."""
+    if "montant_non_etabli" not in det and "devise_de_la_facture" not in det:
+        return ""
+    return " Ce montant est une estimation : les documents ne permettent pas de l'établir exactement."
 
 
 # =====================================================================================================
@@ -1042,6 +1268,11 @@ def _comparer_composante(
         # semble manquer) ; une ligne non lue de cette composante peut expliquer l'écart.
         raisons.append(RaisonCode.valeur_absente)
         details["lecture_incomplete"] = incompletes
+    r_montant, d_montant = montant_non_etabli(
+        ctx, u, refs, {cat}, lambda r: None if cat in r.indisponibles else r.liquide[cat]
+    )
+    raisons += r_montant
+    details.update(d_montant)
     classement = ctx.classify(
         cid,
         ecart=ecart,
@@ -1072,7 +1303,7 @@ def _comparer_composante(
         f"{_accord(len(u.factures), 'refacture', 'refacturent')} {format_montant(refact)} "
         f"{_REFACTURE_CATEGORIE[cat]}{_texte_avoirs(credits)} ; {_libelle_declarations(u.declarations)} {ref_txt}. "
         f"Écart constaté entre les documents : {format_montant(arrondi_centime(ecart))} "
-        f"(tolérance appliquée : {format_montant(tol)})."
+        f"(tolérance appliquée : {format_montant(tol)}).{_texte_estimation(d_montant)}"
     )
     return ctx.constat(
         cid,
@@ -1244,6 +1475,8 @@ def c3_tva_autoliquidee(ctx: ControlContext) -> list[ResultatControle]:
         if refact <= tol:
             out.append(ctx.conforme("C3", **commun))
             continue
+        r_montant, d_montant = montant_non_etabli(ctx, u, refs, {CategorieTaxe.tva}, lambda r: None)
+        details.update(d_montant)
         classement = ctx.classify(
             "C3",
             ecart=refact,
@@ -1253,6 +1486,7 @@ def c3_tva_autoliquidee(ctx: ControlContext) -> list[ResultatControle]:
             confusion=_confusions(vals, [], refact, tol),
             documents=docs + [c.avoir.id for c in credits],
             montant=refact,
+            raisons_supplementaires=r_montant,
         )
         cette = "cette déclaration" if len(u.declarations) == 1 else "ces déclarations"
         libelle = (
@@ -1260,7 +1494,7 @@ def c3_tva_autoliquidee(ctx: ControlContext) -> list[ResultatControle]:
             f"{_accord(len(u.factures), 'refacture', 'refacturent')} {format_montant(refact)} de TVA à "
             f"l'importation{_texte_avoirs(credits)} ; pour {cette} "
             f"({', '.join(_mrn(x) for x in u.declarations)}), la TVA est indiquée comme autoliquidée"
-            f"{_entre_parentheses(description, page_txt([indice]))}."
+            f"{_entre_parentheses(description, page_txt([indice]))}.{_texte_estimation(d_montant)}"
         )
         out.append(
             ctx.constat(
@@ -1461,6 +1695,10 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
         }
         if incompletes:
             details["lecture_incomplete"] = incompletes
+        r_montant, d_montant = montant_non_etabli(
+            ctx, u, refs, {c for c in (*CATEGORIES, None) if c not in exclues}, total_ref, total_c5=True
+        )
+        details.update(d_montant)
         classement = ctx.classify(
             "C5",
             ecart=ecart,
@@ -1472,7 +1710,8 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
             explication=_explication_version(ctx, u, refs, total_ref, refact, tol),
             montant=ecart,
             raisons_supplementaires=([RaisonCode.valeur_absente] if incompletes else [])
-            + ([RaisonCode.attribution_non_univoque] if u.attribution_incertaine else []),
+            + ([RaisonCode.attribution_non_univoque] if u.attribution_incertaine else [])
+            + r_montant,
         )
         sous_facture = _c5_sous_facturation_expliquee(ctx, u, refs, lignes, exclues, ecart, tol, classement)
         if sous_facture is not None:
@@ -1515,6 +1754,7 @@ def c5_total_debours(ctx: ControlContext) -> list[ResultatControle]:
             f"{_accord(len(u.declarations), 'indique', 'indiquent')} un total liquidé de {format_montant(liq)}"
             f"{_entre_parentheses(sources_txt, page_txt(sources))}. Écart constaté entre les documents : "
             f"{format_montant(arrondi_centime(ecart))} (tolérance appliquée : {format_montant(tol)})."
+            f"{_texte_estimation(d_montant)}"
         )
         out.append(
             ctx.constat(

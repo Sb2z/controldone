@@ -28,6 +28,7 @@ from controldone.web.i18n import (
     langue_de,
     textes_js,
     traduire,
+    traduire_erreur,
 )
 
 __all__ = ["page", "redirection", "retour_sur", "texte_visible"]
@@ -118,6 +119,7 @@ def environnement() -> Environment:
         date=_date,
         taille=_taille,
         trad=lambda t: traduire(t),
+        msg=lambda t: traduire_erreur(t) if isinstance(t, str) else t,
         b64=lambda b: base64.b64encode(b).decode("ascii") if b else "",
     )
     from controldone.services.publication import formats_disponibles
@@ -154,9 +156,9 @@ def page(
     acteur = session.acteur() if session is not None else None
     langue = langue_de(request)
     activer(langue)
-    for cle in ("message", "erreur"):  # messages d'erreur du code (textes connus du catalogue)
+    for cle in ("message", "erreur"):  # messages du code ou d'un service (catalogues, D-3803 et D-4801)
         if isinstance(contexte.get(cle), str):
-            contexte[cle] = traduire(contexte[cle])
+            contexte[cle] = traduire_erreur(contexte[cle])
     html = (
         environnement()
         .get_template(nom)
@@ -197,11 +199,11 @@ def _retour_langue(request: Request, statut: int) -> str:
 def redirection(
     request: Request, url: str, *, message: str | None = None, erreur: str | None = None, **params: Any
 ) -> Response:
-    """Redirection 303 avec message flash, traduit dans la langue de la requête (texte du catalogue, paramètres
-    ``params`` au format ``str.format``)."""
+    """Redirection 303 avec message flash, traduit dans la langue de la requête (texte du catalogue ou message
+    d'un service, D-4801 ; paramètres ``params`` au format ``str.format``)."""
     rep = RedirectResponse(url, status_code=303)
     if message or erreur:
-        texte = traduire(erreur or message or "", langue_de(request), **params)
+        texte = traduire_erreur(erreur or message or "", langue_de(request), **params)
         request.app.state.securite.flash(rep, texte, erreur=bool(erreur))
     return rep
 

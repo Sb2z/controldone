@@ -43,7 +43,7 @@
     <div><dt>{{ _("Seuil de certitude") }}</dt><dd class="num">{{ c.seuil or "—" }}</dd></div>
     {% if fondateur %}<div><dt>{{ _("Validation") }}</dt><dd>{{ badge_validation(c.statut_validation_code, c.statut_validation) }}{% if c.commentaire %} <span class="discret" lang="fr">— {{ c.commentaire }}</span>{% endif %}</dd></div>{% endif %}
   </dl>
-  {% if fondateur and c.bloque %}<p class="alerte-ligne">{{ _("Libellé bloqué par les garde-fous :") }} {{ c.motif_blocage }}</p>{% endif %}
+  {% if fondateur and c.bloque %}<p class="alerte-ligne">{{ _("Libellé bloqué par les garde-fous :") }} {{ c.motif_blocage|msg }}</p>{% endif %}
   {% if c.preuves %}
   <div class="preuves">
     {% for p in c.preuves %}

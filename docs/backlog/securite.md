@@ -76,7 +76,8 @@ ok = etat.sessions.fermer_session(s.user_id, sid_vise)       # POST (CSRF) ; Fal
   Debian 13.7, dont libxml2 (CRITICAL), libtiff, expat, curl et **libtesseract5** (6 HIGH). Tesseract et libtiff
   lisent des fichiers hostiles, mais dans le processus isolé (sans secrets, mémoire et délai bornés). Proposition :
   relancer `make audit-image` à chaque construction ; reconstruire dès qu'un correctif paraît (l'audit bloque
-  alors). **À suivre.**
+  alors). **Suivi outillé (D-4704)** : `make suivi-cve` compare chaque mois l'audit au précédent (nouvelles,
+  disparues, devenues corrigeables), sans réseau ; routine dans `docs/MISE_EN_LIGNE.md` § 6.3. **À suivre.**
 - **Libellé de l'alerte `volume_non_chiffre`** (D-3605) dans l'écran Alertes. **À faire (interface).**
 - **`docs/SECURITY.md`** : y reporter D-3601 à D-3605 (refus du mode `dev` exposé, URL publique et hôtes admis,
   sessions actives, cookies `__Host-`, constat du volume chiffré). Variables documentées dans

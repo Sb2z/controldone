@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 import os
 import warnings
@@ -32,6 +33,7 @@ __all__ = [
     "dechiffrer_secret",
     "deriver_fernet",
     "deriver_multifernet",
+    "empreinte_cle",
     "mode_execution",
     "nouvelle_cle",
 ]
@@ -60,6 +62,21 @@ def _valider(cle: str) -> bytes:
     except Exception as exc:
         raise CleManquante("CONTROLDONE_MASTER_KEY invalide (clé Fernet attendue)") from exc
     return brut
+
+
+#: Préfixe de l'empreinte publique d'une clé maîtresse (D-4703) : toute modification casse la procédure de
+#: contrôle de la copie papier séquestrée (``docs/EXPLOITATION.md``), qui recalcule la même formule hors de
+#: l'application.
+PREFIXE_EMPREINTE = b"controldone:empreinte-cle:"
+
+
+def empreinte_cle(cle: bytes | str) -> str:
+    """Empreinte **publique** d'une clé maîtresse : 16 chiffres hexadécimaux (64 bits du SHA-256 de la clé
+    préfixée), groupés par 4. Ne permet pas de retrouver la clé (256 bits aléatoires) ; sert à vérifier qu'une
+    copie (papier séquestré, coffre de mots de passe) est bien la clé qui ouvre les archives, sans l'afficher."""
+    brut = cle.encode() if isinstance(cle, str) else cle
+    h = hashlib.sha256(PREFIXE_EMPREINTE + brut.strip()).hexdigest()[:16]
+    return " ".join(h[i : i + 4] for i in range(0, 16, 4))
 
 
 def charger_cles_maitresses(*, mode: str | None = None, data_dir: Path | str | None = None) -> list[bytes]:

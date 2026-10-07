@@ -524,7 +524,7 @@ class LimiteCorps:
             if k == b"content-length":
                 try:
                     if int(v) > limite:
-                        await _repondre_413(send)
+                        await _repondre_413(send, scope)
                         return
                 except ValueError:
                     pass
@@ -550,11 +550,31 @@ class LimiteCorps:
             await self.app(scope, recevoir, envoyer)
         except CorpsTropGros:
             if not demarre:
-                await _repondre_413(send)
+                await _repondre_413(send, scope)
 
 
-async def _repondre_413(send: Send) -> None:
-    corps = "Requête trop volumineuse.".encode()
+def _langue_brute(scope: Scope) -> str:
+    """Langue d'une réponse produite avant l'application (413) : cookie ``cd_langue``, sinon
+    ``Accept-Language`` (D-3803), lus dans les en-têtes bruts."""
+    from http.cookies import CookieError, SimpleCookie
+
+    from controldone.web.i18n import COOKIE_LANGUE, LANGUES, negocier
+
+    entetes = {k.decode("latin-1"): v.decode("latin-1") for k, v in scope.get("headers", [])}
+    try:
+        biscuits = SimpleCookie(entetes.get("cookie", "")[:4096])
+    except CookieError:
+        biscuits = SimpleCookie()
+    for nom in (COOKIE_LANGUE, "__Host-" + COOKIE_LANGUE):
+        if nom in biscuits and biscuits[nom].value in LANGUES:
+            return biscuits[nom].value
+    return negocier(entetes.get("accept-language"))
+
+
+async def _repondre_413(send: Send, scope: Scope) -> None:
+    from controldone.web.i18n import traduire_erreur
+
+    corps = traduire_erreur("Requête trop volumineuse.", _langue_brute(scope)).encode()
     await send(
         {
             "type": "http.response.start",

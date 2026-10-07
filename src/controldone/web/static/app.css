@@ -736,6 +736,7 @@ th[aria-sort="ascending"] .tri-ico, th[aria-sort="descending"] .tri-ico { opacit
 @media (max-width: 560px) { .suivi-etapes { grid-template-columns: 1fr 1fr; } }
 /* choix de la langue (D-3803) */
 .btn-langue { font-size: .74rem; font-weight: 650; letter-spacing: .04em; }
+.langues { font-size: .8rem; margin-left: auto; }
 .avertissement.traduction { margin-top: .35rem; }
 @media (max-width: 900px) { .grille-graphes { grid-template-columns: 1fr; } }
 

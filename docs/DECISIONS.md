@@ -4863,3 +4863,147 @@ retirer `bench/corpus_g2_new`, `corpus_g3`, `corpus_g4` et `corpus_g5` (environ 
 enregistrements à « Claude <noreply@anthropic.com> » au lieu de l'adresse personnelle du fondateur. Les autres
 branches du dépôt ne sont pas touchées. Une copie complète de l'historique d'avant la réécriture est conservée hors du
 dépôt, le temps de vérifier.
+
+# Interface (bloc I4) : messages des services, documentation de l'API et textes restants en anglais (octobre 2026)
+
+## D-4801 — Messages d'erreur des services traduits à l'affichage
+
+- **Principe** : les services continuent de lever leurs erreurs **en français** (`RequeteInvalide`, `ValueError`,
+  `CouponRefuse`, `EmissionRefusee`, transitions interdites…) : journaux du serveur et journal d'audit inchangés,
+  en français. L'interface traduit à l'affichage par un catalogue dont la **clé est le texte français de
+  référence**, paramètres compris (`web/i18n_messages.py`, `MESSAGES_EN`, ~110 entrées) ; aucun code d'erreur
+  ajouté aux services (blocs parallèles, aucun changement de signature).
+- **Reconnaissance** : texte exact, sinon message paramétré reconnu par motif ancré (clé compilée, le motif le plus
+  précis d'abord), sinon messages joints par `; ` (garde-fous) ; les paramètres connus sont traduits à leur tour
+  (`PARAMETRES_EN` : noms des champs passés à `montant_saisi`, ex. « montant HT de l'avoir »). Un message inconnu
+  reste en français (jamais d'erreur). Les accolades d'une donnée ne sont jamais interprétées.
+- **Où** : `i18n.traduire_erreur` (catalogue de l'interface, puis messages des services), appelé par
+  `rendu.page` (`message`, `erreur`) et `rendu.redirection` (flash) ; paramètres `motif`/`motifs` d'un message
+  (« Action approuvée, suite impossible : {motif} », « Bloqué par les garde-fous : {motifs} ») traduits de même ;
+  filtre `msg` pour les motifs de blocage affichés (file de validation, constat bloqué). `KeyError` : texte sans
+  les guillemets de `str(KeyError)` (finances). Réponse 413 du middleware (`Requête trop volumineuse.`) dans la
+  langue du cookie ou d'`Accept-Language`. Limites de débit et verrous : déjà au catalogue (connexion) ou JSON
+  technique (`trop de requêtes`, au catalogue pour un affichage futur) ; plafond IA et verrou de maintenance ne
+  produisent aucun message d'interface (états affichés par libellés traduits, tâches reportées).
+- **Hors traduction** : messages de l'API REST et du serveur MCP (contrat JSON en français, inchangé), journal
+  d'audit et détails des tâches (`lang="fr"`).
+- **Tests** (`tests/web/test_interface_bloc_i4.py`) : relevé par AST des messages levés par les modules dont
+  l'erreur atteint l'interface, chacun reconnu une fois ses paramètres remplis ; motifs de refus d'un dépôt au
+  catalogue ; mêmes paramètres dans les deux langues, sans paramètre répété ni clé faite d'un seul paramètre ;
+  traductions sans formulation interdite (`check_text` et équivalents anglais) ; parcours réels (dépôt vide, avoir
+  illisible, rejet sans motif, palier inconnu, client sans raison sociale) en anglais et en français.
+
+## D-4802 — Documentation de l'API en anglais
+
+`/api/v1/docs` suit la langue de l'interface (`?langue=fr|en`, sinon cookie `cd_langue`, sinon
+`Accept-Language`) ; liens Français · English sur la page, `Content-Language` et `Vary`. Résumés et descriptions des
+opérations traduits par `web/i18n_api.py` (clé : texte exact du schéma, espaces normalisés), introduction anglaise
+(`DESCRIPTION_EN`, qui précise que noms de champs, codes et textes des constats restent en français). Avertissement
+exact en français suivi de la traduction de courtoisie, comme les pages de l'interface. **Le schéma OpenAPI
+(`openapi.json`) reste en français**, inchangé. Test : chaque résumé et description du schéma a sa traduction.
+
+## D-4803 — Aucun texte français hors des régions `lang="fr"` de l'interface anglaise
+
+- **Repérage** (`tests/web/francais_visible.py`) : texte visible et attributs lus (`title`, `aria-label`,
+  `placeholder`, `alt`, valeur des boutons) hors `lang="fr"`, scripts, styles, `<code>` et `<kbd>` ; jetons
+  techniques ignorés (`_`, `.`, `/`, chiffres) ; mot signalé s'il est un mot outil ou d'interface français sans
+  homographe anglais courant, ou s'il porte un accent propre au français.
+- **Test** : toutes les pages client, lecteur et fondateur, 404, connexion et documentation de l'API rendues en
+  anglais avec les données de démonstration : aucun mot signalé. Liste d'autorisations explicite : textes
+  juridiques exacts (`AVERTISSEMENT`, `PHRASE_RENVOI`), raisons sociales FICTIF, libellés des documents (repris
+  dans un texte alternatif d'image), libellés lus dans les documents de démonstration, libellés des paliers (texte
+  des factures émises).
+- **Corrections trouvées** : journal d'audit (action en `<code>`, détails `lang="fr"`) ; file de validation (objet
+  et texte des actions sortantes `lang="fr"`, champs d'édition compris) ; page des notifications (commande en
+  `<code>`) ; documentation de l'API (D-4802).
+
+# Production (bloc P4) : verrou entre hôtes, exercice mensuel sur une vraie archive, suivi des vulnérabilités (octobre 2026)
+
+### D-4701 — Verrou de maintenance entre hôtes : verrou consultatif PostgreSQL en plus du fichier
+
+- **Constat** : le verrou de D-3504 (`flock` sur `<data_dir>/.verrou-maintenance`) ne vaut que sur un hôte ; deux
+  machines qui partagent une base PostgreSQL (volumes distincts) pouvaient purger et sauvegarder en même temps.
+- **Choix** : `storage/verrou.verrou_maintenance(..., base_url=…)`. Fichier **toujours** pris d'abord (même hôte,
+  et restauration quand le serveur est absent), puis, si la base est PostgreSQL, `pg_try_advisory_lock(CLE_PG)`
+  (clé fixe `0x43444D41494E54`, « CDMAINT », distincte de celle des migrations) sur une connexion **dédiée**
+  (`NullPool`, `AUTOCOMMIT` : aucune transaction ouverte pendant l'opération, `idle_session_timeout = 0`) tenue
+  jusqu'à la fin, puis `pg_advisory_unlock`. Verrou de **session** : libéré par le serveur si le processus meurt
+  ou si la connexion tombe. Attente commune (`attente_s` couvre les deux verrous ; essais toutes les
+  `intervalle_s`). Diagnostic : `application_name = cd-maint|<opération>|<depuis>|<hôte>` (63 octets au plus),
+  relu par `pg_locks` + `pg_stat_activity` (`detenteur_pg`) : « purge impossible pour l'instant : sauvegarde en
+  cours depuis … sur <hôte> ». Appelants : sauvegarde (`base_url` = base sauvegardée), purge et effacement
+  d'un client (`db.url`), restauration (`CONTROLDONE_DATABASE_URL`, serveur injoignable **toléré** : après un
+  sinistre le serveur peut être neuf ou absent ; avertissement, fichier seul). Ailleurs, serveur injoignable :
+  `VerrouIndisponible`, l'opération n'a pas lieu (sauvegarde : code 1 + alerte ; purge : job retenté).
+- **Écarté** : verrou de transaction (`pg_advisory_xact_lock`) — il faudrait garder une transaction ouverte
+  pendant une sauvegarde de plusieurs minutes (`idle_in_transaction_session_timeout`, vacuum bloqué) ; table de
+  bail en base — un bail orphelin après un `kill -9` demande une expiration, alors que le verrou de session
+  disparaît avec la connexion ; verrou PostgreSQL **au lieu** du fichier — la restauration d'un sinistre et un
+  hôte unique sous SQLite n'auraient plus de verrou.
+- **Limite** : une connexion coupée en cours d'opération libère le verrou sans que l'opération le sache (elle se
+  termine normalement) ; la fenêtre est celle d'une coupure réseau pendant une maintenance, sans effet sur les
+  données d'un client conservé (le contrôle approfondi signalerait un objet manquant).
+- **Tests** : `tests/platform/test_verrou_postgresql.py` (4 sans serveur ; 5 marqués `postgresql` sur une grappe
+  jetable, `make test-pg-plateforme` : deux « hôtes » s'excluent, détenteur identifié, attente jusqu'à la
+  libération, verrou libéré à la mort du processus, purge et sauvegarde refusées pendant l'opération d'un autre
+  hôte).
+
+### D-4702 — Exercice mensuel sur la dernière vraie archive : `controldone sauvegarde exercice-mensuel`
+
+- **Constat** : `make restauration-test` prouve la chaîne sur une base fictive ; la restauration de l'archive de
+  production restait une routine manuelle (`docs/DEPLOIEMENT.md` § 14), dépendante de la discipline du fondateur.
+- **Choix** : `services/exercice_mensuel.py`. Archive : la plus récente de `--source` (défaut `BACKUP_DIR`, puis
+  `<data_dir>/sauvegardes` ; copie hors site téléchargée acceptée) ou `--archive`. Étapes chronométrées :
+  sélection (empreinte comparée au `.sha256`, âge, `--age-max-h`), relecture complète et rang de la clé qui
+  ouvre l'archive (premier segment essayé avec chaque clé), restauration **jetable** (répertoire temporaire à
+  côté de l'archive, même volume ; PostgreSQL : base jetable sur `BACKUP_PG_VERIFICATION_URL`, obligatoire —
+  code 2 sinon), contrôle approfondi, migrations appliquées à la **copie** si l'archive est antérieure au code,
+  application démarrée sur la copie (`serve --sans-worker`, 127.0.0.1, mode `dev`, environnement nettoyé de
+  toute variable `CONTROLDONE_*` / `BACKUP_*` de production, donc aucune notification ni connecteur ;
+  PostgreSQL : `default_transaction_read_only` sur la base copiée), `/sante` et `/connexion`, rendu du rapport
+  publié le plus récent (HTML et PDF relus et déchiffrés du coffre, en mémoire, par l'acteur système, sans
+  écriture ni journal), **preuve de la lecture seule** (lignes par table et tête de l'audit identiques avant et
+  après), destruction (dans un `finally` : répertoire et base jetable, même en cas d'échec). Compte rendu
+  `exercice-mensuel-<horodatage>.md` et `.json` (0600) dans `<data_dir>/exercices` : nom, taille, SHA-256 de
+  l'archive, nombres, durées, empreinte publique de la clé, résultat — **aucune donnée client** (testé : ni
+  identifiant ni nom de client, ni adresse, ni chemin, ni clé). Échec : code 1 et alerte
+  `sauvegarde_verification_echec` (libellé et notification existants).
+- **Pas de connexion au web** : l'exercice ne connaît aucun mot de passe de production et n'en crée pas (créer un
+  compte écrirait dans la copie) ; le parcours connecté reste celui de `make restauration-test` (base fictive).
+- **Planification** : `deploy/scheduler.sh`, premier dimanche du mois (jour 1 à 7, `%u` = 7) à partir de
+  `SCHED_EXERCICE_HHMM` (défaut 04:45 UTC, après la sauvegarde de 02:15), une fois par mois (rien si un compte
+  rendu du mois existe : redémarrage du conteneur), puis notifications. **Désactivé par défaut**
+  (`SCHED_EXERCICE_MENSUEL=1`) : il demande l'espace d'une copie des données dans `/backups`, à vérifier avant.
+- **Mesure** (poste de développement, base de démonstration SQLite ≈ 2 Mo) : exercice complet 3,8 s, dont
+  restauration + contrôle + démarrage 2,8 s ; même chose sur PostgreSQL 16 jetable : conforme.
+- **Tests** : `tests/platform/test_exercice_mensuel.py` (conforme, archive altérée, mauvaise clé, ancienne clé
+  repérée par son rang, écriture dans la copie détectée, archive trop ancienne, ligne de commande et alerte,
+  archive PostgreSQL sans serveur de vérification ; un test `postgresql` de bout en bout, base jetable
+  supprimée), `tests/ops/test_exercice_mensuel_planifie.py` (créneau du planificateur, heure simulée).
+
+### D-4703 — Empreinte publique de la clé maîtresse ; contrôle de la copie papier séquestrée
+
+- `storage.cles.empreinte_cle` : 16 chiffres hexadécimaux groupés par 4 = 64 premiers bits de
+  `SHA-256("controldone:empreinte-cle:" + clé)`. Ne révèle rien d'utile sur une clé de 256 bits aléatoires ;
+  formule **figée** car la procédure la recalcule hors de l'application (une ligne `python3` qui lit la clé par
+  `getpass`). Le compte rendu de l'exercice mensuel donne l'empreinte et le rang de la clé qui ouvre la dernière
+  archive.
+- Procédure (`docs/EXPLOITATION.md` § 3.5, documentation seulement) : empreinte notée sur l'enveloppe ;
+  recalcul depuis le papier ; une fois par an, ouverture réelle de la dernière archive avec la clé saisie,
+  passée par l'entrée standard au conteneur (jamais en argument ni dans l'historique), à la place de la clé de
+  production pour cette seule commande (`os.environ` l'emporte sur `.env`).
+- **Écarté** : `controldone sauvegarde verifier --cle-stdin` (proposé au backlog) — la procédure documentée
+  suffit et n'ajoute pas de chemin de code qui lit une clé ; à reconsidérer si le fondateur le demande.
+
+### D-4704 — Suivi mensuel des vulnérabilités de l'image : `scripts/suivi_cve.py`, `make suivi-cve`
+
+- **Constat** : `make audit-image` bloque sur une vulnérabilité grave corrigeable et liste les 77 non corrigées,
+  sans dire ce qui a changé d'un mois sur l'autre.
+- **Choix** : script **sans réseau** qui lit l'audit courant (`var/audit/image-trivy.json`, ou `image.md`), le
+  compare au précédent (`--precedent`, sinon le plus récent de `var/audit/historique/` dont le contenu diffère),
+  pour HIGH et CRITICAL seulement, clé paquet + identifiant : nouvelles, disparues, **devenues corrigeables**
+  (reconstruire l'image), inchangées ; compte rendu `var/audit/suivi-cve.md` ; archive l'audit courant
+  (`image-trivy-AAAAMMJJ-<empreinte>.json`, une fois). Code 1 si nouvelles ou devenues corrigeables (après une
+  première exécution qui établit la référence), 0 sinon, 2 audit absent ou illisible. Routine mensuelle :
+  `docs/MISE_EN_LIGNE.md` § 6.3, `docs/EXPLOITATION.md`. Tests : `tests/ops/test_suivi_cve.py`.
+

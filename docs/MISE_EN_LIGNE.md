@@ -625,6 +625,17 @@ Si tu t'es bloqué par trop d'essais : `docker compose run --rm --no-deps web co
 
    Attendu : « OK » pour l'empreinte, puis « résultat : CONFORME ». Noter la durée affichée.
 
+   Même contrôle, en une commande et avec un compte rendu daté sans donnée client (restauration jetable,
+   contrôle approfondi, application démarrée en lecture seule, rendu d'un rapport, destruction de la copie) :
+
+   ```
+   # docker compose exec scheduler controldone sauvegarde exercice-mensuel
+   ```
+
+   Noter sur l'enveloppe de la copie papier de la clé l'**empreinte publique** affichée (« clé qui l'ouvre … »),
+   puis contrôler la copie papier (`docs/EXPLOITATION.md` § 3.5). Pour le refaire chaque mois automatiquement :
+   `SCHED_EXERCICE_MENSUEL=1` dans `.env.prod` (premier dimanche du mois, § 3.4 du même document).
+
 ### 4.9 Copie hors site avec rclone (Object Storage Scaleway `fr-par`)
 
 1. **Console Scaleway** : Object Storage > Create bucket.
@@ -839,7 +850,9 @@ dans le DPA.
 
 - [ ] Sauvegarde locale faite.
 - [ ] Exercice `controldone sauvegarde exercice` réussi ; restauration de la vraie archive « CONFORME », durée
-      notée.
+      notée ; `controldone sauvegarde exercice-mensuel` « CONFORME ».
+- [ ] Copie papier de la clé maîtresse contrôlée (empreinte et ouverture d'une archive, `docs/EXPLOITATION.md`
+      § 3.5) ; empreinte notée sur l'enveloppe.
 - [ ] Copie hors site faite et contrôlée ; ligne de crontab en place ; règle de 35 jours sur le compartiment.
 - [ ] `controldone alertes essai` reçu sur le téléphone ; sonde « homme mort » et sonde `/sante` actives.
 
@@ -891,8 +904,16 @@ dans le DPA.
   - `ls -lt /srv/controldone/backups | head` (archive du jour présente) ;
   - `rclone ls objeu:<compartiment> | tail` (copies distantes présentes ; rien de plus vieux que 35 jours) ;
   - `tail -n 20 /var/log/controldone-backup.log`.
-- [ ] **Exercice de restauration** sur une vraie archive **téléchargée depuis le stockage objet** (§ 4.8, point 3,
-      en partant de `rclone copy`). Noter la durée.
+- [ ] **Exercice mensuel** sur la dernière vraie archive : lire le compte rendu du mois
+      (`ls -t /srv/controldone/var/exercices | head -2` ; planifié le premier dimanche si
+      `SCHED_EXERCICE_MENSUEL=1`, sinon `docker compose exec scheduler controldone sauvegarde exercice-mensuel`).
+      Attendu : « CONFORME », âge de l'archive < 14 h, empreinte de la clé identique à celle de l'enveloppe. Une
+      fois par trimestre, le refaire sur une machine de test à partir de la copie **téléchargée depuis le stockage
+      objet** (`rclone copy`, puis `--source <dossier>` ; `docs/EXPLOITATION.md` § 3.4). Noter la durée.
+- [ ] **Vulnérabilités de l'image** : `make audit-image` puis `make suivi-cve` (poste de développement avec
+      Docker ; comparaison sans réseau avec le mois précédent). Nouvelles ou devenues corrigeables : lire
+      `var/audit/suivi-cve.md`, reconstruire l'image si un correctif existe (`docs/EXPLOITATION.md`, « Suivi
+      mensuel des vulnérabilités de l'image »).
 - [ ] **Système** :
   - `apt update && apt -y upgrade` (met aussi à jour Docker) ;
   - si `/var/run/reboot-required` existe, redémarrer à une heure creuse (`reboot`), puis appliquer la procédure
@@ -918,6 +939,8 @@ Une fois par an :
 - relire les prix et les contrats (DPA) de l'hébergeur ;
 - renouveler le domaine (vérifier le renouvellement automatique) ;
 - envisager une rotation de la clé maîtresse (`docs/SECURITY.md` § 3).
+- contrôler la copie papier séquestrée de la clé maîtresse (`docs/EXPLOITATION.md` § 3.5 : empreinte, puis
+  ouverture réelle d'une archive), et après chaque rotation.
 
 ---
 

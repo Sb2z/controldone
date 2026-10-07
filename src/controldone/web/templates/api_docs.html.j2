@@ -1,20 +1,24 @@
 <!doctype html>
-<html lang="fr">
+<html lang="{{ langue }}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>API — ControlDOne</title><link rel="stylesheet" href="/static/app.css"></head>
+<title>{{ _("API — ControlDOne") }}</title><link rel="stylesheet" href="/static/app.css"></head>
 <body>
-<header class="entete"><div class="entete-int"><a class="marque" href="/">Control<span>DOne</span></a><span class="discret">API v1 — <a href="/api/v1/openapi.json">openapi.json</a></span></div></header>
+<header class="entete"><div class="entete-int"><a class="marque" href="/">Control<span>DOne</span></a><span class="discret">API v1 — <a href="/api/v1/openapi.json">openapi.json</a></span>
+<nav class="langues" aria-label="{{ _("Langue") }}">{% for code, nom in LANGUES.items() %}{% if code == langue %}<span aria-current="true" lang="{{ code }}">{{ nom }}</span>{% else %}<a href="/api/v1/docs?langue={{ code }}" lang="{{ code }}" hreflang="{{ code }}">{{ nom }}</a>{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</nav></div></header>
 <main class="page">
-<div class="titre-page"><h1>API REST v1</h1></div>
-<section class="carte"><pre class="corps" tabindex="0" role="region" aria-label="Description de l'API">{{ description }}</pre></section>
+<div class="titre-page"><h1>{{ _("API REST v1") }}</h1></div>
+<section class="carte"><pre class="corps" tabindex="0" role="region" aria-label="{{ _("Description de l'API") }}">{{ description }}</pre></section>
 <section class="carte">
+<div class="defilement" tabindex="0" role="region" aria-label="{{ _("Opérations de l'API") }}">
 <table class="donnees">
-<thead><tr><th scope="col">Méthode</th><th scope="col">Chemin</th><th scope="col">Description</th></tr></thead>
+<thead><tr><th scope="col">{{ _("Méthode") }}</th><th scope="col">{{ _("Chemin") }}</th><th scope="col">{{ _("Description") }}</th></tr></thead>
 <tbody>
-{% for r in routes %}<tr><td><code>{{ r.methode }}</code></td><td><code>{{ r.chemin }}</code>{% if r.parametres %}<br><span class="discret">paramètres : {{ r.parametres|join(", ") }}</span>{% endif %}</td><td><strong>{{ r.resume }}</strong>{% if r.description %}<br><span class="discret">{{ r.description }}</span>{% endif %}</td></tr>{% endfor %}
+{% for r in routes %}<tr><td><code>{{ r.methode }}</code></td><td><code>{{ r.chemin }}</code>{% if r.parametres %}<br><span class="discret">{{ _("paramètres :") }} <code>{{ r.parametres|join(", ") }}</code></span>{% endif %}</td><td><strong>{{ r.resume }}</strong>{% if r.description %}<br><span class="discret">{{ r.description }}</span>{% endif %}</td></tr>{% endfor %}
 </tbody></table>
+</div>
 </section>
-<p class="discret">Exemples complets : <code>docs/API.md</code>.</p>
+<p class="discret">{{ _("Exemples complets :") }} <code>docs/API.md</code>.</p>
 </main>
-<footer class="pied"><p class="avertissement"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p></footer>
+<footer class="pied"><p class="avertissement" lang="fr"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p>
+{% if langue == "en" %}<p class="avertissement traduction"><strong>Courtesy translation (the French text above prevails):</strong> {{ AVERTISSEMENT_EN }}</p>{% endif %}</footer>
 </body></html>

@@ -28,6 +28,14 @@ TEXTES_JS: tuple[str, ...] = (
 )
 
 CATALOGUE_EN: dict[str, str] = {
+    "API — ControlDOne": "API — ControlDOne",
+    "API REST v1": "REST API v1",
+    "Description de l'API": "API description",
+    "Chemin": "Path",
+    "Opérations de l'API": "API operations",
+    "Description": "Description",
+    "paramètres :": "parameters:",
+    "Exemples complets :": "Complete examples:",
     " (tri croissant, activer pour décroissant)": " (sorted ascending, activate for descending)",
     " (tri décroissant, activer pour croissant)": " (sorted descending, activate for ascending)",
     " (trier)": " (sort)",
@@ -825,7 +833,7 @@ CATALOGUE_EN: dict[str, str] = {
     "Canaux": "Channels",
     "Canaux configurés : {canaux}.": "Configured channels: {canaux}.",
     "Configuration": "Configuration",
-    "Configuration lue par le serveur web ; les envois sont faits par le planificateur (commande « controldone alertes notifier »), qui doit avoir les mêmes variables.": 'Configuration as read by the web server; notifications are sent by the scheduler ("controldone alertes notifier" command), which must have the same variables.',
+    "Configuration lue par le serveur web ; les envois sont faits par le planificateur, qui doit avoir les mêmes variables. Commande :": "Configuration as read by the web server; notifications are sent by the scheduler, which must have the same variables. Command:",
     "Courriel": "Email",
     "Coût des appels au modèle d'extraction ce mois-ci (registre ai_usage). Au plafond, les appels au modèle s'arrêtent pour ce client jusqu'à votre décision.": "Cost of extraction model calls this month (ai_usage register). At the cap, model calls stop for this client until you decide.",
     "Dernier envoi réussi": "Last successful send",

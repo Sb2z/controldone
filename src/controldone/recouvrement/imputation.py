@@ -424,16 +424,21 @@ def montant_net_ligne(
     """
     ok = utilisable or (lambda v: v is not None and v.est_lisible)
     ht, ttc = ligne.montant_ht, ligne.montant_ttc
-    if ht is not None and ht_depuis_ttc(ligne):
-        return _marquer_tva_comprise(ht)
-    if ht is not None and (ok(ht) or ttc is None or not ok(ttc)):
-        return ht
-    if ttc is None:
-        return ht
     sans_tva = any(
         v is not None and v.est_lisible and v.decimal_ou_none() == 0
         for v in (ligne.taux_tva, ligne.montant_tva)
     )
+    if ht is not None and ht_depuis_ttc(ligne):
+        return _marquer_tva_comprise(ht)
+    if ligne.tva_comprise and not sans_tva:
+        # D-4602 : ligne marquée dès l'extraction « TVA comprise seulement » : aucun montant de la ligne n'est un
+        # hors-taxe imprimé, quelle que soit la colonne où il a été rangé.
+        v = ht if ht is not None and (ok(ht) or ttc is None or not ok(ttc)) else ttc
+        return _marquer_tva_comprise(v) if v is not None else None
+    if ht is not None and (ok(ht) or ttc is None or not ok(ttc)):
+        return ht
+    if ttc is None:
+        return ht
     return ttc if sans_tva else _marquer_tva_comprise(ttc)
 
 

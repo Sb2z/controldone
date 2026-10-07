@@ -184,7 +184,7 @@ def test_journal_filtres_pagination(monde):
     asc = [int(x) for x in re.findall(r'<tr><td class="num">(\d+)</td>', c.get("/admin/journal?tri=id").text)]
     assert asc == sorted(asc) and asc[0] == 1
     connexions = c.get("/admin/journal?action=connexion&taille=100").text
-    actions = re.findall(r"</span></td><td>([a-z_]+)</td>", connexions)
+    actions = re.findall(r"</span></td><td><code>([a-z_]+)</code></td>", connexions)
     assert actions and set(actions) == {"connexion"}
     # « % » et « _ » sont échappés : aucune entrée, pas d'erreur
     assert "Aucune entrée ne correspond" in c.get("/admin/journal?acteur=%25").text

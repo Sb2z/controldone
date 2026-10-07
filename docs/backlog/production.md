@@ -26,7 +26,8 @@ et non traités, faute de périmètre. Décisions du bloc : D-3501 à D-3505.
 - **Verrou de maintenance limité à un hôte.** Constat : `flock` sur `<data_dir>/.verrou-maintenance` (D-3504).
   Impact : nul avec le déploiement actuel (un hôte, volume partagé) ; avec PostgreSQL partagé entre plusieurs
   hôtes, deux machines pourraient purger et sauvegarder en même temps. Proposition : en plus du fichier,
-  `pg_try_advisory_lock` sur une connexion tenue pendant l'opération. À faire (si plusieurs hôtes).
+  `pg_try_advisory_lock` sur une connexion tenue pendant l'opération. **Fait (D-4701)** : verrou consultatif
+  de session sur une connexion dédiée, détenteur identifié, testé sur une grappe jetable.
 - **Effacement RGPD d'un client sans le verrou.** **Fait (D-4103).** Constat : `storage/retention.supprimer_client` supprime le
   coffre d'un client sans prendre le verrou de maintenance. Impact : faible — une sauvegarde concurrente peut
   manquer des objets d'un client en cours d'effacement (le contrôle approfondi le signalerait comme « contenu
@@ -96,3 +97,34 @@ for n in h.notifications:                 # storage.alertes.NotificationEnvoyee,
 - **Contrôle de version `pg_dump` / serveur au démarrage du scheduler.** Voir plus haut. À faire (faible).
 - **Aucune étape de schéma ajoutée par ce bloc** (D-4104 réutilise la colonne `canaux` ; la 5, `langue_utilisateur`,
   vient du bloc interface).
+
+## Bloc P4 (octobre 2026)
+
+Décisions D-4701 à D-4704. Faits : verrou de maintenance entre hôtes (verrou consultatif PostgreSQL, D-4701),
+exercice mensuel sur la dernière vraie archive avec compte rendu daté sans donnée client et planification
+désactivée par défaut (D-4702), empreinte publique de la clé et procédure de contrôle de la copie papier
+(D-4703), suivi mensuel des vulnérabilités de l'image sans réseau (D-4704), `docs/A_FAIRE.md` § 2 remis à jour.
+Commandes : `controldone sauvegarde exercice-mensuel`, `make suivi-cve`, `make test-pg-plateforme`.
+
+### Constats du bloc P4, hors périmètre
+
+- **Mise en service d'une restauration encore manuelle** (`docs/backlog/sauvegardes.md`) : toujours à faire ;
+  l'exercice mensuel ne remplace pas `controldone sauvegarde mettre-en-service`.
+- **Tests PostgreSQL hors de la CI** : `make test-pg-plateforme` s'ajoute à `make test-pg-securite` et
+  `make restauration-test-pg` ; les trois sont à mettre dans le job CI manuel (décision du fondateur sur la CI).
+  Plusieurs tests PostgreSQL anciens (`test_migrations.py`, `test_sauvegarde_postgresql.py`) ne portent pas le
+  marqueur `postgresql` et ne tournent donc pas avec `-m postgresql`. Proposition : les marquer, puis une seule
+  cible `make test-pg`. À faire (outillage).
+- **Exercice mensuel et espace disque** : la copie jetable est créée à côté de l'archive (`/backups`). Un volume
+  de sauvegarde presque plein fait échouer l'exercice (code 1, alerte) sans gêner les sauvegardes suivantes
+  (copie supprimée). Proposition : contrôle de l'espace libre avant de restaurer (taille en clair du manifeste
+  × 1,2). À faire (faible).
+- **Libellé dédié pour l'échec de l'exercice mensuel** : il réutilise `sauvegarde_verification_echec` (message
+  « Exercice mensuel en échec sur … »). Un type `exercice_mensuel_echec` demanderait un libellé dans l'écran
+  Alertes et les notifications. À décider (interface), faible.
+- **`make audit-image` dans la routine mensuelle** : demande Docker et un accès réseau à la base de Trivy depuis
+  le poste du fondateur ; la comparaison (`make suivi-cve`) est hors ligne. Proposition : job CI mensuel
+  programmé qui construit, audite et publie `suivi-cve.md` comme artefact. À faire (CI, décision du fondateur).
+- **Battement quotidien du scheduler** (plus haut) : toujours à faire ; l'exercice mensuel planifié ne
+  s'exécute pas si le scheduler est arrêté (le compte rendu du mois manquant le montre à la routine).
+

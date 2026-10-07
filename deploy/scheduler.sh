@@ -9,6 +9,11 @@
 #                       « 0215 1415 » : RPO 12 h, D-4105), puis mise en file de purger_retention (une fois par jour)
 #   chaque mois         mise en file de referentiel_recalculer, à partir du 2 (clé d'idempotence mensuelle :
 #                       rattrapé si le conteneur était arrêté le 2, jamais deux fois dans le mois)
+#   premier dimanche    exercice mensuel sur la dernière vraie archive (controldone sauvegarde exercice-mensuel,
+#   du mois             D-4702) à SCHED_EXERCICE_HHMM (défaut 0445 UTC, après la sauvegarde de 02:15) :
+#                       DÉSACTIVÉ PAR DÉFAUT (SCHED_EXERCICE_MENSUEL=1 pour l'activer ; demande l'espace disque
+#                       d'une copie des données dans BACKUP_DIR). Une fois par mois : rien si un compte rendu du
+#                       mois existe déjà dans <data_dir>/exercices (redémarrage du conteneur).
 #
 # Les tâches ne font que mettre en file (clés d'idempotence par période) : c'est le worker qui exécute.
 # Un échec est journalisé et n'arrête jamais la boucle. SIGTERM / SIGINT : arrêt propre.
@@ -33,6 +38,10 @@ creneau_courant() {  # creneau_courant <hhmm> : plus récente heure de sauvegard
   printf '%s' "$dernier"
 }
 TICK="${SCHED_TICK_S:-60}"
+EXERCICE_MENSUEL="${SCHED_EXERCICE_MENSUEL:-0}"
+EXERCICE_HHMM="${SCHED_EXERCICE_HHMM:-0445}"
+[[ "$EXERCICE_HHMM" =~ ^([01][0-9]|2[0-3])[0-5][0-9]$ ]] || EXERCICE_HHMM=0445
+RAPPORTS_EXERCICE="${CONTROLDONE_DATA_DIR:-/app/var}/exercices"
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PY="${CONTROLDONE_PYTHON:-python}"
 
@@ -53,7 +62,8 @@ arret=0
 trap 'arret=1; log "arret_demande"; [ -n "${dormeur:-}" ] && kill "$dormeur" 2>/dev/null; true' TERM INT
 
 log "demarrage" "sauvegardes a ${CRENEAUX[*]} UTC"
-dernier_releve="" ; dernier_plan="" ; dernier_creneau="" ; dernier_mois=""
+[ "$EXERCICE_MENSUEL" = "1" ] && log "exercice_mensuel" "premier dimanche du mois a ${EXERCICE_HHMM} UTC"
+dernier_releve="" ; dernier_plan="" ; dernier_creneau="" ; dernier_mois="" ; dernier_exercice=""
 
 while [ "$arret" -eq 0 ]; do
   minute=$(date -u +%M); hhmm=$(date -u +%H%M); jour=$(date -u +%Y-%m-%d); mois=$(date -u +%Y-%m); jdm=$(date -u +%d)
@@ -82,6 +92,16 @@ while [ "$arret" -eq 0 ]; do
   if [[ "$mois" != "$dernier_mois" ]] && { (( 10#$jdm > 2 )) || [[ "$jdm" == "02" && ! "$hhmm" < "0300" ]]; }; then
     dernier_mois="$mois"
     tache referentiel "$PY" -c "from controldone.jobs import enqueue; enqueue('referentiel_recalculer', {}, 'referentiel:${mois}')"
+  fi
+  # premier dimanche du mois (jour 1 à 7, %u = 7), à partir de EXERCICE_HHMM ; une fois par mois (D-4702)
+  if [[ "$EXERCICE_MENSUEL" == "1" && "$mois" != "$dernier_exercice" && "$(date -u +%u)" == "7" ]] \
+     && (( 10#$jdm <= 7 )) && [[ ! "$hhmm" < "$EXERCICE_HHMM" ]]; then
+    dernier_exercice="$mois"
+    if ! compgen -G "$RAPPORTS_EXERCICE/exercice-mensuel-${mois//-/}*.json" >/dev/null; then
+      tache exercice_mensuel "$PY" -m controldone.cli sauvegarde exercice-mensuel --source "${BACKUP_DIR:-/backups}" \
+        --rapports "$RAPPORTS_EXERCICE"
+      tache notifications "$PY" -m controldone.cli alertes notifier   # exercice en échec : notifié aussitôt
+    fi
   fi
 
   [ "$arret" -eq 0 ] || break   # arrêt demandé pendant une tâche : ne pas repartir pour une attente complète

@@ -17,7 +17,7 @@
   <p><span class="badge b-alerte">{{ _("Inactives") }}</span> {{ _("Aucun canal configuré (variables CONTROLDONE_NOTIF_*).") }}</p>
   {% endif %}
   {% if h.erreurs_configuration %}<ul class="liste-simple">{% for e in h.erreurs_configuration %}<li><span class="badge b-alerte">{{ _("Erreur de configuration") }}</span> <span lang="fr">{{ e }}</span></li>{% endfor %}</ul>{% endif %}
-  <p class="discret">{{ _("Configuration lue par le serveur web ; les envois sont faits par le planificateur (commande « controldone alertes notifier »), qui doit avoir les mêmes variables.") }}</p>
+  <p class="discret">{{ _("Configuration lue par le serveur web ; les envois sont faits par le planificateur, qui doit avoir les mêmes variables. Commande :") }} <code>controldone alertes notifier</code></p>
 </section>
 <section class="carte" aria-labelledby="t-canaux">
   <h2 id="t-canaux">{{ _("État des canaux") }}</h2>

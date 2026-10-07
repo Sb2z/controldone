@@ -56,19 +56,19 @@
       <div><span class="badge b-propose">{{ _(libelles_sortie.get(s.kind.value, s.kind.value)) }}</span> <strong lang="fr">{{ s.payload.get("objet", "") }}</strong></div>
       <span class="discret">{{ noms.get(s.tenant_id, _("plateforme")) if s.tenant_id else _("plateforme") }} · {{ s.cree_le|date }}</span>
     </header>
-    {% if s.motif_blocage %}<p class="alerte-ligne">{{ _("Bloqué par les garde-fous :") }} {{ s.motif_blocage }}</p>{% endif %}
+    {% if s.motif_blocage %}<p class="alerte-ligne">{{ _("Bloqué par les garde-fous :") }} {{ s.motif_blocage|msg }}</p>{% endif %}
     <pre class="corps" tabindex="0" role="region" lang="fr" aria-label="{{ _("Texte :") }} {{ s.payload.get('objet', '') or _(libelles_sortie.get(s.kind.value, s.kind.value)) }}">{{ s.payload.get("corps", "") }}</pre>
     {% if formats(s) %}<p>{{ _("Pièces :") }} {% for fmt in formats(s) %}<a class="petit-lien" href="/admin/sorties/{{ s.id }}/{{ fmt }}">{{ fmt|upper }}</a>{% endfor %}</p>{% endif %}
     <div class="decisions">
       <form method="post" action="/admin/sorties/{{ s.id }}/approuver" class="decision">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
-        <button type="submit" class="btn btn-principal">{{ _("Approuver") }}<span class="vh"> : {{ s.payload.get("objet", "") }}</span></button></form>
+        <button type="submit" class="btn btn-principal">{{ _("Approuver") }}<span class="vh"> : <span lang="fr">{{ s.payload.get("objet", "") }}</span></span></button></form>
       <form method="post" action="/admin/sorties/{{ s.id }}/refuser" class="decision decision-motif">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
         <label class="vh" for="ref-{{ s.id }}">{{ _("Motif du refus") }}</label><input id="ref-{{ s.id }}" name="motif" required maxlength="1000" placeholder="{{ _("Motif du refus (obligatoire)") }}">
         <button type="submit" class="btn">{{ _("Refuser") }}</button></form>
       <details class="corriger"><summary>{{ _("Corriger puis approuver") }}</summary>
         <form method="post" action="/admin/sorties/{{ s.id }}/corriger" class="formulaire">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="/admin/validation#sorties">
-          <label for="obj-{{ s.id }}">{{ _("Objet") }}</label><input id="obj-{{ s.id }}" name="objet" value="{{ s.payload.get('objet', '') }}" maxlength="300" required>
-          <label for="corps-{{ s.id }}">{{ _("Texte") }}</label><textarea id="corps-{{ s.id }}" name="corps" rows="10" maxlength="20000">{{ s.payload.get("corps", "") }}</textarea>
+          <label for="obj-{{ s.id }}">{{ _("Objet") }}</label><input id="obj-{{ s.id }}" lang="fr" name="objet" value="{{ s.payload.get('objet', '') }}" maxlength="300" required>
+          <label for="corps-{{ s.id }}">{{ _("Texte") }}</label><textarea id="corps-{{ s.id }}" lang="fr" name="corps" rows="10" maxlength="20000">{{ s.payload.get("corps", "") }}</textarea>
           <button type="submit" class="btn">{{ _("Enregistrer la correction et approuver") }}</button>
         </form></details>
     </div>

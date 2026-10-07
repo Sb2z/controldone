@@ -24,6 +24,7 @@ from typing import Any
 from starlette.requests import Request
 
 from controldone.web.i18n_en import CATALOGUE_EN, TEXTES_JS
+from controldone.web.i18n_messages import traduire_message
 
 __all__ = [
     "AVERTISSEMENT_EN",
@@ -37,6 +38,7 @@ __all__ = [
     "negocier",
     "textes_js",
     "traduire",
+    "traduire_erreur",
 ]
 
 LANGUES = {"fr": "Français", "en": "English"}
@@ -75,6 +77,29 @@ def traduire(texte: str, /, langue: str | None = None, **params: Any) -> str:
     """Traduction de ``texte`` (français) dans ``langue`` (défaut : langue courante), puis paramètres."""
     lg = langue or _courante.get()
     t = CATALOGUE_EN.get(texte, texte) if lg == "en" else texte
+    return t.format(**params) if params else t
+
+
+#: Paramètres d'un message qui portent eux-mêmes un message de service (motif d'un refus, garde-fous).
+PARAMETRES_MESSAGES = frozenset({"motif", "motifs"})
+
+
+def traduire_erreur(texte: str, /, langue: str | None = None, **params: Any) -> str:
+    """Message affiché (flash, page d'erreur) : texte du catalogue de l'interface, sinon message d'un service
+    (``web/i18n_messages.py``, D-4801 : texte exact ou message paramétré reconnu), sinon texte d'origine. Les
+    paramètres ``motif``/``motifs`` (message d'un service) sont traduits de la même façon."""
+    lg = langue or _courante.get()
+    if lg == "en":
+        if texte in CATALOGUE_EN:
+            t = CATALOGUE_EN[texte]
+        else:
+            t = texte if params else (traduire_message(texte, lg) or texte)
+        params = {
+            k: (traduire_message(v, lg) or v) if k in PARAMETRES_MESSAGES and isinstance(v, str) else v
+            for k, v in params.items()
+        }
+    else:
+        t = texte
     return t.format(**params) if params else t
 
 

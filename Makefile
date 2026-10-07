@@ -2,7 +2,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 
-.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build audit restauration-test restauration-test-pg audit-image lock test-pg-securite \
+.PHONY: install test lint demo bench-dev serve-demo demo-complete diagnostic docker-build audit restauration-test restauration-test-pg audit-image lock test-pg-securite test-pg-plateforme suivi-cve \
         hooks pre-commit couverture proprietes corpus corpus-tous corpus-verifier corpus-dev corpus-deps
 
 # Installation reproductible sur un clone neuf (F-17) : crée .venv s'il manque, installe les versions figées
@@ -83,6 +83,11 @@ audit:
 audit-image: docker-build
 	$(MAKE) audit IMAGE=controldone:$(or $(VERSION),2.0.0)
 
+# Suivi mensuel des vulnérabilités de l'image (D-4704) : compare var/audit/image-trivy.json (dernier make audit-image)
+# au précédent audit archivé (var/audit/historique), sans réseau ; nouvelles, disparues, devenues corrigeables.
+suivi-cve:
+	$(PY) scripts/suivi_cve.py
+
 # Fichiers figés avec empreintes (D-3609) : requirements.lock (exécution) et deploy/requirements-build.lock (backend
 # de construction de l'image). Pour monter une version : la modifier dans requirements.lock, puis make lock, puis
 # make audit. Linux, Python 3.11 (image de production).
@@ -141,6 +146,14 @@ test-pg-securite:
 	@url=$$(scripts/pg_jetable.sh demarrer /tmp/cd-pg-securite 55441) && \
 	  CONTROLDONE_TEST_PG_URL="$$url" $(PY) -m pytest -q -m postgresql tests/security; code=$$?; \
 	  scripts/pg_jetable.sh arreter /tmp/cd-pg-securite; exit $$code
+
+# Verrou de maintenance entre hôtes (verrou consultatif PostgreSQL, D-4701) et exercice mensuel sur une archive
+# PostgreSQL (D-4702) : serveur jetable (port 55442), tests marqués « postgresql » de ces fichiers, puis effacé.
+test-pg-plateforme:
+	@url=$$(scripts/pg_jetable.sh demarrer /tmp/cd-pg-plateforme 55442) && \
+	  CONTROLDONE_TEST_PG_URL="$$url" $(PY) -m pytest -q -m postgresql tests/platform/test_verrou_postgresql.py \
+	  tests/platform/test_exercice_mensuel.py; code=$$?; \
+	  scripts/pg_jetable.sh arreter /tmp/cd-pg-plateforme; exit $$code
 
 # Même exercice sur PostgreSQL (D-3501) : serveur jetable dans /tmp (scripts/pg_jetable.sh, initdb + pg_ctl,
 # 127.0.0.1 seulement), pg_dump / pg_restore, puis serveur arrêté et effacé. Pilote : uv pip install pg8000.

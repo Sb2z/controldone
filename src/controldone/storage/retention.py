@@ -175,7 +175,7 @@ def purger_expires(
     lève ``VerrouOccupe`` si l'une d'elles est en cours (le handler reporte alors le job)."""
     from controldone.storage.verrou import verrou_maintenance
 
-    with verrou_maintenance(vault.racine.parent, "purge", attente_s=attente_verrou_s):
+    with verrou_maintenance(vault.racine.parent, "purge", attente_s=attente_verrou_s, base_url=db.url):
         return _purger_expires(db, vault, now)
 
 
@@ -302,7 +302,9 @@ def supprimer_client(
         raise ValueError("motif obligatoire")
     from controldone.storage.verrou import verrou_maintenance
 
-    with verrou_maintenance(vault.racine.parent, "effacement_client", attente_s=attente_verrou_s):
+    with verrou_maintenance(
+        vault.racine.parent, "effacement_client", attente_s=attente_verrou_s, base_url=db.url
+    ):
         return _supprimer_client(db, vault, tenant_id, acteur, motif, dossier_sorties)
 
 

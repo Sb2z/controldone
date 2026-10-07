@@ -49,8 +49,9 @@
   de texte, avec une liste de formulations interdites anglaise, avant de les traduire. À décider (fondateur).
 - **Messages d'erreur des services.** Constat : les messages de `RequeteInvalide` levés hors du web (saisie de
   montants, transitions d'écart, facturation) restent en français dans l'interface anglaise, sauf s'ils figurent
-  au catalogue. Proposition : codes d'erreur + libellés côté web. À faire (faible).
-- **Documentation de l'API (`/api/v1/docs`)** : en français seulement. À faire (faible).
+  au catalogue. Proposition : codes d'erreur + libellés côté web. **Fait (bloc I4, D-4801)** : catalogue des
+  messages des services (clé : texte français de référence, messages paramétrés reconnus), sans toucher aux services.
+- **Documentation de l'API (`/api/v1/docs`)** : en français seulement. **Fait (D-4802)** ; `openapi.json` inchangé.
 
 # Bloc I3 — interface (octobre 2026)
 
@@ -64,3 +65,22 @@
 - **Pages encore en Python** : API `/api/v1` et MCP (`lister_dossiers` complet). À mesurer.
 - **Migration 5 et blocs parallèles.** La colonne `users.langue` est l'étape 5 : un autre bloc qui ajoute une étape
   en parallèle doit prendre le numéro suivant (jamais réordonner). À vérifier à l'intégration.
+
+# Bloc I4 — interface (octobre 2026)
+
+- **Messages reconnus par leur texte.** Constat : la traduction des messages des services repose sur le texte
+  français exact (D-4801) ; un service qui reformule un message le fait retomber en français dans l'interface
+  anglaise. Garde : le test relève par AST les messages levés et exige leur reconnaissance (CI rouge si oubli).
+  Proposition, si les messages se multiplient : codes d'erreur portés par l'exception (`RequeteInvalide(code=…)`),
+  le texte français restant celui des journaux. À décider (faible).
+- **Erreurs de l'API REST et du serveur MCP en français.** Constat : `{"detail": …}` reste en français (contrat
+  JSON, D-4801). Proposition : champ `code` stable à côté de `detail` pour les intégrateurs anglophones. À faire si
+  un client le demande.
+- **Messages tronqués.** Constat : `routes_admin`/`routes_finances` tronquent `str(exc)` (250–300 caractères)
+  avant traduction ; un message plus long ne serait pas reconnu et resterait en français. Aucun message actuel ne
+  dépasse 130 caractères. Faible.
+- **Données des documents dans un texte alternatif.** Constat : « Page 1 of Déclaration en douane n° … » mêle
+  anglais et libellé de document français (un attribut ne peut porter deux langues). Faible (lecteurs d'écran).
+- **Repérage du français limité à une liste de mots.** Constat : `tests/web/francais_visible.py` signale les mots
+  outils, mots d'interface et accents français ; une phrase française sans accent ni mot de la liste passerait.
+  Proposition : compléter la liste au fil des revues. Faible.

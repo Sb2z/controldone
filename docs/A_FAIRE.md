@@ -20,18 +20,31 @@ l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a ét�
 
 ## 2. Fiabilité et sécurité de la production
 
+Reste à faire (détail : `docs/backlog/production.md`, `sauvegardes.md`, `securite.md`) :
+
 | Point | Source | Effort |
 |---|---|---|
-| Image Docker sans `pg8000` ni `postgresql-client` (sauvegarde PostgreSQL impossible dans l'image) | production | petit |
-| Redémarrages en boucle du web et du worker quand une migration attend, pendant une mise à jour | production | petit |
-| Suppression RGPD d'un client (`supprimer_client`) sans le verrou de maintenance | production | petit |
-| Verrou de maintenance limité à un seul hôte | production | moyen |
-| 77 vulnérabilités élevées ou critiques sans correctif Debian dans l'image (libxml2, libtesseract, libtiff, curl…) : suivi | sécurité | suivi |
-| Traces d'envoi en clair sur le disque (`outbox_envoyee`) | sauvegardes | moyen |
-| RPO de 24 h : deux sauvegardes par jour, ou journal de transactions | sauvegardes | moyen |
-| Exercice mensuel sur une vraie archive ; test de la copie séquestrée de la clé | sauvegardes | procédure |
-| Historique des notifications envoyées visible dans l'interface | production | petit |
-| Reporter D-3601 à D-3605 dans `docs/SECURITY.md` | sécurité | petit |
+| **Décision** : activer l'exercice mensuel planifié (`SCHED_EXERCICE_MENSUEL=1`, après avoir vérifié l'espace libre de `/backups`) ; contrôler la copie papier de la clé et noter son empreinte sur l'enveloppe (`docs/EXPLOITATION.md` § 3.4, § 3.5) | production | procédure |
+| 77 vulnérabilités élevées ou critiques sans correctif Debian dans l'image (libxml2, libtesseract, libtiff, curl…) : suivi mensuel outillé (`make audit-image` puis `make suivi-cve`), reconstruire dès qu'un correctif paraît | sécurité | suivi |
+| Tests PostgreSQL dans la CI (`make test-pg-securite`, `make test-pg-plateforme`, `make restauration-test-pg`) ; marquer `postgresql` les anciens tests PostgreSQL de `tests/platform` | production, outillage | petit (après la décision CI du § 1) |
+| Mise en service d'une restauration encore manuelle (`controldone sauvegarde mettre-en-service`, déplacement atomique sous verrou) | sauvegardes | moyen |
+| Battement quotidien du scheduler (rien n'est notifié s'il est arrêté ; seule la sonde « homme mort » le voit) | production | petit |
+| Répétition générale d'une montée de version réelle (`docker compose up` avec le service `migrer`, Caddy, domaine) | production | procédure |
+| Exercice trimestriel sur une machine de test à partir de la copie hors site téléchargée | sauvegardes | procédure |
+| Sauvegarde : compression gzip niveau 9 d'un coffre déjà chiffré (création 4 fois plus lente que nécessaire) | sauvegardes | petit |
+| Contrôle au démarrage de la version de `pg_dump` contre celle du serveur ; rôles PostgreSQL (`pg_dumpall --globals-only`) à documenter pour une restauration sur un serveur neuf | production | petit |
+| Exercice mensuel : contrôle de l'espace libre avant de restaurer ; libellé d'alerte dédié | production, interface | petit |
+| ODS : plafond propre de `content.xml` ; vignettes groupées par appel isolé (à mesurer) | sécurité | petit |
+
+Fait (lots P3 et P4) : client PostgreSQL 16 et `pg8000` dans l'image, sauvegarde et restauration PostgreSQL
+vérifiées dans le conteneur (D-4101) · service ponctuel `migrer`, plus de redémarrages en boucle pendant une
+mise à jour (D-4102) · effacement RGPD d'un client sous le verrou de maintenance (D-4103) · notifications ntfy,
+historique en ligne de commande et page `/admin/notifications` (D-4104, D-4304) · deux sauvegardes par jour,
+RPO 12 h (D-4105) · traces d'envoi chiffrées au repos (D-4106) · D-3601 à D-3605 reportés dans
+`docs/SECURITY.md` § 4.1 · verrou de maintenance entre hôtes, verrou consultatif PostgreSQL (D-4701) · exercice
+mensuel sur la dernière vraie archive, compte rendu daté sans donnée client, planification désactivée par défaut
+(D-4702) · empreinte publique de la clé et procédure de contrôle de la copie séquestrée (D-4703) · suivi
+mensuel des vulnérabilités de l'image, sans réseau (D-4704).
 
 ## 3. Moteur
 
@@ -46,7 +59,7 @@ l'action du fondateur ; tout le reste peut être traité sans lui. Ce qui a ét�
 
 | Point | Effort |
 |---|---|
-| Messages d'erreur des services et page de documentation de l'API encore en français seulement | petit |
+| ~~Messages d'erreur des services et page de documentation de l'API encore en français seulement~~ — fait (bloc I4, D-4801 à D-4803) ; reste au backlog : codes d'erreur portés par l'exception et champ `code` des erreurs de l'API REST (à décider) | petit |
 
 ## 5. Dépôt et outillage
 

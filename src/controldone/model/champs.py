@@ -433,6 +433,10 @@ class LigneFactureTransitaire(_Noeud):
     base_tva: Opt = None
     date_debut: Opt = None
     date_fin: Opt = None
+    #: D-4602 : la ligne n'imprime que des montants TVA comprise (colonne « TTC », « Total c/ IVA ») ; aucun hors-taxe
+    #: n'est imprimé. ``montant_ht``, s'il existe, est déduit (ligne taxée) ou égal au TTC (ligne exonérée). Les
+    #: contrôles ne comparent jamais ce montant comme un hors-taxe (``recouvrement.imputation.montant_net_ligne``).
+    tva_comprise: bool = False
 
 
 class LigneTableauMrn(_Noeud):

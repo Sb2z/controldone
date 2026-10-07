@@ -7,7 +7,7 @@
     controldone creer-fondateur --email <adresse> [--nom "…"] [--mot-de-passe-stdin]
     controldone debit lister | effacer (--email E | --ip A | --cle-api P | --tout) [--motif "…"]
     controldone reinitialiser-mot-de-passe --email <adresse> [--mot-de-passe-stdin]
-    controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice …
+    controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice|exercice-mensuel …
     controldone migrer [--etat] [--sans-sauvegarde]
     controldone alertes notifier | essai | etat | historique [--limite N]
 
@@ -199,8 +199,13 @@ def _creer_fondateur(args: argparse.Namespace) -> int:
 
 
 def _sauvegarde(args: argparse.Namespace) -> int:
-    """Délègue à ``controldone.storage.sauvegarde`` (``exercice`` : ``services.exercice_restauration``)."""
+    """Délègue à ``controldone.storage.sauvegarde`` (``exercice`` : ``services.exercice_restauration`` ;
+    ``exercice-mensuel`` : ``services.exercice_mensuel``)."""
     reste = list(args.arguments)
+    if reste[:1] == ["exercice-mensuel"]:  # dernière vraie archive (D-4702)
+        from controldone.services.exercice_mensuel import main as exercice_mensuel
+
+        return exercice_mensuel(reste[1:])
     if reste[:1] == ["exercice"]:
         from controldone.services.exercice_restauration import main as exercice
 
@@ -489,7 +494,7 @@ def main(argv: list[str] | None = None) -> int:
     sg = sous.add_parser(
         "sauvegarde",
         add_help=False,
-        help="sauvegarder | verifier | restaurer | controler | rotation | alerter | exercice",
+        help="sauvegarder | verifier | restaurer | controler | rotation | alerter | exercice | exercice-mensuel",
     )
     sg.add_argument("arguments", nargs=argparse.REMAINDER)
     sg.set_defaults(fn=_sauvegarde)

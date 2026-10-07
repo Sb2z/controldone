@@ -511,11 +511,21 @@ def test_d6_dates_peu_sures_ou_absentes():
 
 
 def test_d7_surcharge_pourcentage_et_hors_grille():
-    f = ft(ligne(N.transport, "200.00"), ligne(N.surcharge, "25.00", libelle="Surcharge carburant"))
+    # D-4601 : l'assiette (lignes de transport) n'est établie que si toutes les lignes sont lues (Σ = total HT imprimé).
+    f = ft(
+        ligne(N.transport, "200.00"),
+        ligne(N.surcharge, "25.00", libelle="Surcharge carburant"),
+        total_ht="225.00",
+    )
     rs = run([f])
     r = un(rs, "D7")
     assert r.outcome is Outcome.ecart_certain and r.constat.montant_en_jeu == D("5.00")
     textes_propres(rs)
+    sans_total = ft(ligne(N.transport, "200.00"), ligne(N.surcharge, "25.00", libelle="Surcharge carburant"))
+    r0 = un(run([sans_total]), "D7")
+    assert (
+        r0.outcome is Outcome.a_verifier and r0.details["assiette_non_confirmee"] == "total_ht_non_retrouve"
+    )
     g = grille(*[p for p in POSTES if p.code_poste != "CARB"])
     r2 = un(run([ft(ligne(N.surcharge, "18.00", libelle="Surcharge sûreté"))], g=g), "D7")
     assert r2.outcome is Outcome.ecart_certain and r2.constat.montant_en_jeu == D("18.00")

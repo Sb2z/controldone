@@ -41,7 +41,9 @@ Ligne de commande : ``python -m controldone.storage.sauvegarde sauvegarder|verif
 rotation|alerter …`` (aussi ``controldone sauvegarde …``). Codes de retour (D-3303) : 0 succès ; 1 échec de
 la création ; 2 configuration (base non SQLite, clé absente ou invalide, archive introuvable) ; 3 vérification
 ou contrôle en échec ; 4 aucune sauvegarde assez récente. Chaque échec émet une alerte au fondateur (une par
-jour et par type). Verrou de maintenance partagé avec la purge et la restauration (``storage.verrou``, D-3504).
+jour et par type). Verrou de maintenance partagé avec la purge et la restauration (``storage.verrou``, D-3504 ;
+base PostgreSQL : verrou consultatif en plus, plusieurs hôtes, D-4701). Exercice mensuel sur la dernière vraie
+archive : ``controldone sauvegarde exercice-mensuel`` (``services.exercice_mensuel``, D-4702).
 """
 
 from __future__ import annotations
@@ -1073,7 +1075,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return ECHEC_CONFIGURATION
         attente = float(os.environ.get("BACKUP_VERROU_ATTENTE_S", "1800"))
         try:  # purge et restauration exclues pendant la copie (D-3504)
-            with verrou_maintenance(data_dir, "sauvegarde", attente_s=attente):
+            with verrou_maintenance(data_dir, "sauvegarde", attente_s=attente, base_url=url):
                 if chemin is not None:
                     sortie = sauvegarder(
                         chemin, data_dir / "coffre", destination, cles, sorties=data_dir / "outbox_envoyee"
@@ -1134,7 +1136,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return code
     if args.cmd == "restaurer":
         try:
-            with verrou_maintenance(data_dir, "restauration", attente_s=ATTENTE_RESTAURATION_S):
+            # PostgreSQL injoignable toléré : après un sinistre, le serveur peut être neuf ou absent (D-4701)
+            with verrou_maintenance(
+                data_dir,
+                "restauration",
+                attente_s=ATTENTE_RESTAURATION_S,
+                base_url=get_settings().database_url,
+                pg_injoignable_tolere=True,
+            ):
                 cible = restaurer(args.archive, args.cible, cles)
                 if (cible / _ARC_DUMP).is_file() and args.base_cible:
                     etat = restaurer_postgresql(cible / _ARC_DUMP, args.base_cible)

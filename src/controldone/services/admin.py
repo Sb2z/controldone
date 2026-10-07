@@ -175,11 +175,13 @@ def ajouter_entite(
     siren = (siren or "").strip() or None
     if siren and not re.fullmatch(r"\d{9}", siren):
         raise RequeteInvalide("SIREN : 9 chiffres")
+    # identifiant dérivé de la TVA **normalisée** : « fr 40 303… » et « FR40303… » désignent la même entité (D-4902)
+    tva_n = normalize_vat(tva) if tva else None
     e = EntiteModele(
-        id=id_stable(Prefixe.entite, scope.tenant_id, raison_sociale, tva),
+        id=id_stable(Prefixe.entite, scope.tenant_id, raison_sociale, tva_n),
         client_id=scope.tenant_id,
         raison_sociale=raison_sociale[:300],
-        tva=normalize_vat(tva) if tva else None,
+        tva=tva_n,
         siren=siren,
         eori=(eori or "").strip().upper() or None,
         alias=[a.strip() for a in (alias or "").split(";") if a.strip()][:20],

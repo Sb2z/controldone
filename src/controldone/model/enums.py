@@ -143,6 +143,8 @@ class RaisonCode(StrEnum):
     # Ajouts moteur (D-4212, D-4213) : avoir du dossier non imputé ; tarif attendu d'une ligne non établi (D3, D4)
     avoir_non_impute = "avoir_non_impute"
     tarif_non_etabli = "tarif_non_etabli"
+    # D-4603 : écart de débours réel dont le montant n'est pas établi (C1 à C5) ; montant présenté comme une estimation
+    montant_non_etabli = "montant_non_etabli"
 
 
 #: Libellés en clair des raisons (gabarits ; SPEC §3.1 règle 4, §8.5.3). Aucun ne contient
@@ -246,6 +248,11 @@ RAISON_LIBELLES: dict[RaisonCode, str] = {
         "à vérifier : le tarif attendu pour cette ligne n'est pas établi sans ambiguïté (quantité ou prix unitaire "
         "non lus, prestation facturée plusieurs fois sur une ligne, plusieurs grilles possibles, autre version de "
         "la facture) ; l'écart dépend du tarif retenu"
+    ),
+    RaisonCode.montant_non_etabli: (
+        "à vérifier : l'écart est relevé mais son montant exact n'est pas établi (avoir dont le rattachement à cet "
+        "envoi n'est pas sûr, plusieurs versions de la déclaration, totaux par code discordants, facture en "
+        "plusieurs exemplaires) ; le montant indiqué est une estimation"
     ),
     RaisonCode.lecture_non_corroboree: (
         "à vérifier : la lecture d'un montant n'est confirmée par aucun autre calcul imprimé sur le même "

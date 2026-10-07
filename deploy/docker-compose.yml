@@ -97,6 +97,9 @@ services:
       TMPDIR: /app/var/tmp
       BACKUP_DIR: /backups
       SCHED_BACKUP_HHMM: "${SCHED_BACKUP_HHMM:-0215,1415}"
+      # exercice mensuel sur la dernière vraie archive, premier dimanche du mois (D-4702) : désactivé par défaut
+      SCHED_EXERCICE_MENSUEL: "${SCHED_EXERCICE_MENSUEL:-0}"
+      SCHED_EXERCICE_HHMM: "${SCHED_EXERCICE_HHMM:-0445}"
     volumes:
       - ${CONTROLDONE_HOST_VAR:-/srv/controldone/var}:/app/var
       - ${CONTROLDONE_HOST_BACKUPS:-/srv/controldone/backups}:/backups

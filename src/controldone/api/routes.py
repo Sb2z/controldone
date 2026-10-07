@@ -503,8 +503,15 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
     # --- documentation (rendue par le serveur, sans ressource externe) ---
     @api.get("/docs", include_in_schema=False, response_class=HTMLResponse)
     def docs(request: Request) -> HTMLResponse:
+        """Documentation rendue par le serveur, dans la langue de l'interface (D-4802) : ``?langue=fr|en``,
+        sinon cookie de langue puis ``Accept-Language``. Le schéma OpenAPI reste en français."""
+        from controldone.web.i18n import LANGUES, activer, langue_de
+        from controldone.web.i18n_api import DESCRIPTION_EN, description_operation, resume_operation
         from controldone.web.rendu import environnement
 
+        demande = request.query_params.get("langue")
+        langue = demande if demande in LANGUES else langue_de(request)
+        activer(langue)
         schema = api.openapi()
         routes = []
         for chemin, ops in schema.get("paths", {}).items():
@@ -513,8 +520,8 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
                     {
                         "methode": methode.upper(),
                         "chemin": "/api/v1" + chemin,
-                        "resume": op.get("summary", ""),
-                        "description": op.get("description", ""),
+                        "resume": resume_operation(op.get("summary", ""), langue),
+                        "description": description_operation(op.get("description", ""), langue),
                         "tags": op.get("tags", []),
                         "parametres": [p.get("name") for p in op.get("parameters", [])],
                     }
@@ -522,9 +529,14 @@ def creer_api(plateforme: Plateforme, securite: Any) -> FastAPI:
         html = (
             environnement()
             .get_template("api_docs.html.j2")
-            .render(routes=routes, description=DESCRIPTION, AVERTISSEMENT=AVERTISSEMENT)
+            .render(
+                routes=routes,
+                description=DESCRIPTION_EN if langue == "en" else DESCRIPTION,
+                AVERTISSEMENT=AVERTISSEMENT,
+                langue=langue,
+            )
         )
-        return HTMLResponse(html)
+        return HTMLResponse(html, headers={"Content-Language": langue, "Vary": "Cookie, Accept-Language"})
 
     return api
 

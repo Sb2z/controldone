@@ -42,12 +42,18 @@
 - **Copie séquestrée de la clé maîtresse jamais testée.** Constat : la documentation demande une copie papier sous
   scellé de `CONTROLDONE_MASTER_KEY`, mais rien ne vérifie qu'elle ouvre réellement les archives. Impact : clé mal
   recopiée découverte le jour du sinistre. Proposition : `controldone sauvegarde verifier --cle-stdin` (clé saisie,
-  jamais en argument ni en variable), à faire lors de l'exercice mensuel. À faire.
+  jamais en argument ni en variable), à faire lors de l'exercice mensuel. **Fait autrement (D-4703)** : empreinte
+  publique de la clé dans le compte rendu de l'exercice mensuel, procédure documentée (`docs/EXPLOITATION.md`
+  § 3.5 : recalcul de l'empreinte depuis le papier, ouverture réelle d'une archive avec la clé passée par
+  l'entrée standard) ; pas de nouvelle option `--cle-stdin`.
 
 - **Exercice mensuel sur une vraie archive encore manuel.** Constat : `make restauration-test` couvre une base
   fictive ; l'exercice sur l'archive de production téléchargée depuis le stockage objet (`docs/DEPLOIEMENT.md` § 14)
   dépend de la discipline du fondateur. Proposition : routine mensuelle sur une VM de test jetable (téléchargement
-  rclone, `restaurer --controler`, durée notée). À faire.
+  rclone, `restaurer --controler`, durée notée). **Fait (D-4702)** : `controldone sauvegarde exercice-mensuel`
+  (copie locale ou hors site, restauration jetable, contrôle approfondi, application en lecture seule, rendu d'un
+  rapport, destruction, compte rendu daté sans donnée client), planifiable le premier dimanche du mois
+  (désactivé par défaut). Reste : la VM de test trimestrielle à partir de la copie hors site (procédure).
 
 - **Traces d'envoi en clair sur le disque.** Constat : `src/controldone/outbox/expediteurs.py` (`ExpediteurFichier`)
   écrit `var/outbox_envoyee/<kind>/<id>.json` en clair (protégé seulement par le volume LUKS) ; elles sont désormais

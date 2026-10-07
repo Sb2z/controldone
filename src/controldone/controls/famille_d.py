@@ -407,8 +407,10 @@ def _comparer_tarif(
     )
     if ecart <= tol:
         return ctx.conforme(cid, **commun)
-    if cid in ("D3", "D4"):
-        garde, det_garde = _garde_tarif(ctx, cid, lr, facture, attendu + deduction, ecart)
+    if cid in _CONTROLES_TARIF:
+        # D-4212 / D-4213 (D3, D4), étendus à D6 et D7 (D-4601).
+        periode = bool(details) and "jours_periode" in (details or {})
+        garde, det_garde = _garde_tarif(ctx, cid, lr, facture, attendu + deduction, ecart, periode=periode)
         raisons = [*raisons, *garde]
         det.update(det_garde)
     devise = lr.facture.ft.devise
@@ -464,6 +466,10 @@ def _comparer_tarif(
 # D-4212 à D-4214 : un écart au tarif n'est certain que si la ligne de grille, la quantité, l'unité et
 # l'assiette sont établies sans ambiguïté, et qu'aucun avoir du dossier ne peut couvrir l'écart.
 # -----------------------------------------------------------------------------------------------------
+
+
+#: Contrôles d'un écart au tarif soumis aux gardes de D-4212 / D-4213 (D-4601 : D6 et D7 compris).
+_CONTROLES_TARIF = frozenset({"D3", "D4", "D6", "D7"})
 
 
 def _avoirs_non_imputes(ctx: ControlContext, lr: LigneRoutee) -> list[str]:
@@ -684,10 +690,19 @@ def _tarif_ligne_ambigu(ctx: ControlContext, lr: LigneRoutee, facture: Decimal) 
 
 
 def _garde_tarif(
-    ctx: ControlContext, cid: str, lr: LigneRoutee, facture: Decimal, attendu: Decimal, ecart: Decimal
+    ctx: ControlContext,
+    cid: str,
+    lr: LigneRoutee,
+    facture: Decimal,
+    attendu: Decimal,
+    ecart: Decimal,
+    *,
+    periode: bool = False,
 ) -> tuple[list[RaisonCode], dict]:
-    """Conditions communes D3 / D4 d'un écart au tarif certain (D-4212, D-4213). Retourne les raisons et les
-    détails à ajouter ; vide quand tout est établi."""
+    """Conditions communes D3, D4, D6, D7 d'un écart au tarif certain (D-4212, D-4213, D-4601). Retourne les
+    raisons et les détails à ajouter ; vide quand tout est établi. ``periode`` : magasinage (D6) dont l'attendu
+    vient de la période imprimée (dates de début et de fin) et non d'une quantité facturée : la quantité et le prix
+    unitaire de la ligne ne fondent pas l'attendu."""
     raisons: list[RaisonCode] = []
     det: dict = {}
     avoirs = [*_avoirs_non_imputes(ctx, lr), *_credits_hors_avoirs(ctx, lr, ecart)]
@@ -695,7 +710,7 @@ def _garde_tarif(
         raisons.append(RaisonCode.avoir_non_impute)
         det["avoirs_non_imputes"] = avoirs
     motifs: list[str] = []
-    if lr.poste is not None and lr.poste.mode in (ModePoste.forfait, ModePoste.unitaire):
+    if lr.poste is not None and lr.poste.mode in (ModePoste.forfait, ModePoste.unitaire) and not periode:
         motifs += _tarif_ligne_ambigu(ctx, lr, facture)
     if lr.poste is not None and _autre_grille_possible(ctx, lr):
         motifs.append("plusieurs_grilles_applicables")
@@ -710,8 +725,9 @@ def _garde_tarif(
     if ligne_d_un_autre_envoi(ctx, lr.facture, lr.ligne):
         raisons.append(RaisonCode.attribution_non_univoque)
         det["envoi_hors_dossier"] = True
-    if cid == "D3" or (lr.poste is not None and lr.poste.mode is not ModePoste.pourcentage):
-        # D-2802 étendu à D3 (D-4213) : grille du transitaire attestée par l'émetteur lu ; devise lisible.
+    if lr.poste is None or lr.poste.mode is not ModePoste.pourcentage:
+        # D-2802 étendu à D3 (D-4213), D6 et D7 (D-4601) : grille du transitaire attestée par l'émetteur lu ; devise
+        # lisible. Poste en pourcentage : vérifié par ``_pourcentage``.
         attestation = _grille_attestee(ctx, lr)
         if attestation is not None:
             raisons.append(RaisonCode.grille_non_attestee)
@@ -1985,10 +2001,12 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
     raisons: list[RaisonCode] = []
     cles = [v]
     calcule = arrondi_centime(p.pourcentage * retenue / _CENT)
-    if cid == "D4" and calcule == attendu:
-        # Ni minimum ni maximum : l'attendu dépend de chaque débours lu de l'assiette (D-2213).
+    # D-4601 : les conditions d'assiette de D4 valent pour tout pourcentage de débours (surcharge D7 comprise).
+    sur_debours = a_obj is not None
+    if calcule == attendu:
+        # Ni minimum ni maximum : l'attendu dépend de chaque débours (ou ligne de transport) lu de l'assiette (D-2213).
         cles += [x for x in vals if x is not v]
-    if cid == "D4" and motifs:
+    if sur_debours and motifs:
         # D-2703 : débours de l'assiette rattachés à la ligne sans certitude (MRN de ligne mal lu, relevé).
         raisons.append(RaisonCode.attribution_non_univoque)
         details["attribution_non_univoque"] = motifs
@@ -2001,27 +2019,37 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
         *(x for x in (a_obj.factures if a_obj is not None else []) if x.id != lr.facture.id),
     ]
     incompletes = [x.id for x in factures_assiette if not _debours_complets(ctx, x)]
-    if cid == "D4" and (p.maximum is None or attendu < p.maximum) and incompletes:
+    if sur_debours and (p.maximum is None or attendu < p.maximum) and incompletes:
         raisons.append(RaisonCode.valeur_absente)
         details["assiette_non_confirmee"] = "total_des_debours_non_retrouve"
         if any(i != lr.facture.id for i in incompletes):
             details["factures_de_debours_non_confirmees"] = [i for i in incompletes if i != lr.facture.id]
-    if cid == "D4" and a_obj is not None:
+    if (
+        a_obj is None
+        and (p.maximum is None or attendu < p.maximum)
+        and not _toutes_lignes_lues(ctx, lr.facture)
+    ):
+        # D-4601 : surcharge sur les lignes de transport (D7) ; une ligne de transport non lue augmenterait
+        # l'assiette : sans total HT imprimé retrouvé par la somme de toutes les lignes, l'attendu n'est pas établi.
+        raisons.append(RaisonCode.valeur_absente)
+        details["assiette_non_confirmee"] = "total_ht_non_retrouve"
+    if a_obj is not None:
         ambigu, marquees = _d4_ambiguites(ctx, lr, p, base, a_obj, attendu)
         cles += [x for x in marquees if x not in cles]
         if ambigu:
             raisons.append(RaisonCode.assiette_non_etablie)
             details["assiette_non_etablie"] = ambigu
     devise = lr.facture.ft.devise
-    if cid == "D4" and devise is not None and not ctx.utilisable(devise):
-        # D-2802 : devise de la facture lue mais illisible ; la grille est en euros (« EUR » non établi).
+    if cid in _CONTROLES_TARIF and devise is not None and not ctx.utilisable(devise):
+        # D-2802 : devise de la facture lue mais illisible ; la grille est en euros (« EUR » non établi). D-4601 : tout
+        # pourcentage au tarif (D3, D4, D6, D7).
         raisons.append(RaisonCode.devise_incertaine)
-    if cid == "D4":
+    if cid in _CONTROLES_TARIF:
         attestation = _grille_attestee(ctx, lr)
         if attestation is not None:
             raisons.append(RaisonCode.grille_non_attestee)
             details["grille_non_attestee"] = attestation
-    if cid == "D4" and v.decimal_signe() - attendu - deduction > ctx.tol.t_tarif():
+    if sur_debours and v.decimal_signe() - attendu - deduction > ctx.tol.t_tarif():
         motif = _faf_explique(
             ctx,
             p,
@@ -2044,6 +2072,21 @@ def _pourcentage(ctx: ControlContext, cid: str, lr: LigneRoutee) -> ResultatCont
         details=details,
         raisons=raisons,
     )
+
+
+def _toutes_lignes_lues(ctx: ControlContext, f: Document) -> bool:
+    """D-4601 : toutes les lignes de la facture sont lues : facture structurée, ou somme de toutes les lignes = total HT
+    imprimé (ni déduit ni reconstruit)."""
+    vals = [_montant(ctx, lg) for lg in f.ft.lignes]
+    if not vals or any(_dec(ctx, x) is None for x in vals):
+        return False
+    if all(x is not None and x.est_structuree for x in vals):
+        return True
+    ht = f.ft.total_ht
+    if ht is None or ht.est_reconstruite or ht.methode is Methode.derive or _dec(ctx, ht) is None:
+        return False
+    somme = _somme(x.decimal_signe() for x in vals if x is not None)
+    return abs(somme - (_dec(ctx, ht) or ZERO)) <= ctx.tol.t_somme(len(vals))
 
 
 def _d4_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
@@ -2382,7 +2425,14 @@ def _d6_ligne(ctx: ControlContext, lr: LigneRoutee) -> ResultatControle:
 def d6_magasinage(ctx: ControlContext) -> list[ResultatControle]:
     """D6 — ``jours_attendus = max(0, (fin − début + 1) − franchise_jours)`` ; ``attendu = jours × prix`` ;
     ``écart = facturé − attendu``. Certain si dates et montant lus ≥ 0,90 et ``écart > S_TARIF``."""
-    return _par_controle(ctx, "D6", lambda lr: _d6_ligne(ctx, lr) if lr.controle == "D6" else None)
+    vues: dict[tuple, int] = {}
+    return _par_controle(
+        ctx,
+        "D6",
+        lambda lr: (
+            _une_fois(ctx, "D6", lr, vues, lambda x: _d6_ligne(ctx, x)) if lr.controle == "D6" else None
+        ),
+    )
 
 
 # =====================================================================================================
@@ -2393,7 +2443,8 @@ def d6_magasinage(ctx: ControlContext) -> list[ResultatControle]:
 def _d7_ligne(ctx: ControlContext, lr: LigneRoutee, vues: dict[tuple, int]) -> ResultatControle:
     if lr.poste is None and not lr.ambigu:
         return _hors_grille_une_fois(ctx, "D7", lr, vues)
-    return _d3_ligne(ctx, "D7", lr)
+    # D-4601 (comme D-4213 pour D3 / D4) : une ligne répétée n'est comparée au tarif qu'une fois.
+    return _une_fois(ctx, "D7", lr, vues, lambda x: _d3_ligne(ctx, "D7", x))
 
 
 @control("D7")

@@ -60,6 +60,7 @@ controldone sauvegarde controler <répertoire_restauré>
 controldone sauvegarde rotation --destination DIR [--recentes 4] [--jours 7] [--semaines 4]
 make restauration-test                     # exercice complet sur une base fictive, hors ligne (≈ 15 s)
 make restauration-test-pg                  # le même sur PostgreSQL (serveur jetable local, ≈ 25 s)
+controldone sauvegarde exercice-mensuel [--source DIR | --archive F]   # dernière VRAIE archive (D-4702)
 ```
 
 - `sauvegarder` relit **toujours** l'archive qu'elle vient d'écrire (déchiffrement de chaque segment, SHA-256 de
@@ -72,7 +73,13 @@ make restauration-test-pg                  # le même sur PostgreSQL (serveur je
   (`BACKUP_VERIFICATION_PROFONDE_JOUR`).
 - Sauvegarde, purge et restauration partagent un verrou de maintenance (`<data_dir>/.verrou-maintenance`,
   D-3504) : une purge lancée à la main pendant la copie est reportée, au lieu de retirer un objet que
-  l'instantané référence.
+  l'instantané référence. Base PostgreSQL : verrou consultatif PostgreSQL en plus (`pg_try_advisory_lock`,
+  D-4701), valable entre plusieurs hôtes qui partagent la base.
+- `exercice-mensuel` : la plus récente archive réelle (locale ou copie hors site téléchargée), restaurée dans un
+  emplacement jetable (PostgreSQL : base jetable sur `BACKUP_PG_VERIFICATION_URL`), contrôle approfondi,
+  application démarrée en lecture seule, rendu d'un rapport publié, destruction de la copie, compte rendu daté
+  sans donnée client dans `<data_dir>/exercices/`. Planifiable le premier dimanche du mois
+  (`SCHED_EXERCICE_MENSUEL=1`, désactivé par défaut). Détails : `docs/EXPLOITATION.md` § 3.4.
 - `restaurer` n'écrit que dans un répertoire **absent ou vide** et ne remplace jamais les données en service ;
   la mise en service suit `docs/EXPLOITATION.md` § 3.2.
 - `make restauration-test` : base de démonstration neuve (`init-demo`, données fictives) dans un répertoire
@@ -133,4 +140,5 @@ make restauration-test-pg                  # le même sur PostgreSQL (serveur je
   heures ouvrées, compter **jusqu'au jour ouvré suivant**.
 - Ces chiffres valent tant que l'exercice mensuel de restauration (`docs/DEPLOIEMENT.md` § 14, sur une vraie
   archive de production téléchargée depuis le stockage objet) réussit ; noter sa durée à chaque fois pour
-  remplacer l'objectif par une mesure.
+  remplacer l'objectif par une mesure. `controldone sauvegarde exercice-mensuel` (D-4702) l'automatise et écrit
+  la durée « restauration + contrôle + démarrage » dans son compte rendu daté.

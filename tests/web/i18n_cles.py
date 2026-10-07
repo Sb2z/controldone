@@ -20,8 +20,6 @@ _KW = {"page": ("titre", "message", "erreur"), "redirection": ("message", "erreu
 def cles_gabarits() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for f in sorted(GABARITS.rglob("*.j2")):
-        if f.name == "api_docs.html.j2":  # documentation de l'API, en français (servie par l'API)
-            continue
         for m in _JINJA.finditer(f.read_text(encoding="utf-8")):
             brut = m.group(1) if m.group(1) is not None else m.group(2)
             out.setdefault(brut.replace('\\"', '"').replace("\\'", "'"), set()).add(f.name)

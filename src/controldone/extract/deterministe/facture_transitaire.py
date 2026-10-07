@@ -239,6 +239,11 @@ def _reconnaitre_entete(li: VueLigne) -> list[ColonneFt] | None:
         return None
     if not any(r in ("ht", "pu", "ttc", "pu_ttc") or r.startswith("nat:") for r in roles):
         return None
+    # D-4602 : colonne « montant » dont l'en-tête, découpé par l'OCR (« Total : c/ IVA », « Total | TTC »), porte une
+    # mention TVA comprise rattachée au mot reconnu : montant TTC, jamais lu comme hors taxe
+    for c in cols:
+        if c.role == "ht" and _mention_ttc(c.libelle):
+            c.role = "ttc"
     # plusieurs colonnes « montant » (« Montant » … « Total ») : la première est le montant HT, les
     # suivantes un montant TTC (jamais lu comme montant de ligne)
     hts = [c for c in cols if c.role == "ht"]
@@ -246,6 +251,19 @@ def _reconnaitre_entete(li: VueLigne) -> list[ColonneFt] | None:
         if not _deux_tableaux(cols):
             c.role = "ttc"
     return cols
+
+
+#: Mentions « TVA comprise » d'un en-tête de colonne de montant (D-4602) ; « s/ IVA », « excl. », « netto » n'en sont
+#: pas.
+_MENTION_TTC_RE = re.compile(
+    r"(?:^|\s)(?:c/\s*iva|com\s+iva|con\s+iva|ivato|ivainc\w*|iva\s+inc\w*|t\.?t\.?c\.?|incl\.?|inkl\.?|"
+    r"inclusief|brutto|gross|tva\s+comprise)(?:\s|$)"
+)
+
+
+def _mention_ttc(libelle: str) -> bool:
+    """L'en-tête de colonne porte une mention TVA comprise (D-4602)."""
+    return bool(_MENTION_TTC_RE.search(" ".join(_cle_mot(t) for t in libelle.split())))
 
 
 def _deux_tableaux(cols: list[ColonneFt]) -> bool:
@@ -2032,6 +2050,9 @@ class _Extraction:
                     c.definir(pre + k, v)
             ligne: LigneFactureTransitaire = c.obtenir(f"lignes[{idx - 1}]")
             ligne.nature = lg.nature
+            # D-4602 : montant imprimé seulement TVA comprise (aucun hors-taxe imprimé) : marqué dans le modèle, les
+            # contrôles ne le prennent jamais pour un hors-taxe (D-2701, ``montant_net_ligne``).
+            ligne.tva_comprise = ttc_seul
         if not self.avoir:
             for e in self._releve:
                 if e.mrn is None:

@@ -106,7 +106,12 @@ def piece_facture(request: Request, facture_id: str, fmt: str) -> Response:
 
 
 def _erreur(request: Request, exc: Exception) -> Response:
-    return redirection(request, _RETOUR, erreur=str(exc)[:300])
+    """Message du service (en français, journalisé tel quel) traduit à l'affichage (D-4801). ``KeyError`` :
+    son texte, sans les guillemets de ``str(KeyError)``."""
+    texte = (
+        exc.args[0] if isinstance(exc, KeyError) and exc.args and isinstance(exc.args[0], str) else str(exc)
+    )
+    return redirection(request, _RETOUR, erreur=texte[:300])
 
 
 @routeur.post("/diagnostic")
