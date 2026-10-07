@@ -189,14 +189,14 @@
     parDossier: "per file", formule: "Break-even = cost ÷ (1 − 0.20) = ", ht: " excl. VAT",
     solde: "Balance for you", sous: "below the break-even point", commission: "Commission (20 %)", cout: "Cost over the period",
     palier: function (p, q) { return "Monthly plan at €" + p + " excl. VAT (up to " + q + " files a month), 12 months"; },
-    diag: "Diagnostic, paid once", offert: "Diagnostic offered (launch offer)"
+    diag: "Diagnostic, paid once", offert: "Diagnostic offered (launch offer; the 20 % commission is still due)"
   } : {
     lot: "Dossiers dans le lot analysé", an: "Dossiers d'import par an",
     devis: "Au-delà de 150 dossiers par mois, le prix est établi sur devis. Écrivez-moi pour en recevoir un.",
     parDossier: "par dossier", formule: "Seuil = coût ÷ (1 − 0,20) = ", ht: " HT",
     solde: "Solde pour vous", sous: "en dessous du seuil", commission: "Commission (20 %)", cout: "Coût sur la période",
     palier: function (p, q) { return "Contrôle continu à " + p + " € HT par mois (jusqu'à " + q + " dossiers par mois), 12 mois"; },
-    diag: "Diagnostic, payé une fois", offert: "Diagnostic offert (offre de lancement)"
+    diag: "Diagnostic, payé une fois", offert: "Diagnostic offert (offre de lancement ; la commission de 20 % reste due)"
   };
   var PALIERS = [[20, 99], [60, 199], [150, 349]];
   var TAUX = 0.2;

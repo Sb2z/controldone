@@ -77,7 +77,7 @@
         <p class="label">Option 2 · Continuous checking</p>
         <div class="amount">€99<small>excl. VAT a month</small></div>
         <div class="per">Up to 20 files a month. The price follows your volume.</div>
-        <div class="table-wrap">
+        <div role="region" tabindex="0" aria-label="Price by volume" class="table-wrap">
           <table>
             <caption>Price by volume</caption>
             <thead><tr><th scope="col">Files a month</th><th scope="col" class="num">Monthly price excl. VAT</th></tr></thead>
@@ -133,7 +133,7 @@
           <label for="calc-formule">Option</label>
           <select id="calc-formule">
             <option value="diagnostic">Diagnostic (€390 excl. VAT)</option>
-            <option value="offert">Diagnostic offered (launch)</option>
+            <option value="offert">Diagnostic offered (commission still due)</option>
             <option value="continu">Continuous checking (price by volume)</option>
           </select>
         </div>
@@ -158,7 +158,7 @@
       </div>
     </div>
 
-    <div class="table-wrap mt">
+    <div role="region" tabindex="0" aria-label="Break-even point for each option (credit notes excl. VAT needed to cover the price)" class="table-wrap mt">
       <table class="seuils">
         <caption>Break-even point for each option (credit notes excl. VAT needed to cover the price)</caption>
         <thead><tr><th scope="col">Option</th><th scope="col" class="num">Price excl. VAT</th><th scope="col" class="num">Break-even, excl. VAT</th></tr></thead>

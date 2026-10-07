@@ -5276,3 +5276,142 @@ d'opposition conservée. Journal d'audit : import, création, statut, contact, m
 `init-demo` ajoute six sociétés **fictives** (« … DÉMO FICTIF », domaines `.test`, identifiants `prs_demo_*`) à
 différents statuts, sans aucun courriel préparé : la file de validation de la démonstration reste celle des
 clients fictifs.
+
+## D-5101 — Site public : polices auto-hébergées (option A de la recherche)
+
+Titres en **Source Serif 4 Display Regular**, texte et interface en **Inter** Regular et SemiBold (chiffres
+tabulaires), montants et références en **JetBrains Mono** Regular, tous sous SIL Open Font License 1.1
+(`docs/marketing/RECHERCHE.md` §4.5). Fichiers `woff2` officiels **non modifiés**, servis depuis
+`site/assets/fonts/` avec leurs licences (`LICENSE-SourceSerif4.md`, `LICENSE-Inter.txt`, `OFL-JetBrainsMono.txt`) :
+Source Serif vient de la branche `release` du dépôt Adobe (`WOFF2/TTF/`), Inter de la version 4.1 (`web/`),
+JetBrains Mono de la version 2.304 (`fonts/webfonts/`). « Source » est un nom de police réservé : aucun découpage,
+aucun renommage (OFL FAQ 2.6). Quatre fichiers seulement (≈ 390 Ko) plutôt que les fichiers variables (Source
+Serif 4 variable : 429 Ko à elle seule) ; `font-display: swap` ; seule la police de titre est préchargée. Mention
+des licences ajoutée aux mentions légales.
+
+## D-5102 — Site public : un script local autorisé, CSP en `<meta>`
+
+Chaque page charge exactement deux scripts locaux avec `defer` : `assets/vendor/motion.min.js` (copie de la Motion
+14 de l'application, licence MIT) puis `assets/site.js`. Aucun script en ligne, aucune origine externe, aucun
+attribut `style` ; CSP en `<meta>` : `default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self';
+img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'`. `site.js`
+n'envoie rien, n'écrit aucun cookie ni stockage local (le test refuse `fetch`, `XMLHttpRequest`, `sendBeacon`,
+`document.cookie`, `localStorage`, `eval`). Amélioration progressive : sans script, tout le contenu est lisible et
+le calculateur de seuil est remplacé par un tableau statique. Toujours aucun formulaire : le calculateur utilise
+des champs hors `<form>`. Tests : `tests/site/test_site.py::verifier_ressources` (FR et EN).
+
+## D-5103 — Site public : vocabulaire du mouvement
+
+Jetons de `RECHERCHE.md` §4.6 (120 / 200 / 280 / 400 ms, `cubic-bezier(0.16, 1, 0.3, 1)`, ressort sans rebond pour
+le calculateur), uniquement `transform` et `opacity`, pas de parallaxe, aucune animation de plus de cinq secondes,
+une entrée ne se rejoue pas. `prefers-reduced-motion: reduce` : aucune translation, valeurs finales directes,
+rapprochement statique. Motifs retenus : entrée du haut de page en CSS (lisible sans script), preuve qui se
+construit et compteur du montant fictif, révélations en cascade, compteurs des mesures, fil des étapes lié au
+défilement, rapprochement facture/déclaration piloté par le défilement (≥ 900 px de large, sinon joué une fois en
+moins de cinq secondes), en-tête condensé (opacité d'un fond, hauteur fixe), barre de lecture des pages longues,
+FAQ `<details>` adoucie, retour de bouton, appel à l'action collant sur téléphone.
+
+## D-5104 — Tarifs : deux points d'entrée, grille publiée, calculateur de seuil
+
+Diagnostic 390 € HT et contrôle continu présentés comme deux points d'entrée, avec la commission de 20 % sur une
+ligne commune ; pas d'offre leurre. La grille du contrôle continu (99 / 199 / 349 € HT par mois jusqu'à 20 / 60 /
+150 dossiers, au-delà sur devis) est publiée telle qu'elle existe dans `config/offres.yaml` et
+`docs/FACTURATION.md`, avec la mention qu'il s'agit d'une grille de lancement et que le prix applicable est celui du
+contrat. Calculateur de **seuil**, sans taux d'erreur supposé : seuil = prix ÷ (1 − 0,20) ; diagnostic 487,50 € HT,
+contrôle continu 1 485 / 2 985 / 5 235 € HT par an selon le palier (choisi d'après le nombre de dossiers ÷ 12) ;
+seuil par dossier ; solde calculé seulement sur l'hypothèse saisie par le visiteur. Tests : seuils recalculés
+depuis `config/offres.yaml`, fonction de `site.js` exécutée par Node.
+
+## D-5105 — Site public : règles d'écriture et test de style
+
+Tous les textes FR et EN ont été réécrits (`RECHERCHE.md` §3) : première personne du fondateur, vouvoiement,
+phrases courtes avec verbe, vocabulaire du client, mécanisme montré (exemple de rapprochement chiffré), limites
+dans la même voix. `tests/site/test_style_texte.py` refuse la liste de style §3.2 (FR et EN, pages commerciales),
+le tiret cadratin et le demi-cadratin en incise (toutes les pages, y compris les titres), plus d'un point
+d'exclamation par page et les marques exclues (tous les fichiers texte du site ; noms encodés dans le test). Les
+pages juridiques gardent leur texte : seuls le bandeau (« BROUILLON : À RELIRE PAR UN AVOCAT »), un tiret des
+mentions légales, la mention des licences et une phrase sur les scripts (confidentialité) changent. Le rapport de
+démonstration, produit par le moteur, n'est pas couvert. « Offert » toujours suivi de la commission qui reste due,
+« gratuit » interdit hors pages juridiques (test). Preuves autorisées : rapport fictif, page Méthode, mesures du
+banc d'essai datées et présentées comme mesurées sur fichiers de test synthétiques (`corpus_g10`, 7 octobre 2026 :
+51 certains justes sur 51, 79 % des 188 erreurs signalées, 1,10 « à vérifier » non fondé par dossier ; un faux
+certain sur 63 sur `corpus_g9`), fondateur nommé avec des emplacements `[À COMPLÉTER]` pour tout fait non fourni.
+
+## D-5106 — Site public : allégations corrigées
+
+- Facturation électronique : la date d'émission obligatoire pour les PME (1er septembre 2027) est **confirmée**
+  sur la FAQ officielle impots.gouv.fr « À partir de quand suis-je concerné par la réforme de la facturation
+  électronique ? » (modifiée le 16 janvier 2026, consultée le 7 octobre 2026) ; le site cite désormais cette page.
+- Nouveau code des douanes de l'Union : la date du 21 septembre 2027 (source secondaire KPMG, non confirmée) est
+  retirée ; le site cite le règlement (UE) 2026/2108 et les dates publiées par la Commission (entrepôt de données
+  obligatoire pour le commerce en ligne le 1er juillet 2028, pour tous les opérateurs le 1er mars 2034).
+- Hébergement : « Union européenne » seulement, avec l'hébergeur à compléter et la lecture possible par un modèle
+  de langage chez Anthropic aux États-Unis (désactivable) ; jamais « hébergé en France » (test).
+
+## D-5201 — Application : polices Source Serif 4, Inter et JetBrains Mono
+
+*Date : 2026-10-07. Contexte : `docs/marketing/RECHERCHE.md` §4.5 (option A), demande du fondateur (« les polices font IA »).*
+
+- Titres en **Source Serif 4** (fichier variable officiel `SourceSerif4Variable-Roman.ttf.woff2`, version 4.005R, axes
+  `opsz` et `wght`), interface et texte en **Inter** (`InterVariable.woff2` 4.1, chiffres tabulaires `tnum` partout),
+  montants des tableaux, références et codes en **JetBrains Mono** (Regular et Medium 2.304).
+- Fichiers officiels **non modifiés** (pas de sous-ensemble : nom réservé « Source », FAQ OFL 2.6), servis depuis
+  `static/vendor/fonts/` avec leur licence OFL 1.1 (`LICENSE-OFL-*.{txt,md}`), déclarés dans
+  `config/audit_dependances.json`. `font-display: swap` ; seule la police de titre est préchargée.
+- Geist et Geist Mono sont retirées (fichiers et licence supprimés, plus aucune référence). CSP inchangée
+  (`font-src 'self'`, Trusted Types).
+
+## D-5202 — Application : thème clair ivoire par défaut, une seule couleur d'accent
+
+- Fond ivoire `#f7f6f2` et encre `#17202a` (alignés sur le site public), thème sombre presque noir `#0e1114`.
+  Le thème suit le système (clair par défaut s'il n'exprime rien) ; le choix manuel reste mémorisé (`cd-theme`).
+- Une seule couleur d'accent (vert d'eau `#0d6b62` / `#5cc3b5`) ; rouge, ambre et vert réservés aux niveaux
+  « écart certain », « à vérifier », « conforme ». Bouton principal en encre pleine (noir ou ivoire selon le thème).
+- Supprimés : halos animés, grain, dégradés sur le texte, balayage du « scanner », pulsation des badges, reflet et
+  effet « magnétique » des boutons, rotation conique de la zone de dépôt (boucles infinies, RECHERCHE §4.6).
+- Échelle : titres de page en serif 2 à 2,75 rem, graisse 500, interlettrage −0,022 em ; texte 15 px ; titre de
+  connexion jusqu'à 3,6 rem (rapport titre / texte ≈ 3,8). Contraste AA vérifié par axe (0 violation grave).
+
+## D-5203 — Application : vocabulaire du mouvement
+
+- Jetons CSS `--duree-micro` 120 ms, `--duree-courte` 200 ms, `--duree-moyenne` 280 ms, `--duree-section`
+  400 ms ; courbes `--courbe-entree` `cubic-bezier(0.16, 1, 0.3, 1)`, `--courbe-standard`, `--courbe-sortie`.
+  Même vocabulaire dans `app.js` (Motion 14) ; ressorts `visualDuration: 0.3, bounce: 0`.
+- Motifs : entrée de page (12 px, 400 ms, cascade 50 ms, une fois) ; lignes de tableau en cascade de 30 ms ;
+  compteurs des indicateurs (une fois, seulement s'ils sont visibles au chargement) ; avancement du traitement par
+  `transform` (classes `w-N` converties en `scaleX`) ; zone de dépôt (survol, fichiers choisis en cascade, état
+  d'envoi annoncé) ; preuves d'un constat dépliables, contenu posé en 280 ms ; message de confirmation qui arrive
+  et peut être fermé ; exemple de constat de l'écran de connexion (deux montants, puis le trait, puis l'écart) ;
+  pastille de navigation ; bascule de thème en 400 ms.
+- `transform` et `opacity` seulement, aucune parallaxe ni boucle ; en mouvement réduit, rien ne bouge (classe
+  `anime` non posée, `bouge()` faux, CSS `prefers-reduced-motion`).
+
+## D-5204 — Application : réécriture des textes et test de style
+
+- Textes de l'interface réécrits en français (vouvoiement, phrases courtes avec verbe, mots du client : facture du
+  transitaire, déclaration en douane / DAU, avoir, droits, TVA à l'import) et en anglais. Plus de tiret cadratin en
+  incise. Messages d'erreur : ce qui s'est passé, puis quoi faire. États vides : une phrase et une action.
+- Inchangés : `AVERTISSEMENT`, `PHRASE_RENVOI` et leurs traductions de courtoisie, les textes des constats, rapports
+  et relevés produits par le moteur (en français, `lang="fr"`), les textes du module de prospection.
+- `tests/web/test_style_texte_app.py` vérifie les deux catalogues (liste noire RECHERCHE §3.2, tiret en incise) ;
+  exception motivée : « désinscription en un clic » (terme technique RFC 8058 du module de prospection). Le nom
+  `test_style_texte.py` était déjà pris par le test du site (`tests/site`).
+
+## D-5205 — Application : couche de valeur et de confiance, uniquement sur données réelles
+
+- Tableau de bord client : bloc de valeur (avoirs obtenus enregistrés par le client, sinon écarts certains validés,
+  sinon « résultat à ce jour » sans montant), parcours des premiers pas (dépôt, rapprochement et relecture,
+  rapport : états calculés), « prochaine étape » choisie selon l'état réel (traitement en cours, premier dépôt,
+  écarts sans avoir, rapport prêt, relecture).
+- Dossier (client) : « Ce que ce dossier vous a fait récupérer » (avoirs reçus, écarts suivis, reste) lus dans le
+  suivi des avoirs pour les seuls constats publiés du dossier (`routes_client._bilan_dossier`) ; rien n'est estimé.
+- Dépôt : bloc « Ce que deviennent vos documents » avec des faits vérifiés dans le code (chiffrement par client,
+  documents lus comme données, purge des fichiers d'origine `retention_jours` après clôture, lecture par modèle de
+  langage chez Anthropic aux États-Unis ou désactivée selon le réglage du client, transitaire non prévenu).
+- Connexion : exemple de constat marqué « données fictives » (méthode, pas un résultat).
+
+## D-5206 — Navigation du fondateur : menu « Plus »
+
+- Neuf liens ne tenaient plus à 1440 px. Liens principaux : Tableau de bord, File de validation, Clients,
+  Finances, Marketing ; Tâches, Journal, Alertes et Autonomie passent dans un menu `<details>` « Plus » (sans
+  script ; Échap et clic extérieur le ferment avec script). Le libellé du menu prend celui de la page courante.

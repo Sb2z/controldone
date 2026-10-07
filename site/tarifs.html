@@ -79,7 +79,7 @@
         <p class="label">Point d'entrée 2 · Contrôle continu</p>
         <div class="amount">99&nbsp;€<small>HT par mois</small></div>
         <div class="per">Jusqu'à 20 dossiers par mois. Le prix suit votre volume.</div>
-        <div class="table-wrap">
+        <div role="region" tabindex="0" aria-label="Grille par volume" class="table-wrap">
           <table>
             <caption>Grille par volume</caption>
             <thead><tr><th scope="col">Dossiers par mois</th><th scope="col" class="num">Prix HT par mois</th></tr></thead>
@@ -136,7 +136,7 @@
           <label for="calc-formule">Formule</label>
           <select id="calc-formule">
             <option value="diagnostic">Diagnostic (390 € HT)</option>
-            <option value="offert">Diagnostic offert (lancement)</option>
+            <option value="offert">Diagnostic offert (la commission reste due)</option>
             <option value="continu">Contrôle continu (grille par volume)</option>
           </select>
         </div>
@@ -161,7 +161,7 @@
       </div>
     </div>
 
-    <div class="table-wrap mt">
+    <div role="region" tabindex="0" aria-label="Seuil pour chaque formule (avoirs hors taxes à obtenir pour couvrir le prix)" class="table-wrap mt">
       <table class="seuils">
         <caption>Seuil pour chaque formule (avoirs hors taxes à obtenir pour couvrir le prix)</caption>
         <thead><tr><th scope="col">Formule</th><th scope="col" class="num">Prix HT</th><th scope="col" class="num">Seuil d'avoirs HT</th></tr></thead>

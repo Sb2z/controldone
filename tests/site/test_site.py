@@ -1,12 +1,22 @@
-"""Site public statique (site/) : garde-fous juridiques, liens, bandeaux, pas de ressource externe."""
+"""Site public statique (site/) : garde-fous juridiques, liens, bandeaux, ressources locales seulement.
+
+Politique de script (D-5102) : chaque page charge exactement deux scripts locaux, avec `defer`
+(`assets/vendor/motion.min.js` puis `assets/site.js`) ; aucun script en ligne, aucune origine externe, aucun
+attribut `style` (la CSP de la page n'autorise que `script-src 'self'` et `style-src 'self'`)."""
 
 from __future__ import annotations
 
+import json
+import re
+import shutil
+import subprocess
+from decimal import Decimal
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import pytest
+import yaml
 
 from controldone.guardrails import PHRASE_RENVOI, check_text
 
@@ -23,7 +33,9 @@ PAGES_ATTENDUES = [
     "contact.html",
     *PAGES_JURIDIQUES,
 ]
-BANDEAU_AVOCAT = "BROUILLON — À RELIRE PAR UN AVOCAT"
+BANDEAU_AVOCAT = "BROUILLON : À RELIRE PAR UN AVOCAT"
+SCRIPTS_AUTORISES = ["assets/vendor/motion.min.js", "assets/site.js"]
+RACINE = SITE.parent
 
 # Seules sources officielles (ou citées comme source d'un chiffre) autorisées en lien sortant.
 DOMAINES_AUTORISES = {
@@ -48,6 +60,10 @@ class _Page(HTMLParser):
         self.liens: list[tuple[str, str, str]] = []  # (balise, attribut, valeur)
         self.ids: set[str] = set()
         self.balises: list[str] = []
+        self.scripts: list[dict[str, str | None]] = []
+        self.contenu_scripts: list[str] = []
+        self.styles_en_ligne: list[str] = []
+        self.metas: list[dict[str, str | None]] = []
         self._cache = 0
 
     def handle_starttag(self, tag, attrs):
@@ -55,6 +71,13 @@ class _Page(HTMLParser):
         self.balises.append(tag)
         if tag in ("script", "style", "template"):
             self._cache += 1
+        if tag == "script":
+            self.scripts.append(a)
+            self.contenu_scripts.append("")
+        if tag == "meta":
+            self.metas.append(a)
+        if "style" in a:
+            self.styles_en_ligne.append(f"{tag}[style]")
         if "id" in a:
             self.ids.add(a["id"])
         for attr in ("href", "src", "action", "data", "poster", "srcset"):
@@ -71,6 +94,8 @@ class _Page(HTMLParser):
     def handle_data(self, data):
         if not self._cache:
             self.texte.append(data)
+        elif self.balises and self.balises[-1] == "script" and self.contenu_scripts:
+            self.contenu_scripts[-1] += data
 
     @property
     def visible(self) -> str:
@@ -97,11 +122,30 @@ def test_aucune_formulation_interdite(page):
         assert check_text(texte) == [], f"{page.name} : {check_text(texte)}"
 
 
-@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
-def test_pas_de_ressource_externe_ni_formulaire(page):
-    doc = _lire(page)
-    assert "form" not in doc.balises, "aucun formulaire : le contact passe par mailto"
-    assert "script" not in doc.balises, "aucun script"
+def verifier_ressources(page: Path, doc: _Page, prefixe: str) -> None:
+    """Règles communes FR/EN : pas de formulaire, scripts locaux différés, CSP, pas de style en ligne."""
+    assert "form" not in doc.balises, f"{page.name} : aucun formulaire (le contact passe par mailto)"
+    assert [sc.get("src") for sc in doc.scripts] == [prefixe + s for s in SCRIPTS_AUTORISES], page.name
+    for sc, contenu in zip(doc.scripts, doc.contenu_scripts, strict=True):
+        assert "defer" in sc, f"{page.name} : script sans defer {sc}"
+        assert not contenu.strip(), f"{page.name} : script en ligne interdit"
+        assert set(sc) <= {"src", "defer"}, f"{page.name} : attribut de script inattendu {sc}"
+    assert "style" not in doc.balises and not doc.styles_en_ligne, (
+        f"{page.name} : style en ligne {doc.styles_en_ligne}"
+    )
+    csp = [
+        m.get("content") or ""
+        for m in doc.metas
+        if (m.get("http-equiv") or "").lower() == "content-security-policy"
+    ]
+    assert len(csp) == 1, f"{page.name} : une CSP en <meta>"
+    directives = {d.split()[0]: d.split()[1:] for d in csp[0].split(";") if d.strip()}
+    assert directives["default-src"] == ["'none'"]
+    assert directives["script-src"] == ["'self'"], "script-src 'self' seulement (ni inline ni eval)"
+    assert directives["style-src"] == ["'self'"]
+    assert directives["font-src"] == ["'self'"]
+    assert directives["connect-src"] == ["'none'"]
+    assert directives["form-action"] == ["'none'"]
     for tag, attr, val in doc.liens:
         u = urlsplit(val)
         if u.scheme in ("", "mailto"):
@@ -110,7 +154,51 @@ def test_pas_de_ressource_externe_ni_formulaire(page):
         assert attr == "href" and tag == "a", f"{page.name} : ressource externe chargée {tag}[{attr}]={val}"
         assert u.hostname in DOMAINES_AUTORISES, f"{page.name} : lien externe non autorisé {val}"
     feuilles = [v for t, a, v in doc.liens if t == "link" and a == "href" and v.endswith(".css")]
-    assert feuilles == ["assets/style.css"], "une seule feuille de style partagée"
+    assert feuilles == [prefixe + "assets/style.css"], "une seule feuille de style partagée"
+
+
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+def test_pas_de_ressource_externe_ni_formulaire(page):
+    verifier_ressources(page, _lire(page), "")
+
+
+def test_scripts_et_polices_locaux_avec_licences():
+    for chemin in (*SCRIPTS_AUTORISES, "assets/vendor/LICENSE-motion.md"):
+        assert (SITE / chemin).is_file(), chemin
+    assert "MIT" in (SITE / "assets/vendor/LICENSE-motion.md").read_text(encoding="utf-8")
+    css = (SITE / "assets/style.css").read_text(encoding="utf-8")
+    polices = re.findall(r'url\("(fonts/[^"]+\.woff2)"\)', css)
+    assert len(polices) == 4, polices
+    for p in polices:
+        assert (SITE / "assets" / p).is_file(), p
+    assert css.count("font-display: swap") == 4
+    licences = {
+        "LICENSE-SourceSerif4.md": "Reserved Font Name",
+        "LICENSE-Inter.txt": "SIL OPEN FONT LICENSE",
+        "OFL-JetBrainsMono.txt": "SIL OPEN FONT LICENSE",
+    }
+    for nom, attendu in licences.items():
+        assert attendu.lower() in (SITE / "assets/fonts" / nom).read_text(encoding="utf-8").lower(), nom
+    # Nom réservé « Source » : le fichier officiel est servi sous son nom d'origine, non modifié.
+    assert (SITE / "assets/fonts/SourceSerif4Display-Regular.ttf.woff2").is_file()
+    site_js = (SITE / "assets/site.js").read_text(encoding="utf-8")
+    for interdit in (
+        "fetch(",
+        "XMLHttpRequest",
+        "sendBeacon",
+        "document.cookie",
+        "localStorage",
+        "eval(",
+        "new Function",
+    ):
+        assert interdit not in site_js, interdit
+
+
+def test_aucun_hebergement_en_france_annonce():
+    for page in [*PAGES, *sorted((SITE / "en").glob("*.html"))]:
+        texte = _lire(page).visible.lower()
+        for faux in ("hébergé en france", "hébergement en france", "hosted in france", "souverain"):
+            assert faux not in texte, f"{page.name} : {faux}"
 
 
 def test_rapport_demo_sans_ressource_externe():
@@ -165,10 +253,79 @@ def test_demonstration_marquee_fictive():
         assert (SITE / "demo" / "captures" / capture).exists()
 
 
+def _offres() -> dict:
+    return yaml.safe_load((RACINE / "config" / "offres.yaml").read_text(encoding="utf-8"))["offres"]
+
+
+def _euros_fr(montant: Decimal) -> str:
+    entier, dec = f"{montant:.2f}".split(".")
+    groupes = f"{int(entier):,}".replace(",", " ")
+    return f"{groupes},{dec} €"
+
+
 def test_prix_annonces():
-    tarifs = _lire(SITE / "tarifs.html").visible
-    for attendu in ("390 EUR", "20 %", "99 EUR", "Trois diagnostics offerts"):
-        assert attendu in tarifs.replace(" ", " ")
+    tarifs = _lire(SITE / "tarifs.html").visible.replace("\u00a0", " ")
+    offres = _offres()
+    assert f"{int(Decimal(offres['diagnostic']['prix_ht']))} €" in tarifs
+    assert f"{int(Decimal(offres['commission']['taux']) * 100)} %" in tarifs
+    for palier in offres["continu"]["paliers"]:
+        assert f"{int(Decimal(palier['prix_mensuel_ht']))} €" in tarifs, palier
+        assert f"Jusqu'à {palier['dossiers_par_mois']}" in tarifs, palier
+    assert "sur devis" in tarifs
+    assert "diagnostics sont offerts" in tarifs
+
+
+def test_seuils_de_rentabilite_publies():
+    """Seuil = prix ÷ (1 − taux de commission) ; recalculé depuis config/offres.yaml (D-5104)."""
+    tarifs = _lire(SITE / "tarifs.html").visible.replace("\u00a0", " ")
+    offres = _offres()
+    garde = 1 - Decimal(offres["commission"]["taux"])
+    diag = Decimal(offres["diagnostic"]["prix_ht"])
+    assert diag / garde == Decimal("487.5")
+    attendus = [diag, diag / garde]
+    for palier in offres["continu"]["paliers"]:
+        annuel = Decimal(palier["prix_mensuel_ht"]) * 12
+        attendus += [annuel, annuel / garde]
+    assert Decimal("99") * 12 / garde == Decimal("1485")
+    for montant in attendus:
+        assert _euros_fr(montant) in tarifs, _euros_fr(montant)
+
+
+def test_calculateur_seuil_js():
+    """La fonction de calcul de site.js donne les mêmes seuils (exécutée par Node si disponible)."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js absent")
+    script = (
+        "global.window={};global.document={documentElement:{lang:'fr'},readyState:'loading',"
+        "addEventListener:function(){}};"
+        f"require({json.dumps(str(SITE / 'assets' / 'site.js'))});"
+        "const s=window.ControlDOneSeuil;"
+        "console.log(JSON.stringify([s('diagnostic',60),s('offert',10),s('continu',240),s('continu',241),"
+        "s('continu',720),s('continu',1800),s('continu',1801)]));"
+    )
+    sortie = json.loads(
+        subprocess.run([node, "-e", script], capture_output=True, text=True, check=True).stdout
+    )
+    diag, offert, c20, c60a, c60b, c150, devis = sortie
+    assert diag["cout"] == 390 and diag["seuil"] == 487.5 and diag["parDossier"] == pytest.approx(8.125)
+    assert offert["cout"] == 0 and offert["seuil"] == 0
+    assert c20["cout"] == 1188 and c20["seuil"] == pytest.approx(1485)
+    assert c60a["cout"] == 2388 and c60a["seuil"] == pytest.approx(2985)
+    assert c60b["cout"] == 2388
+    assert c150["cout"] == 4188 and c150["seuil"] == pytest.approx(5235)
+    assert devis == {"devis": True}
+
+
+@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
+def test_offert_toujours_avec_commission(page):
+    """L121-4 19° : « offert » est suivi, au même endroit, de la commission qui reste due."""
+    texte = _lire(page).visible.replace("\u00a0", " ")
+    for m in re.finditer(r"offerts?\b", texte):
+        voisinage = texte[max(0, m.start() - 250) : m.end() + 250]
+        assert "reste due" in voisinage, f"{page.name} : « offert » sans la commission : …{voisinage}…"
+    if page.name not in PAGES_JURIDIQUES:  # « moyen gratuit de s'opposer » est une mention légale
+        assert not re.search(r"\bgratuite?s?\b", texte, re.IGNORECASE), f"{page.name} : « gratuit »"
 
 
 def test_cgv_clauses_essentielles():

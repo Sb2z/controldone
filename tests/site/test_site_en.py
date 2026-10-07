@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 import pytest
-from test_site import DOMAINES_AUTORISES, PAGES, _lire
+from test_site import DOMAINES_AUTORISES, PAGES, _lire, verifier_ressources
 
 from controldone.guardrails import PHRASE_RENVOI, check_text
 
@@ -22,7 +22,7 @@ CORRESPONDANCE = {
     "contact.html": "contact.html",
 }
 PAGES_EN = [EN / n for n in CORRESPONDANCE]
-NOTE_JURIDIQUE = "French version prevails — draft to be reviewed by a lawyer"
+NOTE_JURIDIQUE = "French version prevails; draft to be reviewed by a lawyer"
 
 #: English mirror of SPEC §3.2 (case-insensitive, simple plural forms).
 FORMULATIONS_INTERDITES_EN = [
@@ -122,9 +122,7 @@ def test_structure_et_liens_en(page):
     brut = page.read_text(encoding="utf-8")
     assert '<html lang="en">' in brut
     doc = _lire(page)
-    assert "form" not in doc.balises and "script" not in doc.balises
-    feuilles = [v for t, a, v in doc.liens if t == "link" and a == "href" and v.endswith(".css")]
-    assert feuilles == ["../assets/style.css"], "même feuille de style que le site français"
+    verifier_ressources(page, doc, "../")  # mêmes règles que le site français, chemins relatifs à en/
     for tag, attr, val in doc.liens:
         u = urlsplit(val)
         if u.scheme == "mailto":
@@ -162,21 +160,43 @@ def test_memes_sources_que_la_version_francaise(en, fr):
 
 
 def test_chiffres_identiques():
-    tarifs = _lire(EN / "pricing.html").visible.replace(" ", " ")
-    for attendu in ("390 EUR", "20 %", "99 EUR", "Three free diagnostics"):
-        assert attendu in tarifs, attendu
-    accueil = _lire(EN / "index.html").visible.replace(" ", " ")
+    tarifs = _lire(EN / "pricing.html").visible.replace("\u00a0", " ")
     for attendu in (
-        "EUR 3 per item",
-        "EUR 150",
+        "€390",
+        "20%",
+        "€99",
+        "€199",
+        "€349",
+        "€487.50",
+        "€1,485.00",
+        "diagnostics are offered",
+        "still due",
+    ):
+        assert attendu in tarifs, attendu
+    accueil = _lire(EN / "index.html").visible.replace("\u00a0", " ")
+    for attendu in (
+        "€3 per item",
+        "€150",
         "1 September 2026",
+        "1 September 2027",
         "30 September 2027",
-        "21 September 2027",
         "2026/382",
         "2025/2083",
+        "2026/2108",
         "EUR 2,356.28",
+        "160 fictitious files",
+        "188",
     ):
         assert attendu in accueil, attendu
+
+
+@pytest.mark.parametrize("page", PAGES_EN, ids=lambda p: p.name)
+def test_offered_always_with_commission(page):
+    texte = _lire(page).visible.replace("\u00a0", " ")
+    for m in re.finditer(r"\boffered\b", texte):
+        voisinage = texte[max(0, m.start() - 250) : m.end() + 250]
+        assert "still due" in voisinage, f"{page.name} : …{voisinage}…"
+    assert not re.search(r"\bfree\b", texte, re.IGNORECASE), f"{page.name} : « free »"
 
 
 def test_demo_marquee_fictive():
