@@ -438,6 +438,30 @@ def enregistrer_instantanes(ctx: ContexteAgent, instantanes: dict[str, dict[str,
     return len(instantanes)
 
 
+# --- prospection (plateforme) ------------------------------------------------------------------------------
+
+
+def preparer_etapes_prospection(ctx: ContexteAgent) -> list[str]:
+    """Brouillons des étapes de prospection échues (``ServiceProspection.preparer_etapes_dues``, D-5008)."""
+    from controldone.prospection.service import ServiceProspection
+
+    if ctx.tenant_id is not None:
+        raise AccesRefuse("prospection : agent de plateforme seulement")
+    return ServiceProspection(ctx.db, horloge=ctx.horloge, url_publique=_url_publique()).preparer_etapes_dues(
+        ctx.acteur
+    )
+
+
+def _url_publique() -> str | None:
+    """URL publique (lien de désinscription) ; ``None`` si elle n'est pas configurée."""
+    from controldone.web.securite import url_publique
+
+    try:
+        return url_publique(None)
+    except ValueError:
+        return None
+
+
 CATALOGUE: dict[str, Outil] = {
     o.nom: o
     for o in (
@@ -477,5 +501,10 @@ CATALOGUE: dict[str, Outil] = {
         ),
         Outil("lire_instantanes", "Dernières empreintes des sources", lire_instantanes),
         Outil("enregistrer_instantanes", "Nouvelles empreintes des sources", enregistrer_instantanes),
+        Outil(
+            "preparer_etapes_prospection",
+            "Brouillons des étapes de prospection échues (file de validation)",
+            preparer_etapes_prospection,
+        ),
     )
 }

@@ -1,0 +1,110 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import kpi, csrf_champ %}
+{% from "graphes.html.j2" import graphe %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation, badge_statut %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Marketing") }}</h1>
+  <p class="discret">{{ _("Prospection du fondateur : rien ne part sans votre validation. Chiffres réels seulement, aucun suivi d'ouverture ni de clic.") }}</p>
+</div>
+{{ sous_navigation("tableau") }}
+
+<section class="kpis" aria-label="{{ _("Indicateurs de prospection") }}">
+  {{ kpi(_("Prospects"), t.total, _("toutes étapes"), None, base ~ "/prospects") }}
+  {{ kpi(_("Courriels à valider"), t.a_valider|length, _("dont {n} préparé(s) cette semaine", n=t.a_valider_semaine), "accent" if t.a_valider else None, "/admin/validation#sorties") }}
+  {{ kpi(_("Approuvés, pas encore envoyés"), t.approuves|length, _("envoi ou déclaration d'envoi"), None, base ~ "/courriels") }}
+  {{ kpi(_("Réponses à traiter"), t.reponses_a_traiter|length, _("statut « a répondu »"), "alerte" if t.reponses_a_traiter else None, base ~ "/pipeline") }}
+  {{ kpi(_("Envoyés cette semaine"), t.envoyes_semaine, _("envois et envois déclarés")) }}
+  {{ kpi(_("Plafonds du jour"), t.compteurs.preparations ~ " / " ~ t.compteurs.plafond_preparations, _("préparations ; envois {e} / {p}", e=t.compteurs.envois, p=t.compteurs.plafond_envois)) }}
+</section>
+
+{% if t.total == 0 %}
+<section class="carte">
+  <h2>{{ _("Pour commencer") }}</h2>
+  <ol class="prosp-liste-courte">
+    <li><a href="{{ base }}/importer">{{ _("Importez votre fichier de prospects") }}</a> {{ _("(format de commercial/prospects.csv) ou") }} <a href="{{ base }}/rechercher">{{ _("recherchez des entreprises") }}</a> {{ _("dans la base publique.") }}</li>
+    <li>{{ _("Qualifiez chaque prospect : preuve d'import relevée sur son site, adresse publiée avec sa page source.") }}</li>
+    <li>{{ _("Préparez la séquence depuis la fiche, puis approuvez le premier courriel dans la file de validation.") }}</li>
+  </ol>
+</section>
+{% endif %}
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-entonnoir">
+  <h2 id="t-entonnoir">{{ _("Conversion par étape") }}</h2>
+  {% if t.total %}
+  <table class="donnees compacte prosp-entonnoir">
+    <caption class="vh">{{ _("Prospects ayant atteint chaque étape, et part de l'étape précédente") }}</caption>
+    <thead><tr><th scope="col">{{ _("Étape") }}</th><th scope="col" class="num">{{ _("Atteinte") }}</th><th scope="col" class="num">{{ _("Depuis l'étape précédente") }}</th><th scope="col" class="barre-col"><span class="vh">{{ _("Proportion") }}</span></th></tr></thead>
+    <tbody>
+    {% for c in t.conversion %}
+      <tr><td>{{ badge_statut(c.statut, libelles_statut) }}</td><td class="num">{{ c.atteint }}</td><td class="num">{% if c.taux is none %}—{% else %}{{ c.taux }} %{% endif %}</td>
+      <td class="barre-col"><span class="barre"><span class="w-{{ ((c.atteint * 20 / t.total)|round|int) * 5 }}"></span></span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="discret">{{ _("Une étape est « atteinte » si le prospect y est ou y est passé (historique des statuts).") }}</p>
+  {% else %}<p class="vide">{{ _("Aucun prospect pour l'instant.") }}</p>{% endif %}
+</section>
+
+<section class="carte" aria-labelledby="t-statuts">
+  <h2 id="t-statuts">{{ _("Pipeline") }} <a class="petit-lien" href="{{ base }}/pipeline">{{ _("ouvrir le tableau") }}</a></h2>
+  {{ graphe(graphe) }}
+</section>
+</div>
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-valider">
+  <h2 id="t-valider">{{ _("Courriels à valider") }} <a class="petit-lien" href="/admin/validation#sorties">{{ _("file de validation") }}</a></h2>
+  {% if t.a_valider %}
+  <ul class="liste-simple">
+  {% for a in t.a_valider[:8] %}
+    <li><a href="{{ base }}/prospects/{{ a.payload.get('prospect_id', '') }}"><span lang="fr">{{ a.payload.get("objet", "") }}</span></a> <span class="discret">— {{ _("étape {n}", n=a.payload.get("rang", "?")) }}, {{ a.cree_le|date }}</span></li>
+  {% endfor %}
+  </ul>
+  {% else %}<p class="vide">{{ _("Rien à valider. Préparez une séquence depuis la fiche d'un prospect qualifié.") }}</p>{% endif %}
+</section>
+
+<section class="carte" aria-labelledby="t-reponses">
+  <h2 id="t-reponses">{{ _("Réponses à traiter") }}</h2>
+  {% if t.reponses_a_traiter %}
+  <ul class="liste-simple">
+  {% for p in t.reponses_a_traiter[:8] %}
+    <li><a href="{{ base }}/prospects/{{ p.id }}"><span lang="fr">{{ p.raison_sociale }}</span></a> <span class="discret">— {{ (p.derniere_interaction_le or p.modifie_le)|date }}</span></li>
+  {% endfor %}
+  </ul>
+  {% else %}<p class="vide">{{ _("Aucune réponse en attente. Une réponse reçue s'enregistre sur la fiche du prospect (bouton « A répondu »).") }}</p>{% endif %}
+</section>
+</div>
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-segments">
+  <h2 id="t-segments">{{ _("Segments par taux de réponse") }}</h2>
+  {% if t.segments %}
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Segment") }}</th><th scope="col" class="num">{{ _("Contactés") }}</th><th scope="col" class="num">{{ _("Réponses") }}</th><th scope="col" class="num">{{ _("Taux") }}</th></tr></thead>
+    <tbody>
+    {% for s in t.segments %}
+      <tr><td>{% if s.genre == "naf" %}{{ _("NAF {code}", code=s.valeur) }}{% else %}{{ _("{tranche} salariés", tranche=libelles_tranche.get(s.valeur, "?")) }}{% endif %}</td><td class="num">{{ s.contactes }}</td><td class="num">{{ s.reponses }}</td><td class="num">{{ s.taux }} %</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="discret">{{ _("Calculé sur les prospects à qui au moins un courriel a été envoyé ; peu de contacts donnent des taux fragiles.") }}</p>
+  {% else %}<p class="vide">{{ _("Pas encore de courriel envoyé : les taux de réponse apparaîtront après les premiers envois.") }}</p>{% endif %}
+</section>
+
+<section class="carte" aria-labelledby="t-seq">
+  <h2 id="t-seq">{{ _("Séquences") }} <a class="petit-lien" href="{{ base }}/sequences">{{ _("détail par étape") }}</a></h2>
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Séquence") }}</th><th scope="col" class="num">{{ _("Inscrits") }}</th><th scope="col" class="num">{{ _("Envoyés") }}</th><th scope="col" class="num">{{ _("Réponses") }}</th><th scope="col" class="num">{{ _("Rendez-vous") }}</th></tr></thead>
+    <tbody>
+    {% for x in stats.sequences %}
+      <tr><td lang="fr">{{ x.sequence.nom }}</td><td class="num">{{ x.inscrits }}</td><td class="num">{{ x.etapes.values()|sum(attribute="envoyes") }}</td><td class="num">{{ x.etapes.values()|sum(attribute="reponses") }}</td><td class="num">{{ x.rendez_vous }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if t.a_purger %}<p class="alerte-ligne">{{ _("{n} prospect(s) au-delà de la durée de conservation : à purger.", n=t.a_purger) }} <a href="{{ base }}/opposition#conservation">{{ _("Voir") }}</a></p>{% endif %}
+</section>
+</div>
+{% endblock %}

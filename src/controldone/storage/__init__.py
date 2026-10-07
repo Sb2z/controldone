@@ -10,6 +10,9 @@ from controldone.storage import (
     models_facturation as _models_facturation,  # noqa: F401  (tables de facturation)
 )
 from controldone.storage import (
+    models_prospection as _models_prospection,  # noqa: F401  (prospection du fondateur, D-5001)
+)
+from controldone.storage import (
     securite as _securite,  # noqa: F401  (débit et révocations de sessions, D-3201)
 )
 from controldone.storage.audit import verifier_chaine

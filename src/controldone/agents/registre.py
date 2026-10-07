@@ -7,6 +7,7 @@ from .base import Agent
 from .controle import AgentControle
 from .facturation import AgentFacturation
 from .litiges import AgentLitiges
+from .prospection import AgentProspection
 from .questions_clients import AgentQuestionsClients
 from .veille import AgentVeille
 
@@ -21,6 +22,7 @@ AGENTS: dict[str, type[Agent]] = {
         AgentFacturation,
         AgentQuestionsClients,
         AgentVeille,
+        AgentProspection,
     )
 }
 

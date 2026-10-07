@@ -1,0 +1,50 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Importer des prospects") }}</h1>
+  <p class="discret">{{ _("Fichier CSV au format de commercial/prospects.csv (UTF-8, séparateur « ; »). Rien n'est écrit avant votre confirmation : l'aperçu signale les doublons (SIREN ou nom), les exclusions et les lignes sans source.") }}</p>
+</div>
+{{ sous_navigation("importer") }}
+
+{% if lignes is none %}
+<section class="carte" aria-labelledby="t-fichier">
+  <h2 id="t-fichier">{{ _("1. Choisir le fichier") }}</h2>
+  <form method="post" action="{{ base }}/importer" enctype="multipart/form-data" class="formulaire">{{ csrf_champ(csrf) }}
+    <label for="i-fichier">{{ _("Fichier CSV") }}</label><input id="i-fichier" name="fichier" type="file" accept=".csv,text/csv" required>
+    <button type="submit" class="btn btn-principal">{{ _("Analyser") }}</button>
+  </form>
+  <h3>{{ _("Colonnes reconnues") }}</h3>
+  <p><code>raison_sociale</code> ({{ _("obligatoire") }}), <code>siren</code>, <code>naf</code>, <code>effectif_tranche</code>, <code>ville</code>, <code>site_web</code>, <code>preuve_import</code>, <code>contact_publie</code>, <code>source_contact</code>, <code>raison_ciblage</code>, <code>exclusion_verifiee</code>, <code>date_collecte</code>, <code>pays</code>, <code>departement</code>, <code>groupe</code>, <code>source_url</code>.</p>
+  <p class="discret">{{ _("Une adresse n'est gardée que si la colonne source_contact donne la page où l'entreprise la publie. La ligne de commande fait la même chose : controldone prospection importer fichier.csv.") }}</p>
+</section>
+{% else %}
+{% set n_nouveaux = lignes|selectattr("statut", "equalto", "nouveau")|list|length %}
+<section class="carte" aria-labelledby="t-apercu">
+  <div class="carte-tete"><h2 id="t-apercu">{{ _("2. Aperçu") }} <span class="discret">{{ nom_fichier }}</span></h2>
+  <p class="discret">{{ _("{n} ligne(s) à importer sur {total}.", n=n_nouveaux, total=lignes|length) }}</p></div>
+  <div class="defilement">
+  <table class="donnees compacte">
+    <thead><tr><th scope="col" class="num">{{ _("Ligne") }}</th><th scope="col">{{ _("Entreprise") }}</th><th scope="col">{{ _("Résultat") }}</th><th scope="col" class="num">{{ _("Contacts") }}</th><th scope="col">{{ _("Remarques") }}</th></tr></thead>
+    <tbody>
+    {% for l in lignes %}
+      <tr><td class="num">{{ l.numero }}</td><td lang="fr">{{ l.raison_sociale or "—" }}</td>
+      <td><span class="badge {{ {'nouveau': 'b-valide', 'doublon': 'b-neutre', 'exclu': 'b-alerte', 'invalide': 'b-verifier'}[l.statut] }}">{{ _(libelles_import[l.statut]) }}</span>{% if l.motif %} <span class="discret">{{ _(motifs_import.get(l.motif, l.motif)) }}</span>{% endif %}</td>
+      <td class="num">{{ l.contacts|length }}</td>
+      <td>{% for a in l.avertissements %}<span class="discret">{{ _(avertissements_import.get(a, a)) }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if n_nouveaux %}
+  <form method="post" action="{{ base }}/importer" enctype="multipart/form-data" class="formulaire">{{ csrf_champ(csrf) }}
+    <input type="hidden" name="contenu" value="{{ contenu_b64 }}"><input type="hidden" name="nom_fichier" value="{{ nom_fichier }}">
+    <button type="submit" class="btn btn-principal">{{ _("Importer {n} prospect(s)", n=n_nouveaux) }}</button>
+  </form>
+  {% else %}<p class="vide">{{ _("Aucune ligne à importer.") }}</p>{% endif %}
+  <p><a class="petit-lien" href="{{ base }}/importer">{{ _("Choisir un autre fichier") }}</a></p>
+</section>
+{% endif %}
+{% endblock %}

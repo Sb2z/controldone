@@ -1,0 +1,105 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation, badge_statut, score %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Prospects") }}</h1>
+  <p class="discret">{{ _("Entreprises réelles, chacune avec sa source et sa date de collecte. Les groupes de la liste d'exclusion sont refusés à l'entrée.") }}</p>
+</div>
+{{ sous_navigation("prospects") }}
+
+<section class="carte" id="liste" aria-labelledby="t-liste">
+<h2 id="t-liste" class="vh">{{ _("Liste des prospects") }}</h2>
+<form method="get" action="{{ base }}/prospects#liste" class="filtres" role="search" aria-label="{{ _("Filtrer les prospects") }}" data-filtres>
+  <div class="filtre filtre-large">
+    <label for="p-q">{{ _("Recherche") }}</label>
+    <input id="p-q" name="q" maxlength="80" value="{{ req.brut.get('q', '') }}" placeholder="{{ _("nom, ville, SIREN, NAF") }}">
+  </div>
+  <div class="filtre">
+    <label for="p-statut">{{ _("Statut") }}</label>
+    <select id="p-statut" name="statut"><option value="">{{ _("Tous") }}</option>{% for st in statuts %}<option value="{{ st }}"{% if req.brut.get('statut') == st %} selected{% endif %}>{{ _(libelles_statut[st]) }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="p-score">{{ _("Score") }}</label>
+    <select id="p-score" name="score"><option value="">{{ _("Tous") }}</option>{% for code, lib in creneaux.items() %}<option value="{{ code }}"{% if req.brut.get('score') == code %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="p-pays">{{ _("Pays") }}</label>
+    <select id="p-pays" name="pays"><option value="">{{ _("Tous") }}</option>{% for x in pays %}<option value="{{ x }}"{% if req.brut.get('pays') == x %} selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="p-naf">{{ _("Secteur (NAF)") }}</label>
+    <select id="p-naf" name="naf"><option value="">{{ _("Tous") }}</option>{% for x in nafs %}<option value="{{ x }}"{% if req.brut.get('naf') == x %} selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="p-taille">{{ _("Taille") }}</label>
+    <select id="p-taille" name="taille"><option value="">{{ _("Toutes") }}</option>{% for code, lib in libelles_tranche.items() %}<option value="{{ code }}"{% if req.brut.get('taille') == code %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select>
+  </div>
+  <div class="filtre">
+    <label for="p-source">{{ _("Source") }}</label>
+    <select id="p-source" name="source"><option value="">{{ _("Toutes") }}</option>{% for code, lib in libelles_source.items() %}<option value="{{ code }}"{% if req.brut.get('source') == code %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
+  </div>
+  {{ fin_filtres(req, "p", base ~ "/prospects") }}
+</form>
+<div data-resultats>
+{{ nb_resultats(p, req, _("prospect"), _("prospects")) }}
+<div class="defilement">
+<table class="donnees compacte">
+  <caption class="vh">{{ _("Prospects") }}, {{ _("page {n} sur {total}", n=p.page, total=p.pages) }}</caption>
+  <thead><tr>{{ th_tri(req, "nom", _("Entreprise")) }}{{ th_tri(req, "score", _("Score"), "num") }}<th scope="col">{{ _("Statut") }}</th><th scope="col">NAF</th><th scope="col">{{ _("Taille") }}</th><th scope="col">{{ _("Lieu") }}</th><th scope="col" class="num">{{ _("Adresses") }}</th><th scope="col">{{ _("Source") }}</th>{{ th_tri(req, "cree", _("Ajouté")) }}</tr></thead>
+  <tbody>
+  {% for x in p.elements %}{% set pr = x.p %}
+  <tr>
+    <td><a href="{{ base }}/prospects/{{ pr.id }}"><span lang="fr">{{ pr.raison_sociale }}</span></a>{% if x.exclu %} <span class="badge b-alerte">{{ _("Exclu") }}</span>{% endif %}{% if x.sequence %} <span class="badge b-propose">{{ _("Séquence en cours") }}</span>{% endif %}{% if pr.demo %} <span class="badge b-demo">{{ _("Fictif") }}</span>{% endif %}</td>
+    <td class="num">{{ score(pr.score) }}</td>
+    <td>{{ badge_statut(pr.statut, libelles_statut) }}</td>
+    <td><code>{{ pr.naf or "—" }}</code></td>
+    <td>{{ libelles_tranche.get(pr.tranche_effectif or "", "—") }}</td>
+    <td><span lang="fr">{{ pr.ville or "—" }}</span>{% if pr.departement %} ({{ pr.departement }}){% endif %} <span class="discret">{{ pr.pays }}</span></td>
+    <td class="num">{{ x.courriels }}</td>
+    <td>{{ _(libelles_source.get(pr.source, pr.source)) }}</td>
+    <td>{{ pr.cree_le|date(False) }}</td>
+  </tr>
+  {% else %}<tr><td colspan="9" class="vide">{% if req.actif %}{{ _("Aucun prospect ne correspond à ces critères.") }}{% else %}{{ _("Aucun prospect. Importez un fichier ou recherchez des entreprises, ou saisissez-en un ci-dessous.") }}{% endif %}</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{{ pagination(p, req, _("Pages des prospects")) }}
+</div>
+</section>
+
+<section class="carte" id="nouveau" aria-labelledby="t-nouveau">
+  <h2 id="t-nouveau">{{ _("Saisir un prospect") }}</h2>
+  <p class="discret">{{ _("Une entreprise réelle seulement, avec la page qui la prouve. Une adresse doit avoir été publiée par l'entreprise (ou vous avoir été donnée) : indiquez la page où elle figure. Aucune adresse devinée.") }}</p>
+  <form method="post" action="{{ base }}/prospects" class="formulaire">{{ csrf_champ(csrf) }}
+    <label for="n-rs">{{ _("Raison sociale") }}</label><input id="n-rs" name="raison_sociale" required maxlength="300">
+    <label for="n-src">{{ _("Page source (fiche publique, site de l'entreprise)") }}</label><input id="n-src" name="source_url" type="url" required maxlength="1000" placeholder="https://">
+    <div class="champs-2">
+      <div><label for="n-siren">SIREN</label><input id="n-siren" name="siren" maxlength="9" inputmode="numeric" pattern="[0-9]{9}"></div>
+      <div><label for="n-naf">{{ _("Code NAF") }}</label><input id="n-naf" name="naf" maxlength="10" placeholder="46.49Z"></div>
+    </div>
+    <div class="champs-2">
+      <div><label for="n-taille">{{ _("Tranche d'effectif") }}</label><select id="n-taille" name="tranche_effectif"><option value="">{{ _("Inconnue") }}</option>{% for code, lib in libelles_tranche.items() %}<option value="{{ code }}">{{ lib }}</option>{% endfor %}</select></div>
+      <div><label for="n-pays">{{ _("Pays (code à deux lettres)") }}</label><input id="n-pays" name="pays" maxlength="2" value="FR"></div>
+    </div>
+    <div class="champs-2">
+      <div><label for="n-ville">{{ _("Ville") }}</label><input id="n-ville" name="ville" maxlength="200"></div>
+      <div><label for="n-dep">{{ _("Département") }}</label><input id="n-dep" name="departement" maxlength="3"></div>
+    </div>
+    <label for="n-site">{{ _("Site web") }}</label><input id="n-site" name="site_web" type="url" maxlength="500" placeholder="https://">
+    <label for="n-preuve">{{ _("Preuve d'import hors UE (citation exacte entre « »)") }}</label><textarea id="n-preuve" name="preuve_import" rows="2" maxlength="2000"></textarea>
+    <label for="n-preuve-url">{{ _("Page de la preuve") }}</label><input id="n-preuve-url" name="preuve_url" type="url" maxlength="1000" placeholder="https://">
+    <label for="n-douane">{{ _("Service douane interne") }}</label>
+    <select id="n-douane" name="sans_service_douane">{% for code, lib in libelles_douane.items() %}<option value="{{ code }}"{% if code == "inconnu" %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
+    <fieldset class="prosp-etape"><legend>{{ _("Contact publié (facultatif)") }}</legend>
+      <label for="n-adr">{{ _("Adresse électronique publiée") }}</label><input id="n-adr" name="adresse" type="email" maxlength="320" placeholder="contact@…">
+      <label for="n-form">{{ _("ou page de formulaire de contact") }}</label><input id="n-form" name="url_formulaire" type="url" maxlength="1000" placeholder="https://">
+      <label for="n-src-c">{{ _("Page où le contact est publié") }}</label><input id="n-src-c" name="source_contact" type="url" maxlength="1000" placeholder="https://">
+    </fieldset>
+    <label for="n-cible">{{ _("Raison du ciblage") }}</label><textarea id="n-cible" name="raison_ciblage" rows="2" maxlength="2000"></textarea>
+    <button type="submit" class="btn btn-principal">{{ _("Enregistrer le prospect") }}</button>
+  </form>
+</section>
+{% endblock %}

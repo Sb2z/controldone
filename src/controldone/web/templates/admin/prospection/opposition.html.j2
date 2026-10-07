@@ -1,0 +1,49 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation, badge_statut %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Liste d'opposition") }}</h1>
+  <p class="discret">{{ _("Adresses qui ne doivent plus recevoir de courriel : désinscriptions, rebonds, « ne plus contacter ». Vérifiée avant chaque préparation et avant chaque envoi. Seule l'empreinte de l'adresse est conservée, et elle reste après la purge des prospects.") }}</p>
+</div>
+{{ sous_navigation("opposition") }}
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-ajout">
+  <h2 id="t-ajout">{{ _("Ajouter une adresse") }}</h2>
+  <form method="post" action="{{ base }}/opposition" class="formulaire">{{ csrf_champ(csrf) }}
+    <label for="o-adr">{{ _("Adresse électronique") }}</label><input id="o-adr" name="adresse" type="email" required maxlength="320">
+    <label for="o-motif">{{ _("Motif") }}</label>
+    <select id="o-motif" name="motif">{% for code, lib in libelles_motif_suppression.items() %}<option value="{{ code }}">{{ _(lib) }}</option>{% endfor %}</select>
+    <button type="submit" class="btn">{{ _("Ajouter à la liste") }}</button>
+  </form>
+</section>
+
+<section class="carte" id="conservation" aria-labelledby="t-conserv">
+  <h2 id="t-conserv">{{ _("Conservation (3 ans)") }}</h2>
+  <p class="discret">{{ _("Un prospect sans contact émanant de lui depuis 3 ans (à compter de la collecte ou de sa dernière réponse) est à purger. Les clients ne sont pas concernés.") }}</p>
+  {% if a_purger %}
+  <ul class="liste-simple">{% for p in a_purger[:20] %}<li><a href="{{ base }}/prospects/{{ p.id }}"><span lang="fr">{{ p.raison_sociale }}</span></a> {{ badge_statut(p.statut, libelles_statut) }} <span class="discret">{{ _("collecté le {date}", date=p.collecte_le.isoformat()) }}</span></li>{% endfor %}</ul>
+  <form method="post" action="{{ base }}/purger" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn">{{ _("Purger {n} prospect(s)", n=a_purger|length) }}</button></form>
+  {% else %}<p class="vide">{{ _("Aucun prospect à purger.") }}</p>{% endif %}
+</section>
+</div>
+
+<section class="carte" aria-labelledby="t-liste">
+  <h2 id="t-liste">{{ _("Adresses opposées") }} <span class="discret num">{{ liste|length }}</span></h2>
+  {% if liste %}
+  <div class="defilement">
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Adresse") }}</th><th scope="col">{{ _("Motif") }}</th><th scope="col">{{ _("Origine") }}</th><th scope="col">{{ _("Date") }}</th></tr></thead>
+    <tbody>
+    {% for x in liste %}
+      <tr><td>{% if x.contact %}<code>{{ x.contact.adresse }}</code> <a class="petit-lien" href="{{ base }}/prospects/{{ x.contact.prospect_id }}">{{ _("fiche") }}</a>{% else %}<span class="discret">{{ _("empreinte seulement") }}</span> <code>{{ x.s.empreinte[:12] }}…</code>{% endif %}</td>
+      <td>{{ _(libelles_motif_suppression.get(x.s.motif, x.s.motif)) }}</td><td lang="fr">{{ x.s.source }}</td><td>{{ x.s.cree_le|date }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="vide">{{ _("Liste vide. Une désinscription par le lien des courriels, un « STOP » ou un rebond enregistré l'alimentent.") }}</p>{% endif %}
+</section>
+{% endblock %}

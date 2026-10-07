@@ -142,6 +142,10 @@ def create_app(parametres: ParametresWeb | None = None) -> FastAPI:
     app.include_router(routes_finances.routeur_webhooks)
     app.include_router(routes_admin.routeur)
     app.include_router(routes_client.routeur)
+    from controldone.web import routes_prospection  # module « Marketing » du fondateur (D-5001)
+
+    app.include_router(routes_prospection.routeur)
+    app.include_router(routes_prospection.routeur_public)
     app.mount("/api/v1", creer_api(plateforme, etat))
     app.mount("/static", StaticFiles(directory=STATIQUE), name="static")
 

@@ -10,6 +10,7 @@
     controldone sauvegarde sauvegarder|verifier|restaurer|controler|rotation|alerter|exercice|exercice-mensuel …
     controldone migrer [--etat] [--sans-sauvegarde]
     controldone alertes notifier | essai | etat | historique [--limite N]
+    controldone prospection importer <fichier.csv> [--essai] | etapes | etat | purger [--oui]
 
 ``diagnostic`` : exécute le pipeline sur un lot (chaque sous-dossier de premier niveau qui contient des
 documents est une frontière de regroupement naturelle) et écrit ``report.html``, ``report.pdf``,
@@ -479,6 +480,10 @@ def main(argv: list[str] | None = None) -> int:
     from controldone.auth.cli_securite import ajouter_commandes
 
     ajouter_commandes(sous)  # debit lister|effacer, reinitialiser-mot-de-passe (D-3201)
+
+    from controldone.prospection.cli import ajouter_commandes as commandes_prospection
+
+    commandes_prospection(sous)  # prospection importer|etapes|etat|purger (D-5009)
 
     cf = sous.add_parser("creer-fondateur", help="compte fondateur de production (mot de passe saisi + TOTP)")
     cf.add_argument("--email", required=True)

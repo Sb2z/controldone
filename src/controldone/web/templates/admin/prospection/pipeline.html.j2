@@ -1,0 +1,34 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation, score %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Pipeline") }}</h1>
+  <p class="discret">{{ _("Une colonne par étape. Pour déplacer un prospect, choisissez son nouveau statut sur sa carte. Passer à une autre étape que « qualifié » ou « contacté » arrête sa séquence.") }}</p>
+</div>
+{{ sous_navigation("pipeline") }}
+<div class="prosp-tableau" role="region" aria-label="{{ _("Tableau du pipeline") }}" tabindex="0">
+{% for st in statuts %}{% set cartes = colonnes[st] %}
+  <section class="prosp-colonne" aria-labelledby="col-{{ st }}">
+    <h2 id="col-{{ st }}">{{ _(libelles_statut[st]) }} <span class="discret num">{{ cartes|length }}</span></h2>
+    {% for x in cartes[:limite] %}{% set pr = x.p %}
+    <article class="prosp-carte">
+      <a class="nom" href="{{ base }}/prospects/{{ pr.id }}"><span lang="fr">{{ pr.raison_sociale }}</span></a>
+      <div class="meta-ligne"><span>{{ score(pr.score) }}</span><span><code>{{ pr.naf or "—" }}</code> · {{ pr.pays }}</span></div>
+      {% if x.exclu %}<span class="badge b-alerte">{{ _("Exclu") }}</span>{% endif %}
+      {% if x.sequence %}<span class="badge b-propose">{{ _("Séquence en cours") }}</span>{% endif %}
+      <form method="post" action="{{ base }}/prospects/{{ pr.id }}/statut">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ base }}/pipeline">
+        <label class="vh" for="st-{{ pr.id }}">{{ _("Nouveau statut") }}</label>
+        <select id="st-{{ pr.id }}" name="statut">{% for s2 in statuts %}<option value="{{ s2 }}"{% if s2 == st %} selected{% endif %}>{{ _(libelles_statut[s2]) }}</option>{% endfor %}</select>
+        <button type="submit" class="btn btn-petit">{{ _("Déplacer") }}<span class="vh"> : <span lang="fr">{{ pr.raison_sociale }}</span></span></button>
+      </form>
+    </article>
+    {% else %}
+    <p class="vide discret">{{ _("Aucun prospect.") }}</p>
+    {% endfor %}
+    {% if cartes|length > limite %}<a class="petit-lien" href="{{ base }}/prospects?statut={{ st }}">{{ _("+ {n} autre(s) dans la liste", n=cartes|length - limite) }}</a>{% endif %}
+  </section>
+{% endfor %}
+</div>
+{% endblock %}

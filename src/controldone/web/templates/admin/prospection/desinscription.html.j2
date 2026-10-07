@@ -1,0 +1,20 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% block contenu %}
+<section class="carte carte-etroite" aria-labelledby="t-desinscription">
+  <h1 id="t-desinscription">{{ _("Désinscription") }}</h1>
+  {% if etat == "confirmer" %}
+    <p>{{ _("Vous ne recevrez plus de message de prospection de ControlDOne à cette adresse.") }}</p>
+    <form method="post" action="/desinscription/{{ jeton }}" class="formulaire">{{ csrf_champ(csrf) }}
+      <button type="submit" class="btn btn-principal">{{ _("Confirmer la désinscription") }}</button>
+    </form>
+    <p class="discret">{{ _("Vous pouvez aussi répondre « STOP » au message reçu.") }}</p>
+  {% elif etat == "faite" %}
+    <p role="status">{{ _("C'est fait : votre adresse est dans notre liste d'opposition. Aucun autre message de prospection ne vous sera envoyé.") }}</p>
+  {% elif etat == "trop" %}
+    <p role="alert">{{ _("Trop de demandes en peu de temps : réessayez dans une minute, ou répondez « STOP » au message reçu.") }}</p>
+  {% else %}
+    <p role="alert">{{ _("Ce lien de désinscription n'est pas valide. Répondez « STOP » au message reçu : votre adresse sera retirée.") }}</p>
+  {% endif %}
+</section>
+{% endblock %}

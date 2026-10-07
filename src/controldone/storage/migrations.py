@@ -144,6 +144,22 @@ def _m0005_langue_utilisateur(conn: Connection) -> None:
     _ajouter_colonne(conn, "users", "langue")
 
 
+def _m0006_prospection(conn: Connection) -> None:
+    """Tables du module de prospection du fondateur (niveau plateforme, D-5001). Tables nouvelles : rien à faire
+    si l'étape 1 les a déjà créées."""
+    from controldone.storage import models_prospection as mp
+
+    for modele in (
+        mp.Prospect,
+        mp.ContactProspect,
+        mp.EvenementProspect,
+        mp.SequenceProspection,
+        mp.InscriptionSequence,
+        mp.Suppression,
+    ):
+        modele.__table__.create(conn, checkfirst=True)
+
+
 MIGRATIONS: tuple[Migration, ...] = (
     Migration(1, "socle", "tables manquantes (débit, sessions, facturation, notifications)", _m0001_socle),
     Migration(2, "index_journal_taches", "index du journal et des tâches", _m0002_index_journal_taches),
@@ -164,6 +180,12 @@ MIGRATIONS: tuple[Migration, ...] = (
         "langue_utilisateur",
         "colonne users.langue (langue de l'interface par compte)",
         _m0005_langue_utilisateur,
+    ),
+    Migration(
+        6,
+        "prospection",
+        "tables du module de prospection du fondateur (D-5001)",
+        _m0006_prospection,
     ),
 )
 

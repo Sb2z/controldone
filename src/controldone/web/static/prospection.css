@@ -1,0 +1,63 @@
+/* Module « Marketing » du fondateur (/admin/prospection) : chargé sur ces pages seulement.
+   Reprend les variables du thème (app.css) ; aucun style en ligne (CSP). */
+
+.prosp-nav a[aria-current="page"] { color: var(--encre); border-color: var(--accent); background: var(--accent-clair); }
+
+.prosp-statut.prosp-st-qualifie, .prosp-statut.prosp-st-contacte { background: var(--accent-clair); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.prosp-statut.prosp-st-a_repondu, .prosp-statut.prosp-st-rendez_vous, .prosp-statut.prosp-st-essai { background: var(--verifier-fond); color: var(--verifier); border-color: var(--verifier-filet); }
+.prosp-statut.prosp-st-client { background: var(--conforme-fond); color: var(--conforme); border-color: var(--conforme-filet); }
+.prosp-statut.prosp-st-perdu, .prosp-statut.prosp-st-ne_plus_contacter { background: var(--surface-2); color: var(--encre-3); border-color: var(--filet); }
+.prosp-statut::before { display: none; }
+
+.prosp-score { display: inline-flex; min-width: 2.4rem; justify-content: center; padding: .1rem .45rem; border-radius: 999px;
+  border: 1px solid var(--filet-fort); color: var(--encre-2); font-weight: 600; font-size: .85rem; }
+.prosp-score-moyen { border-color: var(--verifier-filet); color: var(--verifier); }
+.prosp-score-haut { border-color: var(--conforme-filet); color: var(--conforme); }
+
+/* Tableau « pourquoi ce score » */
+.prosp-points { font-variant-numeric: tabular-nums; font-weight: 600; }
+.prosp-points.negatif { color: var(--certain); }
+
+/* Pipeline (kanban) : colonnes défilantes, cartes avec changement de statut par formulaire */
+.prosp-tableau { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: .9rem; overflow-x: auto;
+  padding-bottom: .8rem; scroll-snap-type: x proximity; }
+.prosp-colonne { background: var(--surface); border: 1px solid var(--filet); border-radius: var(--rayon); padding: .7rem; min-height: 8rem;
+  scroll-snap-align: start; display: flex; flex-direction: column; gap: .55rem; }
+.prosp-colonne > h2 { font-size: .92rem; margin: 0 0 .2rem; display: flex; justify-content: space-between; gap: .5rem; align-items: baseline; }
+.prosp-carte { background: var(--surface-pleine); border: 1px solid var(--filet); border-radius: var(--rayon-petit); padding: .6rem .65rem;
+  display: flex; flex-direction: column; gap: .35rem; }
+.prosp-carte a.nom { font-weight: 600; text-decoration: none; color: var(--encre); }
+.prosp-carte a.nom:hover, .prosp-carte a.nom:focus-visible { text-decoration: underline; }
+.prosp-carte .meta-ligne { display: flex; justify-content: space-between; gap: .4rem; font-size: .8rem; color: var(--encre-2); }
+.prosp-carte form { display: flex; gap: .3rem; align-items: center; }
+.prosp-carte select { flex: 1; min-width: 0; font-size: .8rem; padding: .2rem .3rem; }
+
+/* Entonnoir de conversion */
+.prosp-entonnoir td.barre-col { width: 45%; }
+
+/* Historique de la fiche */
+.prosp-chrono { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--filet); }
+.prosp-chrono li { position: relative; padding: .2rem 0 .9rem 1rem; }
+.prosp-chrono li::before { content: ""; position: absolute; left: -6px; top: .55rem; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--surface-pleine); border: 2px solid var(--accent); }
+.prosp-chrono .quand { font-size: .78rem; color: var(--encre-3); }
+.prosp-chrono pre { white-space: pre-wrap; word-break: break-word; margin: .35rem 0 0; padding: .55rem .7rem; background: var(--surface-2);
+  border-radius: var(--rayon-petit); font-size: .82rem; max-height: 18rem; overflow: auto; }
+
+/* Aperçu d'un courriel (texte brut) */
+pre.prosp-apercu { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--filet);
+  border-radius: var(--rayon-petit); padding: .8rem .9rem; font-size: .85rem; max-height: 32rem; overflow: auto; }
+.prosp-manquant { color: var(--certain); }
+.prosp-etapes-seq textarea { min-height: 14rem; font-family: var(--mono); font-size: .85rem; }
+.prosp-etape { border-top: 1px solid var(--filet-2); padding-top: .8rem; margin-top: .8rem; }
+.prosp-liste-courte { margin: .3rem 0 0; padding-left: 1.1rem; }
+.prosp-liste-courte li { margin: .15rem 0; }
+.prosp-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; }
+.prosp-actions .formulaire { margin-top: 0; }
+.prosp-cases { display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+.prosp-cases label { font-weight: 400; display: inline-flex; gap: .35rem; align-items: center; margin: 0; }
+.prosp-check li { margin: .35rem 0; }
+
+@media (max-width: 760px) {
+  .prosp-tableau { grid-auto-columns: 82%; }
+}

@@ -1,0 +1,56 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Courriels de prospection") }}</h1>
+  <p class="discret">{{ _("Chaque courriel est d'abord approuvé dans la file de validation. Ensuite : envoi par la messagerie configurée, ou déclaration d'un envoi fait depuis votre propre messagerie. Opposition, exclusion et plafond sont revérifiés juste avant.") }}</p>
+</div>
+{{ sous_navigation("courriels") }}
+
+<section class="kpis" aria-label="{{ _("Plafonds du jour") }}">
+  <div class="kpi"><div class="kpi-lib">{{ _("Préparés aujourd'hui") }}</div><div class="kpi-val num">{{ compteurs.preparations }} / {{ compteurs.plafond_preparations }}</div></div>
+  <div class="kpi"><div class="kpi-lib">{{ _("Envoyés aujourd'hui") }}</div><div class="kpi-val num">{{ compteurs.envois }} / {{ compteurs.plafond_envois }}</div></div>
+  <div class="kpi{% if not envoi_configure %} kpi-alerte{% endif %}"><div class="kpi-lib">{{ _("Messagerie de prospection") }}</div><div class="kpi-val">{{ _("configurée") if envoi_configure else _("non configurée") }}</div>
+    <div class="kpi-note">{{ _("sans messagerie, un courriel approuvé reste approuvé : rien ne part") }}</div></div>
+</section>
+
+<section class="carte" aria-labelledby="t-etapes">
+  <div class="carte-tete"><h2 id="t-etapes">{{ _("Étapes échues") }}</h2>
+  <form method="post" action="{{ base }}/courriels/etapes" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn">{{ _("Préparer les étapes échues") }}</button></form></div>
+  <p class="discret">{{ _("L'agent de prospection le fait chaque jour ; ce bouton le fait tout de suite. Les étapes préparées sont des brouillons à approuver.") }}</p>
+</section>
+
+<section class="carte" aria-labelledby="t-liste">
+  <h2 id="t-liste">{{ _("Tous les courriels") }}</h2>
+  {% if liste %}
+  <div class="defilement">
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Prospect") }}</th><th scope="col">{{ _("Objet") }}</th><th scope="col" class="num">{{ _("Étape") }}</th><th scope="col">{{ _("État") }}</th><th scope="col">{{ _("Date") }}</th><th scope="col"><span class="vh">{{ _("Actions") }}</span></th></tr></thead>
+    <tbody>
+    {% for x in liste %}{% set a = x.a %}
+      <tr><td><a href="{{ base }}/prospects/{{ x.prospect_id }}"><span lang="fr">{{ x.prospect }}</span></a></td>
+      <td lang="fr">{{ a.payload_effectif.get("objet", "") }}</td><td class="num">{{ x.rang }}</td>
+      <td><span class="badge {{ {'brouillon': 'b-propose', 'approuve': 'b-verifier', 'corrige': 'b-verifier', 'envoye': 'b-valide', 'refuse': 'b-rejete'}.get(a.statut.value, 'b-neutre') }}">{{ _(libelles_courriel[a.statut.value]) }}</span>
+        {% if x.declare %}<span class="discret">{{ _("envoi déclaré") }}</span>{% endif %}
+        {% if a.motif_blocage %}<span class="alerte-ligne">{{ _("Bloqué par les garde-fous.") }}</span>{% endif %}
+        {% for b in x.blocages %}<br><span class="prosp-manquant">{{ _(blocages_lib[b]) }}</span>{% endfor %}</td>
+      <td>{{ (a.envoye_le or a.decide_le or a.cree_le)|date }}</td>
+      <td>{% if a.statut.value == "brouillon" %}<a class="petit-lien" href="/admin/validation#sorties">{{ _("Valider") }}</a>
+      {% elif a.statut.value in ("approuve", "corrige") and not x.blocages %}
+        {% if envoi_configure %}<form method="post" action="{{ base }}/courriels/{{ a.id }}/envoyer" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit btn-principal">{{ _("Envoyer") }}</button></form>{% else %}<span class="discret">{{ _("Approuvé, envoi non configuré") }}</span>{% endif %}
+        <form method="post" action="{{ base }}/courriels/{{ a.id }}/declarer" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn btn-petit">{{ _("Je l'ai envoyé moi-même") }}</button></form>
+      {% endif %}</td></tr>
+      {% if a.statut.value in ("approuve", "corrige") %}
+      <tr><td colspan="6"><details><summary>{{ _("Texte approuvé à copier dans votre messagerie") }}</summary>
+        <p>{{ _("Destinataire :") }} <code>{{ a.payload_effectif.get("destinataires", [])|join(", ") }}</code></p>
+        <pre class="prosp-apercu" lang="fr" tabindex="0">{{ a.payload_effectif.get("corps", "") }}</pre></details></td></tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="vide">{{ _("Aucun courriel préparé. Ouvrez la fiche d'un prospect qualifié et préparez la séquence.") }}</p>{% endif %}
+</section>
+{% endblock %}

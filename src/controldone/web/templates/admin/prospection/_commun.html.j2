@@ -1,0 +1,18 @@
+{# Module « Marketing » : sous-navigation, badges de statut, feuille de style propre (chargée sur ces pages seulement). #}
+{% macro feuille() -%}<link rel="stylesheet" href="/static/prospection.css">{%- endmacro %}
+
+{% macro sous_navigation(actif) -%}
+<nav class="ancres prosp-nav" aria-label="{{ _("Marketing : sections") }}">
+  {% for cle, url, lib in [("tableau", "/admin/prospection", _("Vue d'ensemble")), ("prospects", "/admin/prospection/prospects", _("Prospects")), ("pipeline", "/admin/prospection/pipeline", _("Pipeline")), ("importer", "/admin/prospection/importer", _("Importer")), ("rechercher", "/admin/prospection/rechercher", _("Rechercher")), ("sequences", "/admin/prospection/sequences", _("Séquences")), ("courriels", "/admin/prospection/courriels", _("Courriels")), ("opposition", "/admin/prospection/opposition", _("Opposition")), ("delivrabilite", "/admin/prospection/delivrabilite", _("Délivrabilité"))] %}
+  <a href="{{ url }}"{% if actif == cle %} aria-current="page"{% endif %}>{{ lib }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro badge_statut(code, libelles) -%}
+<span class="badge prosp-statut prosp-st-{{ code }}">{{ _(libelles.get(code, code)) }}</span>
+{%- endmacro %}
+
+{% macro score(n) -%}
+<span class="prosp-score{% if n >= 70 %} prosp-score-haut{% elif n >= 40 %} prosp-score-moyen{% endif %}" title="{{ _("Score sur 100") }}"><span class="num">{{ n }}</span></span>
+{%- endmacro %}

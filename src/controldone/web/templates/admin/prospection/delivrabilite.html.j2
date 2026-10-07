@@ -1,0 +1,55 @@
+{% extends "base.html.j2" %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Délivrabilité") }}</h1>
+  <p class="discret">{{ _("Liste de contrôle à faire vous-même chez votre hébergeur de nom de domaine et votre messagerie. Page d'information : l'application ne configure rien et ne crée aucun compte.") }}</p>
+</div>
+{{ sous_navigation("delivrabilite") }}
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-dns">
+  <h2 id="t-dns">{{ _("1. Authentifier le domaine d'envoi") }}</h2>
+  <ul class="prosp-check">
+    <li><strong>SPF</strong> : {{ _("un enregistrement TXT sur le domaine d'envoi qui liste les serveurs autorisés de votre messagerie (un seul enregistrement SPF par domaine), terminé par ~all ou -all.") }}</li>
+    <li><strong>DKIM</strong> : {{ _("activez la signature dans votre messagerie et publiez la clé publique qu'elle fournit (enregistrement TXT ou CNAME sur un sélecteur). Clé de 2048 bits si possible.") }}</li>
+    <li><strong>DMARC</strong> : {{ _("un enregistrement TXT _dmarc sur le domaine, d'abord en p=none avec une adresse de rapports (rua), puis p=quarantine quand les rapports montrent que SPF et DKIM passent et sont alignés sur le domaine de l'adresse d'expédition.") }}</li>
+    <li>{{ _("Envoyez depuis une adresse à votre nom sur votre domaine (pas une adresse gratuite), avec un nom d'expéditeur réel.") }}</li>
+    <li>{{ _("Envisagez un sous-domaine dédié à la prospection : un incident n'atteint pas la messagerie principale.") }}</li>
+  </ul>
+</section>
+
+<section class="carte" aria-labelledby="t-montee">
+  <h2 id="t-montee">{{ _("2. Monter en charge doucement") }}</h2>
+  <ul class="prosp-check">
+    <li>{{ _("Domaine ou adresse neufs : quelques messages par jour la première semaine, puis augmentez progressivement si aucun rebond ni plainte n'apparaît.") }}</li>
+    <li>{{ _("Plafonds configurés : {p} préparations et {e} envois par jour (config/prospection.yaml).", p=config.preparations_par_jour, e=config.envois_par_jour) }}</li>
+    <li>{{ _("Envoyez un message à la fois, à des heures de bureau ; jamais d'envoi groupé (et en Suisse, uniquement des messages individuels).") }}</li>
+    <li>{{ _("Enregistrez chaque rebond définitif : l'adresse passe dans la liste d'opposition et n'est plus jamais utilisée.") }}</li>
+  </ul>
+</section>
+</div>
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-contenu">
+  <h2 id="t-contenu">{{ _("3. Contenu") }}</h2>
+  <ul class="prosp-check">
+    <li>{{ _("Texte brut, court, sans pièce jointe ni image ; un lien au plus (la séquence le vérifie).") }}</li>
+    <li>{{ _("Aucun pixel de suivi ni lien traqué : l'application n'en ajoute jamais, et les réponses sont la seule mesure.") }}</li>
+    <li>{{ _("Identité de l'expéditeur, origine de l'adresse et opposition « STOP » dans chaque message (ajoutées par le pied automatique).") }}</li>
+    <li>{{ _("Avec une messagerie configurée, les en-têtes List-Unsubscribe et List-Unsubscribe-Post permettent la désinscription en un clic depuis la messagerie du destinataire.") }}</li>
+  </ul>
+</section>
+
+<section class="carte" aria-labelledby="t-surveiller">
+  <h2 id="t-surveiller">{{ _("4. Surveiller") }}</h2>
+  <ul class="prosp-check">
+    <li>{{ _("Lisez les rapports DMARC (agrégés) chaque semaine au début.") }}</li>
+    <li>{{ _("Taux de plainte : le garder très bas ; un destinataire qui se plaint est ajouté à la liste d'opposition.") }}</li>
+    <li>{{ _("Vérifiez que l'adresse IP et le domaine ne figurent sur aucune liste de blocage publique.") }}</li>
+    <li>{{ _("Le lien de désinscription n'existe que si l'URL publique du service est configurée (CONTROLDONE_URL_PUBLIQUE ou CONTROLDONE_DOMAIN) ; sinon le message propose seulement « répondez STOP ».") }}</li>
+  </ul>
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+# Module de prospection du fondateur (/admin/prospection, D-5001 à D-5012).
+# Fichier versionné, modifiable sans code. Aucun secret ici : le secret des liens de désinscription vient de
+# l'environnement (CONTROLDONE_PROSPECTION_SECRET, sinon dérivé de la clé maîtresse).
+schema: controldone.prospection/1.0.0
+version: 1.0.0
+
+# Plafonds quotidiens (jour civil de Paris). Préparations : brouillons créés (fondateur et agent) ;
+# envois : courriels envoyés ou déclarés envoyés. Montée en charge prudente d'un domaine neuf : 10 à 20 par jour.
+plafonds:
+  preparations_par_jour: 15
+  envois_par_jour: 15
+
+# Conservation (référentiel CNIL « gestion des activités commerciales ») : 3 ans à compter de la collecte ou du
+# dernier contact émanant du prospect. Au-delà, le prospect est signalé « à purger » (purge par le fondateur).
+conservation_annees: 3
+
+# Groupes exclus (consigne du fondateur) : un prospect dont la dénomination, l'enseigne, le groupe déclaré, le
+# domaine du site ou d'une adresse correspond à l'un de ces motifs est bloqué à l'import, à la recherche, avant
+# la mise en file et avant l'envoi. Comparaison sans casse ni accents ; motif de 5 caractères ou moins : mot entier.
+# Liste reprise de commercial/scripts/prospection_sirene.py ; à compléter si un nouveau nom apparaît.
+exclusions:
+  - groupe: groupe_1
+    motifs: ["occitane", "l'occitane", "loccitane", "melvita", "erborian", "elemis", "sol de janeiro",
+             "dr vranjes", "limelife", "grown alchemist"]
+  - groupe: groupe_2
+    motifs: ["chanel", "paraffection", "eres", "lesage", "lemarie", "massaro", "goossens", "desrues",
+             "maison michel", "causse", "montex", "barrie", "holland & holland", "lognon"]
+
+# Règles par pays (à faire confirmer par un avocat du pays : commercial/prospects_methode.md § 5 bis).
+pays:
+  # Adresse nominative : bloquée sans base légale enregistrée par le fondateur (consentement, relation existante).
+  # Suisse : art. 3 al. 1 let. o LCD ; Belgique : adresses impersonnelles seulement sans consentement.
+  consentement_nominatif: [CH, BE]
+  # Aucune prospection (avis d'un avocat local attendu).
+  bloques: [LU]
+
+# Barème du score (0 à 100), calcul déterministe et expliqué (prospection/scoring.py).
+scoring:
+  # Commerce de gros de biens souvent importés hors UE (liste du script prospection_sirene.py).
+  naf_importateurs: ["46.15Z", "46.16Z", "46.18Z", "46.19B", "46.31Z", "46.37Z", "46.38B", "46.39B",
+                     "46.41Z", "46.42Z", "46.43Z", "46.44Z", "46.47Z", "46.48Z", "46.49Z", "46.51Z",
+                     "46.52Z", "46.65Z", "46.69B", "46.69C", "46.73B", "46.74A", "46.90Z"]
+  # Départements des principales plates-formes logistiques et portuaires (Marseille-Fos, Le Havre, Lyon, Lille,
+  # Île-de-France, Bordeaux, Nantes-Saint-Nazaire, Strasbourg, Toulouse).
+  departements_prioritaires: ["13", "76", "69", "59", "75", "77", "78", "91", "92", "93", "94", "95", "33",
+                              "44", "67", "31"]
+
+# Expéditeur des courriels (identité obligatoire dans chaque message, LCEN). Le SIREN et l'adresse viennent de
+# l'identité du vendeur (config/offres.yaml, CONTROLDONE_VENDEUR_*). Variable : CONTROLDONE_PROSPECTION_EXPEDITEUR_NOM.
+expediteur:
+  nom: "À COMPLÉTER"
+  fonction: "fondateur de ControlDOne"

@@ -1,0 +1,53 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Séquences") }}</h1>
+  <p class="discret">{{ _("Modèles de courriels en texte brut, un lien au plus par message. Les variables viennent de faits enregistrés : si un fait manque, la préparation est bloquée, jamais complétée au hasard. Le pied (identité, origine de l'adresse, opposition) est ajouté automatiquement.") }}</p>
+</div>
+{{ sous_navigation("sequences") }}
+
+<section class="carte" aria-labelledby="t-suivi">
+  <h2 id="t-suivi">{{ _("Suivi par étape") }}</h2>
+  <p class="discret">{{ _("Compteurs tirés des événements réels : courriels préparés, approuvés, envoyés, et réponses enregistrées par vous. Aucun pixel de suivi ni lien traqué.") }}</p>
+  {% for x in stats.sequences %}
+  <table class="donnees compacte">
+    <caption lang="fr">{{ x.sequence.nom }}</caption>
+    <thead><tr><th scope="col">{{ _("Étape") }}</th><th scope="col" class="num">{{ _("Préparés") }}</th><th scope="col" class="num">{{ _("Approuvés") }}</th><th scope="col" class="num">{{ _("Envoyés") }}</th><th scope="col" class="num">{{ _("Réponses") }}</th></tr></thead>
+    <tbody>
+    {% for rang, c in x.etapes|dictsort %}
+      <tr><th scope="row">{{ _("Étape {n}", n=rang) }}</th><td class="num">{{ c.prepares }}</td><td class="num">{{ c.approuves }}</td><td class="num">{{ c.envoyes }}</td><td class="num">{{ c.reponses }}</td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><th scope="row">{{ _("Inscrits / rendez-vous") }}</th><td class="num">{{ x.inscrits }}</td><td></td><td></td><td class="num">{{ x.rendez_vous }}</td></tr></tfoot>
+  </table>
+  {% endfor %}
+</section>
+
+<section class="carte" aria-labelledby="t-vars">
+  <h2 id="t-vars">{{ _("Variables") }}</h2>
+  <ul class="prosp-liste-courte">{% for nom in noms_variables %}<li><code>{{ "{" ~ nom ~ "}" }}</code> : {{ _(variables[nom]) }}</li>{% endfor %}</ul>
+</section>
+
+{% for q in sequences %}
+<section class="carte prosp-etapes-seq" id="seq-{{ q.id }}" aria-labelledby="t-{{ q.id }}">
+  <h2 id="t-{{ q.id }}" lang="fr">{{ q.nom }}</h2>
+  <p class="discret">{{ _("Modifiée le {date}.", date=q.modifie_le|date) }}</p>
+  <form method="post" action="{{ base }}/sequences/{{ q.id }}" class="formulaire">{{ csrf_champ(csrf) }}
+    <label for="{{ q.id }}-nom">{{ _("Nom") }}</label><input id="{{ q.id }}-nom" name="nom" maxlength="200" value="{{ q.nom }}" lang="fr" required>
+    {% for rang in range(1, 7) %}{% set e = q.etapes[rang - 1] if rang <= q.etapes|length else none %}
+    {% if e or rang == q.etapes|length + 1 %}
+    <fieldset class="prosp-etape"><legend>{{ _("Étape {n}", n=rang) }}{% if not e %} ({{ _("facultative, laisser vide") }}){% endif %}</legend>
+      <label for="{{ q.id }}-d{{ rang }}">{{ _("Délai depuis le premier envoi (jours)") }}</label><input id="{{ q.id }}-d{{ rang }}" name="delai_{{ rang }}" type="number" min="0" max="120" value="{{ e.delai_jours if e else '' }}">
+      <label for="{{ q.id }}-o{{ rang }}">{{ _("Objet") }}</label><input id="{{ q.id }}-o{{ rang }}" name="objet_{{ rang }}" maxlength="150" value="{{ e.objet if e else '' }}" lang="fr">
+      <label for="{{ q.id }}-c{{ rang }}">{{ _("Texte") }}</label><textarea id="{{ q.id }}-c{{ rang }}" name="corps_{{ rang }}" maxlength="5000" lang="fr">{{ e.corps if e else '' }}</textarea>
+    </fieldset>
+    {% endif %}
+    {% endfor %}
+    <button type="submit" class="btn btn-principal">{{ _("Enregistrer la séquence") }}</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

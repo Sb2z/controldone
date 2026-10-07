@@ -1,0 +1,168 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation, badge_statut, score %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}{% set p = d.p %}{% set ici = base ~ "/prospects/" ~ p.id %}
+<div class="titre-page">
+  <h1><span lang="fr">{{ p.raison_sociale }}</span></h1>
+  <p class="discret">{{ badge_statut(p.statut, libelles_statut) }} {{ score(p.score) }} · {{ _(libelles_source.get(p.source, p.source)) }} · {{ _("collecté le {date}", date=p.collecte_le.isoformat()) }}{% if p.siren %} · SIREN <code>{{ p.siren }}</code>{% endif %}</p>
+</div>
+{{ sous_navigation("prospects") }}
+{% if d.exclu %}<p class="message erreur" role="alert">{{ _("Liste d'exclusion : ce prospect ne peut recevoir aucun courriel.") }}</p>{% endif %}
+{% if p.pays in ("CH", "BE") %}<p class="alerte-ligne">{{ _("Pays à consentement : une adresse nominative exige une base légale enregistrée (consentement, relation existante). Les adresses génériques restent possibles, un message individuel à la fois.") }}</p>{% endif %}
+
+<div class="grille-2">
+<section class="carte" aria-labelledby="t-faits">
+  <h2 id="t-faits">{{ _("Faits et preuves") }}</h2>
+  <dl class="meta">
+    <div><dt>{{ _("Source") }}</dt><dd><a href="{{ p.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ p.source_url }}</a>{% if p.source_detail %} <span class="discret">({{ p.source_detail }})</span>{% endif %}</dd></div>
+    <div><dt>NAF</dt><dd><code>{{ p.naf or "—" }}</code></dd></div>
+    <div><dt>{{ _("Taille") }}</dt><dd>{{ libelles_tranche.get(p.tranche_effectif or "", "—") }}{% if p.effectif_libelle %} <span class="discret" lang="fr">({{ p.effectif_libelle }})</span>{% endif %}</dd></div>
+    <div><dt>{{ _("Lieu") }}</dt><dd><span lang="fr">{{ p.ville or "—" }}</span>{% if p.departement %} ({{ p.departement }}){% endif %}, {{ p.pays }}</dd></div>
+    <div><dt>{{ _("Site web") }}</dt><dd>{% if p.site_web %}<a href="{{ p.site_web }}" rel="noopener noreferrer nofollow" target="_blank">{{ p.site_web }}</a>{% else %}—{% endif %}</dd></div>
+    {% if p.groupe %}<div><dt>{{ _("Groupe déclaré") }}</dt><dd lang="fr">{{ p.groupe }}</dd></div>{% endif %}
+  </dl>
+  <h3>{{ _("Preuve d'import hors UE") }}</h3>
+  {% if p.preuve_import %}<blockquote lang="fr">{{ p.preuve_import }}</blockquote>
+  <p>{% if p.preuve_url %}<a href="{{ p.preuve_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ p.preuve_url }}</a>{% else %}<span class="prosp-manquant">{{ _("Page source de la preuve absente : à relever.") }}</span>{% endif %}</p>
+  {% else %}<p class="vide">{{ _("Aucune preuve enregistrée : relevez sur le site de l'entreprise une phrase qui montre l'import hors UE, avec la page.") }}</p>{% endif %}
+  {% if p.raison_ciblage %}<h3>{{ _("Raison du ciblage") }}</h3><p lang="fr">{{ p.raison_ciblage }}</p>{% endif %}
+  {% if p.base_legale %}<h3>{{ _("Base légale enregistrée") }}</h3><p lang="fr">{{ p.base_legale }}</p>{% endif %}
+  <details class="corriger"><summary>{{ _("Modifier les faits") }}</summary>
+    <form method="post" action="{{ ici }}/modifier" class="formulaire">{{ csrf_champ(csrf) }}
+      <label for="m-preuve">{{ _("Preuve d'import hors UE (citation exacte entre « »)") }}</label><textarea id="m-preuve" name="preuve_import" rows="3" maxlength="2000" lang="fr">{{ p.preuve_import or "" }}</textarea>
+      <label for="m-preuve-url">{{ _("Page de la preuve") }}</label><input id="m-preuve-url" name="preuve_url" type="url" maxlength="1000" value="{{ p.preuve_url or '' }}">
+      <label for="m-douane">{{ _("Service douane interne") }}</label>
+      <select id="m-douane" name="sans_service_douane">{% for code, lib in libelles_douane.items() %}<option value="{{ code }}"{% if code == p.sans_service_douane %} selected{% endif %}>{{ _(lib) }}</option>{% endfor %}</select>
+      <div class="champs-2">
+        <div><label for="m-naf">{{ _("Code NAF") }}</label><input id="m-naf" name="naf" maxlength="10" value="{{ p.naf or '' }}"></div>
+        <div><label for="m-taille">{{ _("Tranche d'effectif") }}</label><select id="m-taille" name="tranche_effectif"><option value="">{{ _("Inconnue") }}</option>{% for code, lib in libelles_tranche.items() %}<option value="{{ code }}"{% if code == p.tranche_effectif %} selected{% endif %}>{{ lib }}</option>{% endfor %}</select></div>
+      </div>
+      <div class="champs-2">
+        <div><label for="m-ville">{{ _("Ville") }}</label><input id="m-ville" name="ville" maxlength="200" value="{{ p.ville or '' }}"></div>
+        <div><label for="m-dep">{{ _("Département") }}</label><input id="m-dep" name="departement" maxlength="3" value="{{ p.departement or '' }}"></div>
+      </div>
+      <div class="champs-2">
+        <div><label for="m-pays">{{ _("Pays (code à deux lettres)") }}</label><input id="m-pays" name="pays" maxlength="2" value="{{ p.pays }}"></div>
+        <div><label for="m-site">{{ _("Site web") }}</label><input id="m-site" name="site_web" type="url" maxlength="500" value="{{ p.site_web or '' }}"></div>
+      </div>
+      <label for="m-groupe">{{ _("Groupe déclaré") }}</label><input id="m-groupe" name="groupe" maxlength="300" value="{{ p.groupe or '' }}">
+      <label for="m-cible">{{ _("Raison du ciblage") }}</label><textarea id="m-cible" name="raison_ciblage" rows="2" maxlength="2000" lang="fr">{{ p.raison_ciblage or "" }}</textarea>
+      <label for="m-base">{{ _("Base légale (adresse nominative en Suisse ou en Belgique)") }}</label><textarea id="m-base" name="base_legale" rows="2" maxlength="2000" lang="fr">{{ p.base_legale or "" }}</textarea>
+      <button type="submit" class="btn">{{ _("Enregistrer") }}</button>
+    </form>
+  </details>
+</section>
+
+<section class="carte" aria-labelledby="t-score">
+  <h2 id="t-score">{{ _("Pourquoi ce score") }} {{ score(p.score) }}</h2>
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Critère") }}</th><th scope="col" class="num">{{ _("Points") }}</th></tr></thead>
+    <tbody>
+    {% for l in p.score_detail %}
+      <tr><td>{{ _(libelles_score.get(l.code, l.code), **l.params) }}</td><td class="num"><span class="prosp-points{% if l.points < 0 %} negatif{% endif %}">{{ l.points }}</span> <span class="discret">/ {{ l.maximum }}</span></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="discret">{{ _("Calcul déterministe, sans modèle de langage : activité, taille, preuve d'import, dépendance au transitaire, contact publié, région.") }}</p>
+
+  <h2>{{ _("Statut") }}</h2>
+  <form method="post" action="{{ ici }}/statut" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
+    <label for="f-statut">{{ _("Nouveau statut") }}</label>
+    <select id="f-statut" name="statut">{% for st in statuts %}<option value="{{ st }}"{% if st == p.statut %} selected{% endif %}>{{ _(libelles_statut[st]) }}</option>{% endfor %}</select>
+    <button type="submit" class="btn">{{ _("Changer") }}</button>
+  </form>
+  <div class="prosp-actions">
+    <details class="corriger"><summary>{{ _("A répondu") }}</summary>
+      <form method="post" action="{{ ici }}/reponse" class="formulaire">{{ csrf_champ(csrf) }}
+        <label for="r-texte">{{ _("Texte de la réponse (facultatif, conservé comme donnée)") }}</label><textarea id="r-texte" name="texte" rows="5" maxlength="10000"></textarea>
+        <button type="submit" class="btn btn-principal">{{ _("Enregistrer la réponse") }}</button>
+      </form></details>
+    <details class="corriger"><summary>{{ _("Rendez-vous") }}</summary>
+      <form method="post" action="{{ ici }}/rendez-vous" class="formulaire">{{ csrf_champ(csrf) }}
+        <label for="rv-date">{{ _("Date") }}</label><input id="rv-date" name="date" type="date">
+        <label for="rv-texte">{{ _("Note") }}</label><input id="rv-texte" name="texte" maxlength="2000">
+        <button type="submit" class="btn">{{ _("Enregistrer le rendez-vous") }}</button>
+      </form></details>
+  </div>
+</section>
+</div>
+
+<section class="carte" aria-labelledby="t-contacts">
+  <h2 id="t-contacts">{{ _("Contacts") }}</h2>
+  <div class="defilement">
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Contact") }}</th><th scope="col">{{ _("Nature") }}</th><th scope="col">{{ _("Page source") }}</th><th scope="col">{{ _("État") }}</th><th scope="col"><span class="vh">{{ _("Actions") }}</span></th></tr></thead>
+    <tbody>
+    {% for c in d.contacts %}
+      <tr>
+        <td>{% if c.adresse %}<code>{{ c.adresse }}</code>{% else %}<a href="{{ c.url_formulaire }}" rel="noopener noreferrer nofollow" target="_blank">{{ _("formulaire") }}</a>{% endif %}{% if c.personne %} <span class="discret" lang="fr">{{ c.personne }}</span>{% endif %}</td>
+        <td>{{ _(libelles_nature.get(c.nature, c.nature)) }}</td>
+        <td><a href="{{ c.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ c.source_url|truncate(60) }}</a></td>
+        <td>{% if c.oppose %}<span class="badge b-alerte">{{ _("Opposition") }}</span>{% endif %}{% for b in c.blocages if b != "opposition" %}<span class="discret">{{ _(blocages_lib[b]) }}</span> {% endfor %}{% if not c.blocages %}<span class="badge b-valide">{{ _("Courriel possible") }}</span>{% endif %}</td>
+        <td>{% if c.adresse and not c.oppose %}
+          <form method="post" action="{{ base }}/contacts/{{ c.id }}/opposition" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ ici }}"><button type="submit" class="btn btn-petit">{{ _("STOP reçu") }}<span class="vh"> : {{ c.adresse }}</span></button></form>
+          <form method="post" action="{{ base }}/contacts/{{ c.id }}/rebond" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ ici }}"><button type="submit" class="btn btn-petit">{{ _("Rebond") }}<span class="vh"> : {{ c.adresse }}</span></button></form>
+        {% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="5" class="vide">{{ _("Aucun contact. Relevez sur le site de l'entreprise une adresse publiée (contact@, info@…) ou la page du formulaire.") }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <details class="corriger"><summary>{{ _("Ajouter un contact") }}</summary>
+    <form method="post" action="{{ ici }}/contacts" class="formulaire">{{ csrf_champ(csrf) }}
+      <label for="c-adr">{{ _("Adresse électronique publiée") }}</label><input id="c-adr" name="adresse" type="email" maxlength="320">
+      <label for="c-form">{{ _("ou page de formulaire de contact") }}</label><input id="c-form" name="url_formulaire" type="url" maxlength="1000">
+      <label for="c-src">{{ _("Page où le contact est publié (obligatoire)") }}</label><input id="c-src" name="source_url" type="url" required maxlength="1000">
+      <label for="c-pers">{{ _("Personne ou fonction (si vous la connaissez)") }}</label><input id="c-pers" name="personne" maxlength="200">
+      <button type="submit" class="btn">{{ _("Enregistrer le contact") }}</button>
+    </form></details>
+</section>
+
+<section class="carte" aria-labelledby="t-seq">
+  <h2 id="t-seq">{{ _("Séquence de courriels") }}</h2>
+  {% if d.active %}{% set i = d.active %}
+    <p>{{ _("Séquence « {nom} » en cours depuis le {date}.", nom=i.sequence_nom, date=i.demarree_le|date(False)) }}
+    {% if i.prochaine and i.prochaine.due %}{{ _("Étape {n} préparée automatiquement à partir du {date}.", n=i.prochaine.rang, date=i.prochaine.due|date(False)) }}
+    {% elif i.prochaine and i.prochaine.attente %}{{ _("L'étape suivante attend l'envoi du courriel précédent.") }}{% endif %}</p>
+    <form method="post" action="{{ base }}/inscriptions/{{ i.id }}/arreter" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ ici }}"><button type="submit" class="btn btn-petit">{{ _("Arrêter la séquence") }}</button></form>
+  {% else %}
+    {% set possibles = d.contacts|selectattr("adresse")|list %}
+    <form method="post" action="{{ ici }}/sequence" class="formulaire en-ligne-form">{{ csrf_champ(csrf) }}
+      <label for="s-seq">{{ _("Séquence") }}</label>
+      <select id="s-seq" name="sequence_id">{% for q in d.sequences %}<option value="{{ q.id }}" lang="fr">{{ q.nom }}</option>{% endfor %}</select>
+      <label for="s-contact">{{ _("Destinataire") }}</label>
+      <select id="s-contact" name="contact_id">{% for c in possibles %}<option value="{{ c.id }}">{{ c.adresse }}</option>{% else %}<option value="">{{ _("aucune adresse") }}</option>{% endfor %}</select>
+      <button type="submit" class="btn btn-principal"{% if not possibles %} disabled{% endif %}>{{ _("Préparer la séquence") }}</button>
+    </form>
+    <p class="discret">{{ _("Le premier courriel est mis en brouillon dans la file de validation ; les suivants sont préparés aux dates prévues, toujours en brouillon. Le prospect doit être « qualifié ».") }}</p>
+  {% endif %}
+  {% if d.apercu %}
+  <h3>{{ _("Aperçu du premier courriel") }}</h3>
+  {% if d.apercu.manquants %}<p class="alerte-ligne">{{ _("Préparation bloquée, faits manquants :") }} {% for m in d.apercu.manquants %}{{ _(libelles_manquants.get(m, m)) }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+  {% if not lien_public %}<p class="discret">{{ _("URL publique non configurée : le pied propose « répondez STOP » sans lien de désinscription.") }}</p>{% endif %}
+  <p><strong>{{ _("Objet :") }}</strong> <span lang="fr">{{ d.apercu.objet }}</span></p>
+  <pre class="prosp-apercu" lang="fr" tabindex="0">{{ d.apercu.corps }}</pre>
+  {% endif %}
+  {% for i in d.inscriptions %}
+  <h3>{{ _("Séquence « {nom} »", nom=i.sequence_nom) }} <span class="discret">— {% if i.statut == "active" %}{{ _("en cours") }}{% elif i.statut == "terminee" %}{{ _("terminée") }}{% else %}{{ _("arrêtée : {motif}", motif=_(libelles_arret.get(i.motif_arret or "", i.motif_arret or ""))) }}{% endif %}</span></h3>
+  <ul class="prosp-liste-courte">
+    {% for e in i.etapes %}<li>{{ _("Étape {n}", n=e.rang) }} : {{ _(libelles_courriel.get(e.statut or "", e.statut or "—")) }}{% if e.envoye_le %} — {{ e.envoye_le|date }}{% endif %}</li>{% else %}<li class="discret">{{ _("Aucune étape préparée.") }}</li>{% endfor %}
+  </ul>
+  {% endfor %}
+</section>
+
+<section class="carte" aria-labelledby="t-hist">
+  <h2 id="t-hist">{{ _("Historique") }}</h2>
+  <form method="post" action="{{ ici }}/note" class="formulaire">{{ csrf_champ(csrf) }}
+    <label for="n-texte">{{ _("Ajouter une note") }}</label><textarea id="n-texte" name="texte" rows="2" maxlength="5000" required></textarea>
+    <button type="submit" class="btn btn-petit">{{ _("Ajouter") }}</button>
+  </form>
+  <ol class="prosp-chrono">
+  {% for e in d.evenements %}
+    <li><span class="quand">{{ e.le|date }}</span> — <strong>{{ _(libelles_evenement.get(e.kind, e.kind)) }}</strong>{% if e.kind == "statut" %} : {{ _(libelles_statut.get(e.de or "", e.de or "—")) }} → {{ _(libelles_statut.get(e.vers or "", e.vers or "—")) }}{% endif %}{% if e.kind in ("sequence_arret",) and e.details.get("motif") %} : {{ _(libelles_arret.get(e.details.get("motif"), e.details.get("motif"))) }}{% endif %}{% if e.details.get("rang") %} ({{ _("étape {n}", n=e.details.get("rang")) }}){% endif %}
+      {% if e.texte %}<pre lang="fr" tabindex="0">{{ e.texte }}</pre>{% endif %}</li>
+  {% endfor %}
+  </ol>
+</section>
+{% endblock %}

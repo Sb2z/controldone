@@ -1,0 +1,56 @@
+{% extends "base.html.j2" %}
+{% from "macros.html.j2" import csrf_champ %}
+{% from "admin/prospection/_commun.html.j2" import feuille, sous_navigation, score %}
+{% block meta %}{{ feuille() }}{% endblock %}
+{% block contenu %}
+<div class="titre-page">
+  <h1>{{ _("Rechercher des entreprises") }}</h1>
+  <p class="discret">{{ _("Base publique « Recherche d'entreprises » (données SIRENE). La recherche part seulement quand vous la lancez ; les résultats sont des candidats, jamais ajoutés d'office. Les groupes exclus sont retirés.") }}</p>
+</div>
+{{ sous_navigation("rechercher") }}
+
+<section class="carte" aria-labelledby="t-criteres">
+  <h2 id="t-criteres">{{ _("Critères") }}</h2>
+  <form method="post" action="{{ base }}/rechercher" class="formulaire">{{ csrf_champ(csrf) }}
+    <label for="r-mots">{{ _("Mots-clés (cherchés surtout dans la dénomination)") }}</label><input id="r-mots" name="mots" maxlength="80" value="{{ criteres.mots if criteres else '' }}" placeholder="import">
+    <label for="r-naf">{{ _("Codes NAF (séparés par des virgules)") }}</label><input id="r-naf" name="naf" maxlength="400" value="{{ criteres.naf|join(', ') if criteres else '' }}" placeholder="46.49Z, 46.90Z">
+    <label class="case"><input type="checkbox" name="naf_defaut" value="1"> {{ _("Ajouter les codes NAF typiques des importateurs (configuration)") }}</label>
+    <fieldset><legend>{{ _("Tranches d'effectif") }}</legend>
+      <div class="prosp-cases">{% for t in tranches %}<label><input type="checkbox" name="tranche" value="{{ t }}"{% if not criteres or t in criteres.tranches %} checked{% endif %}> {{ libelles_tranche[t] }}</label>{% endfor %}</div>
+    </fieldset>
+    <div class="champs-2">
+      <div><label for="r-dep">{{ _("Département") }}</label><input id="r-dep" name="departement" maxlength="3" value="{{ criteres.departement if criteres else '' }}" placeholder="69"></div>
+      <div><label for="r-region">{{ _("Région") }}</label><select id="r-region" name="region"><option value="">{{ _("Toutes") }}</option>{% for code, nom in regions %}<option value="{{ code }}" lang="fr"{% if criteres and criteres.region == code %} selected{% endif %}>{{ nom }}</option>{% endfor %}</select></div>
+    </div>
+    <label for="r-page">{{ _("Page de résultats") }}</label><input id="r-page" name="page" type="number" min="1" max="20" value="{{ criteres.page if criteres else 1 }}">
+    <button type="submit" class="btn btn-principal">{{ _("Lancer la recherche") }}</button>
+  </form>
+  <p class="discret">{{ _("Une seule requête par recherche, envoyée en séquence avec une pause ; en cas de limite de débit (429), nouvel essai après le délai demandé.") }}</p>
+</section>
+
+{% if erreur_api %}
+<p class="message erreur" role="alert">{{ _("Source publique injoignable ou limite de débit atteinte : réessayez dans quelques instants.") }}</p>
+{% endif %}
+{% if resultats is not none %}
+<section class="carte" aria-labelledby="t-resultats">
+  <div class="carte-tete"><h2 id="t-resultats">{{ _("Candidats") }}</h2>
+  <p class="discret">{{ _("{n} résultat(s) sur {total} (page {page} sur {pages}) ; {e} écarté(s) par la liste d'exclusion.", n=resultats|length, total=res.total, page=criteres.page, pages=res.pages, e=exclus) }}</p></div>
+  <div class="defilement">
+  <table class="donnees compacte">
+    <thead><tr><th scope="col">{{ _("Entreprise") }}</th><th scope="col" class="num">{{ _("Score indicatif") }}</th><th scope="col">NAF</th><th scope="col">{{ _("Taille") }}</th><th scope="col">{{ _("Lieu") }}</th><th scope="col"><span class="vh">{{ _("Action") }}</span></th></tr></thead>
+    <tbody>
+    {% for c in resultats %}{% set e = c.entreprise %}
+      <tr><td><span lang="fr">{{ e.raison_sociale }}</span> <span class="discret">SIREN <code>{{ e.siren }}</code></span></td>
+      <td class="num">{{ score(c.score.total) }}</td><td><code>{{ e.naf or "—" }}</code></td>
+      <td>{{ libelles_tranche.get(e.tranche_effectif or "", "—") }}{% if e.annee_effectif %} <span class="discret">({{ e.annee_effectif }})</span>{% endif %}</td>
+      <td><span lang="fr">{{ e.ville or "—" }}</span>{% if e.departement %} ({{ e.departement }}){% endif %}</td>
+      <td>{% if c.deja %}<a class="petit-lien" href="{{ base }}/prospects/{{ c.deja }}">{{ _("Déjà suivi") }}</a>{% else %}
+        <form method="post" action="{{ base }}/rechercher/ajouter" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="siren" value="{{ e.siren }}"><button type="submit" class="btn btn-petit">{{ _("Ajouter") }}<span class="vh"> : <span lang="fr">{{ e.raison_sociale }}</span></span></button></form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="6" class="vide">{{ _("Aucun candidat pour ces critères.") }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="discret">{{ _("Le score indicatif ne tient compte que de l'activité, de la taille et du département ; il monte quand la preuve d'import et le contact publié sont relevés.") }}</p>
+</section>
+{% endif %}
+{% endblock %}

@@ -181,6 +181,9 @@ def initialiser_demo(
     res.jobs = _executer_jobs(plateforme)
     if decisions:
         _decisions(plateforme, fondateur, res)
+    from controldone.prospection.demo import semer_demo
+
+    semer_demo(db, fondateur)  # module « Marketing » : sociétés FICTIVES, aucun courriel préparé (D-5001)
     return res
 
 

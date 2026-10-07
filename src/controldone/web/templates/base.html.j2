@@ -36,7 +36,7 @@
     {% if acteur %}
     <nav class="nav" aria-label="{{ _("Navigation principale") }}">
       {% if acteur.role.value == "fondateur" %}
-        {% set liens = [("tableau", "/admin", _("Tableau de bord")), ("validation", "/admin/validation", _("File de validation")), ("clients", "/admin/clients", _("Clients")), ("finances", "/admin/finances", _("Finances")), ("jobs", "/admin/jobs", _("Tâches")), ("journal", "/admin/journal", _("Journal")), ("alertes", "/admin/alertes", _("Alertes")), ("autonomie", "/admin/autonomie", _("Autonomie"))] %}
+        {% set liens = [("tableau", "/admin", _("Tableau de bord")), ("validation", "/admin/validation", _("File de validation")), ("clients", "/admin/clients", _("Clients")), ("finances", "/admin/finances", _("Finances")), ("jobs", "/admin/jobs", _("Tâches")), ("journal", "/admin/journal", _("Journal")), ("alertes", "/admin/alertes", _("Alertes")), ("autonomie", "/admin/autonomie", _("Autonomie")), ("prospection", "/admin/prospection", _("Marketing"))] %}
       {% else %}
         {% set liens = [("tableau", "/espace", _("Tableau de bord")), ("depot", "/espace/depot", _("Déposer")), ("dossiers", "/espace/dossiers", _("Dossiers")), ("rapports", "/espace/rapports", _("Rapports")), ("recouvrement", "/espace/recouvrement", _("Suivi des avoirs"))] %}
       {% endif %}

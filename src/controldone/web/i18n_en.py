@@ -876,3 +876,10 @@ CATALOGUE_EN: dict[str, str] = {
     "{n} derniers jours.": "Last {n} days.",
     "En échec": "Failing",
 }
+
+# Module « Marketing » (prospection du fondateur, D-5001) : catalogue à part, fusionné sans remplacer une
+# traduction existante.
+from controldone.web.i18n_prospection_en import CATALOGUE_PROSPECTION_EN  # noqa: E402
+
+for _fr, _en in CATALOGUE_PROSPECTION_EN.items():
+    CATALOGUE_EN.setdefault(_fr, _en)
