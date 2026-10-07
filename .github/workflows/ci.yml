@@ -140,14 +140,18 @@ jobs:
         run: pytest -q tests/proprietes
 
       # D-3902 : suite complète (tests lents compris) sous mesure de couverture (branches).
+      # D-4903 : seuils bloquants = mesure de référence moins 1 point (docs/QUALITE.md § 2), mêmes valeurs que
+      # le Makefile (test de cohérence : tests/outillage/test_couverture_seuils.py).
       - name: Pytest avec couverture
         env:
           HYPOTHESIS_PROFILE: ci
+          COUV_MIN: "87"
+          COUV_MIN_PAQUETS: "controls=85 auth=97"
         run: |
           mkdir -p var/couverture
           pytest -q --cov --cov-report=html --cov-report=json --cov-report=term:skip-covered
           python scripts/couverture_paquets.py var/couverture/couverture.json --out var/couverture/paquets.md \
-            --min "${COUV_MIN:-0}"
+            --min "$COUV_MIN" --min-paquet "$COUV_MIN_PAQUETS"
           cat var/couverture/paquets.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Rapport de couverture

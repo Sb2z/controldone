@@ -74,6 +74,8 @@ TAXE_LIGNE = "taxe_ligne"
 LIGNE_FT = "ligne_ft"
 TVA_LIGNE = "tva_ligne"
 LIGNE_FC = "ligne_fc"
+#: D-4606 : base de TVA de l'article = valeur en douane + droits calculés.
+BASE_TVA = "base_tva"
 
 
 class _Tol(Protocol):
@@ -202,6 +204,52 @@ def _somme_identite(
     )
 
 
+def _identites_base_tva(taxations: Sequence[TaxationDeclaration], lec: _Lecteur, tol: _Tol) -> list[Identite]:
+    """D-4606 : base imprimée de la TVA d'un article = valeur en douane (base commune des droits ad valorem de
+    l'article) + Σ base × taux de ces droits. Quand l'égalité tient au centime près (un par ligne de droit), les trois
+    lectures indépendantes (base de TVA, base et taux de chaque droit) se confirment : un chiffre mal lu de l'une
+    d'elles la romprait. Le montant imprimé du droit n'y entre pas (il peut être l'erreur que B1 relève). Une base de
+    TVA qui comprend d'autres éléments (frais jusqu'au lieu d'introduction) ne donne pas d'identité."""
+    par_article: dict[str, list[TaxationDeclaration]] = {}
+    for t in taxations:
+        k = t.article.valeur.strip() if t.article is not None and t.article.valeur else ""
+        par_article.setdefault(k, []).append(t)
+    out: list[Identite] = []
+    for k, lignes in sorted(par_article.items()):
+        tvas = [t for t in lignes if t.categorie is CategorieTaxe.tva and t.base_montant is not None]
+        droits = [t for t in lignes if t.categorie in (CategorieTaxe.droit, CategorieTaxe.autre_taxe)]
+        if len(tvas) != 1 or not droits or len(lignes) != len(droits) + 1:
+            continue
+        b_tva = lec.num(tvas[0].base_montant)
+        if b_tva is None:
+            continue
+        bases = [lec.num(t.base_montant) for t in droits]
+        taux = [lec.num(t.taux) for t in droits]
+        if (
+            any(_nature_taux(t) is not TauxNature.ad_valorem for t in droits)
+            or any(x is None for x in bases)
+            or any(x is None for x in taux)
+            or len({x for x in bases}) != 1
+        ):
+            continue
+        base = bases[0]
+        assert base is not None
+        calcul = base + sum((base * x / _CENT for x in taux if x is not None), _ZERO)
+        assert tvas[0].base_montant is not None
+        operandes = tuple(v.id for t in droits for v in (t.base_montant, t.taux) if v is not None)
+        out.append(
+            Identite(
+                f"dec:base_tva:{k or '-'}",
+                "produit",
+                BASE_TVA,
+                tvas[0].base_montant.id,
+                operandes,
+                abs(b_tva - calcul) <= tol.t_ligne() * len(droits),
+            )
+        )
+    return out
+
+
 def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identite]:
     c = doc.dec
     out: list[Identite] = []
@@ -224,6 +272,7 @@ def _reseau_declaration(doc: Document, lec: _Lecteur, tol: _Tol) -> list[Identit
                 tol.taxe_ligne_concorde(m, calcul),
             )
         )
+    out += _identites_base_tva(c.taxations, lec, tol)
     # Totaux de catégorie imprimés (une ligne sans article, des lignes par article : D-301, D-2210).
     exclus: set[int] = set()
     for code, (i_total, avec) in sorted(totaux_par_categorie(doc, lec.num, tol).items()):
@@ -710,7 +759,8 @@ def lecture_confirmee(
     if rangee is None:
         return False
     voisines = {k for k, r in (rangee_de or {}).items() if r == rangee and k != valeur_id}
-    return any(i.confirmes & voisines for i in tenues if i.genre != "echo")
+    # D-4606 : l'identité de la base de TVA confirme les colonnes base et taux, pas la colonne du montant de la rangée.
+    return any(i.confirmes & voisines for i in tenues if i.genre != "echo" and i.nature != BASE_TVA)
 
 
 def _complet(identites: Sequence[Identite], contestee: Identite) -> bool:

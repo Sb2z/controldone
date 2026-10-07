@@ -1498,7 +1498,8 @@ def _a6(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
     devise_sure = all(
         (v.est_structuree or v.confiance >= p.a6_confiance_devise_min) and _iso_lu(v) for v in dv.fc_vals
     )
-    raisons = [] if devise_sure and t.exploitable else [RaisonCode.devise_incertaine]
+    corroboree = not devise_sure and t.exploitable and _devise_corroboree_par_taux(ctx, c, dv, t)
+    raisons = [] if (devise_sure or corroboree) and t.exploitable else [RaisonCode.devise_incertaine]
     valeurs = [*m.fc_vals, *m.dec_vals, *dv.valeurs, *t.valeurs]
     cl = ctx.classify(
         cid,
@@ -1533,10 +1534,40 @@ def _a6(ctx: ControlContext, c: Couple) -> list[ResultatControle]:
             composante=Composante.valeur,
             preuves=preuves,
             ecart=montant,
-            details={"taux_imprime": t.exploitable},
+            details={
+                "taux_imprime": t.exploitable,
+                **({"devise_corroboree_par_taux": True} if corroboree else {}),
+            },
             **commun,
         )
     ]
+
+
+#: D-4605 : écart relatif admis entre le taux imprimé sur la déclaration et le taux de référence de la devise lue sur
+#: la facture pour que le premier confirme la lecture de la seconde.
+BANDE_DEVISE_PAR_TAUX = Decimal("0.15")
+
+
+def _devise_corroboree_par_taux(ctx: ControlContext, c: Couple, dv: Devises, t: Taux) -> bool:
+    """D-4605 : devise de la facture lue sous ``a6_confiance_devise_min`` (mais au moins ``c_min_certain``, code ISO lu
+    tel quel) confirmée par une lecture indépendante : le taux de change **imprimé sur la déclaration** (autre
+    document) correspond, à ``BANDE_DEVISE_PAR_TAUX`` près, au taux de référence de cette devise à la date
+    d'acceptation (dans le sens lu, ou dans l'un des deux sens si le sens n'est pas imprimé). Le déclarant a donc
+    converti depuis cette devise : la facture n'est pas en euros. Le taux de référence ne sert jamais au montant."""
+    if dv.fc is None or not dv.fc_vals or t.taux is None or t.taux == 0:
+        return False
+    seuil = ctx.profil.c_min_certain
+    if not all(_iso_lu(v) and (v.est_structuree or v.confiance >= seuil) for v in dv.fc_vals):
+        return False
+    d = _date_acceptation(ctx, c)
+    ref = ctx.taux_bce(dv.fc, d) if d is not None else None  # devise par EUR
+    if not ref:
+        return False
+    if t.sens_lu and t.sens is not None:
+        lus = [t.taux if t.sens is TauxChangeSens.devise_par_eur else Decimal(1) / t.taux]
+    else:
+        lus = [t.taux, Decimal(1) / t.taux]
+    return any(abs(x - ref) / ref <= BANDE_DEVISE_PAR_TAUX for x in lus)
 
 
 @control("A6")

@@ -66,7 +66,7 @@ mensuel des vulnérabilités de l'image, sans réseau (D-4704).
 | Point | Effort |
 |---|---|
 | Réécriture de l'historique Git (corpus `corpus_g3`–`g5`, anciens courriels d'auteur, décision 4A) : corpus régénérables et vérifiés (`make corpus-verifier`, D-4403) ; ensuite retirer leurs exceptions de `.gitignore` | moyen |
-| Seuil minimal de couverture (`COUV_MIN`) une fois la base stabilisée ; modules les moins couverts : `storage`, `services`, `web` | moyen |
+| ~~Seuil minimal de couverture (`COUV_MIN`)~~ — fait (bloc O4, D-4901 à D-4903 : 88,1 %, seuils 87 % global, `controls` 85 %, `auth` 97 %) ; reste : relever les seuils après une mesure stable, tests de `storage/sauvegarde.py`, `storage/verrou.py`, `services/exercice_mensuel.py` une fois livrés par leurs blocs | petit |
 | Formatage automatique (`ruff format`) : 301 fichiers à reformater, à faire en un seul enregistrement isolé | petit |
 
 ## Fait pendant les lots 1 et 2

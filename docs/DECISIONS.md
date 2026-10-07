@@ -5007,3 +5007,37 @@ exact en français suivi de la traduction de courtoisie, comme les pages de l'in
   première exécution qui établit la référence), 0 sinon, 2 audit absent ou illisible. Routine mensuelle :
   `docs/MISE_EN_LIGNE.md` § 6.3, `docs/EXPLOITATION.md`. Tests : `tests/ops/test_suivi_cve.py`.
 
+
+# Couverture des tests (bloc O4, octobre 2026)
+
+## D-4901 — Tests de comportement des modules critiques les moins couverts
+
+Tests seulement (aucune ligne de remplissage) : chemins d'erreur, droits et cloisonnement, cas limites de
+`storage/scope.py`, `storage/securite.py`, `auth/revocation.py`, `auth/cli_securite.py`, `storage/cles.py`,
+`storage/migrations.py`, `web/securite.py`, `services/admin.py`, `services/reclamations.py`,
+`services/validation.py`, `services/vignettes.py` (rendu exécuté dans le processus courant : le service l'exécute
+dans le processus isolé, que la mesure ne voit pas). Les modules que d'autres blocs modifiaient au même moment
+(`storage/verrou.py`, `storage/sauvegarde.py`, `services/notifications.py`, `services/exercice_mensuel.py`,
+`web/i18n*.py`, `web/routes_finances.py`, `storage/retention.py`, `controls/`) ne sont pas traités. Effet : total
+86,2 % -> 88,1 % ; `storage` 81,7 -> 86,8 %, `services` 71,5 -> 88,1 %, `web` 82,9 -> 92,4 %, `auth` 93,5 -> 98,3 %
+(détail : `docs/QUALITE.md` § 2 et § 3).
+
+## D-4902 — Identifiant d'une entité dérivé de la TVA normalisée
+
+Trouvé par les tests D-4901 : `services.admin.ajouter_entite` calculait `id_stable(entite, client, raison sociale,
+TVA)` avec la TVA **saisie** ; « fr 40 303 265 045 » puis « FR40303265045 » donnaient deux entités de même TVA (la
+fiche client et le rattachement des documents voyaient un doublon). Correction minimale : la TVA est normalisée
+(`normalize_vat`) avant le calcul de l'identifiant. Une entité déjà saisie avec une TVA normalisée garde son
+identifiant ; une entité saisie autrement garde le sien, et une nouvelle saisie la met à jour sous l'identifiant
+normalisé (doublon existant à fusionner à la main s'il y en a, aucun connu). Test :
+`tests/platform/test_admin_services_branches.py::test_entite_tva_ecrite_autrement_pas_de_doublon`.
+
+## D-4903 — Seuils de couverture bloquants : global et par paquet
+
+`make couverture` et le job `complet` de la CI échouent sous `COUV_MIN=87` (mesure du 2026-10-07 après O4, 88,1 %,
+moins 1 point, arrondi à l'entier inférieur) et sous les minimums par paquet `COUV_MIN_PAQUETS="controls=85
+auth=97"` (option `--min-paquet paquet=taux` de `scripts/couverture_paquets.py` ; un paquet mal nommé est une
+erreur). `controls` : 85 et non 84 (mesure perturbée par les modifications en cours du bloc moteur, 85,3 % ; valeurs
+stables 86 à 91 %). Valeurs identiques dans le Makefile, la CI et `docs/QUALITE.md`, vérifiées par
+`tests/outillage/test_couverture_seuils.py`. Le job `rapide` ne mesure pas la couverture (durée). Relever les
+seuils quand une mesure stable les dépasse de plus de 2 points ; ne jamais les baisser sans décision.

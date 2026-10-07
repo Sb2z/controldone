@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from controldone.controls import _aides_befg as aides
 from controldone.controls._aides_befg import ZERO, DocAilleurs, num
+from controldone.controls.context import C_LECTURE_CONFIRMABLE
 from controldone.controls.framework import (
     ControlContext,
     arrondi_centime,
@@ -28,6 +29,7 @@ from controldone.formatage import format_montant
 from controldone.model import (
     Composante,
     Document,
+    Methode,
     RaisonCode,
     ResultatControle,
     RolePreuve,
@@ -343,6 +345,40 @@ def _annulee(ctx: ControlContext, ft: Document, montant: Decimal, t: Decimal) ->
     return False
 
 
+def _mrn_confirme(ctx: ControlContext, v: ValeurSourcee, prefixe: str) -> ValeurSourcee:
+    """D-4604 : MRN d'une facture lu sous ``C_MIN_CERTAIN`` (au moins ``C_LECTURE_CONFIRMABLE``, ancré, lu) dont les
+    18 caractères sont ceux du MRN d'une déclaration (du dossier ou d'un autre dossier du client) lu sur un autre
+    document : deux lectures indépendantes d'une chaîne en grande partie aléatoire concordent ; la lecture est
+    confirmée (confiance portée au seuil de certitude). Sinon la valeur est rendue telle quelle."""
+    seuil = ctx.profil.c_min_certain
+    if (
+        v.confiance >= seuil
+        or v.confiance < C_LECTURE_CONFIRMABLE
+        or v.methode is Methode.derive
+        or v.est_reconstruite
+        or not v.ancrage_suffisant()
+    ):
+        return v
+    lu = norm_ref(v.valeur)
+    if len(lu) != 18 or mrn_prefixe(lu) != prefixe:
+        return v
+    decs = [
+        *ctx.declarations(dernieres_versions=False),
+        *(x.doc for x in aides.documents_autres(ctx, TypeDocument.declaration)),
+    ]
+    for d in decs:
+        m = d.dec.mrn
+        if (
+            m is not None
+            and m.valeur
+            and ctx.utilisable(m)
+            and m.document_id != v.document_id
+            and norm_ref(m.valeur) == lu
+        ):
+            return v.model_copy(update={"confiance": seuil})
+    return v
+
+
 def _liquide_mrn(ctx: ControlContext, prefixe: str) -> Decimal | None:
     decs = [d for d in ctx.declarations() if d.dec.mrn_prefixe == prefixe]
     if not decs:
@@ -427,6 +463,9 @@ def _f3_unite(ctx: ControlContext, ft: Document, prefixe: str, pool: list[_Occ])
     # quand le MRN est lu sûrement sur les deux factures et que la complémentarité a pu être testée (montant
     # liquidé connu), le lien est établi par le MRN (pour cette facture comme pour l'autre).
     seuil = ctx.profil.c_min_certain
+    # D-4604 : un MRN lu sous le seuil sur une facture est confirmé par une seconde lecture indépendante : le MRN
+    # complet (18 caractères) de la déclaration, lu sur un autre document, identique caractère pour caractère.
+    mrn_vals = [_mrn_confirme(ctx, v, prefixe) for v in mrn_vals]
     mrn_surs = bool(ici.mrn and autre.mrn) and all(
         v.confiance >= seuil and v.ancrage_suffisant() and mrn_prefixe(v.valeur) == prefixe for v in mrn_vals
     )

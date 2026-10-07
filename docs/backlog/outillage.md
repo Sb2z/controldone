@@ -13,13 +13,28 @@
   écrivent sur la sortie standard (63 appels) : c'est leur rôle de commande. Le crochet ne vise que les paquets
   cœur (contrôles, normalisation, extraction, modèle, web, rapport, ingestion hors démo), où il n'y en a aucun.
   Fait (périmètre volontairement restreint).
-- **Couverture mesurée** (D-3902). `make couverture` : base de référence dans `docs/QUALITE.md` (84,6 %, branches
-  76,2 %). Pas encore de seuil bloquant (`COUV_MIN`) : à fixer après une ou deux mesures, quand les blocs en cours
-  auront fini de modifier `web/securite.py` et `storage/securite.py` (mesures instables pendant leurs travaux).
-  À faire.
-- **Modules critiques encore peu couverts** : `storage/securite.py`, `web/securite.py`, `storage/scope.py`
-  (cloisonnement), `auth/revocation.py`, `auth/jetons.py` — en cours de modification par les blocs sécurité et
-  stockage : tests à écrire par ces blocs (voir `docs/QUALITE.md` § 3). À faire.
+- **Couverture mesurée** (D-3902). `make couverture` : base de référence dans `docs/QUALITE.md` (2026-10-06 :
+  84,6 % ; 2026-10-07 avant O4 : 86,2 % ; après O4 : 88,1 %, branches 79,6 %). Fait.
+- **Seuils bloquants** (D-4903). `COUV_MIN=87` et `COUV_MIN_PAQUETS="controls=85 auth=97"` dans le Makefile et le job
+  `complet` de la CI (`--min-paquet` de `scripts/couverture_paquets.py`), cohérence vérifiée par un test. Fait. À
+  revoir : relever les seuils après une mesure stable (aucun bloc en cours de modification), en particulier
+  `controls` (mesure perturbée à 85,3 % ; 89,1 % sur les seuls tests des contrôles) et le total.
+- **Modules critiques peu couverts** (bloc O4, D-4901) : `storage/scope.py` (99 %), `storage/securite.py` (97 %),
+  `web/securite.py` (98 %), `auth/revocation.py` (100 %), `auth/cli_securite.py` (100 %), `storage/cles.py`
+  (100 %), `storage/migrations.py` (98 %), `services/admin.py`, `services/reclamations.py`,
+  `services/validation.py`, `services/vignettes.py`. Fait.
+- **Défaut trouvé par les tests O4** (D-4902) : identifiant d'entité dérivé de la TVA saisie et non normalisée
+  (doublons). Corrigé, test de non-régression. Fait. À vérifier en exploitation : aucune base réelle n'a encore de
+  doublon d'entité (rien à fusionner connu).
+- **Encore peu couverts, modifiés par d'autres blocs pendant O4** : `storage/sauvegarde.py` (53 %),
+  `storage/verrou.py` (70 %), `services/exercice_mensuel.py` (72 %), `web/routes_finances.py` (64 % avant),
+  `storage/retention.py` (82 %), `services/exercice_restauration.py` (78 %), `controls/famille_a.py`,
+  `controls/famille_c.py`. Tests à écrire par ces blocs ou par un prochain bloc O une fois leurs modifications
+  livrées. À faire.
+- **Rendu isolé non mesuré** : le rendu des pages (`services/vignettes.rendu_local`) et l'extraction s'exécutent
+  dans un processus isolé que `coverage` ne suit pas (pas de `coverage.process_startup`) ; les tests appellent donc
+  le rendu dans le processus courant. Suffisant ; mesurer les sous-processus seulement si un défaut y échappe.
+  Rien à faire.
 - **Tests de propriétés** (D-3903). `tests/proprietes/` (38 propriétés, Hypothesis) : montants FR/EN/DE/CH/IN
   aller-retour, signes et devises, saisie, tolérances (symétrie, monotonie, Decimal), TVA FR et SIREN, MRN et
   confusions OCR, dates multilingues, redirection interne, paramètres de liste. Aucun défaut trouvé en profil

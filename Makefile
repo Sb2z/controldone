@@ -28,14 +28,17 @@ pre-commit:
 	$(VENV)/bin/pre-commit run --all-files --show-diff-on-failure
 
 # Couverture (coverage.py via pytest-cov, branches comprises) : résumé par paquet dans var/couverture/paquets.md,
-# HTML dans var/couverture/html/. Base de référence : docs/QUALITE.md. COUV_MIN=… : taux global minimal.
-COUV_MIN ?= 0
+# HTML dans var/couverture/html/. Base de référence : docs/QUALITE.md. Seuils bloquants (D-4903, mesure de référence
+# moins 1 point, mêmes valeurs dans la CI) : COUV_MIN (taux global) et COUV_MIN_PAQUETS (paquet=taux, séparés par
+# des espaces). `make couverture COUV_MIN=0 COUV_MIN_PAQUETS=` mesure sans bloquer.
+COUV_MIN ?= 87
+COUV_MIN_PAQUETS ?= controls=85 auth=97
 couverture:
 	@mkdir -p var/couverture
 	@# le résumé est produit même si des tests échouent ; le code de sortie reste celui de pytest
 	$(PY) -m pytest -q --cov --cov-report=html --cov-report=json --cov-report=term:skip-covered $(PYTEST_ARGS); \
 	  rc=$$?; $(PY) scripts/couverture_paquets.py var/couverture/couverture.json --out var/couverture/paquets.md \
-	  --min $(COUV_MIN) || { [ $$rc -ne 0 ] || rc=1; }; exit $$rc
+	  --min $(COUV_MIN) --min-paquet "$(COUV_MIN_PAQUETS)" || { [ $$rc -ne 0 ] || rc=1; }; exit $$rc
 
 # Tests de propriétés (Hypothesis, tests/proprietes) : PROFIL=dev (défaut), ci (borné, déterministe) ou intensif.
 PROFIL ?= dev
