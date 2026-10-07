@@ -117,6 +117,18 @@ def _pages_fondateur(monde):
         "/admin/notifications",
         "/compte/sessions",
         "/compte",
+        # module « Marketing » (prospection du fondateur, D-5001)
+        "/admin/prospection",
+        "/admin/prospection/prospects",
+        "/admin/prospection/pipeline",
+        "/admin/prospection/prospects/prs_demo_1",
+        "/admin/prospection/importer",
+        "/admin/prospection/rechercher",
+        "/admin/prospection/sequences",
+        "/admin/prospection/courriels",
+        "/admin/prospection/opposition",
+        "/admin/prospection/delivrabilite",
+        "/desinscription/jeton-invalide",
     ]
 
 

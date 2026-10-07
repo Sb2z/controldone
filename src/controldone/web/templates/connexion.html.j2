@@ -3,26 +3,30 @@
 {% block contenu %}
 <div class="accueil">
   <div class="accueil-texte">
-    <span class="surtitre"><i>{{ _("Import") }}</i> {{ _("Contrôle de cohérence des documents") }}</span>
-    <h1>{{ _("Vos documents d'import,") }} <em>{{ _("réconciliés au centime.") }}</em></h1>
-    <p class="chapeau">{{ _("Facture commerciale, déclaration en douane, facture du transitaire et avoirs : ControlDOne les rapproche, chiffre chaque écart et cite la page qui le montre.") }}</p>
+    <span class="etiquette">{{ _("Contrôle des factures de transitaire") }}</span>
+    <h1>{{ _("Chaque ligne de la facture de votre transitaire,") }} <span class="attenue">{{ _("comparée à votre déclaration en douane.") }}</span></h1>
+    <p class="chapeau">{{ _("Pour chaque envoi, ControlDOne met côte à côte la facture du fournisseur, la déclaration, la facture du transitaire et ses avoirs. Chaque écart est chiffré au centime, avec les deux montants et la page où ils figurent.") }}</p>
     <ol class="etapes">
-      <li><b>01</b><span><strong>{{ _("Déposez vos documents") }}</strong> — {{ _("PDF, scans, XML, CSV ou archives ZIP.") }}</span></li>
-      <li><b>02</b><span><strong>{{ _("Rapprochement calculé") }}</strong> — {{ _("chaque comparaison et chaque montant sont calculés par du code testé.") }}</span></li>
-      <li><b>03</b><span><strong>{{ _("Relevé d'écarts validé") }}</strong> — {{ _("remis après validation ; vous décidez seul de son usage.") }}</span></li>
+      <li><b>01</b><strong>{{ _("Vous déposez vos documents tels quels.") }}</strong><span>{{ _("PDF, scans, XML, CSV ou archives ZIP.") }}</span></li>
+      <li><b>02</b><strong>{{ _("Un programme fait les calculs.") }}</strong><span>{{ _("Les mêmes documents donnent toujours le même résultat. Un modèle de langage peut aider à lire une page, jamais à calculer.") }}</span></li>
+      <li><b>03</b><strong>{{ _("Le fondateur relit chaque constat.") }}</strong><span>{{ _("Vous recevez un relevé vérifié et vous décidez seul de la suite.") }}</span></li>
     </ol>
-    <div class="scanner" aria-hidden="true">
-      <div class="feuille f1"><i></i><i></i><i class="cle"></i><i></i></div>
-      <div class="feuille f2"><i></i><i class="cle"></i><i></i><i></i></div>
-      <div class="feuille f3"><i></i><i></i><i class="ecart"></i><i></i></div>
-      <div class="feuille f4"><i class="cle"></i><i></i><i></i><i></i></div>
-      <div class="faisceau"></div>
-    </div>
+    <figure class="exemple" data-exemple aria-labelledby="exemple-titre">
+      <figcaption class="exemple-tete"><span class="etiquette" id="exemple-titre">{{ _("Exemple de constat, données fictives") }}</span><span class="etiquette">{{ _("Droits de douane") }}</span></figcaption>
+      <dl class="exemple-lignes">
+        <dt>{{ _("Facture du transitaire") }}<small>{{ _("page 1, ligne « Droits de douane »") }}</small></dt><dd data-exemple-valeur>{{ "1284.00"|montant }}</dd>
+        <dt>{{ _("Déclaration en douane (DAU)") }}<small>{{ _("page 2, case 47") }}</small></dt><dd data-exemple-valeur>{{ "1032.00"|montant }}</dd>
+      </dl>
+      <div class="exemple-trait" aria-hidden="true"></div>
+      <dl class="exemple-lignes">
+        <dt class="ecart" data-exemple-ecart>{{ _("Écart constaté") }}<small>{{ _("tolérance 0,05 EUR") }}</small></dt><dd class="ecart" data-exemple-ecart>{{ "252.00"|montant }}</dd>
+      </dl>
+    </figure>
   </div>
   <section class="carte carte-connexion" aria-labelledby="titre-connexion">
     <h2 id="titre-connexion">{{ _("Connexion") }}</h2>
-    <p class="discret">{{ _("Espace sécurisé ControlDOne. Le fondateur confirme ensuite avec un code à usage unique.") }}</p>
-    {% if erreur is defined %}<div class="message erreur" role="alert">{{ erreur }}</div>{% endif %}
+    <p class="discret">{{ _("Espace réservé aux clients de ControlDOne. Le compte du fondateur demande en plus un code à usage unique.") }}</p>
+    {% if erreur is defined %}<div class="message erreur" role="alert"><span class="texte">{{ erreur }}</span></div>{% endif %}
     <form method="post" action="/connexion" class="formulaire">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <label for="email">{{ _("Adresse électronique") }}</label>
@@ -31,7 +35,7 @@
       <input id="mdp" name="mot_de_passe" type="password" autocomplete="current-password" required maxlength="1024">
       <button type="submit" class="btn btn-principal">{{ _("Se connecter") }}</button>
     </form>
-    <p class="securite"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.7-5 7-2.9-1.3-5-3.8-5-7v-4l5-2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.8 8.2l1.6 1.6 3-3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>{{ _("Documents chiffrés au repos et traités comme des données.") }}</p>
+    <p class="securite"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>{{ _("Vos documents sont chiffrés au repos, avec une clé propre à votre société. Leur contenu est lu comme des données, jamais exécuté.") }}</span></p>
   </section>
 </div>
 {% endblock %}

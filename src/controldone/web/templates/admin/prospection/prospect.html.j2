@@ -15,7 +15,7 @@
 <section class="carte" aria-labelledby="t-faits">
   <h2 id="t-faits">{{ _("Faits et preuves") }}</h2>
   <dl class="meta">
-    <div><dt>{{ _("Source") }}</dt><dd><a href="{{ p.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ p.source_url }}</a>{% if p.source_detail %} <span class="discret">({{ p.source_detail }})</span>{% endif %}</dd></div>
+    <div><dt>{{ _("Source") }}</dt><dd><a href="{{ p.source_url }}" rel="noopener noreferrer nofollow" target="_blank">{{ p.source_url }}</a>{% if p.source_detail %} <span class="discret" lang="fr">({{ p.source_detail }})</span>{% endif %}</dd></div>
     <div><dt>NAF</dt><dd><code>{{ p.naf or "—" }}</code></dd></div>
     <div><dt>{{ _("Taille") }}</dt><dd>{{ libelles_tranche.get(p.tranche_effectif or "", "—") }}{% if p.effectif_libelle %} <span class="discret" lang="fr">({{ p.effectif_libelle }})</span>{% endif %}</dd></div>
     <div><dt>{{ _("Lieu") }}</dt><dd><span lang="fr">{{ p.ville or "—" }}</span>{% if p.departement %} ({{ p.departement }}){% endif %}, {{ p.pays }}</dd></div>
@@ -123,8 +123,8 @@
   <h2 id="t-seq">{{ _("Séquence de courriels") }}</h2>
   {% if d.active %}{% set i = d.active %}
     <p>{{ _("Séquence « {nom} » en cours depuis le {date}.", nom=i.sequence_nom, date=i.demarree_le|date(False)) }}
-    {% if i.prochaine and i.prochaine.due %}{{ _("Étape {n} préparée automatiquement à partir du {date}.", n=i.prochaine.rang, date=i.prochaine.due|date(False)) }}
-    {% elif i.prochaine and i.prochaine.attente %}{{ _("L'étape suivante attend l'envoi du courriel précédent.") }}{% endif %}</p>
+    {% if i.prochaine and i.prochaine.get("due") %}{{ _("Étape {n} préparée automatiquement à partir du {date}.", n=i.prochaine.rang, date=i.prochaine.due|date(False)) }}
+    {% elif i.prochaine and i.prochaine.get("attente") %}{{ _("L'étape suivante attend l'envoi du courriel précédent.") }}{% endif %}</p>
     <form method="post" action="{{ base }}/inscriptions/{{ i.id }}/arreter" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ ici }}"><button type="submit" class="btn btn-petit">{{ _("Arrêter la séquence") }}</button></form>
   {% else %}
     {% set possibles = d.contacts|selectattr("adresse")|list %}

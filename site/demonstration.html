@@ -3,12 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Démonstration — ControlDOne</title>
-<meta name="description" content="Rapport de diagnostic ControlDOne produit sur des données fictives : constats, preuves, montants certains et à vérifier.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Démonstration · ControlDOne</title>
+<meta name="description" content="Un rapport de diagnostic produit par le moteur de ControlDOne sur des dossiers d'import entièrement fictifs.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="alternate" hreflang="en" href="en/demo.html">
+<script src="assets/vendor/motion.min.js" defer></script>
+<script src="assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
@@ -16,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Navigation principale">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html" aria-current="page">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
@@ -28,94 +32,114 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Navigation principale (mobile)">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html" aria-current="page">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
         <a href="experts-comptables.html">Experts-comptables</a>
         <a href="contact.html">Contact</a>
         <a href="en/demo.html" hreflang="en" lang="en" title="English version">EN</a>
-        <a href="contact.html">Demander un diagnostic</a>
+        <a class="menu-cta" href="contact.html">Demander un diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="contenu">
-
-<div class="demo-banner" role="note">DONNÉES FICTIVES — DÉMONSTRATION</div>
+<div class="demo-banner" role="note">DONNÉES FICTIVES : DÉMONSTRATION</div>
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Démonstration</span>
-    <h1>Un rapport de diagnostic, sur des données fictives</h1>
-    <p class="lead">Ce rapport a été produit par le moteur de ControlDOne à partir d'un jeu de documents inventé :
-    trois dossiers d'import d'une société fictive, avec ses factures, déclarations et une facture de transitaire.
-    Aucune société, aucun transitaire, aucun numéro et aucun montant ne sont réels.</p>
+    <p class="label">Démonstration</p>
+    <h1>Un vrai rapport, produit par le programme, sur des dossiers inventés.</h1>
+    <p class="lead">Le jeu de documents est fictif : trois dossiers d'import d'une société inventée, avec ses factures, ses
+    déclarations et une facture de transitaire. Aucune société, aucun transitaire, aucun numéro et aucun montant n'est
+    réel. Le rapport, lui, sort du même moteur que celui qui contrôlera vos dossiers.</p>
     <div class="actions">
-      <a class="btn btn-primary" href="demo/report.html">Ouvrir le rapport complet</a>
+      <a class="btn btn-ghost" href="demo/report.html">Ouvrir le rapport complet</a>
       <a class="btn btn-ghost" href="demo/report.pdf">Télécharger le PDF</a>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="constats">
   <div class="wrap">
     <div class="section-head">
-      <h2>Ce que montre la démonstration</h2>
-      <p>Trois dossiers fictifs : deux avec des écarts certains, un à vérifier. Les constats sont au stade « proposé » :
-      dans le service réel, le fondateur les valide avant de vous les remettre.</p>
+      <p class="label">Ce que montre la démonstration</p>
+      <h2>Deux dossiers avec des écarts certains, un dossier conforme.</h2>
+      <p>Les constats sont au stade « proposé ». Dans le service réel, je les relis et je les valide avant de vous les
+      remettre. Le rapport signale aussi deux points qui ne sont pas des montants à récupérer : un écart de calcul sur une
+      déclaration et un point à faire vérifier par un professionnel.</p>
     </div>
     <div class="grid grid-3">
       <div class="card"><span class="badge badge-certain">Écart certain</span>
-        <h3 style="margin-top:.7rem">TVA refacturée malgré l'autoliquidation</h3>
-        <p class="card-muted">La facture du transitaire refacture 2&nbsp;356,28&nbsp;EUR de TVA à l'importation ; la déclaration indique le code document 1008 (autoliquidation).</p></div>
+        <h3 class="mt">TVA refacturée malgré l'autoliquidation</h3>
+        <p class="card-muted">La facture du transitaire refacture 2&nbsp;356,28&nbsp;EUR de TVA à l'importation. La
+        déclaration porte le code document 1008, qui indique une autoliquidation.</p></div>
       <div class="card"><span class="badge badge-certain">Écart certain</span>
-        <h3 style="margin-top:.7rem">Prestation au-dessus de la grille</h3>
-        <p class="card-muted">Frais de dédouanement facturés 95,00&nbsp;EUR ; la grille tarifaire validée prévoit un forfait de 65,00&nbsp;EUR. Écart : 30,00&nbsp;EUR.</p></div>
-      <div class="card"><span class="badge badge-verifier">À vérifier</span>
-        <h3 style="margin-top:.7rem">Total imprimé et somme des taxes</h3>
-        <p class="card-muted">Le total imprimé sur la déclaration diffère de la somme des montants lus ; une ligne non lue peut l'expliquer. D'où « à vérifier », pas « certain ».</p></div>
+        <h3 class="mt">Frais au-dessus de la grille</h3>
+        <p class="card-muted">Frais de dédouanement facturés 95,00&nbsp;EUR, pour un forfait de 65,00&nbsp;EUR dans la
+        grille validée. Écart : 30,00&nbsp;EUR.</p></div>
+      <div class="card"><span class="badge badge-renvoi">Écart de calcul</span>
+        <h3 class="mt">Montant imprimé différent du calcul</h3>
+        <p class="card-muted">Sur une déclaration, le montant imprimé d'une taxe diffère de base × taux de 20,00&nbsp;EUR.
+        Le rapport le donne comme écart de calcul, à faire expliquer par le déclarant. Ce n'est pas un montant de droits
+        à récupérer.</p></div>
     </div>
   </div>
 </section>
 
-<section class="section alt">
+<section class="section alt" id="captures">
   <div class="wrap">
-    <div class="section-head"><h2>Captures</h2></div>
+    <div class="section-head"><p class="label">Captures</p><h2>Le rapport, sur grand écran et sur téléphone.</h2></div>
     <div class="shots">
       <figure class="shot">
         <img src="demo/captures/rapport-constat.png" width="1228" height="828" loading="lazy"
-             alt="Capture d'un constat du rapport de démonstration : valeurs de la facture du transitaire et de la déclaration côte à côte, avec page et texte lu. Données fictives.">
+             alt="Un constat du rapport de démonstration : valeurs de la facture du transitaire et de la déclaration côte à côte, avec la page et le texte lu. Données fictives.">
         <figcaption><span>Un constat : deux valeurs, deux sources, la page et le texte lu</span><span class="tag-fictif">DONNÉES FICTIVES</span></figcaption>
       </figure>
       <figure class="shot">
         <img src="demo/captures/rapport-mobile.png" width="780" height="1688" loading="lazy"
-             alt="Capture du rapport de démonstration sur un écran de téléphone. Données fictives.">
+             alt="Le rapport de démonstration sur un écran de téléphone. Données fictives.">
         <figcaption><span>Lecture sur téléphone</span><span class="tag-fictif">DONNÉES FICTIVES</span></figcaption>
       </figure>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="rapport">
   <div class="wrap">
     <div class="frame">
       <div class="frame-bar"><span>Rapport de démonstration intégré</span><span class="tag-fictif">DONNÉES FICTIVES</span></div>
       <iframe src="demo/report.html" title="Rapport de diagnostic de démonstration, données fictives" loading="lazy" sandbox=""></iframe>
     </div>
-    <p class="small muted" style="margin-top:1rem">Le rapport réel a la même structure : synthèse, prochaines actions, tableau des
-    dossiers, fiche par dossier avec preuves, points à faire vérifier par un professionnel, documents non lus, méthode et avertissement.</p>
+    <p class="note mt">Un rapport réel a la même structure : synthèse, prochaines actions, tableau des dossiers, fiche par
+    dossier avec ses preuves, points à faire vérifier par un professionnel, documents non lus, méthode et avertissement.</p>
   </div>
 </section>
 
+<section class="section alt" id="suite">
+  <div class="wrap">
+    <div class="offer">
+      <div>
+        <p class="label">Et sur vos dossiers</p>
+        <h2>Le même rapport, sur vos factures de transitaire.</h2>
+        <p>Écrivez-moi le nombre de dossiers d'import que vous traitez par an et le nom de vos transitaires. Je vous
+        réponds avec la liste des pièces et les conditions écrites.</p>
+      </div>
+      <div class="offer-box">
+        <div class="actions"><a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Diagnostic : 390 € HT">Demander un diagnostic <span class="fl" aria-hidden="true">→</span></a></div>
+      </div>
+    </div>
+  </div>
+</section>
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Contrôle technique de cohérence entre la facture commerciale, la déclaration en douane,
-        la facture du transitaire et ses avoirs, pour les PME qui importent.</p>
-        <p class="small">Site sans cookie, sans traceur, sans police ni script externes.</p>
+        <p class="foot-about">ControlDOne compare la facture de votre transitaire à votre déclaration en douane, à votre
+        grille tarifaire et à vos avoirs, dossier par dossier. Pour les PME qui importent hors de l'Union européenne.</p>
+        <p class="small">Ce site ne dépose aucun cookie et ne mesure pas votre visite. Ses polices et ses scripts sont
+        servis par ce site : aucun autre serveur n'est appelé.</p>
       </div>
       <div>
         <h2>Le service</h2>

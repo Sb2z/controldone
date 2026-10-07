@@ -1,10 +1,11 @@
 """Liste d'exclusion (groupes exclus par consigne du fondateur, ``config/prospection.yaml``).
 
-Comparaison sans casse ni accents, apostrophes et tirets neutralisés ; un motif de 5 caractères ou moins doit
-être un **mot entier** (« eres » ne bloque pas « fereres ») ; un motif plus long est cherché comme suite de mots
-entiers. Un nom de domaine (``www.marque-groupe.fr``, ``contact@marque.com``) est découpé en mots. Le motif
-trouvé n'est jamais affiché dans l'interface : seul le fait « liste d'exclusion » l'est (le groupe est noté dans le
-journal d'audit par son identifiant de configuration)."""
+Comparaison sans casse ni accents, apostrophes et tirets neutralisés, par **mots entiers** (« eres » ne bloque pas
+« fereres », « barrie » ne bloque pas « barrière ») ; un motif de plusieurs mots est aussi cherché collé (« sol de
+janeiro » dans le domaine ``soldejaneiro.com``). Un nom de domaine (``www.marque-groupe.fr``,
+``contact@marque.com``) est découpé en mots. Le script ``commercial/scripts/prospection_sirene.py`` cherchait les
+motifs longs comme sous-chaînes : trop large (« barrie » bloquait toute « barrière »), D-5003. Le motif
+trouvé n'est jamais affiché dans l'interface : seul le fait « liste d'exclusion » l'est."""
 
 from __future__ import annotations
 
@@ -52,7 +53,7 @@ def chercher_exclusion(textes: Iterable[str | None], config: ConfigProspection) 
                 continue
             colle = m.replace(" ", "")
             for c in candidats:
-                if f" {m} " in c or (len(colle) > 5 and colle in c.replace(" ", "")):
+                if f" {m} " in c or f" {colle} " in c:
                     return Exclusion(g.groupe, motif)
     return None
 

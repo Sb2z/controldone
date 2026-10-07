@@ -34,6 +34,7 @@
 <section class="carte" aria-labelledby="t-entonnoir">
   <h2 id="t-entonnoir">{{ _("Conversion par étape") }}</h2>
   {% if t.total %}
+  <div class="defilement">
   <table class="donnees compacte prosp-entonnoir">
     <caption class="vh">{{ _("Prospects ayant atteint chaque étape, et part de l'étape précédente") }}</caption>
     <thead><tr><th scope="col">{{ _("Étape") }}</th><th scope="col" class="num">{{ _("Atteinte") }}</th><th scope="col" class="num">{{ _("Depuis l'étape précédente") }}</th><th scope="col" class="barre-col"><span class="vh">{{ _("Proportion") }}</span></th></tr></thead>
@@ -44,13 +45,14 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   <p class="discret">{{ _("Une étape est « atteinte » si le prospect y est ou y est passé (historique des statuts).") }}</p>
   {% else %}<p class="vide">{{ _("Aucun prospect pour l'instant.") }}</p>{% endif %}
 </section>
 
 <section class="carte" aria-labelledby="t-statuts">
   <h2 id="t-statuts">{{ _("Pipeline") }} <a class="petit-lien" href="{{ base }}/pipeline">{{ _("ouvrir le tableau") }}</a></h2>
-  {{ graphe(graphe) }}
+  {{ graphe(graphe_pipeline) }}
 </section>
 </div>
 
@@ -82,6 +84,7 @@
 <section class="carte" aria-labelledby="t-segments">
   <h2 id="t-segments">{{ _("Segments par taux de réponse") }}</h2>
   {% if t.segments %}
+  <div class="defilement">
   <table class="donnees compacte">
     <thead><tr><th scope="col">{{ _("Segment") }}</th><th scope="col" class="num">{{ _("Contactés") }}</th><th scope="col" class="num">{{ _("Réponses") }}</th><th scope="col" class="num">{{ _("Taux") }}</th></tr></thead>
     <tbody>
@@ -90,12 +93,14 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   <p class="discret">{{ _("Calculé sur les prospects à qui au moins un courriel a été envoyé ; peu de contacts donnent des taux fragiles.") }}</p>
   {% else %}<p class="vide">{{ _("Pas encore de courriel envoyé : les taux de réponse apparaîtront après les premiers envois.") }}</p>{% endif %}
 </section>
 
 <section class="carte" aria-labelledby="t-seq">
   <h2 id="t-seq">{{ _("Séquences") }} <a class="petit-lien" href="{{ base }}/sequences">{{ _("détail par étape") }}</a></h2>
+  <div class="defilement">
   <table class="donnees compacte">
     <thead><tr><th scope="col">{{ _("Séquence") }}</th><th scope="col" class="num">{{ _("Inscrits") }}</th><th scope="col" class="num">{{ _("Envoyés") }}</th><th scope="col" class="num">{{ _("Réponses") }}</th><th scope="col" class="num">{{ _("Rendez-vous") }}</th></tr></thead>
     <tbody>
@@ -104,6 +109,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% if t.a_purger %}<p class="alerte-ligne">{{ _("{n} prospect(s) au-delà de la durée de conservation : à purger.", n=t.a_purger) }} <a href="{{ base }}/opposition#conservation">{{ _("Voir") }}</a></p>{% endif %}
 </section>
 </div>

@@ -1,16 +1,21 @@
-/* ControlDOne — améliorations progressives de l'interface. Tout fonctionne sans JavaScript ; ce script ajoute
-   les animations (bibliothèque Motion, servie localement : static/vendor/motion.min.js, licence MIT), la palette
+/* ControlDOne : améliorations progressives de l'interface. Tout fonctionne sans JavaScript ; ce script ajoute
+   les animations (bibliothèque Motion 14, servie localement : static/vendor/motion.min.js, licence MIT), la palette
    de commandes (Ctrl+K), le thème clair/sombre et la zone de dépôt par glisser-déposer.
+   Vocabulaire du mouvement (D-5203) : 120, 200, 280 et 400 ms, décélération cubic-bezier(0.16, 1, 0.3, 1),
+   ressorts sans rebond, transform et opacity seulement, aucune boucle, rien en mouvement réduit.
    Aucun contenu de document n'est interprété ici : le script ne lit que la structure de la page. */
 (function () {
   "use strict";
   var racine = document.documentElement;
   var M = window.Motion || null;
   var reduit = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var EASE = [0.22, 1, 0.36, 1];
-  var REVELER = ".titre-page, .fil, .kpi, .carte, .constat, .message, .ancres, .lien-dossier, .accueil-texte > *";
+  var EASE = [0.16, 1, 0.3, 1];
+  var D = { micro: 0.12, courte: 0.2, moyenne: 0.28, section: 0.4 };
+  var RESSORT = { type: "spring", visualDuration: 0.3, bounce: 0 };
+  var REVELER = ".titre-page, .fil, .bilan > *, .prochaine, .kpi, .carte, .constat, .ancres, .lien-dossier, .accueil-texte > *";
 
   function $$(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function bouge() { return !!(M && !reduit); }
 
   /* --- textes de l'interface dans la langue de la page (D-3803) : bloc JSON inerte produit par le serveur ----------- */
   var TEXTES = {};
@@ -25,96 +30,95 @@
     return t;
   }
   function anime(el, kf, opts) {
-    if (M && !reduit) { return M.animate(el, kf, opts); }
+    if (bouge()) { return M.animate(el, kf, opts); }
     return null;
   }
 
-  /* --- entrées en cascade --------------------------------------------------------------------------------- */
+  /* --- entrée de page : ce qui est visible arrive en cascade courte, le reste à son entrée dans la vue (une fois) ---- */
   function entrees() {
     var elements = $$(REVELER);
-    if (!M || reduit) { racine.classList.remove("anime"); return; }
-    elements.forEach(function (el) { el.style.opacity = "0"; });
     racine.classList.remove("anime");
+    if (!bouge()) { return; }
     var hauteur = window.innerHeight;
     var visibles = [], plus_bas = [];
     elements.forEach(function (el) {
-      (el.getBoundingClientRect().top < hauteur * 1.05 ? visibles : plus_bas).push(el);
+      (el.getBoundingClientRect().top < hauteur * 1.02 ? visibles : plus_bas).push(el);
     });
     if (visibles.length) {
-      M.animate(visibles, { opacity: [0, 1], y: [18, 0], filter: ["blur(6px)", "blur(0px)"] },
-        { duration: 0.75, ease: EASE, delay: M.stagger(0.045, { startDelay: 0.04 }) });
+      visibles.forEach(function (el) { el.style.opacity = "0"; });
+      visibles.forEach(function (el, i) {
+        M.animate(el, { opacity: [0, 1], y: [12, 0] }, { duration: D.section, ease: EASE, delay: Math.min(i, 8) * 0.05 });
+      });
     }
     plus_bas.forEach(function (el) {
       // Hors de l'écran : laissé visible (impression, captures, lecteurs) ; animé à son entrée dans la vue.
-      el.style.opacity = "";
       M.inView(el, function () {
-        M.animate(el, { opacity: [0, 1], y: [24, 0], filter: ["blur(6px)", "blur(0px)"] }, { duration: 0.8, ease: EASE });
-      }, { margin: "0px 0px -8% 0px" });
+        M.animate(el, { opacity: [0, 1], y: [12, 0] }, { duration: D.section, ease: EASE });
+      }, { margin: "0px 0px -6% 0px" });
     });
   }
 
-  /* --- compteurs : les montants défilent jusqu'à la valeur exacte affichée par le serveur ------------------- */
+  /* --- lignes des tableaux visibles au chargement : cascade de 30 ms ------------------------------------------------ */
+  function lignes() {
+    if (!bouge()) { return; }
+    $$("table.donnees > tbody").forEach(function (tb) {
+      if (tb.closest("details:not([open])") || tb.getBoundingClientRect().top > window.innerHeight) { return; }
+      var rangs = $$(":scope > tr", tb).slice(0, 14);
+      if (rangs.length < 2) { return; }
+      rangs.forEach(function (r) { r.style.opacity = "0"; });
+      M.animate(rangs, { opacity: [0, 1], y: [4, 0] }, { duration: D.moyenne, ease: EASE, delay: M.stagger(0.03, { startDelay: 0.12 }) });
+    });
+  }
+
+  /* --- compteurs : les montants défilent une fois jusqu'à la valeur exacte affichée par le serveur ------------------- */
   var MOTIF_NOMBRE = ANGLAIS ? /^([^\d-]*)(-?[\d,]+)(?:\.(\d+))?(\s*(?:€|EUR|%)?)$/
-    : /^([^\d-]*)(-?[\d   ]+)(?:,(\d+))?(\s*(?:€|EUR|%)?)$/;
+    : /^([^\d-]*)(-?[\d   ]+)(?:,(\d+))?(\s*(?:€|EUR|%)?)$/;
   function compteurs() {
-    if (!M || reduit) { return; }
-    $$(".kpi-val").forEach(function (bloc) {
+    if (!bouge()) { return; }
+    $$(".kpi-val, [data-compteur]").forEach(function (bloc) {
       var cible = bloc.querySelector("a") || bloc;
       var texte = cible.textContent.trim();
       var m = MOTIF_NOMBRE.exec(texte);
       if (!m) { return; }
-      var entier = parseInt(m[2].replace(/[,\s  ]/g, ""), 10);
+      var entier = parseInt(m[2].replace(/[,\s  ]/g, ""), 10);
       var decimales = m[3] ? m[3].length : 0;
       var valeur = entier + (decimales ? (entier < 0 ? -1 : 1) * parseInt(m[3], 10) / Math.pow(10, decimales) : 0);
       if (!isFinite(valeur) || valeur === 0) { return; }
       var fmt = new Intl.NumberFormat(ANGLAIS ? "en-GB" : "fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
-      var lancer = function () {
+      cible.textContent = m[1] + fmt.format(0) + m[4];
+      M.inView(bloc, function () {
         M.animate(0, valeur, {
-          duration: Math.min(1.6, 0.7 + Math.log10(Math.abs(valeur) + 1) * 0.18), ease: EASE,
+          duration: Math.min(0.9, 0.45 + Math.log10(Math.abs(valeur) + 1) * 0.08), ease: EASE,
           onUpdate: function (v) { cible.textContent = m[1] + fmt.format(v) + m[4]; },
           onComplete: function () { cible.textContent = texte; }
         });
-      };
-      cible.textContent = m[1] + fmt.format(0) + m[4];
-      M.inView(bloc, function () { lancer(); });
+      });
     });
   }
 
   /* --- barres de proportion ------------------------------------------------------------------------------------ */
   function barres() {
-    if (!M || reduit) { return; }
+    if (!bouge()) { return; }
     $$(".barre > span, .jauge > span").forEach(function (b, i) {
       b.style.transform = "scaleX(0)";
       M.inView(b, function () {
-        M.animate(b, { transform: ["scaleX(0)", "scaleX(1)"] }, { duration: 1.1, ease: EASE, delay: 0.15 + (i % 8) * 0.05 });
+        M.animate(b, { transform: ["scaleX(0)", "scaleX(1)"] }, { duration: 0.6, ease: EASE, delay: 0.1 + (i % 8) * 0.04 });
       });
     });
   }
 
-  /* --- halo qui suit le pointeur sur les cartes ---------------------------------------------------------------- */
-  function halos() {
-    if (window.matchMedia && !window.matchMedia("(hover: hover)").matches) { return; }
-    document.addEventListener("pointermove", function (e) {
-      var el = e.target.closest && e.target.closest(".carte, .kpi, .constat");
-      if (!el) { return; }
-      var r = el.getBoundingClientRect();
-      el.style.setProperty("--mx", (e.clientX - r.left) + "px");
-      el.style.setProperty("--my", (e.clientY - r.top) + "px");
-    }, { passive: true });
-  }
-
-  /* --- pastille de navigation qui glisse ------------------------------------------------------------------------- */
+  /* --- pastille de navigation qui glisse (ressort sans rebond) ---------------------------------------------------- */
   function pastille() {
     var nav = document.querySelector(".nav");
     var ul = nav && nav.querySelector("ul");
-    if (!ul || !M || reduit) { return; }
+    if (!ul || !bouge()) { return; }
     var p = document.createElement("span");
     p.className = "pastille"; p.setAttribute("aria-hidden", "true");
     ul.appendChild(p);
     nav.classList.add("avec-pastille");
     var actif = ul.querySelector('a[aria-current="page"]');
     function place(a, instant) {
-      if (!a) { M.animate(p, { opacity: 0 }, { duration: 0.2 }); return; }
+      if (!a) { M.animate(p, { opacity: 0 }, { duration: D.courte }); return; }
       var li = a.parentElement; // les <li> sont positionnés : offsetLeft du lien est relatif à son <li>
       var cible = { x: li.offsetLeft + a.offsetLeft, y: li.offsetTop + a.offsetTop, width: a.offsetWidth, height: a.offsetHeight, opacity: 1 };
       if (instant) {
@@ -122,10 +126,10 @@
         p.style.width = cible.width + "px"; p.style.height = cible.height + "px"; p.style.opacity = 1;
         return;
       }
-      M.animate(p, cible, { type: "spring", stiffness: 520, damping: 40, mass: 0.8 });
+      M.animate(p, cible, RESSORT);
     }
     place(actif, true);
-    // Les largeurs changent quand la police Geist est chargée : on recale la pastille.
+    // Les largeurs changent quand la police Inter est chargée : on recale la pastille.
     if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function () { place(actif, true); }); }
     if (window.ResizeObserver) { new ResizeObserver(function () { place(actif, true); }).observe(ul); }
     $$("a", ul).forEach(function (a) {
@@ -136,33 +140,70 @@
     window.addEventListener("resize", function () { place(actif, true); });
   }
 
-  /* --- barre de progression de lecture ---------------------------------------------------------------------------- */
+  /* --- barre de lecture (pages longues seulement) ------------------------------------------------------------------- */
   function progression() {
     var b = document.querySelector(".progression");
-    if (!b || !M || reduit) { return; }
+    if (!b || !bouge() || document.documentElement.scrollHeight < window.innerHeight * 2.5) { return; }
     M.scroll(function (avance) { b.style.transform = "scaleX(" + avance + ")"; });
   }
 
-  /* --- boutons principaux « magnétiques » --------------------------------------------------------------------------- */
-  function magnetisme() {
-    if (!M || reduit || (window.matchMedia && !window.matchMedia("(hover: hover)").matches)) { return; }
-    $$(".btn-principal").forEach(function (b) {
-      b.addEventListener("pointermove", function (e) {
-        var r = b.getBoundingClientRect();
-        var dx = (e.clientX - r.left - r.width / 2) / r.width, dy = (e.clientY - r.top - r.height / 2) / r.height;
-        M.animate(b, { x: dx * 6, y: dy * 4 }, { type: "spring", stiffness: 300, damping: 20 });
+  /* --- messages (confirmation, erreur) : arrivée douce et bouton pour les fermer --------------------------------------- */
+  function messages() {
+    $$(".page > .message").forEach(function (msg) {
+      anime(msg, { opacity: [0, 1], y: [-8, 0] }, { duration: D.moyenne, ease: EASE });
+      if (!msg.classList.contains("succes")) { return; }
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "fermer"; b.setAttribute("aria-label", T("Fermer ce message"));
+      var ns = "http://www.w3.org/2000/svg";
+      var svg = document.createElementNS(ns, "svg"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("aria-hidden", "true");
+      var trait = document.createElementNS(ns, "path"); trait.setAttribute("d", "M4 4l8 8M12 4l-8 8");
+      trait.setAttribute("stroke", "currentColor"); trait.setAttribute("stroke-width", "1.6"); trait.setAttribute("stroke-linecap", "round");
+      svg.appendChild(trait); b.appendChild(svg);
+      b.addEventListener("click", function () {
+        var fin = function () { msg.remove(); };
+        var a = anime(msg, { opacity: 0, y: -4 }, { duration: D.courte, ease: [0.4, 0, 1, 1] });
+        if (a && a.finished) { a.finished.then(fin); } else { fin(); }
       });
-      b.addEventListener("pointerleave", function () {
-        M.animate(b, { x: 0, y: 0 }, { type: "spring", stiffness: 300, damping: 18 });
+      msg.appendChild(b);
+    });
+  }
+
+  /* --- preuves d'un constat : le contenu révélé se pose en 280 ms ---------------------------------------------------- */
+  function preuves() {
+    $$("details.preuves-bloc, details.valeurs").forEach(function (d) {
+      d.addEventListener("toggle", function () {
+        if (!d.open) { return; }
+        var contenu = $$(":scope > :not(summary)", d);
+        anime(contenu, { opacity: [0, 1], y: [-4, 0] }, { duration: D.moyenne, ease: EASE });
       });
     });
   }
 
-  /* --- thème clair / sombre (avec dévoilement circulaire) --------------------------------------------------------------- */
+  /* --- exemple de constat sur l'écran de connexion : les deux montants, puis le trait, puis l'écart (une fois) ---------- */
+  function exemple() {
+    var bloc = document.querySelector("[data-exemple]");
+    if (!bloc || !bouge()) { return; }
+    var valeurs = $$("[data-exemple-valeur]", bloc);
+    var trait = bloc.querySelector(".exemple-trait");
+    var ecart = $$("[data-exemple-ecart]", bloc);
+    valeurs.concat(ecart).forEach(function (el) { el.style.opacity = "0"; });
+    if (trait) { trait.style.transform = "scaleX(0)"; }
+    var depart = 0.5;
+    valeurs.forEach(function (el, i) {
+      M.animate(el, { opacity: [0, 1], y: [6, 0] }, { duration: D.moyenne, ease: EASE, delay: depart + i * 0.12 });
+    });
+    var apres = depart + valeurs.length * 0.12 + 0.1;
+    if (trait) { M.animate(trait, { transform: ["scaleX(0)", "scaleX(1)"] }, { duration: D.section, ease: EASE, delay: apres }); }
+    ecart.forEach(function (el) {
+      M.animate(el, { opacity: [0, 1], y: [6, 0] }, { duration: D.moyenne, ease: EASE, delay: apres + 0.25 });
+    });
+  }
+
+  /* --- thème clair / sombre (dévoilement circulaire de 400 ms) --------------------------------------------------------- */
   function themeEffectif() {
     var t = racine.getAttribute("data-theme");
     if (t) { return t; }
-    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "clair" : "sombre";
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "sombre" : "clair";
   }
   function basculerTheme(e) {
     var suivant = themeEffectif() === "clair" ? "sombre" : "clair";
@@ -177,7 +218,7 @@
     var t = document.startViewTransition(appliquer);
     t.ready.then(function () {
       racine.animate({ clipPath: ["circle(0px at " + x + "px " + y + "px)", "circle(" + rayon + "px at " + x + "px " + y + "px)"] },
-        { duration: 650, easing: "cubic-bezier(.22,1,.36,1)", pseudoElement: "::view-transition-new(root)" });
+        { duration: 400, easing: "cubic-bezier(0.16, 1, 0.3, 1)", pseudoElement: "::view-transition-new(root)" });
     });
     t.finished.finally(function () { racine.classList.remove("bascule-theme"); });
   }
@@ -194,7 +235,7 @@
     $$(".carte-tete a.petit-lien, .carte h2 a.petit-lien").forEach(function (a) {
       var bloc = a.closest(".carte, .bandeau-alertes");
       var h = bloc && bloc.querySelector("h2");
-      entrees.push({ lib: (h ? h.firstChild.textContent.trim() + " — " : "") + a.textContent.trim(), aide: T("Lien"), url: a.getAttribute("href") });
+      entrees.push({ lib: (h ? h.firstChild.textContent.trim() + " · " : "") + a.textContent.trim(), aide: T("Lien"), url: a.getAttribute("href") });
     });
     var moncompte = document.querySelector('.compte a[href="/compte"]');
     if (moncompte) { entrees.push({ lib: T("Mon compte"), aide: T("Compte"), url: moncompte.getAttribute("href") }); }
@@ -202,7 +243,7 @@
     if (compte) { entrees.push({ lib: T("Changer de mot de passe"), aide: T("Compte"), url: compte.getAttribute("href") }); }
     var sessions = document.querySelector('.compte a[href="/compte/sessions"]');
     if (sessions) { entrees.push({ lib: T("Mes sessions actives"), aide: T("Compte"), url: sessions.getAttribute("href") }); }
-    entrees.push({ lib: T("Basculer le thème clair / sombre"), aide: T("Affichage"), action: function () { basculerTheme(); } });
+    entrees.push({ lib: T("Passer en thème clair ou sombre"), aide: T("Affichage"), action: function () { basculerTheme(); } });
     if (document.querySelector("[data-imprimer]")) { entrees.push({ lib: T("Imprimer cette page"), aide: T("Affichage"), action: function () { window.print(); } }); }
     var vues = [], sel = 0;
 
@@ -240,7 +281,7 @@
     function ouvrir() {
       champ.value = ""; sel = 0; rendre();
       dlg.showModal();
-      anime(dlg, { opacity: [0, 1], scale: [0.96, 1], y: [-8, 0] }, { duration: 0.35, ease: EASE });
+      anime(dlg, { opacity: [0, 1], scale: [0.98, 1], y: [-4, 0] }, { duration: D.courte, ease: EASE });
       champ.focus();
     }
     function fermer() { if (dlg.open) { dlg.close(); } }
@@ -262,7 +303,7 @@
     $$("[data-palette-ouvrir]").forEach(function (b) { b.addEventListener("click", ouvrir); });
   }
 
-  /* --- dépôt : glisser-déposer et liste des fichiers ------------------------------------------------------------------------ */
+  /* --- dépôt : glisser-déposer, liste des fichiers choisis, envoi ---------------------------------------------------------- */
   function depot() {
     var form = document.querySelector("form[data-depot]");
     if (!form) { return; }
@@ -274,7 +315,8 @@
     function afficher() {
       var n = champ.files.length, total = 0;
       for (var i = 0; i < n; i++) { total += champ.files[i].size; }
-      resume.textContent = n ? T("{n} fichier(s) sélectionné(s), {taille}", { n: n, taille: taille(total) }) : "";
+      resume.textContent = n ? T("{n} fichier(s) prêt(s) à envoyer, {taille}", { n: n, taille: taille(total) }) : "";
+      if (zone) { zone.classList.toggle("rempli", n > 0); }
       if (liste) {
         liste.textContent = "";
         for (var j = 0; j < Math.min(n, 40); j++) {
@@ -284,8 +326,8 @@
           li.appendChild(s); li.appendChild(em); liste.appendChild(li);
         }
         if (n > 40) { var plus = document.createElement("li"); plus.textContent = T("+ {n} autre(s)", { n: n - 40 }); liste.appendChild(plus); }
-        if (M && !reduit && n) {
-          M.animate($$("li", liste), { opacity: [0, 1], y: [8, 0], scale: [0.96, 1] }, { duration: 0.4, ease: EASE, delay: M.stagger(0.03) });
+        if (bouge() && n) {
+          M.animate($$("li", liste), { opacity: [0, 1], y: [6, 0] }, { duration: D.moyenne, ease: EASE, delay: M.stagger(0.03) });
         }
       }
     }
@@ -297,6 +339,9 @@
     form.addEventListener("submit", function () {
       var b = form.querySelector("button[type=submit]");
       b.disabled = true; b.textContent = T("Envoi en cours…");
+      if (resume && champ.files.length) {
+        resume.textContent = T("Envoi de {n} fichier(s) en cours. Gardez cette page ouverte.", { n: champ.files.length });
+      }
     });
   }
 
@@ -349,13 +394,10 @@
         if (lib && d.erreur && i === rang) { lib.textContent = d.libelle || T("Erreur"); }
       });
       if (barre) {
+        // la barre avance par transform (transition CSS de 400 ms) : la classe w-N porte l'échelle
         var pct = Math.max(0, Math.min(100, Math.round((d.pourcentage || 5) / 5) * 5));
         if (d.fini) { pct = 100; }
-        var avant = barre.className;
         barre.className = "w-" + pct;
-        if (avant !== barre.className && M && !reduit) {
-          M.animate(barre, { opacity: [0.6, 1] }, { duration: 0.6, ease: EASE });
-        }
       }
       bloc.classList.toggle("suivi-erreur", !!d.erreur);
       bloc.classList.toggle("suivi-fini", !!d.fini && !d.erreur);
@@ -363,12 +405,12 @@
       var compteurEtape = bloc.querySelector("li.en-cours .suivi-compteur");
       if (compteurEtape && typeof d.fait === "number" && d.total) { compteurEtape.textContent = d.fait + "/" + d.total; }
       if (texte) {
-        texte.textContent = d.fini && !d.erreur ? T("Traitement terminé : affichage des résultats…") : (d.texte || "");
+        texte.textContent = d.fini && !d.erreur ? T("Traitement terminé. Les résultats s'affichent…") : (d.texte || "");
       }
       if (d.etape !== etapeAffichee) {
         etapeAffichee = d.etape;
         var actuelle = bloc.querySelector("li.en-cours .suivi-puce");
-        if (actuelle) { anime(actuelle, { scale: [0.6, 1.15, 1] }, { duration: 0.5, ease: EASE }); }
+        if (actuelle) { anime(actuelle, { scale: [0.8, 1] }, RESSORT); }
       }
       if (d.fini) {
         var lien = document.querySelector("[data-rafraichir]");
@@ -395,7 +437,7 @@
           b.className = "badge " + (l.erreur ? "b-rejete" : (l.fini ? "b-valide" : "b-verifier en-cours"));
           b.setAttribute("data-fini", l.fini ? "oui" : "non");
           if (!l.fini) { restants++; }
-          if (avant !== l.libelle) { anime(b, { scale: [0.85, 1.06, 1], opacity: [0.4, 1] }, { duration: 0.45, ease: EASE }); }
+          if (avant !== l.libelle) { anime(b, { opacity: [0.4, 1], scale: [0.96, 1] }, { duration: D.moyenne, ease: EASE }); }
         });
         return restants > 0;
       }, 4000);
@@ -449,7 +491,7 @@
           history.replaceState(null, "", url + (window.location.hash || ""));
           var compte = importee.querySelector("[data-compte]");
           annonce.textContent = compte ? compte.textContent.trim() : "";
-          anime(importee, { opacity: [0.5, 1] }, { duration: 0.3, ease: EASE });
+          anime(importee, { opacity: [0.6, 1] }, { duration: D.courte, ease: EASE });
         };
         xhr.onerror = function () { requete = null; region.classList.remove("charge"); };
         xhr.send();
@@ -463,7 +505,7 @@
 
   /* --- graphiques : barres qui poussent à leur entrée dans la vue (le SVG final est celui du serveur) ---------------------------- */
   function graphes() {
-    if (!M || reduit) { return; }
+    if (!bouge()) { return; }
     $$(".graphe").forEach(function (fig) {
       var rects = $$(".g-barre", fig);
       // seulement les graphiques visibles au chargement : plus bas, ils restent tels que rendus (captures, impression)
@@ -471,7 +513,7 @@
       var axe = fig.classList.contains("graphe-colonnes") ? "scaleY" : "scaleX";
       rects.forEach(function (r) { r.style.transform = axe + "(0)"; });
       M.inView(fig, function () {
-        M.animate(rects, { transform: [axe + "(0)", axe + "(1)"] }, { duration: 0.9, ease: EASE, delay: M.stagger(0.05) });
+        M.animate(rects, { transform: [axe + "(0)", axe + "(1)"] }, { duration: 0.6, ease: EASE, delay: M.stagger(0.04) });
       });
     });
   }
@@ -492,7 +534,7 @@
   });
 
   function demarrer() {
-    entrees(); compteurs(); barres(); halos(); pastille(); progression(); magnetisme(); palette(); depot();
+    entrees(); lignes(); compteurs(); barres(); pastille(); progression(); messages(); preuves(); exemple(); palette(); depot();
     suiviLot(); suiviListes(); filtresDirects(); graphes();
   }
   if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", demarrer); } else { demarrer(); }

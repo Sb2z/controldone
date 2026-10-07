@@ -17,8 +17,20 @@
   <dl class="cles">
     {% for lib, val in d.cles %}<div><dt>{{ _(lib) }}</dt><dd><code>{{ val }}</code></dd></div>{% endfor %}
   </dl>
-  {% if lu.documents_manquants %}<p class="alerte-ligne">{{ _("Documents manquants :") }} {{ lu.documents_manquants|map("trad")|join(", ") }}.</p>{% endif %}
+  {% if lu.documents_manquants %}<p class="alerte-ligne">{{ _("Documents manquants :") }} {{ lu.documents_manquants|map("trad")|join(", ") }}. {{ _("Les contrôles qui en dépendent n'ont pas pu être faits.") }}</p>{% endif %}
 </section>
+
+{% if bilan is defined and bilan.n %}
+<section class="carte" aria-labelledby="t-bilan-dossier">
+  <h2 id="t-bilan-dossier">{{ _("Ce que ce dossier vous a fait récupérer") if bilan.credite > 0 else _("Suivi des écarts de ce dossier") }}</h2>
+  <dl class="bilan-dossier">
+    <div class="principal"><dt>{{ _("Avoirs reçus") }}</dt><dd data-compteur>{{ bilan.credite|montant }}</dd></div>
+    <div><dt>{{ _("Écarts suivis") }}</dt><dd>{{ bilan.initial|montant }}</dd></div>
+    <div><dt>{{ _("Reste sans avoir") }}</dt><dd>{{ bilan.reste|montant }}</dd></div>
+  </dl>
+  {% if bilan.reste > 0 %}<p class="discret">{{ _("Quand un avoir arrive pour ce dossier, enregistrez-le dans le suivi : le montant s'ajoutera ici.") }} <a href="/espace/recouvrement?q={{ d.reference|urlencode }}">{{ _("Ouvrir le suivi des avoirs") }}</a></p>{% endif %}
+</section>
+{% endif %}
 
 <section aria-labelledby="t-constats">
   <h2 id="t-constats">{{ _("Constats") }} {% if not fondateur %}<span class="discret">{{ _("publiés") }}</span>{% endif %} <span class="compteur">{{ lu.constats|length }}</span></h2>
@@ -26,7 +38,7 @@
   {% for c in lu.constats %}
     {{ constat_carte(c, img.extraits, base, csrf, retour, fondateur, client.id if fondateur else None) }}
   {% else %}
-    <p class="vide carte">{% if fondateur %}{{ _("Aucun constat : tous les contrôles exécutés sont conformes, non applicables ou non vérifiables.") }}{% else %}{{ _("Aucun constat publié pour ce dossier pour l'instant.") }}{% endif %}</p>
+    <p class="vide carte">{% if fondateur %}{{ _("Aucun constat : tous les contrôles exécutés sont conformes, non applicables ou non vérifiables.") }}{% else %}{{ _("Aucun constat publié pour ce dossier. S'il est en relecture, il s'affichera ici.") }}{% endif %}</p>
   {% endfor %}
 </section>
 
@@ -54,7 +66,7 @@
     {% endif %}
     {% if doc.valeurs %}
     <details class="valeurs{% if not vign %} pleine{% endif %}"{% if fondateur and lu.documents|length <= 2 %} open{% endif %}>
-      <summary>{{ _("Valeurs extraites et provenance ({n})", n=doc.valeurs|length) }}</summary>
+      <summary>{{ _("Valeurs lues et leur source ({n})", n=doc.valeurs|length) }}</summary>
       <div class="defilement">
       <table class="donnees compacte">
         <thead><tr><th scope="col">{{ _("Champ") }}</th><th scope="col">{{ _("Texte lu") }}</th><th scope="col">{{ _("Valeur retenue") }}</th><th scope="col" class="num">{{ _("Page") }}</th><th scope="col">{{ _("Méthode") }}</th><th scope="col" class="num">{{ _("Confiance") }}</th>{% if fondateur %}<th scope="col">{{ _("Corriger ou confirmer") }}</th>{% endif %}</tr></thead>

@@ -5163,3 +5163,116 @@ pendant l'exécution : une mesure faite pendant les modifications du bloc moteur
 identiques dans le Makefile, la CI et `docs/QUALITE.md`, vérifiées par
 `tests/outillage/test_couverture_seuils.py`. Le job `rapide` ne mesure pas la couverture (durée). Relever les
 seuils quand une mesure stable les dépasse de plus de 2 points ; ne jamais les baisser sans décision.
+
+
+# Module « Marketing » : prospection du fondateur (octobre 2026)
+
+## D-5001 — Un module de prospection de niveau plateforme, réservé au fondateur
+
+`/admin/prospection` (prospects, pipeline, import, recherche, séquences, courriels, opposition, délivrabilité) :
+paquet `controldone.prospection`, tables `prospects`, `prospect_contacts`, `prospect_evenements` (append-only),
+`prospection_sequences`, `prospection_inscriptions`, `prospection_suppressions` (`storage/models_prospection.py`,
+migration 6), **sans** `TenantMixin` : invisibles de tout client. Chaque route vérifie le rôle fondateur (404 pour
+un compte client, comme une page inexistante), chaque POST le jeton CSRF ; accès base par `storage/prospection.py`
+seulement (règle d'architecture). Feuille de style propre (`static/prospection.css`), chargée sur ces pages
+seulement ; catalogue anglais à part (`web/i18n_prospection_en.py`) fusionné sans remplacer une traduction
+existante. Tests : `tests/platform/test_prospection.py`, `tests/web/test_prospection_web.py`.
+
+## D-5002 — Rien ne part sans validation ; jamais de faux envoi
+
+Chaque courriel est un brouillon `email_prospection` de la file de validation existante (`FileSortante`, garde-fous
+compris). Après approbation : envoi par un `Expediteur` SMTP **seulement** si la messagerie de prospection est
+configurée (`CONTROLDONE_PROSPECTION_SMTP_*`, `CONTROLDONE_PROSPECTION_COURRIEL_DE`) **et** en production ; sinon
+l'action reste « approuvée, envoi non configuré ». Le fondateur peut **déclarer** un envoi fait depuis sa propre
+messagerie (pratique actuelle : un message à la fois) : l'action passe « envoyée » avec la référence
+`declaration:<compte>:<date>`, rien ne part de l'application. L'expéditeur fichier (`ExpediteurFichier`) n'est
+jamais utilisé pour la prospection. Opposition, exclusion, pays, base légale, faits manquants (« [à compléter »),
+pied obligatoire et plafond sont revérifiés juste avant l'envoi ou la déclaration.
+
+## D-5003 — Liste d'exclusion dans la configuration, mots entiers
+
+La liste du script `commercial/scripts/prospection_sirene.py` (deux groupes, leurs filiales et marques) passe dans
+`config/prospection.yaml` ; une configuration sans liste est refusée au chargement. Appliquée à la saisie, à
+l'import, aux résultats de recherche (dénomination, enseignes, dirigeants personnes morales), à la modification
+d'une fiche (un prospect devenu exclu passe « ne plus contacter »), avant la mise en file et avant l'envoi.
+Comparaison sans casse ni accents par **mots entiers**, motifs de plusieurs mots aussi cherchés collés (nom de
+domaine) ; le script cherchait les motifs de plus de 5 lettres comme sous-chaînes, ce qui bloquait par exemple
+toute « barrière ». Seuls les noms, enseignes, groupe déclaré et domaines sont comparés, jamais un texte libre
+(la colonne `exclusion_verifiee` du fichier cite la consigne). L'interface n'affiche jamais le motif trouvé.
+
+## D-5004 — Score déterministe et expliqué
+
+Six critères, 100 points (`prospection/scoring.py`) : activité NAF (25), taille (20), preuve d'import hors UE
+avec page source (25), dépendance au transitaire (10, -10 si service douane interne), contact publié (15),
+département logistique ou portuaire (5). Barème et listes (NAF, départements) dans la configuration ; détail
+« pourquoi ce score » sur la fiche. Aucun modèle de langage dans le module (personnalisation par modèle non
+livrée : la séquence n'utilise que des faits enregistrés).
+
+## D-5005 — Modèles : faits vérifiés seulement, pied ajouté par le code
+
+Variables `{raison_sociale}`, `{accroche}`, `{ville}`, `{expediteur}`. `{accroche}` n'est qu'une **citation
+textuelle** (entre « ») de la preuve d'import dont la page source est enregistrée. Un fait absent est rendu
+« [à compléter : …] » et la préparation est refusée. Pied obligatoire non modifiable : nom de l'expéditeur
+(configuration), SIREN et adresse (identité du vendeur), origine de l'adresse (art. 14 RGPD), « répondez STOP »
+et lien de désinscription quand l'URL publique est configurée. Validation à l'enregistrement : 1 à 6 étapes,
+délais croissants (J0 pour la première), un lien au plus, variables connues, garde-fous. Séquence par défaut
+réécrite depuis `commercial/sequence_emails.md` (J0, J+4, J+10, J+20 ; première personne, vouvoiement, sans
+sujet réglementaire, exemple chiffré signalé comme inventé).
+
+## D-5006 — Opposition, consentement, pays
+
+Liste d'opposition par **empreinte SHA-256** de l'adresse normalisée (aucune adresse en clair conservée hors des
+fiches), conservée après la purge des prospects ; alimentée par le lien de désinscription, le bouton « STOP reçu »,
+le rebond déclaré, le statut « ne plus contacter » et la saisie directe. Vérifiée avant la mise en file et avant
+l'envoi. Adresse **nominative** (toute boîte hors d'une liste fermée de boîtes de service) d'un pays à consentement
+(`CH`, `BE` par défaut) : bloquée sans base légale enregistrée sur la fiche ; pays bloqués (`LU`) refusés à la
+saisie et à l'import. Une adresse n'est jamais construite par le code ; une adresse sans page source est refusée.
+
+## D-5007 — Désinscription publique : jeton signé, confirmation en un clic
+
+`/desinscription/<jeton>` : jeton `<empreinte>.<HMAC-SHA256 tronqué>` (base64url), secret
+`CONTROLDONE_PROSPECTION_SECRET` (rotation : plusieurs valeurs) ou dérivé de la clé maîtresse, sans expiration.
+Le GET n'enregistre rien (les passerelles de sécurité des messageries ouvrent les liens à l'avance) : il affiche
+un bouton ; le POST enregistre l'opposition, sans jeton CSRF (désinscription en un clic depuis la messagerie,
+RFC 8058 : en-têtes `List-Unsubscribe` et `List-Unsubscribe-Post` posés par l'expéditeur SMTP) ; un jeton
+invalide reçoit 404 (GET) ou 403 (POST). Débit borné par adresse IP (20, puis une toutes les 3 secondes).
+
+## D-5008 — Séquences : étapes suivantes en brouillon par l'agent `prospection`
+
+« Préparer la séquence » (prospect « qualifié ») inscrit le prospect et met l'étape 1 en brouillon. L'agent
+`prospection` (plateforme, quotidien, outil `preparer_etapes_prospection`) et le bouton « Préparer les étapes
+échues » préparent l'étape suivante quand elle est due : J+délai depuis l'**envoi** de l'étape 1, au moins un jour
+après l'envoi précédent, rien tant que le brouillon précédent n'est pas envoyé. Arrêt sur réponse, opposition,
+rebond, changement de statut hors « qualifié / contacté », brouillon refusé, exclusion. Clé d'idempotence
+`prospection:<inscription>:<rang>` ; lectures de la file et écritures dans des transactions séparées.
+
+## D-5009 — Import CSV et recherche publique
+
+Import au format de `commercial/prospects.csv` : aperçu sans écriture (nouveau, doublon par SIREN ou nom normalisé,
+exclu, invalide : raison sociale, SIREN hors clé de Luhn, aucune source), puis import confirmé (analyse refaite) ;
+même chose en ligne de commande (`controldone prospection importer fichier.csv [--essai]`). Recherche dans l'API
+« Recherche d'entreprises » lancée par le fondateur (POST) : client derrière une interface (double en mémoire dans
+les tests, aucun réseau), une requête par recherche, pause, nouvel essai sur 429/503 en respectant `Retry-After`
+(borné), pas de redirection. Un candidat ajouté est relu dans l'API par son SIREN (les données ne viennent pas du
+formulaire) et entre « à qualifier ».
+
+## D-5010 — Suivi honnête
+
+Compteurs par séquence et par étape tirés des événements réels : préparés, approuvés, envoyés (file de
+validation), réponses et rendez-vous **saisis par le fondateur** (réponse rattachée à la dernière étape envoyée
+avant elle). Aucun pixel, aucun lien suivi. Le texte d'une réponse collée est une donnée : conservé tel quel,
+affiché échappé, jamais interprété.
+
+## D-5011 — Plafonds quotidiens et conservation
+
+Plafonds (jour civil de Paris) de préparations et d'envois (15 et 15 par défaut, `config/prospection.yaml`).
+Conservation : prospect sans contact émanant de lui depuis 3 ans (collecte ou dernière réponse) signalé « à
+purger » ; purge par le fondateur (bouton ou `controldone prospection purger --oui`), clients exclus, liste
+d'opposition conservée. Journal d'audit : import, création, statut, contact, mise en file, opposition, purge
+(identifiants et compteurs, jamais d'adresse).
+
+## D-5012 — Démonstration
+
+`init-demo` ajoute six sociétés **fictives** (« … DÉMO FICTIF », domaines `.test`, identifiants `prs_demo_*`) à
+différents statuts, sans aucun courriel préparé : la file de validation de la démonstration reste celle des
+clients fictifs.

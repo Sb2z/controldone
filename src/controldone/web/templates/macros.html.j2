@@ -41,10 +41,12 @@
     {% if c.composante %}<div><dt>{{ _("Composante") }}</dt><dd>{{ _(c.composante) }}</dd></div>{% endif %}
     <div><dt>{{ _("Tolérance appliquée") }}</dt><dd class="num">{{ c.tolerance or "—" }}</dd></div>
     <div><dt>{{ _("Seuil de certitude") }}</dt><dd class="num">{{ c.seuil or "—" }}</dd></div>
-    {% if fondateur %}<div><dt>{{ _("Validation") }}</dt><dd>{{ badge_validation(c.statut_validation_code, c.statut_validation) }}{% if c.commentaire %} <span class="discret" lang="fr">— {{ c.commentaire }}</span>{% endif %}</dd></div>{% endif %}
+    {% if fondateur %}<div><dt>{{ _("Validation") }}</dt><dd>{{ badge_validation(c.statut_validation_code, c.statut_validation) }}{% if c.commentaire %} <span class="discret" lang="fr">({{ c.commentaire }})</span>{% endif %}</dd></div>{% endif %}
   </dl>
   {% if fondateur and c.bloque %}<p class="alerte-ligne">{{ _("Libellé bloqué par les garde-fous :") }} {{ c.motif_blocage|msg }}</p>{% endif %}
   {% if c.preuves %}
+  <details class="preuves-bloc" open>
+  <summary>{{ _("Preuves : {n} extrait(s) de page", n=c.preuves|length) }}</summary>
   <div class="preuves">
     {% for p in c.preuves %}
     <figure class="preuve">
@@ -59,6 +61,7 @@
     </figure>
     {% endfor %}
   </div>
+  </details>
   {% endif %}
   {% if c.prochaine_action %}<p class="action"><strong>{{ _("Prochaine action :") }}</strong> <span lang="fr">{{ c.prochaine_action }}</span></p>{% endif %}
   {% if fondateur and c.statut_validation_code == "propose" and tenant_id %}
@@ -78,7 +81,7 @@
       {{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
       <label class="vh" for="ret-{{ c.id }}">{{ _("Motif de la rétrogradation") }}</label>
       <input id="ret-{{ c.id }}" name="motif" required maxlength="1000" placeholder="{{ _("Valeur à confirmer : laquelle ?") }}">
-      <button type="submit" class="btn">{{ _("Rétrograder en à vérifier") }}</button>
+      <button type="submit" class="btn">{{ _("Passer en « à vérifier »") }}</button>
     </form>
     {% else %}
     <p class="discret note-decision">{{ _("Pour en faire un écart certain : corriger ou confirmer la valeur douteuse dans le dossier (le contrôle est relancé).") }}</p>

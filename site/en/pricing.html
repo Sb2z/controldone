@@ -3,13 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pricing — ControlDOne</title>
-<meta name="description" content="Diagnostic EUR 390 excl. VAT, 20% commission on credit notes obtained, continuous checking from EUR 99 excl. VAT per month. Launch offer: three free diagnostics.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Pricing · ControlDOne</title>
+<meta name="description" content="Diagnostic at €390 excl. VAT, continuous checking from €99 excl. VAT a month, 20% commission on credit notes obtained. Break-even calculator.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="alternate" hreflang="fr" href="../tarifs.html">
+<script src="../assets/vendor/motion.min.js" defer></script>
+<script src="../assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
@@ -17,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Main navigation">
-        <a href="index.html">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html">Demo</a>
         <a href="pricing.html" aria-current="page">Pricing</a>
@@ -28,69 +31,180 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Main navigation (mobile)">
-        <a href="index.html">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html">Demo</a>
         <a href="pricing.html" aria-current="page">Pricing</a>
         <a href="contact.html">Contact</a>
         <a href="../tarifs.html" hreflang="fr" lang="fr" title="Version française">FR</a>
-        <a href="contact.html">Request a diagnostic</a>
+        <a class="menu-cta" href="contact.html">Request a diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="content">
-
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Pricing</span>
-    <h1>A simple price, a commission on results</h1>
-    <p class="lead">Prices exclude VAT; VAT not applicable, article 293 B of the French tax code (VAT franchise) <span class="ph">[TO BE CONFIRMED]</span>.
-    The commission is only payable on credit notes actually obtained from your freight forwarder.</p>
+    <p class="label">Pricing</p>
+    <h1>You pay for the check, then 20% of what you recover.</h1>
+    <p class="lead">There are two ways to start: a diagnostic of your past files, or continuous checking of each new file.
+    The commission is the same in both cases, and it is only due if you obtain a credit note. Prices exclude VAT; VAT not
+    applicable, article 293 B of the French tax code <span class="ph">[TO BE CONFIRMED]</span>.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Diagnostic: €390 excl. VAT">Request a diagnostic <span class="fl" aria-hidden="true">→</span></a>
+      <a class="btn btn-ghost" href="demo.html">See a sample report</a>
+    </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="plans">
   <div class="wrap">
     <div class="prices">
       <div class="price">
-        <span class="label">Diagnostic</span>
-        <div class="amount">390&nbsp;EUR <small>excl. VAT</small></div>
-        <div class="per">flat fee, one-off</div>
+        <p class="label">Option 1 · Diagnostic</p>
+        <div class="amount">€390<small>excl. VAT</small></div>
+        <div class="per">Flat fee, paid once.</div>
+        <p class="offert">Offered to the first three companies. The 20% commission on credit notes obtained is still due.</p>
         <ul class="checklist">
-          <li>Analysis of a batch of past import files <span class="ph">[TO BE COMPLETED: maximum number of files or period covered]</span></li>
-          <li>Online report, PDF and spreadsheet</li>
-          <li>Evidence and calculation for each difference</li>
-          <li>Statement of differences and letter template, to be used by you</li>
-          <li>List of points to be checked by a professional</li>
+          <li>Review of a batch of past import files <span class="ph">[TO BE COMPLETED: maximum number of files or period covered]</span></li>
+          <li>Report online, as a PDF and as a spreadsheet</li>
+          <li>For each difference: both values, the page, the calculation</li>
+          <li>Statement of differences and letter template, which you send yourself</li>
+          <li>List of points to have checked by a professional, with no amount</li>
         </ul>
-        <a class="btn btn-ghost" href="contact.html">Request a diagnostic</a>
-      </div>
-      <div class="price featured">
-        <span class="label">Commission</span>
-        <div class="amount">20&nbsp;%</div>
-        <div class="per">of credit notes obtained</div>
-        <ul class="checklist">
-          <li>Calculated on the amount, excluding VAT, of credit notes issued by your freight forwarder and linked to differences reported by ControlDOne</li>
-          <li>Never on a repayment or remission granted by an authority</li>
-          <li>No credit note obtained, no commission</li>
-          <li>Shared register: you see every credit note taken into account</li>
-          <li>Comes on top of the diagnostic or the subscription</li>
-        </ul>
-        <a class="btn btn-primary" href="contact.html">Talk about it</a>
+        <a class="btn btn-primary" href="contact.html">Request a diagnostic</a>
       </div>
       <div class="price">
-        <span class="label">Continuous checking</span>
-        <div class="amount"><small>from</small> 99&nbsp;EUR <small>excl. VAT</small></div>
-        <div class="per">entry price per month; price depends on volume</div>
+        <p class="label">Option 2 · Continuous checking</p>
+        <div class="amount">€99<small>excl. VAT a month</small></div>
+        <div class="per">Up to 20 files a month. The price follows your volume.</div>
+        <div class="table-wrap">
+          <table>
+            <caption>Price by volume</caption>
+            <thead><tr><th scope="col">Files a month</th><th scope="col" class="num">Monthly price excl. VAT</th></tr></thead>
+            <tbody>
+              <tr><td>Up to 20</td><td class="num"><span class="num">€99</span></td></tr>
+              <tr><td>Up to 60</td><td class="num"><span class="num">€199</span></td></tr>
+              <tr><td>Up to 150</td><td class="num"><span class="num">€349</span></td></tr>
+              <tr><td>Above</td><td class="num">on quotation</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note mt">These are launch prices. I will review them after the first clients; the price that applies to
+        you is the one in your contract.</p>
         <ul class="checklist">
-          <li>Check of each new file on receipt</li>
-          <li>Upload through a secure area or a dedicated address</li>
-          <li>Tracking of credit notes received and reminders of your internal deadlines</li>
-          <li>Can be terminated <span class="ph">[TERMS TO BE CONFIRMED IN THE TERMS OF SALE]</span></li>
+          <li>Each new file checked on receipt</li>
+          <li>Upload through the secure space or a dedicated address</li>
+          <li>Credit notes received are tracked and matched with open differences</li>
+          <li>Can be cancelled <span class="ph">[TERMS TO BE CONFIRMED IN THE TERMS OF SALE]</span></li>
         </ul>
-        <a class="btn btn-ghost" href="contact.html">Request a quote</a>
+        <a class="btn btn-ghost" href="contact.html">Talk to me about it</a>
       </div>
+    </div>
+
+    <div class="commission">
+      <div>
+        <p class="label">For both options</p>
+        <div class="amount">20%<small> of credit notes obtained</small></div>
+      </div>
+      <ul class="checklist">
+        <li>Calculated on the amount excluding VAT of credit notes issued by your freight forwarder and linked to differences I reported and approved.</li>
+        <li>Never on a refund or remission granted by an authority.</li>
+        <li>No credit note, no commission.</li>
+        <li>A shared register shows you every credit note taken into account.</li>
+        <li>Invoiced monthly, on a summary invoice.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="break-even">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Break-even point</p>
+      <h2>Work out the credit notes needed to cover the price.</h2>
+      <p>This calculation assumes no error rate, because I know of no reliable one. It only gives the amount of credit notes
+      above which what you recover, after commission, exceeds what you paid. It is a calculation, not a promise of savings.</p>
+    </div>
+
+    <div class="calc" id="calc" hidden>
+      <fieldset>
+        <legend>Your situation</legend>
+        <div class="champ">
+          <label for="calc-formule">Option</label>
+          <select id="calc-formule">
+            <option value="diagnostic">Diagnostic (€390 excl. VAT)</option>
+            <option value="offert">Diagnostic offered (launch)</option>
+            <option value="continu">Continuous checking (price by volume)</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label for="calc-dossiers">Files in the batch reviewed</label>
+          <input id="calc-dossiers" type="number" min="1" step="1" inputmode="numeric" value="60" aria-describedby="aide-dossiers">
+          <span class="aide" id="aide-dossiers">Used to express the break-even point per file. For continuous checking, it
+          also selects the price band.</span>
+        </div>
+        <div class="champ">
+          <label for="calc-credits">Credit notes you have in mind, € excl. VAT (optional)</label>
+          <input id="calc-credits" type="number" min="0" step="0.01" inputmode="decimal" aria-describedby="aide-credits">
+          <span class="aide" id="aide-credits">Your own assumption, to see the balance. I make no estimate for you.</span>
+        </div>
+      </fieldset>
+      <div class="resultat" aria-live="polite">
+        <p class="k">Credit notes needed to cover the price</p>
+        <p class="v" id="calc-seuil">€487.50 excl. VAT</p>
+        <p class="small" id="calc-par-dossier"></p>
+        <div id="calc-hypothese" hidden><dl id="calc-detail"></dl></div>
+        <p class="formule" id="calc-formule-txt"></p>
+      </div>
+    </div>
+
+    <div class="table-wrap mt">
+      <table class="seuils">
+        <caption>Break-even point for each option (credit notes excl. VAT needed to cover the price)</caption>
+        <thead><tr><th scope="col">Option</th><th scope="col" class="num">Price excl. VAT</th><th scope="col" class="num">Break-even, excl. VAT</th></tr></thead>
+        <tbody>
+          <tr><td>Diagnostic</td><td class="num"><span class="num">€390.00</span></td><td class="num"><span class="num">€487.50</span></td></tr>
+          <tr><td>Diagnostic offered (launch); the commission is still due</td><td class="num"><span class="num">€0.00</span></td><td class="num"><span class="num">€0.00</span></td></tr>
+          <tr><td>Continuous checking, up to 20 files a month, over 12 months</td><td class="num"><span class="num">€1,188.00</span></td><td class="num"><span class="num">€1,485.00</span></td></tr>
+          <tr><td>Continuous checking, up to 60 files a month, over 12 months</td><td class="num"><span class="num">€2,388.00</span></td><td class="num"><span class="num">€2,985.00</span></td></tr>
+          <tr><td>Continuous checking, up to 150 files a month, over 12 months</td><td class="num"><span class="num">€4,188.00</span></td><td class="num"><span class="num">€5,235.00</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note mt">Formula: break-even = price ÷ (1 − 0.20), because you keep 80% of each credit note. Example:
+    390 ÷ 0.8 = €487.50 excl. VAT. Above that amount, what you recover exceeds what you paid.</p>
+  </div>
+</section>
+
+<section class="section" id="questions">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Questions</p>
+      <h2>What to know about the price.</h2>
+    </div>
+    <div class="faq">
+      <details><summary>How is the commission calculated?</summary><div class="rep">
+        <p>It applies to credit notes received from your freight forwarder and allocated, to the cent, to differences I
+        reported and approved. Allocation follows a fixed rule, described in the <a href="method.html">method</a>. The base
+        is the amount of the credit notes excluding VAT; refunds and remissions granted by an authority are excluded.</p>
+        <p>The commission is invoiced monthly, on a summary invoice. You see every credit note taken into account in your
+        space. Period during which a credit note is taken into account: see the
+        <a href="../cgv.html#commission" hreflang="fr">terms of sale (in French)</a> <span class="ph">[TO BE CONFIRMED]</span>.</p></div></details>
+      <details><summary>What is left to pay with an offered diagnostic?</summary><div class="rep">
+        <p>The €390 excl. VAT flat fee is discounted by 100%. The 20% commission on credit notes obtained is still due. The
+        discount requires nothing in return: the agreement to publish anonymised results is separate and optional.</p></div></details>
+      <details><summary>Who writes to the freight forwarder?</summary><div class="rep">
+        <p>You, if you decide to. You receive a statement of differences (values compared, location in the documents,
+        calculation) and a neutral letter template with no legal argument. You adapt it, sign it and send it yourself. I
+        never contact your freight forwarder, never chase them for you and never collect any money on your behalf.</p></div></details>
+      <details><summary>What if the diagnostic finds no difference?</summary><div class="rep">
+        <p>The flat fee is still due: it pays for the check itself. The report lists the checks run, those that could not
+        be run and why. A file that cannot be concluded is never presented as consistent.</p></div></details>
+      <details><summary>Do I need software or an integration?</summary><div class="rep">
+        <p>No. You upload your documents as they are. An API exists if you want to automate uploads.</p></div></details>
+      <details><summary>How do I pay?</summary><div class="rep">
+        <p>By bank transfer, or by card through a payment provider. Payment terms and late penalties: see the
+        <a href="../cgv.html#paiement" hreflang="fr">terms of sale (in French)</a>.</p></div></details>
     </div>
   </div>
 </section>
@@ -99,54 +213,30 @@
   <div class="wrap">
     <div class="offer">
       <div>
-        <span class="kicker" style="color:inherit;opacity:.8">Launch offer</span>
-        <h2>Three free diagnostics</h2>
-        <p>Three free diagnostics (launch discount). If you agree, and only then, we later publish anonymised results,
-        after your review. No data that could identify you or your freight forwarders is published. Your agreement is
-        separate, optional and revocable until publication; the discount applies in every case.</p>
+        <p class="label">Launch offer</p>
+        <h2>The first three diagnostics are offered.</h2>
+        <p>The discount covers the €390 excl. VAT flat fee. The 20% commission on credit notes obtained is still due. If
+        you agree, and only then, I will later publish anonymised results, after you have reviewed them. Nothing will
+        identify you or your freight forwarders. Your agreement is separate, optional and can be withdrawn until
+        publication; the discount stands in every case.</p>
       </div>
       <div class="offer-box">
-        <p style="margin:0">Limited to three companies. Written conditions provided before the start.</p>
-        <div class="actions" style="margin-top:1rem"><a class="btn btn-primary" href="contact.html">Put your company forward</a></div>
+        <p>Three companies in total. The written terms are provided before the start.</p>
+        <div class="actions"><a class="btn btn-primary" href="contact.html">Request a diagnostic <span class="fl" aria-hidden="true">→</span></a></div>
       </div>
     </div>
   </div>
 </section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="section-head"><h2>Frequently asked questions</h2></div>
-    <div class="faq">
-      <details><summary>How is the commission calculated?</summary><div>
-        <p>It applies to the amounts of credit notes received from your freight forwarder and allocated, to the cent, to differences
-        reported by ControlDOne and validated. Allocation follows a fixed rule, documented in the <a href="method.html">method</a>.
-        The credit note register can be viewed in your area. The basis is the amount, excluding VAT, of credit notes issued
-        by your freight forwarder; repayments or remissions granted by an authority are excluded. The commission is invoiced
-        monthly, on a summary invoice. How long a credit note remains taken into account: see the <a href="../cgv.html#commission" hreflang="fr">terms of sale (in French)</a> <span class="ph">[TO BE CONFIRMED]</span>.</p></div></details>
-      <details><summary>Who writes to the freight forwarder?</summary><div>
-        <p>You do, if you decide to. You receive a statement of differences (values compared, location in the documents,
-        calculation) and a neutral letter template, with no legal argument, which you adapt, sign and send yourself.
-        ControlDOne never contacts your freight forwarder, sends no reminders on your behalf and collects no money for you.</p></div></details>
-      <details><summary>What happens if the diagnostic finds no difference?</summary><div>
-        <p>The diagnostic fee remains payable: it pays for the check itself. The report then lists the checks
-        performed, those that could not be performed and why. A file where no conclusion is possible is never presented as compliant.</p></div></details>
-      <details><summary>Do I need software or an integration?</summary><div>
-        <p>No. You upload your documents as they are. An API exists for those who want to automate uploads.</p></div></details>
-      <details><summary>How do I pay?</summary><div>
-        <p>By bank transfer or by card through our payment provider. Payment terms and late payment penalties: see the <a href="../cgv.html#paiement" hreflang="fr">terms of sale (in French)</a>.</p></div></details>
-    </div>
-  </div>
-</section>
-
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Technical consistency check between the commercial invoice, the customs declaration,
-        the freight forwarder's invoice and its credit notes, for small and medium-sized businesses that import.</p>
-        <p class="small">No cookies, no trackers, no external fonts or scripts on this site.</p>
+        <p class="foot-about">ControlDOne compares your freight forwarder's invoice with your customs declaration, your
+        rate card and your credit notes, file by file. For small and mid-sized businesses importing from outside the EU.</p>
+        <p class="small">This site sets no cookies and does not measure your visit. Its fonts and scripts are served
+        from this site; no other server is contacted.</p>
       </div>
       <div>
         <h2>The service</h2>
@@ -161,7 +251,7 @@
       </div>
       <div>
         <h2>Legal information (in French)</h2>
-        <p class="small" id="legal-note"><strong>French version prevails — draft to be reviewed by a lawyer.</strong>
+        <p class="small" id="legal-note"><strong>French version prevails; draft to be reviewed by a lawyer.</strong>
         The legal pages are published in French only; no English translation is provided.</p>
         <ul>
           <li><a href="../mentions-legales.html" hreflang="fr">Mentions légales (legal notice)</a></li>

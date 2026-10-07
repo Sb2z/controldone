@@ -84,6 +84,8 @@ Source : `docs/recherche/juridique_france_suisse.md` §5.5 (à faire confirmer p
 
 ## 7. Relancer la collecte
 
+> Depuis octobre 2026, ce fichier s'importe dans l'application (menu **Marketing**, ou `controldone prospection importer prospects.csv`), qui tient aussi la liste d'exclusion (`config/prospection.yaml`), les séquences et la liste d'opposition : voir `docs/PROSPECTION.md`.
+
 Depuis un poste qui a accès à l'API :
 
 ```bash

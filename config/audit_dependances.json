@@ -15,28 +15,36 @@
       "source": "https://motion.dev"
     },
     {
-      "nom": "geist-font",
-      "version": "inconnue (fichiers woff2 servis localement)",
+      "nom": "inter-font",
+      "version": "4.1 (InterVariable.woff2 officiel, non modifié)",
       "licence": "OFL-1.1",
-      "chemin": "src/controldone/web/static/vendor/fonts/geist-latin-wght-normal.woff2",
-      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-geist.txt",
-      "source": "https://vercel.com/font"
+      "chemin": "src/controldone/web/static/vendor/fonts/InterVariable.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-Inter.txt",
+      "source": "https://github.com/rsms/inter"
     },
     {
-      "nom": "geist-font-latin-ext",
-      "version": "inconnue (fichiers woff2 servis localement)",
+      "nom": "source-serif-4-font",
+      "version": "4.005R (SourceSerif4Variable-Roman.ttf.woff2 officiel, non modifié : nom réservé « Source »)",
       "licence": "OFL-1.1",
-      "chemin": "src/controldone/web/static/vendor/fonts/geist-latin-ext-wght-normal.woff2",
-      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-geist.txt",
-      "source": "https://vercel.com/font"
+      "chemin": "src/controldone/web/static/vendor/fonts/SourceSerif4Variable-Roman.ttf.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-SourceSerif4.md",
+      "source": "https://github.com/adobe-fonts/source-serif"
     },
     {
-      "nom": "geist-mono-font",
-      "version": "inconnue (fichiers woff2 servis localement)",
+      "nom": "jetbrains-mono-font",
+      "version": "2.304 (JetBrainsMono-Regular.woff2 officiel, non modifié)",
       "licence": "OFL-1.1",
-      "chemin": "src/controldone/web/static/vendor/fonts/geist-mono-latin-wght-normal.woff2",
-      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-geist.txt",
-      "source": "https://vercel.com/font"
+      "chemin": "src/controldone/web/static/vendor/fonts/JetBrainsMono-Regular.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-JetBrainsMono.txt",
+      "source": "https://github.com/JetBrains/JetBrainsMono"
+    },
+    {
+      "nom": "jetbrains-mono-font-medium",
+      "version": "2.304 (JetBrainsMono-Medium.woff2 officiel, non modifié)",
+      "licence": "OFL-1.1",
+      "chemin": "src/controldone/web/static/vendor/fonts/JetBrainsMono-Medium.woff2",
+      "fichier_licence": "src/controldone/web/static/vendor/fonts/LICENSE-OFL-JetBrainsMono.txt",
+      "source": "https://github.com/JetBrains/JetBrainsMono"
     }
   ]
 }

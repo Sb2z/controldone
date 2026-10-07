@@ -3,11 +3,11 @@
 {% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page"><h1>{{ _("Suivi des avoirs reçus") }}</h1>
-<p class="discret">{{ _("Écarts refacturés validés. Les montants sont des écarts constatés entre documents ; si vous écrivez à votre transitaire, c'est vous qui le faites ; enregistrez ici les avoirs reçus (montant hors taxes).") }}</p></div>
+<p>{{ _("Les écarts validés et ce que vous en avez obtenu. Si vous écrivez à votre transitaire, c'est vous qui le faites. Enregistrez ici chaque avoir reçu, en montant hors taxes.") }}</p></div>
 <section class="kpis" aria-label="{{ _("Totaux") }}">
   <div class="kpi"><div class="kpi-lib">{{ _("Écarts constatés") }}</div><div class="kpi-val num">{{ totaux.initial|montant }}</div></div>
   <div class="kpi"><div class="kpi-lib">{{ _("Avoirs reçus") }}</div><div class="kpi-val num">{{ totaux.credite|montant }}</div></div>
-  <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Reste") }}</div><div class="kpi-val num">{{ totaux.reste|montant }}</div></div>
+  <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Reste sans avoir") }}</div><div class="kpi-val num">{{ totaux.reste|montant }}</div></div>
 </section>
 <section class="carte" aria-labelledby="t-registre">
 <h2 id="t-registre" class="vh">{{ _("Écarts et avoirs") }}</h2>
@@ -50,7 +50,7 @@
       {% endif %}
     </td>{% endif %}
   </tr>
-  {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}{{ _("Aucun écart ne correspond à ces critères.") }} <a href="/espace/recouvrement">{{ _("Afficher tous les écarts") }}</a>.{% elif total_lignes == 0 %}{{ _("Aucun écart à recouvrer pour l'instant.") }}{% else %}{{ _("Aucun écart sur cette page.") }}{% endif %}</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}{{ _("Aucun écart ne correspond à ces critères.") }} <a href="/espace/recouvrement">{{ _("Afficher tous les écarts") }}</a>.{% elif total_lignes == 0 %}{{ _("Aucun écart à suivre pour l'instant. Ils s'ajoutent ici quand un écart certain est validé.") }}{% else %}{{ _("Aucun écart sur cette page.") }}{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>

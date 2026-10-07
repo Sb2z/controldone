@@ -13,6 +13,7 @@
   <h2 id="t-suivi">{{ _("Suivi par étape") }}</h2>
   <p class="discret">{{ _("Compteurs tirés des événements réels : courriels préparés, approuvés, envoyés, et réponses enregistrées par vous. Aucun pixel de suivi ni lien traqué.") }}</p>
   {% for x in stats.sequences %}
+  <div class="defilement">
   <table class="donnees compacte">
     <caption lang="fr">{{ x.sequence.nom }}</caption>
     <thead><tr><th scope="col">{{ _("Étape") }}</th><th scope="col" class="num">{{ _("Préparés") }}</th><th scope="col" class="num">{{ _("Approuvés") }}</th><th scope="col" class="num">{{ _("Envoyés") }}</th><th scope="col" class="num">{{ _("Réponses") }}</th></tr></thead>
@@ -23,6 +24,7 @@
     </tbody>
     <tfoot><tr><th scope="row">{{ _("Inscrits / rendez-vous") }}</th><td class="num">{{ x.inscrits }}</td><td></td><td></td><td class="num">{{ x.rendez_vous }}</td></tr></tfoot>
   </table>
+  </div>
   {% endfor %}
 </section>
 

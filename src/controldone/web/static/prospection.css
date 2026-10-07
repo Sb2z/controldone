@@ -19,7 +19,7 @@
 .prosp-points.negatif { color: var(--certain); }
 
 /* Pipeline (kanban) : colonnes défilantes, cartes avec changement de statut par formulaire */
-.prosp-tableau { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: .9rem; overflow-x: auto;
+.prosp-tableau { min-width: 0; max-width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: .9rem; overflow-x: auto;
   padding-bottom: .8rem; scroll-snap-type: x proximity; }
 .prosp-colonne { background: var(--surface); border: 1px solid var(--filet); border-radius: var(--rayon); padding: .7rem; min-height: 8rem;
   scroll-snap-align: start; display: flex; flex-direction: column; gap: .55rem; }
@@ -61,3 +61,8 @@ pre.prosp-apercu { white-space: pre-wrap; word-break: break-word; background: va
 @media (max-width: 760px) {
   .prosp-tableau { grid-auto-columns: 82%; }
 }
+.prosp-carte, .prosp-colonne { min-width: 0; }
+.prosp-chrono pre, pre.prosp-apercu { max-width: 100%; }
+dd a { overflow-wrap: anywhere; }
+/* Bloc de défilement : contient aussi les textes masqués (.vh, position absolue) de ses boutons. */
+.prosp-tableau, main .defilement { position: relative; }

@@ -3,12 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tarifs — ControlDOne</title>
-<meta name="description" content="Diagnostic 390 EUR HT, commission de 20 % des avoirs obtenus, contrôle continu à partir de 99 EUR HT par mois. Offre de lancement : trois diagnostics offerts.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Tarifs · ControlDOne</title>
+<meta name="description" content="Diagnostic 390 € HT, contrôle continu à partir de 99 € HT par mois, commission de 20 % des avoirs obtenus. Calculateur de seuil de rentabilité.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="alternate" hreflang="en" href="en/pricing.html">
+<script src="assets/vendor/motion.min.js" defer></script>
+<script src="assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
@@ -16,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Navigation principale">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html" aria-current="page">Tarifs</a>
@@ -28,70 +32,184 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Navigation principale (mobile)">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html" aria-current="page">Tarifs</a>
         <a href="experts-comptables.html">Experts-comptables</a>
         <a href="contact.html">Contact</a>
         <a href="en/pricing.html" hreflang="en" lang="en" title="English version">EN</a>
-        <a href="contact.html">Demander un diagnostic</a>
+        <a class="menu-cta" href="contact.html">Demander un diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="contenu">
-
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Tarifs</span>
-    <h1>Un prix simple, une commission sur le résultat</h1>
-    <p class="lead">Prix hors taxes ; TVA non applicable, art. 293 B du CGI (franchise en base) <span class="ph">[À VALIDER]</span>. La commission
-    n'est due que sur les avoirs effectivement obtenus de votre transitaire.</p>
+    <p class="label">Tarifs</p>
+    <h1>Vous payez le contrôle, puis 20&nbsp;% de ce que vous récupérez.</h1>
+    <p class="lead">Il y a deux façons de commencer : un diagnostic sur vos dossiers passés, ou un contrôle continu de
+    chaque nouveau dossier. La commission est la même dans les deux cas, et elle n'est due que si vous obtenez un avoir.
+    Prix hors taxes ; TVA non applicable, art. 293 B du CGI <span class="ph">[À VALIDER]</span>.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Diagnostic : 390 € HT">Demander un diagnostic <span class="fl" aria-hidden="true">→</span></a>
+      <a class="btn btn-ghost" href="demonstration.html">Voir un rapport d'exemple</a>
+    </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="formules">
   <div class="wrap">
     <div class="prices">
       <div class="price">
-        <span class="label">Diagnostic</span>
-        <div class="amount">390&nbsp;EUR <small>HT</small></div>
-        <div class="per">forfait, une fois</div>
+        <p class="label">Point d'entrée 1 · Diagnostic</p>
+        <div class="amount">390&nbsp;€<small>HT</small></div>
+        <div class="per">Forfait, payé une fois.</div>
+        <p class="offert">Offert aux trois premières entreprises. La commission de 20&nbsp;% sur les avoirs obtenus reste due.</p>
         <ul class="checklist">
           <li>Analyse d'un lot de dossiers d'import passés <span class="ph">[À COMPLÉTER : nombre maximal de dossiers ou période couverte]</span></li>
-          <li>Rapport en ligne, PDF et tableur</li>
-          <li>Preuve et calcul pour chaque écart</li>
-          <li>Relevé d'écarts et modèle de courrier, à utiliser par vos soins</li>
-          <li>Liste des points à faire vérifier par un professionnel</li>
+          <li>Rapport en ligne, en PDF et en tableur</li>
+          <li>Pour chaque écart : les deux valeurs, la page, le calcul</li>
+          <li>Relevé d'écarts et modèle de courrier, que vous envoyez vous-même</li>
+          <li>Liste des points à faire vérifier par un professionnel, sans montant</li>
         </ul>
-        <a class="btn btn-ghost" href="contact.html">Demander un diagnostic</a>
-      </div>
-      <div class="price featured">
-        <span class="label">Commission</span>
-        <div class="amount">20&nbsp;%</div>
-        <div class="per">des avoirs obtenus</div>
-        <ul class="checklist">
-          <li>Calculée sur le montant HT des avoirs émis par votre transitaire et rattachés à des écarts signalés par ControlDOne</li>
-          <li>Jamais sur un remboursement ou une remise accordés par une administration</li>
-          <li>Aucun avoir obtenu, aucune commission</li>
-          <li>Registre partagé : vous voyez chaque avoir pris en compte</li>
-          <li>S'ajoute au diagnostic ou à l'abonnement</li>
-        </ul>
-        <a class="btn btn-primary" href="contact.html">En parler</a>
+        <a class="btn btn-primary" href="contact.html">Demander un diagnostic</a>
       </div>
       <div class="price">
-        <span class="label">Contrôle continu</span>
-        <div class="amount"><small>dès</small> 99&nbsp;EUR <small>HT</small></div>
-        <div class="per">prix d'entrée par mois ; tarif selon le volume</div>
+        <p class="label">Point d'entrée 2 · Contrôle continu</p>
+        <div class="amount">99&nbsp;€<small>HT par mois</small></div>
+        <div class="per">Jusqu'à 20 dossiers par mois. Le prix suit votre volume.</div>
+        <div class="table-wrap">
+          <table>
+            <caption>Grille par volume</caption>
+            <thead><tr><th scope="col">Dossiers par mois</th><th scope="col" class="num">Prix HT par mois</th></tr></thead>
+            <tbody>
+              <tr><td>Jusqu'à 20</td><td class="num"><span class="num">99&nbsp;€</span></td></tr>
+              <tr><td>Jusqu'à 60</td><td class="num"><span class="num">199&nbsp;€</span></td></tr>
+              <tr><td>Jusqu'à 150</td><td class="num"><span class="num">349&nbsp;€</span></td></tr>
+              <tr><td>Au-delà</td><td class="num">sur devis</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note mt">C'est la grille de lancement. Je la reverrai après les premiers clients ; le prix qui
+        s'applique à vous est celui de votre contrat.</p>
         <ul class="checklist">
-          <li>Contrôle de chaque nouveau dossier à réception</li>
-          <li>Dépôt par espace sécurisé ou adresse dédiée</li>
-          <li>Suivi des avoirs reçus et rappels de vos échéances internes</li>
+          <li>Contrôle de chaque nouveau dossier dès réception</li>
+          <li>Dépôt par l'espace sécurisé ou par une adresse dédiée</li>
+          <li>Suivi des avoirs reçus, rapprochés des écarts ouverts</li>
           <li>Résiliable <span class="ph">[MODALITÉS À VALIDER DANS LES CGV]</span></li>
         </ul>
-        <a class="btn btn-ghost" href="contact.html">Demander un devis</a>
+        <a class="btn btn-ghost" href="contact.html">En parler avec moi</a>
       </div>
+    </div>
+
+    <div class="commission">
+      <div>
+        <p class="label">Pour les deux formules</p>
+        <div class="amount">20&nbsp;%<small> des avoirs obtenus</small></div>
+      </div>
+      <ul class="checklist">
+        <li>Calculée sur le montant hors taxes des avoirs émis par votre transitaire et rattachés à des écarts que j'ai signalés et validés.</li>
+        <li>Jamais sur un remboursement ou une remise accordés par une administration.</li>
+        <li>Pas d'avoir, pas de commission.</li>
+        <li>Un registre partagé vous montre chaque avoir pris en compte.</li>
+        <li>Facturée chaque mois, sur une facture récapitulative.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="seuil">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Seuil de rentabilité</p>
+      <h2>Calculez le montant d'avoirs qui couvre le prix du service.</h2>
+      <p>Ce calcul ne suppose aucun taux d'erreur, parce que je n'en connais pas de fiable. Il donne seulement le montant
+      d'avoirs à partir duquel ce que vous récupérez, commission déduite, dépasse ce que vous avez payé. C'est un calcul,
+      pas une promesse d'économies.</p>
+    </div>
+
+    <div class="calc" id="calc" hidden>
+      <fieldset>
+        <legend>Votre cas</legend>
+        <div class="champ">
+          <label for="calc-formule">Formule</label>
+          <select id="calc-formule">
+            <option value="diagnostic">Diagnostic (390 € HT)</option>
+            <option value="offert">Diagnostic offert (lancement)</option>
+            <option value="continu">Contrôle continu (grille par volume)</option>
+          </select>
+        </div>
+        <div class="champ">
+          <label for="calc-dossiers">Dossiers dans le lot analysé</label>
+          <input id="calc-dossiers" type="number" min="1" step="1" inputmode="numeric" value="60" aria-describedby="aide-dossiers">
+          <span class="aide" id="aide-dossiers">Sert à ramener le seuil à un montant par dossier. Pour le contrôle continu, il
+          choisit aussi le palier de la grille.</span>
+        </div>
+        <div class="champ">
+          <label for="calc-credits">Avoirs envisagés, en € HT (facultatif)</label>
+          <input id="calc-credits" type="number" min="0" step="0.01" inputmode="decimal" aria-describedby="aide-credits">
+          <span class="aide" id="aide-credits">Votre hypothèse, pour voir le solde. Je ne fais aucune estimation à votre place.</span>
+        </div>
+      </fieldset>
+      <div class="resultat" aria-live="polite">
+        <p class="k">Avoirs nécessaires pour couvrir le prix</p>
+        <p class="v" id="calc-seuil">487,50&nbsp;€ HT</p>
+        <p class="small" id="calc-par-dossier"></p>
+        <div id="calc-hypothese" hidden><dl id="calc-detail"></dl></div>
+        <p class="formule" id="calc-formule-txt"></p>
+      </div>
+    </div>
+
+    <div class="table-wrap mt">
+      <table class="seuils">
+        <caption>Seuil pour chaque formule (avoirs hors taxes à obtenir pour couvrir le prix)</caption>
+        <thead><tr><th scope="col">Formule</th><th scope="col" class="num">Prix HT</th><th scope="col" class="num">Seuil d'avoirs HT</th></tr></thead>
+        <tbody>
+          <tr><td>Diagnostic</td><td class="num"><span class="num">390,00&nbsp;€</span></td><td class="num"><span class="num">487,50&nbsp;€</span></td></tr>
+          <tr><td>Diagnostic offert (lancement) ; la commission reste due</td><td class="num"><span class="num">0,00&nbsp;€</span></td><td class="num"><span class="num">0,00&nbsp;€</span></td></tr>
+          <tr><td>Contrôle continu, jusqu'à 20 dossiers par mois, sur 12 mois</td><td class="num"><span class="num">1&nbsp;188,00&nbsp;€</span></td><td class="num"><span class="num">1&nbsp;485,00&nbsp;€</span></td></tr>
+          <tr><td>Contrôle continu, jusqu'à 60 dossiers par mois, sur 12 mois</td><td class="num"><span class="num">2&nbsp;388,00&nbsp;€</span></td><td class="num"><span class="num">2&nbsp;985,00&nbsp;€</span></td></tr>
+          <tr><td>Contrôle continu, jusqu'à 150 dossiers par mois, sur 12 mois</td><td class="num"><span class="num">4&nbsp;188,00&nbsp;€</span></td><td class="num"><span class="num">5&nbsp;235,00&nbsp;€</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note mt">Formule : seuil = prix ÷ (1 − 0,20), car vous gardez 80&nbsp;% de chaque avoir. Exemple :
+    390 ÷ 0,8 = 487,50&nbsp;€ HT. Au-delà de ce montant, ce que vous récupérez dépasse ce que vous avez payé.</p>
+  </div>
+</section>
+
+<section class="section" id="questions">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Questions fréquentes</p>
+      <h2>Ce qu'il faut savoir sur le prix.</h2>
+    </div>
+    <div class="faq">
+      <details><summary>Comment la commission est-elle calculée&nbsp;?</summary><div class="rep">
+        <p>Elle porte sur les avoirs reçus de votre transitaire et imputés, au centime, sur des écarts que j'ai signalés et
+        validés. L'imputation suit une règle fixe, décrite dans la <a href="methode.html">méthode</a>. L'assiette est le
+        montant hors taxes des avoirs ; les remboursements et remises accordés par une administration en sont exclus.</p>
+        <p>La commission est facturée chaque mois, sur une facture récapitulative. Vous voyez chaque avoir pris en compte
+        dans votre espace. Durée pendant laquelle un avoir reste pris en compte : voir les
+        <a href="cgv.html#commission">CGV</a> <span class="ph">[À VALIDER]</span>.</p></div></details>
+      <details><summary>Qu'est-ce qui reste à payer avec un diagnostic offert&nbsp;?</summary><div class="rep">
+        <p>Le forfait de 390&nbsp;€ HT est remis à 100&nbsp;%. La commission de 20&nbsp;% sur les avoirs obtenus reste
+        due. La remise ne dépend d'aucune contrepartie : l'accord de publication de résultats anonymisés est séparé et
+        facultatif.</p></div></details>
+      <details><summary>Qui écrit au transitaire&nbsp;?</summary><div class="rep">
+        <p>Vous, si vous le décidez. Vous recevez un relevé d'écarts (valeurs comparées, emplacement dans les documents,
+        calcul) et un modèle de courrier neutre, sans argument juridique. Vous l'adaptez, le signez et l'envoyez vous-même.
+        Je ne contacte jamais votre transitaire, je ne relance pas pour vous et je n'encaisse aucune somme pour votre
+        compte.</p></div></details>
+      <details><summary>Que se passe-t-il si le diagnostic ne trouve aucun écart&nbsp;?</summary><div class="rep">
+        <p>Le forfait reste dû : il paie le contrôle lui-même. Le rapport indique les contrôles faits, ceux qui n'ont pas
+        pu l'être et pourquoi. Un dossier impossible à conclure n'est jamais présenté comme conforme.</p></div></details>
+      <details><summary>Faut-il un logiciel ou une intégration&nbsp;?</summary><div class="rep">
+        <p>Non. Vous déposez vos documents tels quels. Une API existe si vous voulez automatiser le dépôt.</p></div></details>
+      <details><summary>Comment payer&nbsp;?</summary><div class="rep">
+        <p>Par virement, ou par carte via un prestataire de paiement. Délais et pénalités de retard : voir les
+        <a href="cgv.html#paiement">CGV</a>.</p></div></details>
     </div>
   </div>
 </section>
@@ -100,57 +218,30 @@
   <div class="wrap">
     <div class="offer">
       <div>
-        <span class="kicker" style="color:inherit;opacity:.8">Offre de lancement</span>
-        <h2>Trois diagnostics offerts</h2>
-        <p>Trois diagnostics offerts (remise de lancement). Si vous l'acceptez, et seulement dans ce cas, nous publions
-        ensuite des résultats anonymisés, après votre relecture. Aucune donnée permettant de vous identifier, ni vous ni vos
-        transitaires, n'est publiée. Votre accord est distinct, facultatif et révocable jusqu'à la publication ; la remise
-        reste acquise dans tous les cas.</p>
+        <p class="label">Offre de lancement</p>
+        <h2>Les trois premiers diagnostics sont offerts.</h2>
+        <p>La remise couvre le forfait de 390&nbsp;€ HT. La commission de 20&nbsp;% sur les avoirs obtenus reste due.
+        Si vous l'acceptez, et seulement dans ce cas, je publierai ensuite des résultats anonymisés, après votre relecture.
+        Rien ne permettra de vous identifier, ni vous ni vos transitaires. Votre accord est séparé, facultatif et révocable
+        jusqu'à la publication ; la remise reste acquise dans tous les cas.</p>
       </div>
       <div class="offer-box">
-        <p style="margin:0">Places limitées à trois entreprises. Conditions écrites remises avant le démarrage.</p>
-        <div class="actions" style="margin-top:1rem"><a class="btn btn-primary" href="contact.html">Proposer votre entreprise</a></div>
+        <p>Trois entreprises au total. Les conditions écrites vous sont remises avant le démarrage.</p>
+        <div class="actions"><a class="btn btn-primary" href="contact.html">Demander un diagnostic <span class="fl" aria-hidden="true">→</span></a></div>
       </div>
     </div>
   </div>
 </section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="section-head"><h2>Questions fréquentes</h2></div>
-    <div class="faq">
-      <details><summary>Comment la commission est-elle calculée&nbsp;?</summary><div>
-        <p>Elle porte sur les montants des avoirs reçus de votre transitaire et imputés, au centime, sur des écarts signalés
-        par ControlDOne et validés. L'imputation suit une règle fixe, documentée dans la <a href="methode.html">méthode</a>.
-        Le registre des avoirs est consultable dans votre espace. L'assiette est le montant hors taxes des avoirs émis par
-        votre transitaire ; les remboursements ou remises accordés par une administration en sont exclus. La commission est
-        facturée chaque mois, par facture récapitulative. Durée pendant laquelle un avoir reste pris en compte : voir les
-        <a href="cgv.html#commission">CGV</a> <span class="ph">[À VALIDER]</span>.</p></div></details>
-      <details><summary>Qui écrit au transitaire&nbsp;?</summary><div>
-        <p>Vous, si vous le décidez. Vous recevez un relevé d'écarts (valeurs comparées, emplacement dans les documents,
-        calcul) et un modèle de courrier neutre, sans argumentation juridique, que vous adaptez, signez et envoyez vous-même.
-        ControlDOne ne contacte jamais votre transitaire, ne relance pas pour vous et n'encaisse aucune somme pour votre
-        compte.</p></div></details>
-      <details><summary>Que se passe-t-il si le diagnostic ne trouve aucun écart&nbsp;?</summary><div>
-        <p>Le forfait de diagnostic reste dû : il rémunère le contrôle lui-même. Le rapport indique alors les contrôles
-        réalisés, ceux qui n'ont pas pu l'être et pourquoi. Un dossier « impossible à conclure » n'est jamais présenté comme conforme.</p></div></details>
-      <details><summary>Faut-il un logiciel ou une intégration&nbsp;?</summary><div>
-        <p>Non. Vous déposez vos documents tels quels. Une API existe pour ceux qui veulent automatiser le dépôt.</p></div></details>
-      <details><summary>Comment payer&nbsp;?</summary><div>
-        <p>Par virement ou par carte via notre prestataire de paiement. Délais et pénalités de retard : voir les <a href="cgv.html#paiement">CGV</a>.</p></div></details>
-    </div>
-  </div>
-</section>
-
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Contrôle technique de cohérence entre la facture commerciale, la déclaration en douane,
-        la facture du transitaire et ses avoirs, pour les PME qui importent.</p>
-        <p class="small">Site sans cookie, sans traceur, sans police ni script externes.</p>
+        <p class="foot-about">ControlDOne compare la facture de votre transitaire à votre déclaration en douane, à votre
+        grille tarifaire et à vos avoirs, dossier par dossier. Pour les PME qui importent hors de l'Union européenne.</p>
+        <p class="small">Ce site ne dépose aucun cookie et ne mesure pas votre visite. Ses polices et ses scripts sont
+        servis par ce site : aucun autre serveur n'est appelé.</p>
       </div>
       <div>
         <h2>Le service</h2>

@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#05060a">
+<meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1114" media="(prefers-color-scheme: dark)">
 {% block meta %}{% endblock %}
-<title>{{ titre }} — ControlDOne</title>
-<link rel="preload" href="/static/vendor/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<title>{{ titre }} · ControlDOne</title>
+<link rel="preload" href="/static/vendor/fonts/SourceSerif4Variable-Roman.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/theme.js"></script>
@@ -17,19 +18,17 @@
 </head>
 <body class="{% block corps_classe %}{% endblock %}">
 <a class="evitement" href="#contenu">{{ _("Aller au contenu") }}</a>
-<div class="decor" aria-hidden="true"><div class="halo h1"></div><div class="halo h2"></div><div class="halo h3"></div><div class="trame"></div><div class="grain"></div></div>
 <div class="progression" aria-hidden="true"></div>
 {% if demo %}
-<aside class="bandeau-demo" aria-label="{{ _("Données fictives") }}"><strong>{{ _("DONNÉES FICTIVES") }}</strong> — {{ _("client de démonstration : sociétés, documents et montants inventés.") }}</aside>
+<aside class="bandeau-demo" aria-label="{{ _("Données fictives") }}"><strong>{{ _("DONNÉES FICTIVES") }}</strong> · {{ _("Client de démonstration : les sociétés, les documents et les montants sont inventés.") }}</aside>
 {% endif %}
 <header class="entete">
   <div class="entete-int">
-    <a class="marque" href="/" aria-label="{{ _("ControlDOne — accueil") }}">
+    <a class="marque" href="/" aria-label="{{ _("ControlDOne, accueil") }}">
       <svg class="logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <defs><linearGradient id="logo-degrade" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse"><stop stop-color="#8b9cff"/><stop offset=".5" stop-color="#b69cff"/><stop offset="1" stop-color="#5eead4"/></linearGradient></defs>
-        <rect x="1.5" y="1.5" width="29" height="29" rx="9" stroke="url(#logo-degrade)" stroke-width="1.6" opacity=".9"/>
-        <path d="M9.5 12.5h8M9.5 16.5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
-        <path class="trace" d="M14.5 21.2l3.2 3.1 6.6-7.6" stroke="url(#logo-degrade)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect class="cadre" x="2" y="2" width="28" height="28" rx="8" stroke-width="1.5"/>
+        <path d="M9.5 12.5h8M9.5 16.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>
+        <path class="trace" d="M14.5 21.2l3.2 3.1 6.6-7.6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <span aria-hidden="true" class="marque-texte">Control<span>DOne</span></span>
     </a>
@@ -65,7 +64,7 @@
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="retour" value="{{ retour_langue }}">
       <button type="submit" name="langue" value="{{ autre }}" class="btn-icone btn-langue" lang="{{ autre }}" title="{{ LANGUES[autre] }}"><span aria-hidden="true">{{ autre|upper }}</span><span class="vh">{{ LANGUES[autre] }}</span></button>
     </form>
-    <button type="button" class="btn-icone seulement-js" data-theme-basculer aria-label="{{ _("Basculer le thème clair ou sombre") }}" title="{{ _("Thème clair / sombre") }}">
+    <button type="button" class="btn-icone seulement-js" data-theme-basculer aria-label="{{ _("Passer en thème clair ou sombre") }}" title="{{ _("Thème clair ou sombre") }}">
       <svg class="ico-lune" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.5 12.3A6.8 6.8 0 017.7 3.5a6.8 6.8 0 108.8 8.8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
       <svg class="ico-soleil" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="3.6" stroke="currentColor" stroke-width="1.6"/><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     </button>
@@ -73,14 +72,14 @@
 </header>
 <main id="contenu" class="page">
   {% if flash %}
-  <div class="message {{ 'erreur' if flash.e else 'succes' }}" role="{{ 'alert' if flash.e else 'status' }}">{{ flash.m }}</div>
+  <div class="message {{ 'erreur' if flash.e else 'succes' }}" role="{{ 'alert' if flash.e else 'status' }}"><span class="texte">{{ flash.m }}</span></div>
   {% endif %}
   {% block contenu %}{% endblock %}
 </main>
 <footer class="pied">
   <p class="avertissement" lang="fr"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p>
   {% if langue == "en" %}<p class="avertissement traduction"><strong>Courtesy translation (the French text above prevails):</strong> {{ AVERTISSEMENT_EN }}</p>{% endif %}
-  <p class="mentions">{{ _("ControlDOne — contrôle technique de cohérence des documents d'import. Les relevés d'écarts sont remis au client, qui décide seul de leur usage.") }}</p>
+  <p class="mentions">{{ _("ControlDOne compare vos documents d'import entre eux et chiffre les écarts. Les relevés vous sont remis : vous décidez seul de ce que vous en faites.") }}</p>
 </footer>
 {% if acteur %}
 <dialog class="palette" data-palette aria-label="{{ _("Recherche rapide") }}">

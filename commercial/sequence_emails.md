@@ -2,6 +2,8 @@
 
 *Version 1.0 — 2 octobre 2026. Brouillons à valider par le fondateur. Rien n'est envoyé automatiquement.*
 
+> La séquence par défaut du module **Marketing** de l'application (J0, J+4, J+10, J+20) est une réécriture plus courte de ces messages, modifiable dans l'interface ; voir `docs/PROSPECTION.md`.
+
 ## Règles d'usage (à relire avant chaque envoi)
 
 - **Cible** : la fonction du destinataire doit avoir un lien direct avec l'offre (dirigeant, responsable achats/import, DAF). C'est la condition de l'intérêt légitime en prospection B2B par e-mail (CNIL, https://www.cnil.fr/fr/la-prospection-commerciale-par-courrier-electronique).

@@ -3,13 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ControlDOne — checking freight forwarder invoices against customs declarations</title>
-<meta name="description" content="Reconciliation of the commercial invoice, the customs declaration, the freight forwarder's invoice and credit notes for small businesses that import. Quantified differences, evidence for each difference, a statement of differences and a letter template that the client adapts and sends itself.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>ControlDOne · Freight forwarder invoice checks</title>
+<meta name="description" content="I compare each line of your freight forwarder's invoice with your customs declaration, your rate card and your credit notes. Each difference is quantified, with the page that proves it.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="alternate" hreflang="fr" href="../index.html">
+<script src="../assets/vendor/motion.min.js" defer></script>
+<script src="../assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
@@ -17,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Main navigation">
-        <a href="index.html" aria-current="page">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html">Demo</a>
         <a href="pricing.html">Pricing</a>
@@ -28,156 +31,206 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Main navigation (mobile)">
-        <a href="index.html" aria-current="page">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html">Demo</a>
         <a href="pricing.html">Pricing</a>
         <a href="contact.html">Contact</a>
         <a href="../index.html" hreflang="fr" lang="fr" title="Version française">FR</a>
-        <a href="contact.html">Request a diagnostic</a>
+        <a class="menu-cta" href="contact.html">Request a diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="content">
-
 <section class="hero">
   <div class="wrap">
     <div>
-      <span class="kicker">Checking import documents</span>
-      <h1>Do your freight forwarder's invoices say the same thing as your customs declarations?</h1>
-      <p class="lead">ControlDOne reconciles, file by file, the commercial invoice, the customs declaration,
-      the freight forwarder's invoice and its credit notes. Each difference is quantified and cited with its evidence. You receive
-      a statement of differences and a neutral letter template, which you adapt and send yourself if you decide to.</p>
-      <ul class="hero-points">
-        <li>For small and medium-sized businesses that import through a freight forwarder, without a customs department</li>
-        <li>Calculations done by tested code, evidence page by page</li>
-        <li>No legal or customs advice: regulatory matters are referred to a professional</li>
-      </ul>
+      <p class="label">Freight forwarder invoice checks</p>
+      <h1><span>Every line of your freight forwarder's invoice,</span> <span class="ton2">checked against your customs declaration.</span></h1>
+      <p class="lead">For each import file, I put the supplier's invoice, the customs declaration, the freight forwarder's
+      invoice and its credit notes side by side. Each difference is calculated to the cent, with both amounts, the page
+      where they appear and the calculation.</p>
       <div class="actions">
-        <a class="btn btn-primary" href="contact.html">Request a diagnostic</a>
-        <a class="btn btn-ghost" href="demo.html">See the demo</a>
+        <a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Diagnostic: €390 excl. VAT">Request a diagnostic <span class="fl" aria-hidden="true">→</span></a>
+        <a class="btn btn-ghost" href="demo.html">See a sample report</a>
       </div>
+      <p class="after-cta">I reply to you myself. Nothing is binding until you have signed the written terms.</p>
     </div>
 
-    <div class="specimen" aria-label="Example finding, fictitious data">
-      <div class="specimen-top"><span>Example finding taken from the demo report</span><span class="tag-fictif">FICTITIOUS DATA</span></div>
+    <div class="specimen" role="figure" aria-label="Example finding from the demo report, fictitious data">
+      <div class="specimen-top"><span>Finding 01 · file D-2026-00001</span><span class="tag-fictif">FICTITIOUS DATA</span></div>
       <div class="specimen-body">
         <div class="specimen-title"><span>Import VAT re-invoiced</span><span class="badge badge-certain">Confirmed difference</span></div>
         <div class="pair">
           <div class="cite">
             <div class="src">Freight forwarder's invoice</div>
             <div class="val">EUR&nbsp;2,356.28</div>
-            <div class="where">No. FT-FIC-0501, page 1 — import VAT re-invoiced</div>
+            <div class="where">No. FT-FIC-0501, page 1, line "import VAT"</div>
           </div>
           <div class="cite">
             <div class="src">Customs declaration</div>
             <div class="val">code 1008</div>
-            <div class="where">MRN 26FRD1FIC000004711, page 1 — VAT shown as reverse-charged</div>
+            <div class="where">MRN 26FRD1FIC000004711, page 1: VAT shown as reverse-charged</div>
           </div>
         </div>
+        <div class="trace" aria-hidden="true"><span></span></div>
         <div class="specimen-foot">
-          <span>Difference found between the documents</span><strong>EUR&nbsp;2,356.28</strong>
+          <span>Difference found between the two documents</span>
+          <strong data-count="2356.28" data-decimals="2" data-prefix="EUR&nbsp;" data-delay="1.15">EUR&nbsp;2,356.28</strong>
         </div>
-        <p class="small muted" style="margin:.6rem 0 0">Tolerance applied: EUR&nbsp;0.05. The finding concerns the difference between the two
-        documents; it expresses no opinion on whether the reverse charge applies.</p>
+        <p class="specimen-note">Tolerance applied: EUR&nbsp;0.05. The finding concerns the difference between the two
+        documents. It expresses no opinion on whether the reverse charge applies.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section alt" id="problem">
+<section class="pricebar" aria-label="Prices">
   <div class="wrap">
-    <div class="section-head">
-      <span class="kicker">The problem</span>
-      <h2>Four documents, three issuers, nobody to reconcile them</h2>
-      <p>For each imported shipment, a small business receives its supplier's invoice, the declaration lodged by the declarant,
-      the freight forwarder's invoice, sometimes a credit note. Duties, import VAT and re-invoiced charges are rarely
-      reconciled line by line: formats differ, and without a customs department nobody has the time to do it.</p>
-    </div>
-    <div class="grid grid-2">
-      <div class="card"><h3>VAT re-invoiced despite the reverse charge</h3>
-        <p class="card-muted">The freight forwarder's invoice re-invoices import VAT that the declaration shows as reverse-charged.</p></div>
-      <div class="card"><h3>Services above the quote</h3>
-        <p class="card-muted">Customs clearance fees, disbursement fees or additional lines invoiced at an amount different from the priced rate card you send us.</p></div>
-      <div class="card"><h3>Disbursements different from the amount assessed</h3>
-        <p class="card-muted">Duties or taxes re-invoiced for an amount higher than the one shown on the declaration.</p></div>
-      <div class="card"><h3>Duplicates and missing credit notes</h3>
-        <p class="card-muted">Same declaration re-invoiced twice, same service invoiced on two invoices, credit note announced but never applied.</p></div>
-    </div>
-    <p class="small muted" style="margin-top:1.25rem">These examples describe types of checks performed, not an observed frequency.</p>
+    <div class="pb"><p class="pb-k">Diagnostic</p><p class="pb-v"><span class="num">€390</span> excl. VAT, paid once, for a batch of past files.</p></div>
+    <div class="pb"><p class="pb-k">Continuous checking</p><p class="pb-v">From <span class="num">€99</span> excl. VAT a month, depending on volume.</p></div>
+    <div class="pb"><p class="pb-k">Commission</p><p class="pb-v"><span class="num">20%</span> of credit notes obtained. No credit note, nothing to pay.</p></div>
+    <div class="pb"><a href="pricing.html">Pricing and break-even calculator</a></div>
   </div>
 </section>
 
-<section class="section" id="comparison">
+<section class="section" id="problem">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">What is compared</span>
-      <h2>Each import file, document against document</h2>
-      <p>Native PDFs, scans, XML or CSV declaration exports, Factur-X, UBL or CII e-invoices, spreadsheets:
-      documents are read, grouped by file, then compared.</p>
+      <p class="label">The problem</p>
+      <h2>In a business without a customs department, nobody has time to compare these documents.</h2>
+      <p>For one shipment you receive the supplier's invoice, the declaration lodged by the declarant, the freight
+      forwarder's invoice and sometimes a credit note. Each has its own format. So the check happens at payment time, by
+      eye, when there is time.</p>
+      <p>Here is what I compare, with the check code as it appears in the report.</p>
     </div>
-    <div class="grid grid-4">
-      <div class="card"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg></div><h3>Commercial invoice</h3>
-        <p class="card-muted">The reference document: value, currency, quantities, masses, packages, Incoterm.</p></div>
-      <div class="card"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21h14"/><path d="M7 17h10l-1-4H8z"/><path d="M12 13V8"/><circle cx="12" cy="6" r="2.5"/></svg></div><h3>Customs declaration</h3>
-        <p class="card-muted">H1 or H7 data: amounts assessed, printed base × rate, VAT payment method.</p></div>
-      <div class="card"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11v10H3z"/><path d="M14 10h4l3 3v3h-7"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/></svg></div><h3>Freight forwarder's invoice</h3>
-        <p class="card-muted">Re-invoiced disbursements against the declaration; services against your rate card or quote.</p></div>
-      <div class="card"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></div><h3>Credit notes</h3>
-        <p class="card-muted">Link to the original invoice, allocation to open differences, tracking of differences still open.</p></div>
+    <ul class="ledger">
+      <li><span class="code">C3</span><h3>VAT re-invoiced although it was reverse-charged</h3>
+        <p>The freight forwarder's invoice charges import VAT that the declaration shows as reverse-charged.</p></li>
+      <li><span class="code">D3</span><h3>Fees above your rate card</h3>
+        <p>File, clearance or disbursement fees invoiced at a price other than the one in the quote or rate card you sent me.</p></li>
+      <li><span class="code">C1</span><h3>Duties re-invoiced above the amount assessed</h3>
+        <p>The duties re-invoiced are higher than those shown on the declaration.</p></li>
+      <li><span class="code">E · F</span><h3>Duplicates and forgotten credit notes</h3>
+        <p>The same declaration invoiced twice. The same service on two invoices. A credit note announced but never applied.</p></li>
+    </ul>
+    <p class="note after-list">These are examples of checks, not an observed frequency. I know of no independent
+    measurement of error rates on freight forwarder invoices. The diagnostic measures yours.</p>
+  </div>
+</section>
+
+<section class="section alt" id="reconciliation">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">The check, line by line</p>
+      <h2>This is how a difference is found, on a fictitious file.</h2>
+      <p>Each line of the freight forwarder's invoice is matched with the corresponding line of the declaration or of your
+      rate card. If both amounts agree within the tolerance, the line is consistent. If not, the difference is calculated
+      and its evidence is cited.</p>
+    </div>
+    <div class="cmp">
+      <div class="cmp-sticky">
+        <div class="cmp-steps" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <div class="cmp-docs" aria-hidden="true"><span>Freight forwarder invoice FT-FIC-0501</span><span>Check</span><span>Declaration and rate card</span></div>
+        <ol class="cmp-rows">
+          <li class="cmp-row">
+            <div class="cmp-cell"><span class="k">Customs duties re-invoiced <em>FT-FIC-0501, p. 1</em></span><span class="v">EUR&nbsp;223.83</span></div>
+            <div class="cmp-status"><span class="badge badge-ok">Consistent</span></div>
+            <div class="cmp-cell right"><span class="k">Duties assessed <em>declaration, p. 1</em></span><span class="v">EUR&nbsp;223.83</span></div>
+          </li>
+          <li class="cmp-row is-gap">
+            <div class="cmp-cell"><span class="k">Import VAT re-invoiced <em>FT-FIC-0501, p. 1</em></span><span class="v">EUR&nbsp;2,356.28</span></div>
+            <div class="cmp-status"><span class="badge badge-certain">Confirmed difference</span><span class="ecart">EUR&nbsp;2,356.28</span></div>
+            <div class="cmp-cell right"><span class="k">VAT <em>declaration, p. 1</em></span><span class="v">code 1008, reverse-charged</span></div>
+            <p class="cmp-proof">Evidence: invoice FT-FIC-0501, page 1, amount read <span class="num">2,356.28</span>.
+            Declaration 26FRD1FIC000004711, page 1, document code 1008 followed by the importer's VAT number.
+            Tolerance EUR&nbsp;0.05.</p>
+          </li>
+          <li class="cmp-row is-gap">
+            <div class="cmp-cell"><span class="k">Customs clearance fee <em>FT-FIC-0501, p. 1</em></span><span class="v">EUR&nbsp;95.00</span></div>
+            <div class="cmp-status"><span class="badge badge-certain">Confirmed difference</span><span class="ecart">EUR&nbsp;30.00</span></div>
+            <div class="cmp-cell right"><span class="k">Rate card <em>quote D-2026-001</em></span><span class="v">flat fee EUR&nbsp;65.00</span></div>
+            <p class="cmp-proof">Evidence: line "customs clearance fee" invoiced at EUR&nbsp;<span class="num">95.00</span>;
+            the validated rate card sets a flat fee of EUR&nbsp;<span class="num">65.00</span> for this item. Tolerance EUR&nbsp;0.01.</p>
+          </li>
+        </ol>
+        <div class="cmp-total">
+          <p>Total confirmed differences on this file, before my review</p>
+          <strong>EUR&nbsp;2,386.28</strong>
+        </div>
+        <p class="cmp-caption">File D-2026-00001 of the demo report. <span class="tag-fictif">FICTITIOUS DATA</span>
+        The amounts are calculated by a program: the same documents always give the same result.</p>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="section alt" id="deliverables">
+<section class="section" id="deliverables">
   <div class="wrap">
-    <div class="grid grid-2" style="align-items:center;gap:2.5rem">
+    <div class="split center">
       <div>
-        <span class="kicker">What you receive</span>
-        <h2>A verifiable report, and a ready-to-use statement of differences</h2>
-        <ul class="checklist">
-          <li>An online diagnostic report, as PDF and as a spreadsheet.</li>
-          <li>For each difference: the two values side by side, with the document, the page and the text read, the calculation and the tolerance applied.</li>
-          <li>Two separate amounts: confirmed differences and differences to be checked, never added together.</li>
-          <li>A statement of differences and a neutral letter template, with no legal argument, which you adapt, sign and send yourself to your freight forwarder if you decide to.</li>
-          <li>The list of points to be checked by a professional, without any amount.</li>
-          <li>With the subscription: check of each new file and tracking of credit notes received.</li>
-        </ul>
+        <p class="label">What you receive</p>
+        <h2>A report you can check yourself.</h2>
+        <p>The report is available online, as a PDF and as a spreadsheet. For each difference it gives both values, the
+        document, the page, the text read, the calculation and the tolerance applied.</p>
+        <p>Confirmed differences and differences to verify have separate totals. I never add them together.</p>
+        <p>You also receive a statement of differences and a neutral letter template with no legal argument. You adapt it,
+        sign it and send it to your freight forwarder if you decide to. I never write on your behalf.</p>
+        <p>A difference in your favour (you paid less than the documents say) is reported too. It never goes into the letter.</p>
       </div>
       <figure class="shot">
-        <img src="../demo/captures/rapport-synthese.png" width="1272" height="652"
-             alt="Screenshot of the demo report summary (in French): confirmed amount, amount to be checked, files by status. Fictitious data.">
+        <img src="../demo/captures/rapport-synthese.png" width="1272" height="652" loading="lazy"
+             alt="Summary of the demo report: confirmed amount, amount to verify and files by status. Fictitious data (report in French).">
         <figcaption><span>Summary of the demo report (in French)</span><span class="tag-fictif">FICTITIOUS DATA</span></figcaption>
       </figure>
     </div>
   </div>
 </section>
 
+<section class="section alt" id="measures">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">What I measured</p>
+      <h2>On 160 fictitious files never seen before, no confirmed difference was wrong.</h2>
+      <p>Before offering the service, I tested it on invented import files, generated for the purpose, with errors placed
+      in them on purpose. The last set was never opened during development.</p>
+    </div>
+    <div class="measures">
+      <div class="measure"><p class="big"><span data-count="51">51</span></p>
+        <p>differences classed as confirmed, all correct. None wrong.</p></div>
+      <div class="measure"><p class="big"><span data-count="79">79</span><small>%</small></p>
+        <p>of the 188 errors placed were reported, as confirmed or to verify. About one in five was missed.</p></div>
+      <div class="measure"><p class="big">1.1</p>
+        <p>unfounded "to verify" finding per file on average. I discard them during my review.</p></div>
+    </div>
+    <p class="measure-src">Measured on 7 October 2026, on 160 fictitious files generated for testing (188 injected
+    errors), with the engine version in use on that date. These figures describe the program on synthetic test files.
+    They say nothing about how often errors occur in your real files. On another test set, one confirmed difference out
+    of 63 turned out to be wrong: that is why I review every finding before sending it to you.
+    <a href="method.html#measures">Details on the Method page.</a></p>
+  </div>
+</section>
+
 <section class="section" id="limits">
   <div class="wrap">
-    <div class="grid grid-2" style="gap:2.5rem">
+    <div class="split">
       <div>
-        <span class="kicker">What it is not</span>
-        <h2>A technical audit, not advice</h2>
-        <p class="muted">ControlDOne finds factual, documentary and pricing differences between documents. It never says whether a duty,
-        a tax, a tariff classification, an origin or a customs value is right under the regulations.</p>
+        <p class="label">What I do not do</p>
+        <h2>I do not say whether a duty is right. I say whether two documents agree.</h2>
         <ul class="nolist">
           <li>No legal, tax or customs advice.</li>
           <li>No opinion on tariff classification, origin, preference, customs value, a rate or a procedure.</li>
-          <li>No dealings with the customs authorities.</li>
-          <li>No contact with your freight forwarder, no reminders, no money collected on your behalf: you remain the sender.</li>
-          <li>Not an approved e-invoicing platform.</li>
+          <li>No dealings with customs.</li>
+          <li>No contact with your freight forwarder. You send the credit note request yourself, if you decide to.</li>
+          <li>ControlDOne is not an approved e-invoicing platform.</li>
         </ul>
       </div>
-      <div>
-        <div class="callout">
-          <p><strong>When a difference touches a regulatory matter</strong>, the report shows it separately, without any amount,
-          always with the same sentence (French original, followed by its translation):</p>
-          <p class="quote-renvoi" lang="fr">« Ce point relève d'une appréciation réglementaire : il est à faire vérifier par un représentant en douane enregistré ou un avocat. ControlDOne ne se prononce pas sur ce point. »</p>
-          <p class="quote-renvoi">“This point involves a regulatory assessment: it should be checked by a registered customs representative or a lawyer. ControlDOne does not express any opinion on this point.”</p>
-          <p class="small muted">A registered customs representative or a lawyer can then examine the point.</p>
-        </div>
+      <div class="callout">
+        <p>When a point concerns regulations, the report lists it separately, with no amount, and always with the same
+        sentence (quoted in French, as it appears in the report):</p>
+        <p class="quote-renvoi" lang="fr">« Ce point relève d'une appréciation réglementaire : il est à faire vérifier par un représentant en douane enregistré ou un avocat. ControlDOne ne se prononce pas sur ce point. »</p>
+        <p class="small muted">In English: "This point involves a regulatory assessment: it should be checked by a
+        registered customs representative or a lawyer. ControlDOne expresses no opinion on this point."</p>
       </div>
     </div>
   </div>
@@ -186,84 +239,159 @@
 <section class="section alt" id="how-it-works">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">How it works</span>
-      <h2>Four steps</h2>
+      <p class="label">How it works</p>
+      <h2>Four steps. The last one is yours.</h2>
     </div>
     <ol class="steps">
-      <li><h3>You upload</h3><p>A batch of past files, in a secure area or through a dedicated address: PDFs, scans, exports, e-invoices, your rate card.</p></li>
-      <li><h3>The code compares</h3><p>Reading, grouping by file, then deterministic checks. The tolerances applied are displayed.</p></li>
-      <li><h3>The founder validates</h3><p>Each finding and each statement of differences is reviewed by a person before being handed to you.</p></li>
-      <li><h3>You decide, we track</h3><p>You alone decide whether to write to your freight forwarder. Credit notes you report as received are matched against the differences; the commission only applies to the amount, excluding VAT, of credit notes obtained.</p></li>
+      <li><h3>You upload your files</h3>
+        <p>A batch of past files, uploaded as they are to a secure space opened once the terms are signed: PDFs, scans,
+        declaration exports, e-invoices, your rate card.</p></li>
+      <li><h3>The program compares</h3>
+        <p>It reads the documents, groups them by file and runs fixed checks. The tolerances are written in the report.</p></li>
+      <li><h3>I review every finding</h3>
+        <p>No finding reaches you until I have reviewed and approved it. Every correction is logged.</p></li>
+      <li><h3>You decide</h3>
+        <p>You alone choose whether to write to your freight forwarder. If you obtain a credit note, you tell me: it is
+        matched with the open differences, and the commission applies to its amount excluding VAT.</p></li>
     </ol>
+  </div>
+</section>
+
+<section class="section" id="founder">
+  <div class="wrap">
+    <div class="founder">
+      <div class="portrait" role="img" aria-label="Placeholder for the founder's photo">
+        <span><span class="initiales">SB</span><span class="ph">[TO BE COMPLETED: real photo of the founder]</span></span>
+      </div>
+      <div>
+        <p class="label">Who is behind it</p>
+        <h2>I am Samuel Bazzanella. I am the one who reviews your report.</h2>
+        <p>I worked on customs economic performance at a large luxury group
+        <span class="ph">[TO BE COMPLETED: role and duration]</span>. I graduated from GEM, Grenoble École de Management
+        <span class="ph">[TO BE COMPLETED: programme and year]</span>.</p>
+        <p><span class="ph">[TO BE COMPLETED by the founder: in two or three sentences, why you built ControlDOne]</span></p>
+        <p>To be transparent: ControlDOne is a one-person company. The program does the calculations, I do the review,
+        and you always deal with the same person.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="security">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Your documents</p>
+      <h2>Your documents stay encrypted and separate from other clients' documents.</h2>
+    </div>
+    <div class="split">
+      <div>
+        <p>Each client has its own encryption key. Files are encrypted at rest, and in transit with TLS. I access
+        administration with a second factor, and every access is recorded in an audit log.</p>
+        <p>Raw files are deleted 180 days after a file is closed. At the end of the contract, I return your data (JSON and
+        PDF), then delete it within 30 days.</p>
+      </div>
+      <div>
+        <p>The service is hosted in the European Union <span class="ph">[TO BE COMPLETED: hosting provider]</span>. To read
+        difficult documents, a language model may be used (Anthropic, in the United States, under standard contractual
+        clauses). It has no tools, no network access and no write access, and it calculates nothing. You are informed of it
+        and you can switch it off.</p>
+        <p>A data processing agreement (article 28 GDPR) is signed with each client.
+        <a href="method.html#security">All measures are described on the Method page.</a></p>
+      </div>
+    </div>
   </div>
 </section>
 
 <section class="section" id="context">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Context 2026-2027</span>
-      <h2>More rules, more lines on invoices</h2>
-      <p>A few public deadlines that add amounts and mentions to reconcile. ControlDOne does not handle
-      these obligations for you; it compares what your documents say.</p>
+      <p class="label">What changes in 2026 and 2027</p>
+      <h2>Several deadlines add amounts to check on your invoices.</h2>
+      <p>ControlDOne does not handle these obligations for you. It compares what your documents say.</p>
     </div>
     <div class="facts">
-      <div class="fact"><div class="big">EUR&nbsp;3 per item</div>
-        <p>Flat-rate customs duty on low-value consignments (up to EUR&nbsp;150), from 1 July 2026 to 1 July 2028.
-        The item is determined by the tariff classification, not by the quantity.</p>
+      <div class="fact"><div class="big">€3 per item</div>
+        <p>Flat-rate customs duty on low-value consignments (up to €150), from 1 July 2026 to 1 July 2028. The item is
+        determined by tariff classification, not by quantity.</p>
         <p class="source">Source: Regulation (EU) 2026/382; <a href="https://taxation-customs.ec.europa.eu/news/guidance-and-legal-text-temporary-flat-fee-low-value-imports-which-will-apply-until-1-july-2028-2026-06-08_en">European Commission, DG TAXUD</a>.</p></div>
       <div class="fact"><div class="big">1 September 2026</div>
-        <p>Receiving e-invoices becomes mandatory for all taxable businesses in France, through an approved platform.
-        Issuing becomes mandatory for small and medium-sized businesses on 1 September 2027 at the latest.</p>
-        <p class="source">Source: <a href="https://www.impots.gouv.fr/actualite/facturation-electronique">impots.gouv.fr</a>.</p></div>
+        <p>All French businesses must be able to receive electronic invoices. Small and medium-sized businesses and
+        micro-businesses will also have to issue them from 1 September 2027.</p>
+        <p class="source">Source: <a href="https://www.impots.gouv.fr/professionnel/questions/partir-de-quand-suis-je-concerne-par-la-reforme-de-la-facturation">impots.gouv.fr (in French)</a>, page consulted on 7 October 2026.</p></div>
       <div class="fact"><div class="big">30 September 2027</div>
-        <p>First annual CBAM (MACF) declaration, for the year 2026, for the importers concerned. ControlDOne does not prepare this declaration.</p>
-        <p class="source">Source: Regulation (EU) 2025/2083; timetable published by the German competent authority, <a href="https://www.dehst.de/EN/Topics/CBAM/CBAM-definitive-regime-2026/cbam-definitive-regime-2026_node.html">DEHSt</a>.</p></div>
-      <div class="fact"><div class="big">21 September 2027</div>
-        <p>Announced date of application of most of the new Union Customs Code, adopted in September 2026 and applicable in stages until 2034.</p>
-        <p class="source">Source: <a href="https://kpmg.com/us/en/taxnewsflash/news/2026/09/tnf-eu-customs-reform-enters-into-force-with-new-e-commerce-rules.html">KPMG</a>;
-        <a href="https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en">European Commission</a>.</p></div>
-    </div>
-    <div class="callout warn" style="margin-top:1.25rem">
-      <p><strong>How many errors on freight forwarders' invoices?</strong> To our knowledge, no independent measurement
-      exists. The diagnostic is precisely meant to measure your own situation, on your own files.</p>
+        <p>First annual CBAM declaration, for 2026, for the importers concerned. ControlDOne does not prepare this declaration.</p>
+        <p class="source">Source: Regulation (EU) 2025/2083; timetable published by the competent German authority, <a href="https://www.dehst.de/EN/Topics/CBAM/CBAM-definitive-regime-2026/cbam-definitive-regime-2026_node.html">DEHSt</a>.</p></div>
+      <div class="fact"><div class="big">2028 and 2034</div>
+        <p>The new Union Customs Code (Regulation (EU) 2026/2108) applies in stages. The EU customs data hub becomes
+        mandatory for e-commerce on 1 July 2028, then for all traders on 1 March 2034.</p>
+        <p class="source">Source: <a href="https://taxation-customs.ec.europa.eu/customs/eu-customs-reform_en">European Commission, EU customs reform</a>.</p></div>
     </div>
   </div>
 </section>
 
-<section class="section alt" id="offer">
+<section class="section alt" id="questions">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="label">Questions</p>
+      <h2>What you will want to know before sending me documents.</h2>
+    </div>
+    <div class="faq">
+      <details><summary>Where are my documents, and who reads them?</summary><div class="rep">
+        <p>In the European Union <span class="ph">[TO BE COMPLETED: hosting provider]</span>, encrypted with a key specific
+        to your company. On the ControlDOne side, I am the only person with access, with a second factor, and every access
+        is logged. A language model (Anthropic, United States) may help read difficult documents; you can switch it off.</p></div></details>
+      <details><summary>Will my freight forwarder know I use ControlDOne?</summary><div class="rep">
+        <p>No, unless you tell them. I never contact them. If you write to them, it is with your own letter, signed with your name.</p></div></details>
+      <details><summary>What if a difference is in my favour?</summary><div class="rep">
+        <p>It appears in the report, labelled as such, at the "to verify" level. It never goes into the letter template.</p></div></details>
+      <details><summary>What happens to my data at the end of the contract?</summary><div class="rep">
+        <p>I return it (JSON and PDF), then delete it within 30 days. During the contract, raw files are already deleted 180
+        days after each file is closed.</p></div></details>
+      <details><summary>Is this legal advice?</summary><div class="rep">
+        <p>No. The report records differences between documents. Any point that involves regulations is referred to a
+        registered customs representative or a lawyer, with no amount.</p></div></details>
+      <details><summary>What if the diagnostic finds nothing?</summary><div class="rep">
+        <p>A file with no difference is a result, and the report shows it as such. The flat fee is still due, because it
+        pays for the check. The report also states which checks could not be run, and why.</p></div></details>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="offer">
   <div class="wrap">
     <div class="offer">
       <div>
-        <span class="kicker" style="color:inherit;opacity:.8">Launch offer</span>
-        <h2>Three free diagnostics</h2>
-        <p>The first three companies that wish to take part receive a complete diagnostic free of charge (100&nbsp;% launch
-        discount). If they agree, through a separate, optional and revocable agreement, anonymised results are then published
-        after their review: neither your name, nor that of your freight forwarders, nor your document numbers appear. The
-        discount does not depend on this agreement.</p>
-        <p class="fine">Conditions set out in writing before the start. The commission on credit notes obtained remains payable under the terms of sale <span class="ph">[TO BE CONFIRMED]</span>.</p>
+        <p class="label">Launch offer</p>
+        <h2>The first three diagnostics are offered.</h2>
+        <p>The discount covers the €390 excl. VAT flat fee. The 20% commission on credit notes obtained is still due.</p>
+        <p>If you agree, through a separate agreement you can withdraw until publication, I will later publish anonymised
+        results, after you have reviewed them. Neither your name, nor your freight forwarder's, nor your document numbers
+        will appear. The discount does not depend on this agreement.</p>
+        <p class="fine">Written terms provided before the start <span class="ph">[TO BE CONFIRMED]</span>.</p>
       </div>
       <div class="offer-box">
-        <h3>What the diagnostic includes</h3>
-        <ul>
-          <li>Analysis of a batch of past files</li>
-          <li>Online report, PDF and spreadsheet</li>
-          <li>Statement of differences and letter template</li>
-        </ul>
-        <div class="actions" style="margin-top:1.2rem"><a class="btn btn-primary" href="contact.html">Put your company forward</a></div>
+        <h3>To get started</h3>
+        <ol>
+          <li>You write to me: files per year, freight forwarders, countries of origin.</li>
+          <li>I send you the list of documents and the terms.</li>
+          <li>You upload a batch, I deliver the report.</li>
+        </ol>
+        <div class="actions"><a class="btn btn-primary" href="contact.html">Request a diagnostic <span class="fl" aria-hidden="true">→</span></a>
+        <a class="btn btn-ghost" href="demo.html">See a sample report</a></div>
       </div>
     </div>
   </div>
 </section>
-
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Technical consistency check between the commercial invoice, the customs declaration,
-        the freight forwarder's invoice and its credit notes, for small and medium-sized businesses that import.</p>
-        <p class="small">No cookies, no trackers, no external fonts or scripts on this site.</p>
+        <p class="foot-about">ControlDOne compares your freight forwarder's invoice with your customs declaration, your
+        rate card and your credit notes, file by file. For small and mid-sized businesses importing from outside the EU.</p>
+        <p class="small">This site sets no cookies and does not measure your visit. Its fonts and scripts are served
+        from this site; no other server is contacted.</p>
       </div>
       <div>
         <h2>The service</h2>
@@ -278,7 +406,7 @@
       </div>
       <div>
         <h2>Legal information (in French)</h2>
-        <p class="small" id="legal-note"><strong>French version prevails — draft to be reviewed by a lawyer.</strong>
+        <p class="small" id="legal-note"><strong>French version prevails; draft to be reviewed by a lawyer.</strong>
         The legal pages are published in French only; no English translation is provided.</p>
         <ul>
           <li><a href="../mentions-legales.html" hreflang="fr">Mentions légales (legal notice)</a></li>

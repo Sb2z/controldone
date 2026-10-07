@@ -3,13 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Demo — ControlDOne</title>
-<meta name="description" content="ControlDOne diagnostic report produced on fictitious data: findings, evidence, confirmed amounts and amounts to be checked.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Demo · ControlDOne</title>
+<meta name="description" content="A diagnostic report produced by the ControlDOne engine on entirely fictitious import files.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="alternate" hreflang="fr" href="../demonstration.html">
+<script src="../assets/vendor/motion.min.js" defer></script>
+<script src="../assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
@@ -17,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Main navigation">
-        <a href="index.html">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html" aria-current="page">Demo</a>
         <a href="pricing.html">Pricing</a>
@@ -28,93 +31,113 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Main navigation (mobile)">
-        <a href="index.html">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html" aria-current="page">Demo</a>
         <a href="pricing.html">Pricing</a>
         <a href="contact.html">Contact</a>
         <a href="../demonstration.html" hreflang="fr" lang="fr" title="Version française">FR</a>
-        <a href="contact.html">Request a diagnostic</a>
+        <a class="menu-cta" href="contact.html">Request a diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="content">
-
-<div class="demo-banner" role="note">FICTITIOUS DATA — DEMONSTRATION</div>
+<div class="demo-banner" role="note">FICTITIOUS DATA: DEMO</div>
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Demo</span>
-    <h1>A diagnostic report, on fictitious data</h1>
-    <p class="lead">This report was produced by the ControlDOne engine from an invented set of documents:
-    three import files of a fictitious company, with its invoices, declarations and a freight forwarder's invoice.
-    No company, freight forwarder, number or amount is real. The report itself is in French.</p>
+    <p class="label">Demo</p>
+    <h1>A real report, produced by the program, on invented files.</h1>
+    <p class="lead">The documents are fictitious: three import files of an invented company, with its invoices, its
+    declarations and a freight forwarder's invoice. No company, freight forwarder, number or amount is real. The report
+    itself comes from the same engine that will check your files. It is in French.</p>
     <div class="actions">
-      <a class="btn btn-primary" href="../demo/report.html" hreflang="fr">Open the full report (in French)</a>
-      <a class="btn btn-ghost" href="../demo/report.pdf" hreflang="fr">Download the PDF (in French)</a>
+      <a class="btn btn-ghost" href="../demo/report.html" hreflang="fr">Open the full report (in French)</a>
+      <a class="btn btn-ghost" href="../demo/report.pdf" hreflang="fr">Download the PDF</a>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="findings">
   <div class="wrap">
     <div class="section-head">
-      <h2>What the demo shows</h2>
-      <p>Three fictitious files: two with confirmed differences, one to be checked. The findings are at the “proposed” stage:
-      in the real service, the founder validates them before handing them to you.</p>
+      <p class="label">What the demo shows</p>
+      <h2>Two files with confirmed differences, one consistent file.</h2>
+      <p>The findings are at the "proposed" stage. In the real service, I review and approve them before you receive
+      them. The report also lists two points that are not recoverable amounts: a calculation difference on a declaration
+      and a point to have checked by a professional.</p>
     </div>
     <div class="grid grid-3">
       <div class="card"><span class="badge badge-certain">Confirmed difference</span>
-        <h3 style="margin-top:.7rem">VAT re-invoiced despite the reverse charge</h3>
-        <p class="card-muted">The freight forwarder's invoice re-invoices EUR&nbsp;2,356.28 of import VAT; the declaration shows document code 1008 (reverse charge).</p></div>
+        <h3 class="mt">VAT re-invoiced despite the reverse charge</h3>
+        <p class="card-muted">The freight forwarder's invoice charges EUR&nbsp;2,356.28 of import VAT. The declaration
+        shows document code 1008, which indicates a reverse charge.</p></div>
       <div class="card"><span class="badge badge-certain">Confirmed difference</span>
-        <h3 style="margin-top:.7rem">Service above the rate card</h3>
-        <p class="card-muted">Customs clearance fees invoiced at EUR&nbsp;95.00; the validated rate card provides for a flat fee of EUR&nbsp;65.00. Difference: EUR&nbsp;30.00.</p></div>
-      <div class="card"><span class="badge badge-verifier">To be checked</span>
-        <h3 style="margin-top:.7rem">Printed total and sum of taxes</h3>
-        <p class="card-muted">The total printed on the declaration differs from the sum of the amounts read; an unread line may explain it. Hence “to be checked”, not “confirmed”.</p></div>
+        <h3 class="mt">Fee above the rate card</h3>
+        <p class="card-muted">Customs clearance fee invoiced at EUR&nbsp;95.00, against a flat fee of EUR&nbsp;65.00 in the
+        validated rate card. Difference: EUR&nbsp;30.00.</p></div>
+      <div class="card"><span class="badge badge-renvoi">Calculation difference</span>
+        <h3 class="mt">Printed amount different from the calculation</h3>
+        <p class="card-muted">On one declaration, the printed amount of a tax differs from base × rate by EUR&nbsp;20.00.
+        The report gives it as a calculation difference for the declarant to explain. It is not an amount of duty to
+        recover.</p></div>
     </div>
   </div>
 </section>
 
-<section class="section alt">
+<section class="section alt" id="screenshots">
   <div class="wrap">
-    <div class="section-head"><h2>Screenshots</h2></div>
+    <div class="section-head"><p class="label">Screenshots</p><h2>The report on a large screen and on a phone.</h2></div>
     <div class="shots">
       <figure class="shot">
         <img src="../demo/captures/rapport-constat.png" width="1228" height="828" loading="lazy"
-             alt="Screenshot of a finding in the demo report (in French): values from the freight forwarder's invoice and the declaration side by side, with page and text read. Fictitious data.">
+             alt="A finding in the demo report: values from the freight forwarder's invoice and the declaration side by side, with the page and the text read. Fictitious data, report in French.">
         <figcaption><span>A finding: two values, two sources, the page and the text read</span><span class="tag-fictif">FICTITIOUS DATA</span></figcaption>
       </figure>
       <figure class="shot">
         <img src="../demo/captures/rapport-mobile.png" width="780" height="1688" loading="lazy"
-             alt="Screenshot of the demo report on a phone screen. Fictitious data.">
+             alt="The demo report on a phone screen. Fictitious data, report in French.">
         <figcaption><span>Reading on a phone</span><span class="tag-fictif">FICTITIOUS DATA</span></figcaption>
       </figure>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="report">
   <div class="wrap">
     <div class="frame">
       <div class="frame-bar"><span>Embedded demo report (in French)</span><span class="tag-fictif">FICTITIOUS DATA</span></div>
-      <iframe src="../demo/report.html" title="Demo diagnostic report, fictitious data (in French)" loading="lazy" sandbox=""></iframe>
+      <iframe src="../demo/report.html" title="Demo diagnostic report, fictitious data, in French" loading="lazy" sandbox=""></iframe>
     </div>
-    <p class="small muted" style="margin-top:1rem">The real report has the same structure: summary, next actions, table of
-    files, one sheet per file with evidence, points to be checked by a professional, unread documents, method and disclaimer.</p>
+    <p class="note mt">A real report has the same structure: summary, next actions, table of files, a sheet per file with
+    its evidence, points to have checked by a professional, documents not read, method and disclaimer.</p>
   </div>
 </section>
 
+<section class="section alt" id="next">
+  <div class="wrap">
+    <div class="offer">
+      <div>
+        <p class="label">On your files</p>
+        <h2>The same report, on your freight forwarder invoices.</h2>
+        <p>Write to me with the number of import files you handle each year and the names of your freight forwarders. I
+        will reply with the list of documents and the written terms.</p>
+      </div>
+      <div class="offer-box">
+        <div class="actions"><a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Diagnostic: €390 excl. VAT">Request a diagnostic <span class="fl" aria-hidden="true">→</span></a></div>
+      </div>
+    </div>
+  </div>
+</section>
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Technical consistency check between the commercial invoice, the customs declaration,
-        the freight forwarder's invoice and its credit notes, for small and medium-sized businesses that import.</p>
-        <p class="small">No cookies, no trackers, no external fonts or scripts on this site.</p>
+        <p class="foot-about">ControlDOne compares your freight forwarder's invoice with your customs declaration, your
+        rate card and your credit notes, file by file. For small and mid-sized businesses importing from outside the EU.</p>
+        <p class="small">This site sets no cookies and does not measure your visit. Its fonts and scripts are served
+        from this site; no other server is contacted.</p>
       </div>
       <div>
         <h2>The service</h2>
@@ -129,7 +152,7 @@
       </div>
       <div>
         <h2>Legal information (in French)</h2>
-        <p class="small" id="legal-note"><strong>French version prevails — draft to be reviewed by a lawyer.</strong>
+        <p class="small" id="legal-note"><strong>French version prevails; draft to be reviewed by a lawyer.</strong>
         The legal pages are published in French only; no English translation is provided.</p>
         <ul>
           <li><a href="../mentions-legales.html" hreflang="fr">Mentions légales (legal notice)</a></li>

@@ -3,12 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Experts-comptables — ControlDOne</title>
-<meta name="description" content="Proposition de partenariat aux cabinets d'expertise comptable dont les clients importent via un transitaire.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Experts-comptables · ControlDOne</title>
+<meta name="description" content="Un rapport de contrôle des factures de transitaire que l'expert-comptable de l'importateur peut lire et exploiter.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="alternate" hreflang="en" href="en/index.html">
+<script src="assets/vendor/motion.min.js" defer></script>
+<script src="assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
@@ -16,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Navigation principale">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
@@ -28,78 +32,81 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Navigation principale (mobile)">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
         <a href="experts-comptables.html" aria-current="page">Experts-comptables</a>
         <a href="contact.html">Contact</a>
         <a href="en/index.html" hreflang="en" lang="en" title="English version">EN</a>
-        <a href="contact.html">Demander un diagnostic</a>
+        <a class="menu-cta" href="contact.html">Demander un diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="contenu">
-
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Experts-comptables</span>
-    <h1>Vos clients importateurs reçoivent des factures de transitaire. Vous les comptabilisez.</h1>
-    <p class="lead">ControlDOne leur apporte un contrôle technique de ces factures, avec un rapport que vous pouvez lire
-    et exploiter. Nous cherchons quelques cabinets pour construire ce partenariat avec nous.</p>
-  </div>
-</section>
-
-<section class="section">
-  <div class="wrap">
-    <div class="grid grid-3">
-      <div class="card"><h3>Pour vos clients</h3>
-        <p class="card-muted">Un diagnostic de leurs dossiers d'import passés, des écarts chiffrés et prouvés, un relevé
-        d'écarts et un modèle de courrier neutre qu'ils adaptent et envoient eux-mêmes à leur transitaire s'ils le décident.</p></div>
-      <div class="card"><h3>Pour votre cabinet</h3>
-        <p class="card-muted">Un rapport et un tableur exploitables, avec l'accord de votre client : débours refacturés, TVA à
-        l'importation autoliquidée ou payée, avoirs reçus.</p></div>
-      <div class="card"><h3>Votre rôle préservé</h3>
-        <p class="card-muted">Les questions de traitement TVA ne sont jamais tranchées par ControlDOne : elles sont signalées et
-        renvoyées à l'expert-comptable du client.</p></div>
+    <p class="label">Experts-comptables</p>
+    <h1>Vos clients importateurs paient des factures de transitaire. Vous les comptabilisez.</h1>
+    <p class="lead">Je propose à vos clients un contrôle technique de ces factures, avec un rapport que vous pouvez lire et
+    exploiter. Je cherche quelques cabinets pour construire ce partenariat avec moi.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Partenariat cabinets">Écrire au fondateur <span class="fl" aria-hidden="true">→</span></a>
+      <a class="btn btn-ghost" href="demonstration.html">Voir un rapport d'exemple</a>
     </div>
   </div>
 </section>
 
-<section class="section alt">
+<section class="section" id="interet">
   <div class="wrap">
-    <div class="grid grid-2" style="gap:2.5rem">
+    <div class="grid grid-3">
+      <div class="card"><h3>Pour vos clients</h3>
+        <p class="card-muted">Un diagnostic de leurs dossiers d'import passés : des écarts chiffrés et prouvés, un relevé
+        d'écarts et un modèle de courrier neutre. Ils l'adaptent et l'envoient eux-mêmes à leur transitaire, s'ils le
+        décident.</p></div>
+      <div class="card"><h3>Pour votre cabinet</h3>
+        <p class="card-muted">Avec l'accord de votre client, un rapport et un tableur : débours refacturés, TVA à
+        l'importation autoliquidée ou payée, avoirs reçus.</p></div>
+      <div class="card"><h3>Votre rôle reste le vôtre</h3>
+        <p class="card-muted">Je ne tranche jamais une question de traitement TVA. Elle est signalée et renvoyée à
+        l'expert-comptable du client.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="proposition">
+  <div class="wrap">
+    <div class="split">
       <div>
-        <h2>Ce que nous proposons</h2>
+        <p class="label">Ce que je propose</p>
+        <h2>Un partenariat simple, écrit avec vous.</h2>
         <ul class="checklist">
-          <li>Une présentation du service à vos clients qui importent, sur votre demande.</li>
+          <li>Une présentation du service à vos clients qui importent, si vous le souhaitez.</li>
           <li>Un accès en lecture au rapport de diagnostic de votre client, s'il l'autorise.</li>
-          <li>Des exports en tableur, avec colonnes de revue.</li>
+          <li>Des exports en tableur, avec des colonnes de revue.</li>
           <li>Un échange régulier sur les points qui relèvent de votre mission.</li>
         </ul>
       </div>
       <div class="callout warn">
         <p><strong>Aucune commission d'apport</strong></p>
-        <p>Aucune commission d'apport n'est versée aux cabinets : l'article 24 de l'ordonnance du 19 septembre 1945 prévoit
-        que les honoraires de l'expert-comptable sont exclusifs de toute rémunération indirecte d'un tiers. Le cabinet facture
-        librement à son client le temps qu'il consacre à l'exploitation du rapport. La manière de présenter ControlDOne à vos
-        clients est définie avec vous par écrit <span class="ph">[À VALIDER]</span>.</p>
+        <p>Je ne verse aucune commission d'apport aux cabinets : l'article 24 de l'ordonnance du 19 septembre 1945 prévoit
+        que les honoraires de l'expert-comptable sont exclusifs de toute rémunération indirecte d'un tiers. Le cabinet
+        facture librement à son client le temps qu'il consacre au rapport. La façon de présenter ControlDOne à vos clients
+        est définie avec vous par écrit <span class="ph">[À VALIDER]</span>.</p>
       </div>
     </div>
-    <div class="actions"><a class="btn btn-primary" href="contact.html">Échanger avec le fondateur</a></div>
   </div>
 </section>
-
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Contrôle technique de cohérence entre la facture commerciale, la déclaration en douane,
-        la facture du transitaire et ses avoirs, pour les PME qui importent.</p>
-        <p class="small">Site sans cookie, sans traceur, sans police ni script externes.</p>
+        <p class="foot-about">ControlDOne compare la facture de votre transitaire à votre déclaration en douane, à votre
+        grille tarifaire et à vos avoirs, dossier par dossier. Pour les PME qui importent hors de l'Union européenne.</p>
+        <p class="small">Ce site ne dépose aucun cookie et ne mesure pas votre visite. Ses polices et ses scripts sont
+        servis par ce site : aucun autre serveur n'est appelé.</p>
       </div>
       <div>
         <h2>Le service</h2>

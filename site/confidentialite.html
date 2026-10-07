@@ -3,20 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Politique de confidentialité — ControlDOne</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Politique de confidentialité · ControlDOne</title>
 <meta name="description" content="Politique de confidentialité de ControlDOne (brouillon).">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="alternate" hreflang="en" href="en/index.html">
+<script src="assets/vendor/motion.min.js" defer></script>
+<script src="assets/site.js" defer></script>
 </head>
-<body>
+<body data-lecture="">
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-header">
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Navigation principale">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
@@ -28,14 +32,13 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Navigation principale (mobile)">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
         <a href="experts-comptables.html">Experts-comptables</a>
         <a href="contact.html">Contact</a>
         <a href="en/index.html" hreflang="en" lang="en" title="English version">EN</a>
-        <a href="contact.html">Demander un diagnostic</a>
+        <a class="menu-cta" href="contact.html">Demander un diagnostic</a>
       </nav>
     </details>
   </div>
@@ -43,7 +46,7 @@
 <main id="contenu">
 <div class="wrap legal">
   <div class="draft-banner" role="note">
-  <strong>BROUILLON — À RELIRE PAR UN AVOCAT</strong>
+  <strong>BROUILLON : À RELIRE PAR UN AVOCAT</strong>
   <p>Ce texte est un projet. Il n'a pas encore été relu par un avocat et ne doit pas être utilisé en l'état.
   Les passages <span class="ph">[À COMPLÉTER : …]</span> et <span class="ph">[À VALIDER]</span> doivent être remplis ou
   confirmés avant publication.</p>
@@ -62,7 +65,9 @@
 
     <h2>Ce site</h2>
     <p>Le site ne dépose aucun cookie, ne contient aucun formulaire, aucun outil de mesure d'audience, aucun bouton de réseau
-    social et ne charge aucune ressource depuis un serveur tiers. L'hébergeur peut tenir des journaux techniques (adresse IP,
+    social et ne charge aucune ressource depuis un serveur tiers. Ses deux scripts (animations et calculateur de seuil
+    de la page Tarifs) sont servis par le site lui-même : ils s'exécutent dans votre navigateur, n'envoient rien et
+    n'enregistrent rien. L'hébergeur peut tenir des journaux techniques (adresse IP,
     date, page demandée) pour la sécurité du service : <span class="ph">[À COMPLÉTER : hébergeur et durée de conservation des journaux]</span>.</p>
 
     <h2>Traitements</h2>
@@ -119,9 +124,10 @@
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Contrôle technique de cohérence entre la facture commerciale, la déclaration en douane,
-        la facture du transitaire et ses avoirs, pour les PME qui importent.</p>
-        <p class="small">Site sans cookie, sans traceur, sans police ni script externes.</p>
+        <p class="foot-about">ControlDOne compare la facture de votre transitaire à votre déclaration en douane, à votre
+        grille tarifaire et à vos avoirs, dossier par dossier. Pour les PME qui importent hors de l'Union européenne.</p>
+        <p class="small">Ce site ne dépose aucun cookie et ne mesure pas votre visite. Ses polices et ses scripts sont
+        servis par ce site : aucun autre serveur n'est appelé.</p>
       </div>
       <div>
         <h2>Le service</h2>

@@ -3,12 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contact — ControlDOne</title>
-<meta name="description" content="Contacter le fondateur de ControlDOne.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Contact · ControlDOne</title>
+<meta name="description" content="Écrire au fondateur de ControlDOne pour demander un diagnostic de vos dossiers d'import.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="alternate" hreflang="en" href="en/contact.html">
+<script src="assets/vendor/motion.min.js" defer></script>
+<script src="assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
@@ -16,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Navigation principale">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
@@ -28,68 +32,69 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Navigation principale (mobile)">
-        <a href="index.html">Accueil</a>
         <a href="methode.html">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
         <a href="experts-comptables.html">Experts-comptables</a>
         <a href="contact.html" aria-current="page">Contact</a>
         <a href="en/contact.html" hreflang="en" lang="en" title="English version">EN</a>
-        <a href="contact.html">Demander un diagnostic</a>
+        <a class="menu-cta" href="contact.html">Demander un diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="contenu">
-
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Contact</span>
-    <h1>Parlons de vos dossiers d'import</h1>
-    <p class="lead">Écrivez au fondateur. Réponse sous deux jours ouvrés <span class="ph">[À VALIDER]</span>.</p>
+    <p class="label">Contact</p>
+    <h1>Parlons de vos dossiers d'import.</h1>
+    <p class="lead">Écrivez-moi directement. Je vous réponds sous deux jours ouvrés <span class="ph">[À VALIDER]</span>.</p>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="ecrire">
   <div class="wrap">
-    <div class="grid grid-2" style="gap:2rem">
+    <div class="split">
       <div class="card">
-        <h2 style="font-size:1.3rem">Par e-mail</h2>
-        <p><a class="btn btn-primary" href="mailto:adresse@a-completer.invalid?subject=Diagnostic%20ControlDOne">Écrire au fondateur</a></p>
-        <p class="small muted">Adresse : <span class="ph">[À COMPLÉTER : adresse e-mail de contact]</span><br>
-        Interlocuteur : <span class="ph">[À COMPLÉTER : nom et prénom du fondateur]</span></p>
-        <p>Pour préparer l'échange, indiquez si possible :</p>
+        <h2 class="h-card">Par e-mail</h2>
+        <p>Le message s'ouvre avec quatre questions déjà écrites. Répondez à celles que vous pouvez, une ligne suffit.</p>
+        <p><a class="btn btn-primary" href="mailto:adresse@a-completer.invalid?subject=Diagnostic%20ControlDOne&amp;body=Bonjour%2C%0A%0ANombre%20de%20dossiers%20d%27import%20par%20an%20%3A%20%0AUn%20ou%20plusieurs%20transitaires%20%3A%20%0APays%20d%27origine%20principaux%20%3A%20%0AGrille%20tarifaire%20ou%20devis%20accept%C3%A9%20(oui%20%2F%20non)%20%3A%20%0A">Écrire au fondateur <span class="fl" aria-hidden="true">→</span></a></p>
         <ul>
-          <li>le nombre approximatif de dossiers d'import par mois ;</li>
-          <li>le nombre de transitaires ou d'intégrateurs express utilisés ;</li>
-          <li>si vous disposez d'une grille tarifaire ou d'un devis accepté ;</li>
-          <li>votre intérêt pour l'offre de lancement.</li>
+          <li>le nombre approximatif de dossiers d'import par an ;</li>
+          <li>un ou plusieurs transitaires (ou intégrateurs express) ;</li>
+          <li>les principaux pays d'origine ;</li>
+          <li>si vous avez une grille tarifaire ou un devis accepté.</li>
         </ul>
+        <p class="small muted">Adresse : <span class="ph">[À COMPLÉTER : adresse e-mail de contact]</span><br>
+        Interlocuteur : Samuel Bazzanella, fondateur.</p>
       </div>
       <div>
         <div class="callout warn">
-          <p><strong>N'envoyez pas de documents par e-mail.</strong> Un espace de dépôt sécurisé vous est ouvert après la
+          <p><strong>N'envoyez pas de documents par e-mail.</strong> Je vous ouvre un espace de dépôt sécurisé après la
           signature des conditions et de l'accord de sous-traitance.</p>
         </div>
-        <div class="callout" style="margin-top:1rem">
-          <p class="small">Ce site ne comporte aucun formulaire. Les informations que vous nous écrivez servent uniquement à
-          vous répondre et, si vous le souhaitez, à préparer une proposition. Voir la
-          <a href="confidentialite.html">politique de confidentialité</a>.</p>
-        </div>
+        <h3 class="mt">Ce qui se passe ensuite</h3>
+        <ol class="steps">
+          <li><h3>Je vous réponds</h3><p>Avec la liste des pièces à préparer et les conditions écrites.</p></li>
+          <li><h3>Vous signez</h3><p>Les conditions et l'accord de sous-traitance (RGPD).</p></li>
+          <li><h3>Vous déposez</h3><p>Votre lot de dossiers, dans l'espace sécurisé que je vous ouvre.</p></li>
+        </ol>
+        <p class="note mt">Ce site n'a pas de formulaire. Ce que vous m'écrivez sert seulement à vous répondre et, si vous
+        le souhaitez, à préparer une proposition. Voir la <a href="confidentialite.html">politique de confidentialité</a>.</p>
       </div>
     </div>
   </div>
 </section>
-
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Contrôle technique de cohérence entre la facture commerciale, la déclaration en douane,
-        la facture du transitaire et ses avoirs, pour les PME qui importent.</p>
-        <p class="small">Site sans cookie, sans traceur, sans police ni script externes.</p>
+        <p class="foot-about">ControlDOne compare la facture de votre transitaire à votre déclaration en douane, à votre
+        grille tarifaire et à vos avoirs, dossier par dossier. Pour les PME qui importent hors de l'Union européenne.</p>
+        <p class="small">Ce site ne dépose aucun cookie et ne mesure pas votre visite. Ses polices et ses scripts sont
+        servis par ce site : aucun autre serveur n'est appelé.</p>
       </div>
       <div>
         <h2>Le service</h2>

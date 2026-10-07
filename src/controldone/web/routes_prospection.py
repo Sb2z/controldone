@@ -199,7 +199,7 @@ def tableau(request: Request) -> Response:
         nav=NAV,
         sous_nav="tableau",
         t=t,
-        graphe=graphe,
+        graphe_pipeline=graphe,
         stats=svc.statistiques(f),
         **_commun(),
     )

@@ -3,20 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Méthode — ControlDOne</title>
-<meta name="description" content="Calcul déterministe, preuve par écart, deux niveaux de constat, hors périmètre réglementaire, sécurité et RGPD.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Méthode · ControlDOne</title>
+<meta name="description" content="Calcul par un programme, preuve pour chaque écart, deux niveaux de constat, limites écrites, sécurité et RGPD.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="alternate" hreflang="en" href="en/method.html">
+<script src="assets/vendor/motion.min.js" defer></script>
+<script src="assets/site.js" defer></script>
 </head>
-<body>
+<body data-lecture="">
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-header">
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Navigation principale">
-        <a href="index.html">Accueil</a>
         <a href="methode.html" aria-current="page">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
@@ -28,68 +32,68 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Navigation principale (mobile)">
-        <a href="index.html">Accueil</a>
         <a href="methode.html" aria-current="page">Méthode</a>
         <a href="demonstration.html">Démonstration</a>
         <a href="tarifs.html">Tarifs</a>
         <a href="experts-comptables.html">Experts-comptables</a>
         <a href="contact.html">Contact</a>
         <a href="en/method.html" hreflang="en" lang="en" title="English version">EN</a>
-        <a href="contact.html">Demander un diagnostic</a>
+        <a class="menu-cta" href="contact.html">Demander un diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="contenu">
-
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Méthode</span>
-    <h1>Comparer, calculer, prouver. Rien d'autre.</h1>
-    <p class="lead">ControlDOne constate des écarts factuels (un calcul ne tombe pas juste), documentaires (deux
-    documents ne disent pas la même chose) et tarifaires (une ligne facturée diffère du prix chiffré de la grille que vous nous transmettez ; toute question
-    d'interprétation du contrat vous est signalée à part). Voici comment.</p>
+    <p class="label">Méthode</p>
+    <h1>Voici comment je compare vos documents, et où je m'arrête.</h1>
+    <p class="lead">ControlDOne relève trois sortes d'écarts : un calcul qui ne tombe pas juste, deux documents qui ne
+    disent pas la même chose, une ligne facturée à un autre prix que celui de la grille que vous m'avez transmise. Toute
+    question d'interprétation du contrat vous est signalée à part.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="contact.html" data-cta-principal data-cta-texte="Diagnostic : 390 € HT">Demander un diagnostic <span class="fl" aria-hidden="true">→</span></a>
+      <a class="btn btn-ghost" href="demonstration.html">Voir un rapport d'exemple</a>
+    </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="principes">
   <div class="wrap">
     <div class="grid grid-3">
-      <div class="card"><span class="num">01</span><h3>Calcul déterministe</h3>
-        <p class="card-muted">Un modèle de langage peut aider à lire un document. Il ne calcule, ne compare et ne rédige
-        jamais : les relevés et modèles de courrier sont produits à partir de gabarits fixes. Toutes les comparaisons et tous les montants viennent de code versionné et testé : les mêmes documents donnent
-        toujours le même résultat.</p></div>
-      <div class="card"><span class="num">02</span><h3>Une preuve par écart</h3>
-        <p class="card-muted">Pour chaque valeur utilisée : le document, la page, le texte lu, la méthode de lecture et un
-        niveau de confiance. Les deux valeurs comparées sont présentées côte à côte, avec le calcul et la tolérance appliquée.</p></div>
-      <div class="card"><span class="num">03</span><h3>Validation humaine</h3>
-        <p class="card-muted">Aucun constat et aucun relevé d'écarts ne vous sont remis sans avoir été relus et validés par le
-        fondateur. Toute correction est tracée.</p></div>
+      <div class="card"><span class="n">01</span><h3>Le calcul est fait par un programme</h3>
+        <p class="card-muted">Un modèle de langage peut aider à lire un document difficile. Il ne calcule pas, ne compare
+        pas et ne rédige pas. Les comparaisons et les montants viennent d'un code versionné et testé : les mêmes documents
+        donnent toujours le même résultat. Les relevés et les modèles de courrier sont produits à partir de gabarits fixes.</p></div>
+      <div class="card"><span class="n">02</span><h3>Chaque écart a sa preuve</h3>
+        <p class="card-muted">Pour chaque valeur utilisée, le rapport cite le document, la page, le texte lu, la méthode de
+        lecture et un niveau de confiance. Les deux valeurs comparées sont côte à côte, avec le calcul et la tolérance.</p></div>
+      <div class="card"><span class="n">03</span><h3>Je relis tout</h3>
+        <p class="card-muted">Aucun constat ni relevé ne vous est remis sans ma relecture. Toute correction est tracée.</p></div>
     </div>
   </div>
 </section>
 
 <section class="section alt" id="niveaux">
   <div class="wrap">
-    <div class="grid grid-2" style="gap:2.5rem">
+    <div class="split">
       <div>
-        <span class="kicker">Deux niveaux</span>
-        <h2>« Écart certain » ou « à vérifier »</h2>
-        <p>Un écart n'est classé <strong>certain</strong> que si toutes les conditions sont réunies : écart au-dessus du seuil
-        de certitude, valeurs lues avec une confiance suffisante et retrouvées dans le document, documents solidement
-        rattachés au même dossier, aucune explication possible par une erreur de lecture, par une ligne de pied ou par un avoir
-        déjà reçu.</p>
-        <p>Dans tous les autres cas, il est <strong>à vérifier</strong>, avec la raison en clair : chiffre probablement mal lu
-        (un 6 et un 8 souvent confondus par la reconnaissance de caractères), total reconstruit, rattachement incertain,
-        devise incertaine, document manquant…</p>
+        <p class="label">Deux niveaux</p>
+        <h2>Un écart n'est « certain » que si rien d'autre ne peut l'expliquer.</h2>
+        <p>Toutes les conditions doivent être réunies. L'écart dépasse le seuil de certitude. Les valeurs ont été lues avec
+        une confiance suffisante et retrouvées dans le document. Les documents appartiennent bien au même dossier. Et ni une
+        erreur de lecture, ni une ligne de pied de page, ni un avoir déjà reçu ne peut l'expliquer.</p>
+        <p>Sinon, l'écart est « à vérifier », avec la raison en clair : chiffre probablement mal lu (un 6 et un 8 se
+        confondent souvent à la reconnaissance de caractères), total reconstruit, rattachement incertain, devise
+        incertaine, document manquant.</p>
       </div>
       <div>
-        <h3>Pourquoi tant de prudence&nbsp;?</h3>
-        <p>Un courrier infondé adressé à votre transitaire vous coûte plus cher qu'un écart manqué : du temps, de la
-        crédibilité, une relation commerciale. C'est pourquoi :</p>
+        <h3>Pourquoi autant de prudence</h3>
+        <p>Un courrier infondé à votre transitaire vous coûte plus cher qu'un écart manqué. Il vous coûte du temps, de la
+        crédibilité, et il abîme une relation dont vous avez besoin. Donc :</p>
         <ul class="checklist">
-          <li>le montant certain et le montant à vérifier sont affichés séparément, et jamais additionnés ;</li>
-          <li>seuls les écarts certains entrent par défaut dans le relevé d'écarts joint au modèle de courrier ; vous pouvez y ajouter un écart à vérifier, marqué « à confirmer » ;</li>
+          <li>le montant certain et le montant à vérifier sont affichés séparément, jamais additionnés ;</li>
+          <li>seuls les écarts certains entrent par défaut dans le relevé joint au courrier ; vous pouvez y ajouter un écart à vérifier, marqué « à confirmer » ;</li>
           <li>une donnée illisible donne « non vérifiable », jamais « conforme » ;</li>
           <li>un écart en votre faveur est signalé, mais n'entre jamais dans le modèle de courrier.</li>
         </ul>
@@ -101,98 +105,142 @@
 <section class="section" id="controles">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Les contrôles</span>
-      <h2>Huit familles de contrôles</h2>
-      <p>Chaque contrôle a un identifiant stable, une tolérance par défaut et un seuil de certitude, modifiables par client
-      seulement dans le sens de la prudence.</p>
+      <p class="label">Les contrôles</p>
+      <h2>Huit familles de contrôles, chacune avec sa tolérance.</h2>
+      <p>Chaque contrôle a un identifiant stable, une tolérance par défaut et un seuil de certitude. On peut les régler pour
+      un client, mais seulement dans le sens de la prudence.</p>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th scope="col">Famille</th><th scope="col">Ce qui est comparé</th><th scope="col">Exemple de tolérance par défaut</th></tr></thead>
+        <thead><tr><th scope="col">Famille</th><th scope="col">Ce qui est comparé</th><th scope="col">Tolérance par défaut (exemple)</th></tr></thead>
         <tbody>
-          <tr><td>P — Préalables</td><td>Complétude du dossier, lisibilité, rattachement des documents</td><td>—</td></tr>
-          <tr><td>A — Facture contre déclaration</td><td>Entité, référence de facture, devise, valeur, conversion au taux imprimé, Incoterm, quantités, masses, colis</td><td>Valeur : 1 unité de devise ou 0,1&nbsp;%</td></tr>
-          <tr><td>B — Cohérence de la déclaration</td><td>Base × taux imprimés contre montant imprimé, sommes des taxes, masses, colis</td><td>0,01&nbsp;EUR par ligne</td></tr>
-          <tr><td>C — Facture du transitaire contre déclaration</td><td>Droits, autres taxes et TVA refacturés contre montants liquidés ; autoliquidation indiquée</td><td>0,05&nbsp;EUR ; certitude au-delà de 1,00&nbsp;EUR</td></tr>
-          <tr><td>D — Facture du transitaire contre grille</td><td>Prix chiffrés de la grille ou du devis transmis contre lignes facturées : lignes absentes de la grille, prix différent du tarif chiffré, frais d'avance de fonds, doublons de lignes, magasinage, surcharges</td><td>0,01&nbsp;EUR par ligne</td></tr>
-          <tr><td>E — Avoirs</td><td>Rattachement, montant, double réception, imputation sur les écarts ouverts</td><td>—</td></tr>
-          <tr><td>F — Doublons entre dossiers</td><td>Document, numéro de facture, déclaration ou prestation facturés deux fois</td><td>—</td></tr>
-          <tr><td>G — Petits envois</td><td>Nombre d'articles × montant unitaire du forfait, forfait refacturé contre forfait liquidé</td><td>0,05&nbsp;EUR</td></tr>
+          <tr><td><span class="mono">P</span> Préalables</td><td>Complétude du dossier, lisibilité, rattachement des documents</td><td>Sans objet</td></tr>
+          <tr><td><span class="mono">A</span> Facture contre déclaration</td><td>Entité, référence de facture, devise, valeur, conversion au taux imprimé, Incoterm, quantités, masses, colis</td><td>Valeur : 1 unité de devise ou 0,1&nbsp;%</td></tr>
+          <tr><td><span class="mono">B</span> Cohérence de la déclaration</td><td>Base × taux imprimés contre montant imprimé, sommes des taxes, masses, colis</td><td>0,01&nbsp;EUR par ligne</td></tr>
+          <tr><td><span class="mono">C</span> Facture du transitaire contre déclaration</td><td>Droits, autres taxes et TVA refacturés contre montants liquidés ; autoliquidation indiquée</td><td>0,05&nbsp;EUR ; certitude au-delà de 1,00&nbsp;EUR</td></tr>
+          <tr><td><span class="mono">D</span> Facture du transitaire contre grille</td><td>Prix de la grille ou du devis transmis contre lignes facturées : lignes absentes de la grille, prix différent, frais d'avance de fonds, lignes en double, magasinage, surcharges</td><td>0,01&nbsp;EUR par ligne</td></tr>
+          <tr><td><span class="mono">E</span> Avoirs</td><td>Rattachement, montant, double réception, imputation sur les écarts ouverts</td><td>Sans objet</td></tr>
+          <tr><td><span class="mono">F</span> Doublons entre dossiers</td><td>Document, numéro de facture, déclaration ou prestation facturés deux fois</td><td>Sans objet</td></tr>
+          <tr><td><span class="mono">G</span> Petits envois</td><td>Nombre d'articles × montant unitaire du forfait, forfait refacturé contre forfait liquidé</td><td>0,05&nbsp;EUR</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 </section>
 
-<section class="section alt" id="hors-perimetre">
+<section class="section alt" id="mesures">
   <div class="wrap">
-    <div class="grid grid-2" style="gap:2.5rem">
+    <div class="section-head">
+      <p class="label">Mesures</p>
+      <h2>Je mesure le programme sur des dossiers fictifs qu'il n'a jamais vus.</h2>
+      <p>Un générateur produit des dossiers d'import inventés (factures, déclarations, factures de transitaire, avoirs) dans
+      plusieurs mises en page et plusieurs langues, et y place des erreurs connues. Une partie des dossiers est tenue à
+      l'écart : personne ne l'ouvre pendant le développement. On compare ensuite ce que le programme signale à ce qui a été
+      placé.</p>
+    </div>
+    <div class="measures">
+      <div class="measure"><p class="big"><span data-count="51">51</span><small>/ 51</small></p>
+        <p>écarts classés « certains » justes, sur le dernier jeu (160 dossiers, 188 erreurs injectées). Avec ce résultat, on
+        peut dire avec 95&nbsp;% de confiance que la part d'écarts certains justes est d'au moins 93&nbsp;%.</p></div>
+      <div class="measure"><p class="big"><span data-count="79">79</span><small>%</small></p>
+        <p>des erreurs injectées ont été signalées, en écart certain ou à vérifier. Les autres ont été manquées.</p></div>
+      <div class="measure"><p class="big">1,10</p>
+        <p>constat « à vérifier » sans fondement par dossier, en moyenne. Ils sont écartés à la relecture.</p></div>
+    </div>
+    <p class="measure-src">Mesure du 7 octobre 2026 (jeu de 160 dossiers fictifs générés pour le test). Sur l'ensemble
+    des onze jeux tenus à l'écart, mesurés avec la même version, un seul écart classé certain s'est révélé faux (un montant
+    inexact, sur un jeu où 62 autres étaient justes). Ces chiffres décrivent le programme sur des fichiers de test
+    synthétiques ; ils ne disent rien de la fréquence des erreurs sur de vrais dossiers. Je les recalcule à chaque
+    nouvelle version.</p>
+  </div>
+</section>
+
+<section class="section" id="hors-perimetre">
+  <div class="wrap">
+    <div class="split">
       <div>
-        <span class="kicker">Hors périmètre</span>
-        <h2>Ce que ControlDOne ne vérifie jamais</h2>
+        <p class="label">Hors périmètre</p>
+        <h2>Ce que ControlDOne ne vérifie jamais.</h2>
         <ul class="nolist">
           <li>Le taux d'un droit ou d'une taxe (seul le calcul base × taux imprimés est refait).</li>
           <li>Le code marchandise, l'origine, une préférence tarifaire, la valeur en douane, le régime douanier.</li>
           <li>L'applicabilité de l'autoliquidation ou du droit forfaitaire sur les petits envois.</li>
           <li>La possibilité d'une rectification ou d'une demande auprès de la douane.</li>
-          <li>Le traitement TVA d'une opération, renvoyé à votre expert-comptable.</li>
+          <li>Le traitement TVA d'une opération, qui relève de votre expert-comptable.</li>
         </ul>
       </div>
       <div class="callout">
-        <p>Ces sujets apparaissent uniquement comme des <strong>notes de renvoi</strong> : valeurs lues citées, aucun montant
-        présenté comme récupérable, et cette phrase exacte :</p>
+        <p>Ces sujets apparaissent seulement comme des notes de renvoi : les valeurs lues sont citées, aucun montant n'est
+        présenté comme récupérable, et la note porte cette phrase exacte :</p>
         <p class="quote-renvoi">« Ce point relève d'une appréciation réglementaire : il est à faire vérifier par un représentant en douane enregistré ou un avocat. ControlDOne ne se prononce pas sur ce point. »</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="securite">
+<section class="section alt" id="securite">
   <div class="wrap">
     <div class="section-head">
-      <span class="kicker">Sécurité et RGPD</span>
-      <h2>Vos documents restent des données, chez vous</h2>
+      <p class="label">Sécurité et RGPD</p>
+      <h2>Vos documents sont traités comme des données, jamais comme des instructions.</h2>
     </div>
     <div class="grid grid-2">
       <div class="card"><h3>Cloisonnement et chiffrement</h3>
         <ul class="checklist">
           <li>Chaque client est isolé par une couche d'accès unique et testée.</li>
-          <li>Fichiers chiffrés au repos avec une clé propre à chaque client ; TLS en transit.</li>
-          <li>Second facteur obligatoire pour le fondateur ; chaque accès administrateur est journalisé dans un journal d'audit chaîné.</li>
-          <li>Sauvegardes chiffrées.</li>
+          <li>Les fichiers sont chiffrés au repos avec une clé propre à chaque client, et en transit par TLS.</li>
+          <li>Second facteur obligatoire pour mon accès ; chaque accès administrateur est inscrit dans un journal d'audit chaîné.</li>
+          <li>Les sauvegardes sont chiffrées.</li>
         </ul></div>
-      <div class="card"><h3>Documents = données</h3>
+      <div class="card"><h3>Les documents restent des données</h3>
         <ul class="checklist">
           <li>Aucun texte lu dans un document ou un e-mail n'est exécuté comme une instruction.</li>
           <li>Le modèle de langage n'a aucun outil, aucun accès réseau, aucun droit d'écriture.</li>
           <li>Rien ne part vers l'extérieur sans validation humaine.</li>
-          <li>Journaux techniques sans contenu de document.</li>
+          <li>Les journaux techniques ne contiennent pas le contenu des documents.</li>
         </ul></div>
       <div class="card"><h3>RGPD</h3>
         <ul class="checklist">
-          <li>ControlDOne agit comme sous-traitant (art. 28 RGPD) : un <a href="dpa.html">accord de sous-traitance</a> est signé avec chaque client.</li>
+          <li>ControlDOne agit comme sous-traitant (article 28 du RGPD) : un <a href="dpa.html">accord de sous-traitance</a> est signé avec chaque client.</li>
           <li>Hébergement dans l'Union européenne <span class="ph">[À COMPLÉTER : nom de l'hébergeur]</span>.</li>
-          <li>Lecture par modèle de langage (Anthropic, États-Unis, clauses contractuelles types) : vous en êtes informé et pouvez la désactiver ; les lectures structurée et déterministe restent disponibles.</li>
+          <li>Lecture par modèle de langage (Anthropic, États-Unis, clauses contractuelles types) : vous en êtes informé et vous pouvez la désactiver ; la lecture des formats structurés et la lecture déterministe restent disponibles.</li>
         </ul></div>
       <div class="card"><h3>Conservation et sortie</h3>
         <ul class="checklist">
-          <li>Fichiers bruts purgés 180 jours après la clôture du dossier (réglable).</li>
+          <li>Fichiers bruts supprimés 180 jours après la clôture du dossier (réglable).</li>
           <li>En fin de contrat : restitution (JSON et PDF), puis suppression sous 30 jours.</li>
-          <li>Référentiel de prix anonymisé : statistiques de prix seulement, jamais de taux d'écart attribué à un transitaire identifiable ; publication d'un agrégat seulement s'il réunit au moins 5 clients et 10 dossiers ; vous pouvez vous y opposer.</li>
+          <li>Référentiel de prix anonymisé : statistiques de prix seulement, jamais de taux d'écart attribué à un transitaire identifiable. Un agrégat n'est publié que s'il réunit au moins 5 clients et 10 dossiers, et vous pouvez vous y opposer.</li>
         </ul></div>
     </div>
   </div>
 </section>
 
+<section class="section" id="suite">
+  <div class="wrap">
+    <div class="offer">
+      <div>
+        <p class="label">Pour aller plus loin</p>
+        <h2>Le plus simple est de voir un rapport.</h2>
+        <p>Le rapport de démonstration est produit par le même moteur, sur des dossiers entièrement fictifs. Si la
+        méthode vous convient, écrivez-moi : je vous envoie la liste des pièces et les conditions écrites.</p>
+      </div>
+      <div class="offer-box">
+        <div class="actions"><a class="btn btn-primary" href="contact.html">Demander un diagnostic <span class="fl" aria-hidden="true">→</span></a>
+        <a class="btn btn-ghost" href="demonstration.html">Voir un rapport d'exemple</a></div>
+      </div>
+    </div>
+  </div>
+</section>
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, accueil"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Contrôle technique de cohérence entre la facture commerciale, la déclaration en douane,
-        la facture du transitaire et ses avoirs, pour les PME qui importent.</p>
-        <p class="small">Site sans cookie, sans traceur, sans police ni script externes.</p>
+        <p class="foot-about">ControlDOne compare la facture de votre transitaire à votre déclaration en douane, à votre
+        grille tarifaire et à vos avoirs, dossier par dossier. Pour les PME qui importent hors de l'Union européenne.</p>
+        <p class="small">Ce site ne dépose aucun cookie et ne mesure pas votre visite. Ses polices et ses scripts sont
+        servis par ce site : aucun autre serveur n'est appelé.</p>
       </div>
       <div>
         <h2>Le service</h2>

@@ -113,6 +113,16 @@ Code : `src/controldone/agents/` ; tests : `tests/ops/test_agents.py`. Décision
   `publication: jamais`).
 - **Limites** : la note n'analyse ni ne résume le contenu (pas de modèle) ; elle signale des pages à relire.
 
+### 3.7 `prospection` — étapes de séquence échues (plateforme, période : jour)
+
+- **Rôle** : préparer, en **brouillon** de la file de validation (`email_prospection`), les étapes suivantes
+  échues des séquences de prospection du fondateur (D-5008, `docs/PROSPECTION.md`). Il n'approuve ni n'envoie.
+- **Outil** : `preparer_etapes_prospection` (`ServiceProspection.preparer_etapes_dues`).
+- **Règles appliquées par le service** : étape due à J+délai depuis l'envoi de l'étape 1 (et au moins un jour après
+  l'envoi précédent) ; arrêt sur réponse, opposition, rebond, changement de statut, brouillon refusé ou liste
+  d'exclusion ; plafond quotidien de préparations ; textes tirés des modèles et de faits enregistrés (aucun
+  modèle de langage).
+
 ## 4. Catalogue des outils
 
 | Outil | Effet | Agents |
@@ -130,6 +140,7 @@ Code : `src/controldone/agents/` ; tests : `tests/ops/test_agents.py`. Décision
 | `signaler_alerte` | alerte (types fermés) | controle, litiges, questions_clients |
 | `demander_job` | job `traiter_lot` ou `preparer_reclamation` | controle, litiges |
 | `lire_sources`, `telecharger_source`, `lire_instantanes`, `enregistrer_instantanes` | veille (liste blanche) | veille |
+| `preparer_etapes_prospection` | brouillons `email_prospection` des étapes échues (plateforme) | prospection |
 
 ## 5. Planification
 

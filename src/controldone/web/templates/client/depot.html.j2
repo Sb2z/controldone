@@ -2,35 +2,45 @@
 {% from "macros.html.j2" import badge_suivi %}
 {% block contenu %}
 <div class="titre-page"><h1>{{ _("Déposer des documents") }}</h1>
-<p class="discret">{{ _("Factures commerciales, déclarations en douane (PDF, XML, CSV), factures du transitaire et avoirs. Rangez chaque envoi dans son propre dossier ou archive ZIP : l'arborescence est conservée et aide au regroupement.") }}</p></div>
+<p>{{ _("Déposez les documents tels que vous les recevez : facture commerciale, déclaration en douane (DAU, en PDF ou en XML), facture du transitaire et avoirs. Si vous le pouvez, rangez chaque envoi dans son propre dossier ou fichier ZIP : le regroupement n'en sera que plus sûr.") }}</p></div>
 <div class="grille-2 grille-large-etroite">
-<section class="carte">
+<section class="carte" aria-labelledby="t-depot">
+  <h2 id="t-depot" class="vh">{{ _("Nouveau dépôt") }}</h2>
   {% if peut_deposer %}
   <form method="post" action="/espace/depot" enctype="multipart/form-data" class="formulaire depot" data-depot>
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="fichiers" class="vh">{{ _("Fichiers ou archives ZIP") }}</label>
     <div class="zone-depot">
-      <svg class="ico-depot" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.5V4.5M12 4.5l-4 4M12 4.5l4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 14.5v3a2 2 0 002 2h11a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      <svg class="ico-depot" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 15.5V4.5M12 4.5l-4 4M12 4.5l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 14.5v3a2 2 0 002 2h11a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
       <strong>{{ _("Glissez vos fichiers ici") }}</strong>
-      <span>{{ _("ou cliquez pour choisir — PDF, scans, XML, CSV, XLSX, e-mails ou archives ZIP") }}</span>
+      <span>{{ _("ou cliquez pour les choisir. PDF, scans, XML, CSV, XLSX, e-mails ou archives ZIP.") }}</span>
       <input id="fichiers" name="fichiers" type="file" multiple required accept=".pdf,.zip,.xml,.csv,.xlsx,.png,.jpg,.jpeg,.tif,.tiff,.eml">
     </div>
     <ul class="liste-fichiers" aria-hidden="true"></ul>
-    <p class="discret" data-resume aria-live="polite"></p>
-    <button type="submit" class="btn btn-principal">{{ _("Envoyer") }}</button>
+    <div class="depot-envoi">
+      <button type="submit" class="btn btn-principal">{{ _("Envoyer les documents") }}</button>
+      <p class="discret" data-resume aria-live="polite"></p>
+    </div>
   </form>
-  {% else %}<p>{{ _("Votre compte est en lecture seule : le dépôt est réservé aux administrateurs de votre société.") }}</p>{% endif %}
-  <h2>{{ _("Limites") }}</h2>
+  {% else %}<p>{{ _("Votre compte est en lecture seule. Le dépôt est réservé aux administrateurs de votre société.") }}</p>{% endif %}
+  <h3 id="t-confiance">{{ _("Ce que deviennent vos documents") }}</h3>
+  <ul class="confiance" aria-labelledby="t-confiance">
+    <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>{{ _("Chiffrés au repos, avec une clé propre à votre société.") }}</span></li>
+    <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 8s2-4 5.5-4 5.5 4 5.5 4-2 4-5.5 4-5.5-4-5.5-4z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.6" stroke="currentColor" stroke-width="1.4"/></svg><span>{{ _("Lus comme des données : rien de ce qu'ils contiennent n'est exécuté.") }}</span></li>
+    <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3l2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>{{ _("Fichiers d'origine supprimés {n} jours après la clôture du dossier. Les constats et le suivi des avoirs sont conservés.", n=info.retention_jours) }}</span></li>
+    <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4.5h10M3 8h6M3 11.5h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span>{% if info.reglages.get("llm_desactive") %}{{ _("La lecture par modèle de langage est désactivée pour votre société.") }}{% else %}{{ _("Une page difficile à lire peut être transmise à un modèle de langage (Anthropic, États-Unis). Le fondateur peut désactiver cette lecture pour votre société.") }}{% endif %}</span></li>
+    <li><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 4.5l5.5 4 5.5-4M2.5 4.5v7h11v-7" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span>{{ _("Votre transitaire n'est pas prévenu. Vous décidez seul de lui écrire, ou non.") }}</span></li>
+  </ul>
+  <h2>{{ _("Formats et limites") }}</h2>
   <ul class="liste-simple">
     <li>{{ _("{a} Mo par fichier, {b} Mo par dépôt, {c} pages par fichier.", a=limites.taille_fichier // 1048576, b=limites.taille_lot // 1048576, c=limites.pages_fichier) }}</li>
-    <li>{{ _("Archives : {n} fichiers au plus, {p} niveaux d'archives imbriquées ; chemins absolus, « .. », liens symboliques et archives anormalement compressées refusés.", n=limites.zip_entrees, p=limites.zip_profondeur) }}</li>
-    <li>{{ _("Les documents sont chiffrés au repos et traités comme des données : aucun texte qu'ils contiennent n'est exécuté.") }}</li>
+    <li>{{ _("Archives : {n} fichiers au plus et {p} niveaux d'archives imbriquées. Les chemins absolus, les « .. », les liens symboliques et les archives anormalement compressées sont refusés.", n=limites.zip_entrees, p=limites.zip_profondeur) }}</li>
   </ul>
 </section>
-<section class="carte">
-  <h2>{{ _("Dépôts récents") }}</h2>
+<section class="carte" aria-labelledby="t-recents">
+  <h2 id="t-recents">{{ _("Dépôts récents") }}</h2>
   {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}<br><span class="discret">{{ _("{n} fichier(s)", n=l.resume.get("fichiers", 0)) }}{% if l.resume.get("refuses") %}, {{ _("{n} refusé(s)", n=l.resume.get("refuses")) }}{% endif %}</span></li>{% endfor %}</ul>
-  {% else %}<p class="vide">{{ _("Aucun dépôt.") }}</p>{% endif %}
+  {% else %}<p class="vide">{{ _("Aucun dépôt pour l'instant. Chaque envoi s'affichera ici avec son état de traitement.") }}</p>{% endif %}
 </section>
 </div>
 {% endblock %}

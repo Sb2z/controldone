@@ -3,13 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contact — ControlDOne</title>
-<meta name="description" content="Contact the founder of ControlDOne.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; frame-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Contact · ControlDOne</title>
+<meta name="description" content="Write to the founder of ControlDOne to request a diagnostic of your import files.">
 <meta name="color-scheme" content="light dark">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/SourceSerif4Display-Regular.ttf.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="../assets/style.css">
 <link rel="alternate" hreflang="fr" href="../contact.html">
+<script src="../assets/vendor/motion.min.js" defer></script>
+<script src="../assets/site.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
@@ -17,7 +21,6 @@
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
     <nav class="nav" aria-label="Main navigation">
-        <a href="index.html">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html">Demo</a>
         <a href="pricing.html">Pricing</a>
@@ -28,67 +31,69 @@
     <details class="menu">
       <summary>Menu</summary>
       <nav aria-label="Main navigation (mobile)">
-        <a href="index.html">Home</a>
         <a href="method.html">Method</a>
         <a href="demo.html">Demo</a>
         <a href="pricing.html">Pricing</a>
         <a href="contact.html" aria-current="page">Contact</a>
         <a href="../contact.html" hreflang="fr" lang="fr" title="Version française">FR</a>
-        <a href="contact.html">Request a diagnostic</a>
+        <a class="menu-cta" href="contact.html">Request a diagnostic</a>
       </nav>
     </details>
   </div>
 </header>
 <main id="content">
-
 <section class="page-head">
   <div class="wrap">
-    <span class="kicker">Contact</span>
-    <h1>Let's talk about your import files</h1>
-    <p class="lead">Write to the founder. Reply within two working days <span class="ph">[TO BE CONFIRMED]</span>.</p>
+    <p class="label">Contact</p>
+    <h1>Let's talk about your import files.</h1>
+    <p class="lead">Write to me directly. I reply within two working days <span class="ph">[TO BE CONFIRMED]</span>.
+    I can reply in English; contracts and legal pages are in French.</p>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="write">
   <div class="wrap">
-    <div class="grid grid-2" style="gap:2rem">
+    <div class="split">
       <div class="card">
-        <h2 style="font-size:1.3rem">By e-mail</h2>
-        <p><a class="btn btn-primary" href="mailto:adresse@a-completer.invalid?subject=ControlDOne%20diagnostic">Write to the founder</a></p>
-        <p class="small muted">Address: <span class="ph">[TO BE COMPLETED: contact e-mail address]</span><br>
-        Contact person: <span class="ph">[TO BE COMPLETED: first and last name of the founder]</span></p>
-        <p>To prepare the conversation, please indicate if possible:</p>
+        <h2 class="h-card">By e-mail</h2>
+        <p>The message opens with four questions already written. Answer the ones you can; one line is enough.</p>
+        <p><a class="btn btn-primary" href="mailto:adresse@a-completer.invalid?subject=ControlDOne%20diagnostic&amp;body=Hello%2C%0A%0AImport%20files%20per%20year%3A%20%0AOne%20or%20several%20freight%20forwarders%3A%20%0AMain%20countries%20of%20origin%3A%20%0ARate%20card%20or%20accepted%20quote%20(yes%20%2F%20no)%3A%20%0A">Write to the founder <span class="fl" aria-hidden="true">→</span></a></p>
         <ul>
-          <li>the approximate number of import files per month;</li>
-          <li>the number of freight forwarders or express carriers used;</li>
-          <li>whether you have a rate card or an accepted quote;</li>
-          <li>your interest in the launch offer.</li>
+          <li>the approximate number of import files per year;</li>
+          <li>one or several freight forwarders (or express carriers);</li>
+          <li>the main countries of origin;</li>
+          <li>whether you have a rate card or an accepted quote.</li>
         </ul>
+        <p class="small muted">Address: <span class="ph">[TO BE COMPLETED: contact e-mail address]</span><br>
+        Contact person: Samuel Bazzanella, founder.</p>
       </div>
       <div>
         <div class="callout warn">
-          <p><strong>Do not send documents by e-mail.</strong> A secure upload area is opened for you after
-          the terms and the data processing agreement have been signed.</p>
+          <p><strong>Do not send documents by e-mail.</strong> I open a secure upload space for you once the terms and the
+          data processing agreement are signed.</p>
         </div>
-        <div class="callout" style="margin-top:1rem">
-          <p class="small">This site has no form. The information you write to us is used only to
-          reply to you and, if you wish, to prepare a proposal. See the
-          <a href="../confidentialite.html" hreflang="fr">privacy policy (in French)</a>.</p>
-        </div>
+        <h3 class="mt">What happens next</h3>
+        <ol class="steps">
+          <li><h3>I reply</h3><p>With the list of documents to prepare and the written terms.</p></li>
+          <li><h3>You sign</h3><p>The terms and the data processing agreement (GDPR).</p></li>
+          <li><h3>You upload</h3><p>Your batch of files, in the secure space I open for you.</p></li>
+        </ol>
+        <p class="note mt">This site has no form. What you write to me is only used to reply and, if you wish, to prepare a
+        proposal. See the <a href="../confidentialite.html" hreflang="fr">privacy policy (in French)</a>.</p>
       </div>
     </div>
   </div>
 </section>
-
 </main>
 <footer class="site-footer">
   <div class="wrap">
     <div class="foot-grid">
       <div>
         <a class="brand" href="index.html" aria-label="ControlDOne, home"><svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect width="32" height="32" rx="7" fill="#13314f"/><rect x="6.5" y="7" width="9" height="13" rx="1.6" fill="none" stroke="#ffffff" stroke-width="1.8"/><rect x="16.5" y="12" width="9" height="13" rx="1.6" fill="#13314f" stroke="#5cc3b5" stroke-width="1.8"/><path d="M18.7 18.6l1.9 1.9 3.2-3.6" fill="none" stroke="#5cc3b5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Control<b>DOne</b></span></a>
-        <p style="margin-top:.8rem;max-width:30rem">Technical consistency check between the commercial invoice, the customs declaration,
-        the freight forwarder's invoice and its credit notes, for small and medium-sized businesses that import.</p>
-        <p class="small">No cookies, no trackers, no external fonts or scripts on this site.</p>
+        <p class="foot-about">ControlDOne compares your freight forwarder's invoice with your customs declaration, your
+        rate card and your credit notes, file by file. For small and mid-sized businesses importing from outside the EU.</p>
+        <p class="small">This site sets no cookies and does not measure your visit. Its fonts and scripts are served
+        from this site; no other server is contacted.</p>
       </div>
       <div>
         <h2>The service</h2>
@@ -103,7 +108,7 @@
       </div>
       <div>
         <h2>Legal information (in French)</h2>
-        <p class="small" id="legal-note"><strong>French version prevails — draft to be reviewed by a lawyer.</strong>
+        <p class="small" id="legal-note"><strong>French version prevails; draft to be reviewed by a lawyer.</strong>
         The legal pages are published in French only; no English translation is provided.</p>
         <ul>
           <li><a href="../mentions-legales.html" hreflang="fr">Mentions légales (legal notice)</a></li>

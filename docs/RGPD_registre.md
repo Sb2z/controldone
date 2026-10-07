@@ -84,6 +84,24 @@ Data Privacy Framework (certification d'Anthropic à vérifier sur dataprivacyfr
 | Transferts hors UE | [À COMPLÉTER] |
 | Sécurité | Compte de messagerie avec second facteur ; fichier de prospection chiffré [À COMPLÉTER] |
 
+### 2.1 bis Outil de prospection intégré (module « Marketing », `/admin/prospection`)
+
+Outil du traitement 2.1, tenu dans l'application (D-5001 à D-5012, mode d'emploi : `docs/PROSPECTION.md`).
+
+| Rubrique | Contenu |
+|---|---|
+| Finalité | Tenir le fichier des entreprises prospectées, préparer des courriels individuels soumis à la validation du fondateur, suivre réponses et rendez-vous |
+| Base légale | Intérêt légitime (art. 6.1.f RGPD), message en rapport avec la profession (art. L34-5 CPCE) ; Suisse et Belgique : adresse nominative seulement avec une base légale enregistrée sur la fiche (consentement, relation existante) ; Luxembourg : aucune prospection |
+| Personnes concernées | Contacts professionnels d'entreprises importatrices ; la plupart des adresses sont génériques (contact@, info@) |
+| Données | Dénomination, SIREN, NAF, tranche d'effectif, commune ; adresse professionnelle publiée par l'entreprise ou saisie par le fondateur, **avec l'URL de la page source** ; éventuellement nom ou fonction saisis par le fondateur ; historique (statuts, notes, réponses collées, rendez-vous) ; liste d'opposition (empreinte SHA-256 de l'adresse seulement) |
+| Source et date | Chaque prospect porte sa source (fichier importé et ligne, API « Recherche d'entreprises », saisie), l'URL de la page source et sa date de collecte ; aucune adresse devinée ni achetée, aucune extraction automatisée |
+| Information (art. 14) | Pied de chaque courriel : identité de l'expéditeur (nom, SIREN, adresse), page où l'adresse a été trouvée, opposition par « STOP » ou lien de désinscription |
+| Opposition | Lien de désinscription (jeton signé, sans compte), réponse « STOP », rebond ; liste vérifiée avant chaque préparation et chaque envoi, conservée après la purge des prospects pour rester respectée |
+| Destinataires | Fondateur ; messagerie d'envoi [À COMPLÉTER : fournisseur, pays] — aucune n'est configurée par défaut (envoi déclaré depuis la messagerie du fondateur) |
+| Durée | 3 ans à compter de la collecte ou du dernier contact émanant du prospect ; signalé « à purger » au-delà, purge par le fondateur (`controldone prospection purger --oui`) ; liste d'opposition : tant que nécessaire pour la respecter (empreintes seulement) |
+| Mesures | Accès réservé au compte fondateur (second facteur), invisible des clients ; journal d'audit des imports, changements de statut, mises en file, oppositions et purges, sans adresse en clair ; aucun pixel ni lien suivi ; texte des réponses traité comme une donnée |
+| Transferts hors UE | Aucun par le module ; l'API publique interrogée est française (DINUM) |
+
 ### 2.2 Gestion des clients et facturation
 
 | Rubrique | Contenu |

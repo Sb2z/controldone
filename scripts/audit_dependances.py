@@ -11,7 +11,7 @@ Les outils (``pip-audit``, ``cyclonedx-py``, ``pip-licenses``) vivent dans un en
    (code de sortie 0 si le reste est propre) ; sans l'option, l'audit échoue (on ne conclut jamais « propre » sans
    avoir interrogé une base).
 2. **SBOM** : ``cyclonedx-py requirements`` (CycloneDX JSON), complété par la licence de chaque paquet et par les
-   composants servis par l'application (``static/vendor`` : Motion, polices Geist), avec leur empreinte SHA-256.
+   composants servis par l'application (``static/vendor`` : Motion, polices Source Serif 4, Inter, JetBrains Mono), avec leur empreinte SHA-256.
 3. **Licences** : ``pip-licenses`` sur l'environnement d'exécution, limité aux paquets de ``requirements.lock``.
    Permissives acceptées (MIT, BSD, Apache, ISC, PSF, domaine public, OFL pour les polices) ; toute autre
    (GPL, LGPL, AGPL, MPL, inconnue) est **signalée** et fait échouer l'audit, sauf exception justifiée dans
