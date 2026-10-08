@@ -25,6 +25,7 @@ from controldone.services.plateforme import Interdit, Plateforme, RequeteInvalid
 from controldone.services.saisie import montant_saisi
 from controldone.storage.erreurs import AccesRefuse
 from controldone.web.graphes import donnees_client
+from controldone.web.i18n import N_, pluriel
 from controldone.web.i18n import traduire as _
 from controldone.web.listes import Requete, lire_requete
 from controldone.web.listes_sql import (
@@ -69,6 +70,33 @@ def _contexte(acteur: Acteur) -> dict[str, Any]:
     }
 
 
+def _certains_hors_recouvrement(scope: Any, dossiers: list[Any]) -> dict[str, Decimal]:
+    """Affichage seulement : pour un dossier « Écart certain » sans montant recouvrable (par exemple un écart de
+    calcul sur la déclaration), montant de ses écarts certains publiés qui ne se demandent pas au transitaire. Rien
+    n'est ajouté aux totaux recouvrables (indicateurs, suivi des avoirs, rapport) : mêmes règles d'exclusion que
+    ``services.lecture.ligne_dossier``."""
+    from controldone.services.lecture import hors_totaux
+    from controldone.storage import listes_sql as requetes
+
+    ids = [d.id for d in dossiers if d.statut_code == "ecart_certain" and not d.recouvrable_certain]
+    out: dict[str, Decimal] = {}
+    for d, cs in requetes.lignes_dossiers(scope, ids):
+        out[d.id] = sum(
+            (
+                c.montant_en_jeu
+                for c in cs
+                if c.niveau == "ecart_certain"
+                and c.statut_validation == "valide"
+                and c.nature_montant not in ("recouvrable", "renvoi", "aucun")
+                and not hors_totaux(c)
+                and c.montant_en_jeu
+                and c.montant_en_jeu > 0
+            ),
+            Decimal(0),
+        )
+    return out
+
+
 @routeur.get("")
 def tableau(request: Request) -> Response:
     a = _client(request)
@@ -80,6 +108,7 @@ def tableau(request: Request) -> Response:
         info = client_info(scope)
         ind = indicateurs(scope)
         dossiers = page_dossiers(scope, derniers)[0].elements
+        hors_recouvrement = _certains_hors_recouvrement(scope, dossiers)
         lots = lister_lots(scope, limite=5)
         totaux, _n = totaux_registre(scope)
         graphes = donnees_client(scope, ind.lignes)
@@ -101,6 +130,7 @@ def tableau(request: Request) -> Response:
         nav="tableau",
         info=info,
         dossiers=dossiers,
+        hors_recouvrement=hors_recouvrement,
         lots=lots,
         kpi=kpi,
         rapports=rapports[-3:],
@@ -153,11 +183,13 @@ def deposer(request: Request) -> Response:
         r = depot.deposer(pf, a, transmis)
     except RequeteInvalide as exc:
         return redirection(request, "/espace/depot", erreur=str(exc))
-    msg = _("{n} fichier(s) reçu(s)", n=r.acceptes)
+    msg = pluriel(
+        N_("{n} fichier reçu"), N_("{n} fichiers reçus"), r.acceptes, aucun=N_("Aucun fichier reçu")
+    )
     if r.doublons:
-        msg += ", " + _("{n} déjà reçu(s)", n=r.doublons)
+        msg += ", " + pluriel(N_("{n} déjà reçu"), N_("{n} déjà reçus"), r.doublons)
     if r.refuses:
-        msg += ", " + _("{n} refusé(s)", n=len(r.refuses))
+        msg += ", " + pluriel(N_("{n} refusé"), N_("{n} refusés"), len(r.refuses))
     return redirection(
         request,
         f"/espace/lots/{r.lot_id}",

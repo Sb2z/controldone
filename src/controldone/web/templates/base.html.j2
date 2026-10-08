@@ -89,11 +89,24 @@
   {% endif %}
   {% block contenu %}{% endblock %}
 </main>
-<footer class="pied">
+{# Pied de page. Pages du client et pages publiques : avertissement exact (SPEC §3.4) et phrase de service destinée
+   au client. Pages du fondateur : pied neutre ; celles qui montrent des constats (dossier, file de validation)
+   posent pied_page = "rapport" et gardent l'avertissement exact. Page de désinscription des prospects :
+   pied_page = "aucun". #}
+{% set genre_pied = pied_page|default("fondateur" if acteur and acteur.role.value == "fondateur" else "client") %}
+{% if genre_pied != "aucun" %}
+<footer class="pied{% if genre_pied != 'client' %} pied-interne{% endif %}">
+  {% if genre_pied in ("client", "rapport") %}
   <p class="avertissement" lang="fr"><strong>Avertissement.</strong> {{ AVERTISSEMENT }}</p>
   {% if langue == "en" %}<p class="avertissement traduction"><strong>Courtesy translation (the French text above prevails):</strong> {{ AVERTISSEMENT_EN }}</p>{% endif %}
+  {% endif %}
+  {% if genre_pied == "client" %}
   <p class="mentions">{{ _("ControlDOne compare vos documents d'import entre eux et chiffre les écarts. Les relevés vous sont remis : vous décidez seul de ce que vous en faites.") }}</p>
+  {% else %}
+  <p class="mentions">{{ _("Espace du fondateur : pages réservées au compte fondateur.") }}</p>
+  {% endif %}
 </footer>
+{% endif %}
 {% if acteur %}
 <dialog class="palette" data-palette aria-label="{{ _("Recherche rapide") }}">
   <div class="palette-champ">

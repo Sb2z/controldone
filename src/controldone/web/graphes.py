@@ -16,7 +16,7 @@ from typing import Any
 
 from controldone.calendrier import mois_paris
 from controldone.formatage import format_montant
-from controldone.web.i18n import N_, courante
+from controldone.web.i18n import N_, courante, pluriel
 from controldone.web.i18n import traduire as _
 from controldone.web.listes_vues import FAMILLES
 
@@ -56,6 +56,46 @@ class Graphe:
     graduations: list[tuple[float, str]] = field(default_factory=list)
     vide: bool = False
     note: str = ""
+    largeur_zone: float = 0  # barres horizontales : largeur de la piste de fond
+
+
+#: Barres horizontales : marge des libellés (à gauche), de la valeur écrite au bout de la barre (à droite).
+MARGE_LIBELLES, MARGE_VALEURS = 290, 110
+
+
+def largeur_libelle(texte: str, taille: float = 12) -> float:
+    """Largeur approchée (px) d'un libellé en Inter : majuscules et chiffres plus larges que les minuscules."""
+    em = 0.0
+    for ch in texte:
+        if ch == " ":
+            em += 0.28
+        elif ch in "il.,;:'·|/!()":
+            em += 0.3
+        elif ch in "mwMW":
+            em += 0.86
+        elif ch.isupper() or ch.isdigit():
+            em += 0.68
+        else:
+            em += 0.55
+    return em * taille
+
+
+def libelle_court(texte: str, largeur: float = MARGE_LIBELLES - 16) -> str:
+    """Libellé entier s'il tient dans la marge, sinon coupé au dernier mot qui tient, suivi de « … »."""
+    if largeur_libelle(texte) <= largeur:
+        return texte
+    mots, court = texte.split(" "), ""
+    for mot in mots:
+        essai = f"{court} {mot}".strip()
+        if largeur_libelle(essai + " …") > largeur:
+            break
+        court = essai
+    if not court:  # premier mot trop long : coupé au caractère
+        court = texte
+        while court and largeur_libelle(court + "…") > largeur:
+            court = court[:-1]
+        return court + "…"
+    return court + " …"
 
 
 def _texte(v: Decimal, monnaie: bool) -> str:
@@ -184,7 +224,7 @@ def barres(
     )
     """Barres horizontales classées (catégories), valeur écrite au bout de chaque barre."""
     series = sorted(series, key=lambda s: -s[1])[:8]
-    L, g, d, ligne = 640, 230, 110, 30
+    L, g, d, ligne = 640, MARGE_LIBELLES, MARGE_VALEURS, 30
     H = max(60, 12 + ligne * len(series))
     maxi = max((v for _l, v in series), default=Decimal(0))
     zone_l = L - g - d
@@ -197,7 +237,7 @@ def barres(
                 lib,
                 v,
                 _texte(v, monnaie),
-                court=lib if len(lib) <= 34 else lib[:33] + "…",
+                court=libelle_court(lib),
                 x=g,
                 y=y + 5,
                 largeur=round(max(w, 2 if v else 0), 1),
@@ -210,9 +250,10 @@ def barres(
         )
     total = sum((v for _l, v in series), Decimal(0))
     desc = (
-        _(
-            "{n} catégorie(s) ; total {total} ; la plus élevée : {nom} ({valeur}).",
-            n=len(series),
+        pluriel(
+            N_("{n} catégorie ; total {total} ; la plus élevée : {nom} ({valeur})."),
+            N_("{n} catégories ; total {total} ; la plus élevée : {nom} ({valeur})."),
+            len(series),
             total=_texte(total, monnaie),
             nom=series[0][0],
             valeur=_texte(series[0][1], monnaie),
@@ -221,7 +262,18 @@ def barres(
         else _("Aucune donnée.")
     )
     return Graphe(
-        id_, titre, desc, "barres", L, H, out, colonne_libelle, colonne_valeur, vide=not maxi, note=note
+        id_,
+        titre,
+        desc,
+        "barres",
+        L,
+        H,
+        out,
+        colonne_libelle,
+        colonne_valeur,
+        vide=not maxi,
+        note=note,
+        largeur_zone=zone_l,
     )
 
 
@@ -284,7 +336,7 @@ def donnees_client(scope: Any, lignes: Sequence[Any] | None = None) -> list[Grap
         barres(
             "g-familles",
             N_("Constats publiés par famille de contrôles"),
-            [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in par_famille.items()],
+            [(f"{k} · {_(FAMILLES.get(k, k))}", v) for k, v in par_famille.items()],
             colonne_libelle=N_("Famille"),
         ),
         barres(
@@ -320,13 +372,13 @@ def donnees_fondateur(stats: dict[str, dict[str, Any]]) -> list[Graphe]:
         barres(
             "g-proposes",
             N_("Constats à valider par famille de contrôles"),
-            [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in proposes.items()],
+            [(f"{k} · {_(FAMILLES.get(k, k))}", v) for k, v in proposes.items()],
             colonne_libelle=N_("Famille"),
         ),
         barres(
             "g-valides",
             N_("Constats validés par famille de contrôles"),
-            [(f"{k} — {_(FAMILLES.get(k, k))}", v) for k, v in valides.items()],
+            [(f"{k} · {_(FAMILLES.get(k, k))}", v) for k, v in valides.items()],
             colonne_libelle=N_("Famille"),
         ),
     ]

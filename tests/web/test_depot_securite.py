@@ -197,3 +197,48 @@ def test_texte_utilisateur_echappe(monde):
     )
     page = f.get(f"/admin/clients/{A}").text
     assert "<script>alert" not in page and "&lt;script&gt;alert" in page
+
+
+def test_nombre_de_fichiers_conserve_apres_traitement(monde):
+    """Régression : le résumé du traitement s'ajoute à celui du dépôt sans l'effacer. Avant correction,
+    « Dépôts récents » affichait « 0 fichier(s) » pour un lot traité qui avait produit des dossiers."""
+    import re
+    from pathlib import Path
+
+    c = monde.client()
+    connecter_client(c, monde, ADMIN_A)
+    docs = Path(__file__).resolve().parents[2] / "demo/dossiers/DEMO-2/docs"
+    envois = [
+        (p.name, p.read_bytes() + b"\n% copie FICTIVE (test du compte de fichiers)\n", "application/pdf")
+        for p in sorted(docs.glob("*.pdf"))
+    ]  # empreintes nouvelles : pas des doublons de la base de démonstration
+    assert len(envois) == 3
+    r = _deposer(c, envois)
+    assert r.status_code == 303
+    lot_id = r.headers["location"].rsplit("/", 1)[1]
+    avant = dict(_lot(monde, lot_id)[0].resume)
+    assert (avant["fichiers"], avant["doublons"], avant["refuses"]) == (3, 0, 0)
+    executer_jobs(monde)
+    lot = _lot(monde, lot_id)[0]
+    assert lot.statut == "traite"
+    assert {k: lot.resume[k] for k in avant} == avant  # clés du dépôt intactes
+    assert {"dossiers", "constats", "non_lus", "llm"} <= lot.resume.keys()  # clés du traitement ajoutées
+    page = c.get("/espace/depot").text
+    ligne = re.search(rf'<li><a href="/espace/lots/{lot_id}">.*?</li>', page, re.S)
+    assert ligne is not None
+    assert "3 fichiers" in ligne.group(0) and "aucun fichier" not in ligne.group(0)
+
+
+def test_compte_de_fichiers_inconnu_non_affiche(monde):
+    """Lot dont le résumé ne porte aucun compte de fichiers (lot traité avant la correction) : « Dépôts récents »
+    n'affiche pas de nombre plutôt qu'un « aucun fichier » inexact."""
+    import re
+
+    with monde.pf.db.tenant(A, Acteur.systeme("t")) as s:
+        for lot in s.lister(Lot):
+            s.modifier(Lot, lot.id, resume={k: v for k, v in (lot.resume or {}).items() if k != "fichiers"})
+    c = monde.client()
+    connecter_client(c, monde, ADMIN_A)
+    page = c.get("/espace/depot").text
+    lignes = re.findall(r'<li><a href="/espace/lots/[^"]+">.*?</li>', page, re.S)
+    assert lignes and not [x for x in lignes if "fichier" in x]

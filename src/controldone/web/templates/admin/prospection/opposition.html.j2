@@ -25,7 +25,7 @@
   <p class="discret">{{ _("Un prospect sans contact émanant de lui depuis 3 ans (à compter de la collecte ou de sa dernière réponse) est à purger. Les clients ne sont pas concernés.") }}</p>
   {% if a_purger %}
   <ul class="liste-simple">{% for p in a_purger[:20] %}<li><a href="{{ base }}/prospects/{{ p.id }}"><span lang="fr">{{ p.raison_sociale }}</span></a> {{ badge_statut(p.statut, libelles_statut) }} <span class="discret">{{ _("collecté le {date}", date=p.collecte_le.isoformat()) }}</span></li>{% endfor %}</ul>
-  <form method="post" action="{{ base }}/purger" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn">{{ _("Purger {n} prospect(s)", n=a_purger|length) }}</button></form>
+  <form method="post" action="{{ base }}/purger" class="en-ligne">{{ csrf_champ(csrf) }}<button type="submit" class="btn">{{ pluriel("Purger {n} prospect", "Purger {n} prospects", a_purger|length) }}</button></form>
   {% else %}<p class="vide">{{ _("Aucun prospect à purger.") }}</p>{% endif %}
 </section>
 </div>

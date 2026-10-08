@@ -231,6 +231,10 @@ td.num { font-size: .86em; }
 .pied p { max-width: var(--largeur); margin: 0 auto; padding: 1rem 1.5rem 0; font-size: .78rem; color: var(--encre-3); line-height: 1.5; }
 .pied .avertissement strong { color: var(--encre-2); font-weight: 600; }
 .pied .mentions { padding-bottom: 1.5rem; }
+.pied-interne .mentions { padding-top: .8rem; padding-bottom: 1rem; }
+/* Écart certain qui ne se demande pas au transitaire : montant affiché, note « hors recouvrement » dessous */
+.hors-recouvrement { display: inline-flex; flex-direction: column; align-items: flex-end; color: var(--encre-2); }
+.hors-recouvrement small { font-family: var(--police); font-size: .72rem; color: var(--encre-3); white-space: nowrap; }
 
 /* --- structure ------------------------------------------------------------------------------------------------- */
 .titre-page { margin-bottom: 2.25rem; }
@@ -358,7 +362,7 @@ td.vide { padding: 1.4rem .75rem; }
 .donnees td.details span { display: block; font-size: .78rem; color: var(--encre-2); }
 .barre-col { width: 40%; }
 .barre, .jauge { display: inline-block; height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; vertical-align: middle; box-shadow: inset 0 0 0 1px var(--filet-2); }
-.barre { width: 100%; }
+.barre { width: 100%; min-width: 4rem; } /* la colonne ne s'écrase jamais à zéro dans un tableau étroit */
 .jauge { width: 90px; margin-right: .5rem; }
 .barre > span, .jauge > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); transform-origin: 0 50%; }
 .jauge-alerte > span { background: var(--verifier); }

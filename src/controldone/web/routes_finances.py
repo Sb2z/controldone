@@ -24,6 +24,7 @@ from controldone.outbox import FileSortante, TypeAction
 from controldone.services.saisie import montant_saisi
 from controldone.storage import facturation as stock
 from controldone.storage.erreurs import AccesRefuse
+from controldone.web.i18n import N_, accord
 from controldone.web.rendu import page, redirection
 from controldone.web.reponses import fichier_attache
 from controldone.web.routes_admin import _fondateur, _pf, _s
@@ -240,9 +241,13 @@ def synchroniser_pa(request: Request) -> Response:
     _fondateur(request)
     formulaire_sync(request)
     n = service_pour(_pf(request)).synchroniser_statuts_pa()
-    return redirection(
-        request, _RETOUR, message="{n} statut(s) de cycle de vie reçu(s) de la plateforme agréée.", n=n
+    msg = accord(
+        N_("{n} statut de cycle de vie reçu de la plateforme agréée."),
+        N_("{n} statuts de cycle de vie reçus de la plateforme agréée."),
+        n,
+        aucun=N_("Aucun statut de cycle de vie reçu de la plateforme agréée."),
     )
+    return redirection(request, _RETOUR, message=msg, n=n)
 
 
 # --- bouchon de paiement (aucun Stripe configuré) ---------------------------------------------------------------
@@ -284,9 +289,12 @@ def payer_bouchon(request: Request, session_id: str) -> Response:
         raise AccesRefuse("introuvable ou hors périmètre") from exc
     for charge, signature in evenements:  # même chemin que les webhooks réels (signature vérifiée)
         svc.traiter_webhook(charge, signature)
-    return redirection(
-        request, _RETOUR, message="Paiement simulé : {n} événement(s) traité(s).", n=len(evenements)
+    msg = accord(
+        N_("Paiement simulé : {n} événement traité."),
+        N_("Paiement simulé : {n} événements traités."),
+        len(evenements),
     )
+    return redirection(request, _RETOUR, message=msg, n=len(evenements))
 
 
 # --- webhooks -----------------------------------------------------------------------------------------------------

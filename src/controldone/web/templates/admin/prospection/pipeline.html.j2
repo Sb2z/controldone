@@ -27,7 +27,7 @@
     {% else %}
     <p class="vide discret">{{ _("Aucun prospect.") }}</p>
     {% endfor %}
-    {% if cartes|length > limite %}<a class="petit-lien" href="{{ base }}/prospects?statut={{ st }}">{{ _("+ {n} autre(s) dans la liste", n=cartes|length - limite) }}</a>{% endif %}
+    {% if cartes|length > limite %}<a class="petit-lien" href="{{ base }}/prospects?statut={{ st }}">{{ pluriel("+ {n} autre dans la liste", "+ {n} autres dans la liste", cartes|length - limite) }}</a>{% endif %}
   </section>
 {% endfor %}
 </div>

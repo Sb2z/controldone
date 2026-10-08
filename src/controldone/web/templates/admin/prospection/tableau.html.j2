@@ -6,17 +6,17 @@
 {% block contenu %}
 <div class="titre-page">
   <h1>{{ _("Marketing") }}</h1>
-  <p class="discret">{{ _("Prospection du fondateur : rien ne part sans votre validation. Chiffres réels seulement, aucun suivi d'ouverture ni de clic.") }}</p>
+  <p class="discret">{{ _("Prospection du fondateur : rien ne part sans votre validation. Aucun chiffre estimé : tout vient des événements enregistrés, sans suivi d'ouverture ni de clic.") }}</p>
 </div>
 {{ sous_navigation("tableau") }}
 
 <section class="kpis" aria-label="{{ _("Indicateurs de prospection") }}">
   {{ kpi(_("Prospects"), t.total, _("toutes étapes"), None, base ~ "/prospects") }}
-  {{ kpi(_("Courriels à valider"), t.a_valider|length, _("dont {n} préparé(s) cette semaine", n=t.a_valider_semaine), "accent" if t.a_valider else None, "/admin/validation#sorties") }}
+  {{ kpi(_("Courriels à valider"), t.a_valider|length, pluriel("dont {n} préparé cette semaine", "dont {n} préparés cette semaine", t.a_valider_semaine, aucun="aucun préparé cette semaine"), "accent" if t.a_valider else None, "/admin/validation#sorties") }}
   {{ kpi(_("Approuvés, pas encore envoyés"), t.approuves|length, _("envoi ou déclaration d'envoi"), None, base ~ "/courriels") }}
   {{ kpi(_("Réponses à traiter"), t.reponses_a_traiter|length, _("statut « a répondu »"), "alerte" if t.reponses_a_traiter else None, base ~ "/pipeline") }}
   {{ kpi(_("Envoyés cette semaine"), t.envoyes_semaine, _("envois et envois déclarés")) }}
-  {{ kpi(_("Plafonds du jour"), t.compteurs.preparations ~ " / " ~ t.compteurs.plafond_preparations, _("préparations ; envois {e} / {p}", e=t.compteurs.envois, p=t.compteurs.plafond_envois)) }}
+  {{ kpi(_("Plafonds du jour"), t.compteurs.preparations ~ " / " ~ t.compteurs.plafond_preparations, _("courriels préparés aujourd'hui ; envoyés : {e} sur {p}", e=t.compteurs.envois, p=t.compteurs.plafond_envois)) }}
 </section>
 
 {% if t.total == 0 %}
@@ -62,7 +62,7 @@
   {% if t.a_valider %}
   <ul class="liste-simple">
   {% for a in t.a_valider[:8] %}
-    <li><a href="{{ base }}/prospects/{{ a.payload.get('prospect_id', '') }}"><span lang="fr">{{ a.payload.get("objet", "") }}</span></a> <span class="discret">— {{ _("étape {n}", n=a.payload.get("rang", "?")) }}, {{ a.cree_le|date }}</span></li>
+    <li><a href="{{ base }}/prospects/{{ a.payload.get('prospect_id', '') }}"><span lang="fr">{{ a.payload.get("objet", "") }}</span></a> <span class="discret">· {{ _("étape {n}", n=a.payload.get("rang", "?")) }}, {{ a.cree_le|date }}</span></li>
   {% endfor %}
   </ul>
   {% else %}<p class="vide">{{ _("Rien à valider. Préparez une séquence depuis la fiche d'un prospect qualifié.") }}</p>{% endif %}
@@ -73,7 +73,7 @@
   {% if t.reponses_a_traiter %}
   <ul class="liste-simple">
   {% for p in t.reponses_a_traiter[:8] %}
-    <li><a href="{{ base }}/prospects/{{ p.id }}"><span lang="fr">{{ p.raison_sociale }}</span></a> <span class="discret">— {{ (p.derniere_interaction_le or p.modifie_le)|date }}</span></li>
+    <li><a href="{{ base }}/prospects/{{ p.id }}"><span lang="fr">{{ p.raison_sociale }}</span></a> <span class="discret">· {{ (p.derniere_interaction_le or p.modifie_le)|date }}</span></li>
   {% endfor %}
   </ul>
   {% else %}<p class="vide">{{ _("Aucune réponse en attente. Une réponse reçue s'enregistre sur la fiche du prospect (bouton « A répondu »).") }}</p>{% endif %}
@@ -110,7 +110,7 @@
     </tbody>
   </table>
   </div>
-  {% if t.a_purger %}<p class="alerte-ligne">{{ _("{n} prospect(s) au-delà de la durée de conservation : à purger.", n=t.a_purger) }} <a href="{{ base }}/opposition#conservation">{{ _("Voir") }}</a></p>{% endif %}
+  {% if t.a_purger %}<p class="alerte-ligne">{{ pluriel("{n} prospect a dépassé la durée de conservation : à purger.", "{n} prospects ont dépassé la durée de conservation : à purger.", t.a_purger) }} <a href="{{ base }}/opposition#conservation">{{ _("Voir") }}</a></p>{% endif %}
 </section>
 </div>
 {% endblock %}

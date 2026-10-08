@@ -39,7 +39,7 @@
 </section>
 <section class="carte" aria-labelledby="t-recents">
   <h2 id="t-recents">{{ _("Dépôts récents") }}</h2>
-  {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}<br><span class="discret">{{ _("{n} fichier(s)", n=l.resume.get("fichiers", 0)) }}{% if l.resume.get("refuses") %}, {{ _("{n} refusé(s)", n=l.resume.get("refuses")) }}{% endif %}</span></li>{% endfor %}</ul>
+  {% if lots %}<ul class="liste-simple" data-suivi-liste="/espace/suivi">{% for l in lots %}<li><a href="/espace/lots/{{ l.id }}">{{ l.recu_le|date }}</a> {{ badge_suivi(l.id, l.suivi) }}{% if l.resume.get("fichiers") is not none %}<br><span class="discret">{{ pluriel("{n} fichier", "{n} fichiers", l.resume.get("fichiers"), aucun="aucun fichier") }}{% if l.resume.get("refuses") %}, {{ pluriel("{n} refusé", "{n} refusés", l.resume.get("refuses")) }}{% endif %}</span>{% endif %}</li>{% endfor %}</ul>
   {% else %}<p class="vide">{{ _("Aucun dépôt pour l'instant. Chaque envoi s'affichera ici avec son état de traitement.") }}</p>{% endif %}
 </section>
 </div>

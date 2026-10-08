@@ -14,7 +14,7 @@
   <ul>
   {% for b in bandeau %}
     <li><span class="badge b-alerte">{{ _(libelle_alerte(b.kind)) }}</span>
-      <span>{{ _("{n} non lue(s), la dernière le {date}", n=b.nombre, date=b.dernier|date) }}</span>
+      <span>{{ pluriel("{n} non lue, reçue le {date}", "{n} non lues, la dernière le {date}", b.nombre, date=b.dernier|date) }}</span>
       <form method="post" action="/admin/alertes/bandeau/lues" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="kind" value="{{ b.kind }}">
         <button type="submit" class="btn btn-petit">{{ _("Marquer comme lu") }}<span class="vh"> : {{ _(libelle_alerte(b.kind)) }}</span></button></form></li>
   {% endfor %}

@@ -338,7 +338,10 @@ def traiter_lot(ctx: JobContext) -> dict[str, Any]:
             "non_lus_detail": non_lus[:200],
             "llm": plafond.llm_autorise,
         }
-        lot.statut, lot.resume = "traite", resume
+        # Le résumé du traitement **s'ajoute** à celui écrit à la réception (``fichiers``, ``doublons``,
+        # ``refuses`` du dépôt ; ``source``, ``message_id``... d'un connecteur) sans l'effacer. Nouveau dict :
+        # la colonne JSON n'est pas suivie en mutation, une modification sur place ne serait pas enregistrée.
+        lot.statut, lot.resume = "traite", {**(lot.resume or {}), **resume}
         scope.flush()
         ctx.exiger_bail(scope.session)  # jeton de clôture, dans la transaction qui valide les résultats
     return resume

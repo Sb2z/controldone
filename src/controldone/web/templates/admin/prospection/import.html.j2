@@ -24,7 +24,7 @@
 {% set n_nouveaux = lignes|selectattr("statut", "equalto", "nouveau")|list|length %}
 <section class="carte" aria-labelledby="t-apercu">
   <div class="carte-tete"><h2 id="t-apercu">{{ _("2. Aperçu") }} <span class="discret">{{ nom_fichier }}</span></h2>
-  <p class="discret">{{ _("{n} ligne(s) à importer sur {total}.", n=n_nouveaux, total=lignes|length) }}</p></div>
+  <p class="discret">{{ pluriel("{n} ligne à importer sur {total}.", "{n} lignes à importer sur {total}.", n_nouveaux, aucun="Aucune ligne à importer sur {total}.", total=lignes|length) }}</p></div>
   <div class="defilement">
   <table class="donnees compacte">
     <thead><tr><th scope="col" class="num">{{ _("Ligne") }}</th><th scope="col">{{ _("Entreprise") }}</th><th scope="col">{{ _("Résultat") }}</th><th scope="col" class="num">{{ _("Contacts") }}</th><th scope="col">{{ _("Remarques") }}</th></tr></thead>
@@ -41,7 +41,7 @@
   {% if n_nouveaux %}
   <form method="post" action="{{ base }}/importer" enctype="multipart/form-data" class="formulaire">{{ csrf_champ(csrf) }}
     <input type="hidden" name="contenu" value="{{ contenu_b64 }}"><input type="hidden" name="nom_fichier" value="{{ nom_fichier }}">
-    <button type="submit" class="btn btn-principal">{{ _("Importer {n} prospect(s)", n=n_nouveaux) }}</button>
+    <button type="submit" class="btn btn-principal">{{ pluriel("Importer {n} prospect", "Importer {n} prospects", n_nouveaux) }}</button>
   </form>
   {% else %}<p class="vide">{{ _("Aucune ligne à importer.") }}</p>{% endif %}
   <p><a class="petit-lien" href="{{ base }}/importer">{{ _("Choisir un autre fichier") }}</a></p>

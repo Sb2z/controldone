@@ -38,7 +38,7 @@ from controldone.prospection.statuts import (
     STATUTS,
 )
 from controldone.storage.erreurs import AccesRefuse
-from controldone.web.i18n import N_
+from controldone.web.i18n import N_, accord
 from controldone.web.listes import Param, contient, lire_requete, paginer, trier
 from controldone.web.rendu import page, redirection, retour_sur
 from controldone.web.securite import acteur_de, depuis_boucle, formulaire_sync, url_publique
@@ -574,7 +574,12 @@ def importer(request: Request) -> Response:
     return redirection(
         request,
         f"{BASE}/prospects",
-        message=N_("{n} prospect(s) importé(s) ; doublons {d}, exclus {e}, invalides {i}."),
+        message=accord(
+            N_("{n} prospect importé ; doublons {d}, exclus {e}, invalides {i}."),
+            N_("{n} prospects importés ; doublons {d}, exclus {e}, invalides {i}."),
+            r.crees,
+            aucun=N_("Aucun prospect importé ; doublons {d}, exclus {e}, invalides {i}."),
+        ),
         n=r.crees,
         d=r.doublons,
         e=r.exclus,
@@ -750,7 +755,12 @@ def etapes_dues(request: Request) -> Response:
     return redirection(
         request,
         f"{BASE}/courriels",
-        message=N_("{n} étape(s) préparée(s) : à approuver dans la file de validation."),
+        message=accord(
+            N_("{n} étape préparée : à approuver dans la file de validation."),
+            N_("{n} étapes préparées : à approuver dans la file de validation."),
+            len(ids),
+            aucun=N_("Aucune étape préparée."),
+        ),
         n=len(ids),
     )
 
@@ -835,7 +845,8 @@ def purger(request: Request) -> Response:
     f = _fondateur(request)
     formulaire_sync(request)
     n = _svc(request).purger(f)
-    return redirection(request, f"{BASE}/opposition", message=N_("{n} prospect(s) purgé(s)."), n=n)
+    msg = accord(N_("{n} prospect purgé."), N_("{n} prospects purgés."), n, aucun=N_("Aucun prospect purgé."))
+    return redirection(request, f"{BASE}/opposition", message=msg, n=n)
 
 
 @routeur.get("/delivrabilite")

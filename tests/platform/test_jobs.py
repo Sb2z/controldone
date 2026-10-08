@@ -372,6 +372,31 @@ def test_handler_traiter_lot(monde, horloge, monkeypatch):
     assert pages == []  # la page 1 de fic_a existait déjà (fixture) : pas de doublon
 
 
+def test_handler_conserve_le_resume_de_reception(monde, horloge, monkeypatch):
+    """Le résumé du traitement s'ajoute à celui de la réception (compteurs du dépôt, clés d'idempotence d'un
+    connecteur) au lieu de le remplacer."""
+    from controldone.pipeline import OptionsPipeline
+
+    reception = {
+        "fichiers": 3,
+        "doublons": 1,
+        "refuses": 0,
+        "source": "courriel",
+        "message_id": "<m-fictif@exemple.invalid>",
+    }
+    with monde.db.tenant("cli_a", SYSTEME) as sc:
+        sc.modifier(Lot, "lot_a", resume=reception)
+    monkeypatch.setattr(handlers_mod, "charger_pipeline", lambda: (_faux_pipeline([]), OptionsPipeline))
+    job = enqueue("traiter_lot", {"lot_id": "lot_a"}, "traiter_lot:cli_a:lot_a", "cli_a", db=monde.db)
+    w = _worker(monde, horloge, {"traiter_lot": handlers_mod.traiter_lot}, services={"vault": monde.vault})
+    assert w.executer_un() == "done"
+    with monde.db.tenant("cli_a", SYSTEME, lecture=True) as sc:
+        resume = dict(sc.obtenir(Lot, "lot_a").resume)
+    assert {k: resume.get(k) for k in reception} == reception
+    assert (resume["dossiers"], resume["constats"], resume["non_lus"]) == (1, 0, 0)
+    assert "fichiers" not in JobStore(monde.db).obtenir(job.id).resultat  # résultat du job : inchangé
+
+
 def test_handler_llm_coupe_au_plafond(monde, horloge, monkeypatch):
     from controldone.pipeline import OptionsPipeline
 

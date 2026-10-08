@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from controldone.storage.comptes import definir_langue, utilisateur
-from controldone.web.i18n import COOKIE_LANGUE, LANGUES
+from controldone.web.i18n import COOKIE_LANGUE, LANGUES, N_, accord
 from controldone.web.rendu import page, redirection, retour_sur
 from controldone.web.securite import EtatSecurite, NonConnecte, acteur_de, formulaire_sync
 
@@ -101,7 +101,13 @@ def fermer_autres(request: Request) -> Response:
     fermer = getattr(etat.sessions, "fermer_autres_sessions", None)
     if fermer is not None:
         n = fermer(acteur.id, s.sid)
-        return redirection(request, "/compte/sessions", message="{n} autre(s) session(s) fermée(s).", n=n)
+        msg = accord(
+            N_("{n} autre session fermée."),
+            N_("{n} autres sessions fermées."),
+            n,
+            aucun=N_("Aucune autre session à fermer."),
+        )
+        return redirection(request, "/compte/sessions", message=msg, n=n)
     # repli sans registre des sessions : toutes les sessions sont coupées, celle-ci est remplacée (D-3202)
     etat.sessions.revoquer_utilisateur(acteur.id)
     rep = redirection(request, "/compte/sessions", message="Vos autres sessions ont été fermées.")

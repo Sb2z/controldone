@@ -30,7 +30,7 @@ from controldone.storage.erreurs import AccesRefuse
 from controldone.storage.file_jobs import JobStore
 from controldone.storage.models import Document, Dossier, Fichier
 from controldone.web.graphes import donnees_fondateur
-from controldone.web.i18n import N_
+from controldone.web.i18n import N_, accord, pluriel
 from controldone.web.i18n import traduire as _
 from controldone.web.listes import decalage, lire_requete, paginer
 from controldone.web.listes_sql import indicateurs, page_dossiers
@@ -130,7 +130,13 @@ def bandeau_lu(request: Request) -> Response:
         presents = [k for k in op.alertes_non_lues_par_type() if alerte_du_bandeau(k)]
         cibles = presents if kind == "tous" else [k for k in presents if k == kind]
         n = op.marquer_alertes_lues(cibles)
-    return redirection(request, "/admin", message="{n} alerte(s) marquée(s) comme lue(s).", n=n)
+    msg = accord(
+        N_("{n} alerte marquée comme lue."),
+        N_("{n} alertes marquées comme lues."),
+        n,
+        aucun=N_("Aucune alerte à marquer comme lue."),
+    )
+    return redirection(request, "/admin", message=msg, n=n)
 
 
 # --- clients ------------------------------------------------------------------------------------------------
@@ -414,10 +420,9 @@ def publier(request: Request, tenant_id: str) -> Response:
     return redirection(
         request,
         "/admin/validation#sorties",
-        message="Rapport préparé ({d} dossier(s), {c} constat(s) validé(s)) : à approuver dans la file "
-        "de validation.",
-        d=r.nb_dossiers,
-        c=r.nb_constats,
+        message=N_("Rapport préparé : {dossiers}, {constats}. À approuver dans la file de validation."),
+        dossiers=pluriel(N_("{n} dossier"), N_("{n} dossiers"), r.nb_dossiers),
+        constats=pluriel(N_("{n} constat validé"), N_("{n} constats validés"), r.nb_constats),
     )
 
 

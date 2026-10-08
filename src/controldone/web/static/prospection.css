@@ -29,11 +29,15 @@
 .prosp-carte a.nom { font-weight: 600; text-decoration: none; color: var(--encre); }
 .prosp-carte a.nom:hover, .prosp-carte a.nom:focus-visible { text-decoration: underline; }
 .prosp-carte .meta-ligne { display: flex; justify-content: space-between; gap: .4rem; font-size: .8rem; color: var(--encre-2); }
-.prosp-carte form { display: flex; gap: .3rem; align-items: center; }
-.prosp-carte select { flex: 1; min-width: 0; font-size: .8rem; padding: .2rem .3rem; }
+/* Le choix du statut garde la largeur de son plus long libellé (« Essai / diagnostic ») : dans une colonne étroite,
+   le bouton passe à la ligne au lieu de couper le texte. */
+.prosp-carte form { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+.prosp-carte select { flex: 1 1 9.5rem; min-width: 0; font-size: .8rem; padding: .2rem .3rem; }
 
 /* Entonnoir de conversion */
 .prosp-entonnoir td.barre-col { width: 45%; }
+/* en-têtes longs (« Depuis l'étape précédente ») : sur plusieurs lignes plutôt qu'un tableau trop large sur téléphone */
+@media (max-width: 760px) { table.donnees.prosp-entonnoir thead th { white-space: normal; } }
 
 /* Historique de la fiche */
 .prosp-chrono { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--filet); }

@@ -92,7 +92,7 @@
   <h3>{{ _("Diagnostic ({prix} HT)", prix=cat.prix_diagnostic_ht|montant) }}</h3>
   <form method="post" action="/admin/finances/diagnostic" class="formulaire">{{ csrf_champ(csrf) }}
     <label for="d-client">{{ _("Client") }}</label><select id="d-client" name="client_id" required>{% for cid, nom in clients.items() %}<option value="{{ cid }}">{{ nom }}</option>{% endfor %}</select>
-    <label for="d-coupon">{{ _("Coupon (facultatif)") }}</label><select id="d-coupon" name="coupon"><option value="">{{ _("Aucun") }}</option>{% for code, c in cat.coupons.items() %}<option value="{{ code }}">{{ code }} · {{ _("{n}/{max} utilisé(s)", n=coupons[code], max=c.utilisations_max) }}</option>{% endfor %}</select>
+    <label for="d-coupon">{{ _("Coupon (facultatif)") }}</label><select id="d-coupon" name="coupon"><option value="">{{ _("Aucun") }}</option>{% for code, c in cat.coupons.items() %}<option value="{{ code }}">{{ code }} · {{ _("utilisé {n} fois sur {max}", n=coupons[code], max=c.utilisations_max) }}</option>{% endfor %}</select>
     <fieldset><legend>{{ _("Accord de publication des résultats anonymisés (facultatif, distinct de la remise, révocable)") }}</legend>
       <label><input type="checkbox" name="consentement_signe" value="1"> {{ _("Accord signé par le client") }}</label>
       <label for="d-par">{{ _("Signé par") }}</label><input id="d-par" name="signe_par" maxlength="200">
@@ -131,7 +131,7 @@
     <tr><td>{{ clients.get(u.client_id, u.client_id) }}</td><td>{{ u.mois }}</td><td><code>{{ u.dossier_id }}</code></td><td class="num">{{ u.cout_eur|montant }}</td></tr>
   {% else %}<tr><td colspan="4" class="vide">{{ _("Aucun coût IA enregistré.") }}</td></tr>{% endfor %}
   </tbody></table>
-  {% if brouillons %}<p class="discret">{{ _("{n} brouillon(s) de facture en attente d'approbation dans la file de validation.", n=brouillons|length) }}</p>{% endif %}
+  {% if brouillons %}<p class="discret">{{ pluriel("{n} brouillon de facture attend son approbation dans la file de validation.", "{n} brouillons de facture attendent leur approbation dans la file de validation.", brouillons|length) }}</p>{% endif %}
 </section>
 </div>
 {% endblock %}

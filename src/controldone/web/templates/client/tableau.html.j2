@@ -69,7 +69,7 @@
 </div>
 
 <section class="kpis" aria-label="{{ _("Indicateurs") }}">
-  <div class="kpi"><div class="kpi-lib">{{ _("Dossiers contrôlés") }}</div><div class="kpi-val num"><a href="/espace/dossiers">{{ kpi.dossiers }}</a></div><div class="kpi-note">{{ _("{n} constat(s) publié(s)", n=kpi.constats) }}</div></div>
+  <div class="kpi"><div class="kpi-lib">{{ _("Dossiers contrôlés") }}</div><div class="kpi-val num"><a href="/espace/dossiers">{{ kpi.dossiers }}</a></div><div class="kpi-note">{{ pluriel("{n} constat publié", "{n} constats publiés", kpi.constats, aucun="aucun constat publié") }}</div></div>
   <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Écarts certains") }}</div><div class="kpi-val num">{{ kpi.certain|montant }}</div><div class="kpi-note">{{ _("relus et validés") }}</div></div>
   <div class="kpi"><div class="kpi-lib">{{ _("À vérifier") }}</div><div class="kpi-val num">{{ kpi.a_verifier|montant }}</div><div class="kpi-note">{{ _("affiché à part, jamais additionné") }}</div></div>
   <div class="kpi"><div class="kpi-lib">{{ _("Sans avoir reçu") }}</div><div class="kpi-val num"><a href="/espace/recouvrement">{{ kpi.reste|montant }}</a></div><div class="kpi-note">{{ _("avoirs reçus : {m}", m=kpi.credite|montant) }}</div></div>
@@ -83,7 +83,7 @@
     <thead><tr><th scope="col">{{ _("Dossier") }}</th><th scope="col">{{ _("Statut") }}</th><th scope="col">MRN</th><th scope="col" class="num">{{ _("Écart certain") }}</th></tr></thead>
     <tbody>
     {% for d in dossiers %}
-    <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td class="num">{{ d.recouvrable_certain|montant if d.recouvrable_certain else "—" }}</td></tr>
+    <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td class="num">{% if d.recouvrable_certain %}{{ d.recouvrable_certain|montant }}{% elif d.statut_code == "ecart_certain" %}{% set h = hors_recouvrement.get(d.id) %}<span class="hors-recouvrement" title="{{ _("Écart certain qui ne se demande pas au transitaire (par exemple un écart de calcul sur la déclaration) : il n'entre pas dans les montants recouvrables.") }}">{{ h|montant if h else "—" }}<small>{{ _("hors recouvrement") }}</small></span>{% else %}—{% endif %}</td></tr>
     {% else %}<tr><td colspan="4" class="vide">{{ _("Vos dossiers apparaîtront ici après votre premier dépôt.") }}{% if peut_deposer %} <a href="/espace/depot">{{ _("Déposer des documents") }}</a>{% endif %}</td></tr>{% endfor %}
     </tbody>
   </table>

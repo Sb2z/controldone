@@ -283,7 +283,7 @@ def test_bandeau_alertes_graves(monde):
     ):
         assert lib in bandeau, lib
     assert "Coût IA 80 %" not in bandeau and "Écart sans suite" not in bandeau
-    assert "2 non lue(s)" in bandeau
+    assert "2 non lues, la dernière le" in bandeau
     r = poster(f, "/admin", "/admin/alertes/bandeau/lues", {"kind": "sauvegarde_echec"})
     assert r.status_code == 303 and r.headers["location"] == "/admin"
     assert "sauvegarde_echec" not in _non_lues(monde)

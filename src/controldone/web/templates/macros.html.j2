@@ -45,19 +45,25 @@
   </dl>
   {% if fondateur and c.bloque %}<p class="alerte-ligne">{{ _("Libellé bloqué par les garde-fous :") }} {{ c.motif_blocage|msg }}</p>{% endif %}
   {% if c.preuves %}
+  {# Compte exact des preuves : extraits de document (page citée) et calculs (aucune page à montrer) #}
+  {% set n_extraits = c.preuves|selectattr("document_id")|list|length %}
+  {% set n_calculs = c.preuves|rejectattr("document_id")|selectattr("calcul")|list|length %}
+  {% set n_autres = c.preuves|length - n_extraits - n_calculs %}
+  {% set morceaux = ([pluriel("{n} extrait de page", "{n} extraits de page", n_extraits)] if n_extraits else []) + ([pluriel("{n} calcul", "{n} calculs", n_calculs)] if n_calculs else []) + ([pluriel("{n} autre élément", "{n} autres éléments", n_autres)] if n_autres else []) %}
   <details class="preuves-bloc" open>
-  <summary>{{ _("Preuves : {n} extrait(s) de page", n=c.preuves|length) }}</summary>
+  <summary>{{ _("Preuves :") }} {{ morceaux|join(", ") }}</summary>
   <div class="preuves">
     {% for p in c.preuves %}
-    <figure class="preuve">
+    <figure class="preuve{% if not p.document_id and p.calcul %} preuve-calcul{% endif %}">
       <figcaption>
         <span class="preuve-role">{{ _(p.role) }}</span>
-        <span class="preuve-doc">{{ p.document }}{% if p.page %}, {{ _("page {n}", n=p.page) }}{% endif %}</span>
+        {% if p.document_id or not p.calcul %}<span class="preuve-doc">{{ p.document }}{% if p.page %}, {{ _("page {n}", n=p.page) }}{% endif %}</span>
+        {% else %}<span class="preuve-doc">{{ _("Calcul") }}</span>{% endif %}
       </figcaption>
       {% set img = extraits.get((c.id, p.index)) %}
       {% if img %}<img src="data:image/png;base64,{{ img|b64 }}" alt="{{ _("Extrait de la page {n} : valeur lue {v}", n=p.page, v=p.valeur_lue or "") }}" loading="lazy">{% endif %}
-      {% if p.valeur_lue %}<div class="valeur-lue"><span>{{ _("Valeur lue") }}</span> <code>{{ p.valeur_lue }}</code></div>{% endif %}
-      {% if p.calcul %}<div class="calcul"><span>{{ _("Calcul") }}</span> <code>{{ p.calcul }}</code></div>{% endif %}
+      {% if p.valeur_lue %}<div class="valeur-lue"><span>{{ _("Valeur lue :") }}</span> <code>{{ p.valeur_lue }}</code></div>{% endif %}
+      {% if p.calcul %}<div class="calcul">{% if p.document_id %}<span>{{ _("Calcul :") }}</span> {% endif %}<code>{{ p.calcul }}</code></div>{% endif %}
     </figure>
     {% endfor %}
   </div>

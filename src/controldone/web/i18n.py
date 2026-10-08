@@ -2,8 +2,11 @@
 
 - **Catalogue** : les textes de l'interface sont écrits en français dans les gabarits et le code
   (``_("Dossiers")``) ; ``CATALOGUE_EN`` (``web/i18n_en.py``) donne leur traduction anglaise. Paramètres nommés au
-  format ``str.format`` : ``_("{n} fichier(s) reçu(s)", n=3)``. Un texte absent du catalogue reste en français
-  (un test vérifie qu'aucun texte marqué n'y manque).
+  format ``str.format`` : ``_("Page {n}", n=3)``. Un texte absent du catalogue reste en français (un test vérifie
+  qu'aucun texte marqué n'y manque).
+- **Pluriels** : jamais de « fichier(s) » à l'écran ; ``pluriel("{n} fichier reçu", "{n} fichiers reçus", n)``
+  choisit la forme selon la langue (français : singulier pour 0 et 1 ; anglais : pour 1 seulement), avec une
+  forme facultative pour zéro (``aucun="aucun fichier reçu"``). Chaque forme est une entrée du catalogue.
 - **Choix de la langue** : cookie ``cd_langue`` (préférence du navigateur, posé par ``POST /preferences/langue``,
   sans donnée personnelle) ; à défaut, ``Accept-Language`` pour les pages sans session (connexion), français
   sinon.
@@ -19,6 +22,7 @@ de nouveau par ``rendu.page`` avant le rendu.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from starlette.requests import Request
@@ -32,10 +36,12 @@ __all__ = [
     "LANGUES",
     "N_",
     "PHRASE_RENVOI_EN",
+    "accord",
     "activer",
     "courante",
     "langue_de",
     "negocier",
+    "pluriel",
     "textes_js",
     "traduire",
     "traduire_erreur",
@@ -78,6 +84,31 @@ def traduire(texte: str, /, langue: str | None = None, **params: Any) -> str:
     lg = langue or _courante.get()
     t = CATALOGUE_EN.get(texte, texte) if lg == "en" else texte
     return t.format(**params) if params else t
+
+
+def accord(un: str, plusieurs: str, n: Any, /, aucun: str | None = None, langue: str | None = None) -> str:
+    """Forme à employer pour la quantité ``n`` (texte français, clé du catalogue) : ``aucun`` pour zéro s'il est
+    donné ; sinon le singulier pour 0 et 1 en français (moins de 2), pour 1 seulement en anglais ; le pluriel
+    autrement. Sert aux messages traduits plus tard (``redirection(message=accord(...), n=n)``)."""
+    lg = langue or _courante.get()
+    try:
+        v = abs(Decimal(str(n)))
+    except (InvalidOperation, ValueError):
+        return plusieurs
+    if not v.is_finite():  # NaN ou infini : aucune comparaison possible
+        return plusieurs
+    if aucun is not None and v == 0:
+        return aucun
+    return un if (v < 2 if lg == "fr" else v == 1) else plusieurs
+
+
+def pluriel(
+    un: str, plusieurs: str, n: Any, /, aucun: str | None = None, langue: str | None = None, **params: Any
+) -> str:
+    """Texte accordé à la quantité ``n`` puis traduit : ``pluriel("{n} constat publié", "{n} constats publiés", 3)``.
+    Le paramètre ``{n}`` reçoit ``n`` ; les autres paramètres sont passés tels quels."""
+    lg = langue or _courante.get()
+    return traduire(accord(un, plusieurs, n, aucun=aucun, langue=lg), lg, n=n, **params)
 
 
 #: Paramètres d'un message qui portent eux-mêmes un message de service (motif d'un refus, garde-fous).

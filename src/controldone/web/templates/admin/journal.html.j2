@@ -3,7 +3,7 @@
 {% block contenu %}
 <div class="titre-page"><h1>{{ _("Journal d'audit") }}</h1></div>
 {% if anomalies %}
-<div class="message erreur" role="alert"><strong>{{ _("Chaîne rompue :") }}</strong> {{ _("{n} anomalie(s) détectée(s).", n=anomalies|length) }}
+<div class="message erreur" role="alert"><strong>{{ _("Chaîne rompue :") }}</strong> {{ pluriel("{n} anomalie détectée.", "{n} anomalies détectées.", anomalies|length) }}
 <ul>{% for a in anomalies[:20] %}<li>{{ _("Entrée {n} :", n=a.id) }} <span lang="fr">{{ a.motif }}</span></li>{% endfor %}</ul></div>
 {% else %}
 <div class="message succes" role="status"><strong>{{ _("Chaîne intacte :") }}</strong> {{ _("chaque entrée est liée à la précédente par son empreinte SHA-256.") }}</div>

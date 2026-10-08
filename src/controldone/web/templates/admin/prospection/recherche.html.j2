@@ -34,7 +34,7 @@
 {% if resultats is not none %}
 <section class="carte" aria-labelledby="t-resultats">
   <div class="carte-tete"><h2 id="t-resultats">{{ _("Candidats") }}</h2>
-  <p class="discret">{{ _("{n} résultat(s) sur {total} (page {page} sur {pages}) ; {e} écarté(s) par la liste d'exclusion.", n=resultats|length, total=res.total, page=criteres.page, pages=res.pages, e=exclus) }}</p></div>
+  <p class="discret">{{ pluriel("{n} résultat sur {total} (page {page} sur {pages}) ;", "{n} résultats sur {total} (page {page} sur {pages}) ;", resultats|length, total=res.total, page=criteres.page, pages=res.pages) }} {{ pluriel("{n} écarté par la liste d'exclusion.", "{n} écartés par la liste d'exclusion.", exclus, aucun="aucun écarté par la liste d'exclusion.") }}</p></div>
   <div class="defilement">
   <table class="donnees compacte">
     <thead><tr><th scope="col">{{ _("Entreprise") }}</th><th scope="col" class="num">{{ _("Score indicatif") }}</th><th scope="col">NAF</th><th scope="col">{{ _("Taille") }}</th><th scope="col">{{ _("Lieu") }}</th><th scope="col"><span class="vh">{{ _("Action") }}</span></th></tr></thead>

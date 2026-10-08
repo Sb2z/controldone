@@ -185,6 +185,9 @@ def test_imap_expediteur_autorise_et_idempotence(monde, boite):
         fichiers = sc.lister(Fichier, lot_id=lots[0].id)
     noms = sorted(f.nom_original for f in fichiers)
     assert "facture.xml" in noms and len(noms) == 2  # pièce jointe + corps stocké comme donnée
+    # compteurs de « Dépôts récents », comme un dépôt par l'interface
+    compteurs = {k: lots[0].resume.get(k) for k in ("fichiers", "doublons", "refuses")}
+    assert compteurs == {"fichiers": sum(1 for f in fichiers if f.coffre_ref), "doublons": 0, "refuses": 0}
     assert all("\\Seen" in m["flags"] for m in serveur.messages.values())
     assert relever_tout(monde.db, monde.vault, [c])[0]["depots"] == []  # plus rien de non lu
 

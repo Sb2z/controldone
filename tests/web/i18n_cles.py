@@ -1,6 +1,7 @@
-"""Extraction des textes marqués à traduire de l'interface (D-3803) : gabarits (``_("…")``), code web
-(``_()``, ``traduire()``, ``N_()``, ``page(titre=…, message=…, erreur=…)``, ``redirection(message=…, erreur=…)``),
-JavaScript (``T("…")``) et libellés fixes affichés par l'interface (statuts, niveaux, natures…)."""
+"""Extraction des textes marqués à traduire de l'interface (D-3803) : gabarits (``_("…")``, formes de
+``pluriel("…", "…", n, aucun="…")``), code web (``_()``, ``traduire()``, ``N_()``, ``pluriel()``, ``accord()``,
+``page(titre=…, message=…, erreur=…)``, ``redirection(message=…, erreur=…)``), JavaScript (``T("…")`` et les deux
+formes de ``TP(n, "…", "…")``) et libellés fixes affichés par l'interface (statuts, niveaux, natures…)."""
 
 from __future__ import annotations
 
@@ -14,15 +15,24 @@ RACINE_WEB = Path(web.__file__).parent
 GABARITS = RACINE_WEB / "templates"
 _JINJA = re.compile(r"""\b_\(\s*"((?:[^"\\]|\\.)*)"|\b_\(\s*'((?:[^'\\]|\\.)*)'""")
 _JS = re.compile(r"""\bT\(\s*"((?:[^"\\]|\\.)*)\"""")
+#: Accord en nombre : ``pluriel("un", "plusieurs", n, aucun="zéro")`` (gabarits), ``TP(n, "un", "plusieurs")`` (JS).
+_CHAINE = r'"((?:[^"\\]|\\.)*)"'
+_PLURIEL = re.compile(r"\bpluriel\(\s*" + _CHAINE + r"\s*,\s*" + _CHAINE)
+_AUCUN = re.compile(r"\baucun=" + _CHAINE)
+_JS_TP = re.compile(r"\bTP\([^\"]*" + _CHAINE + r"\s*,\s*" + _CHAINE)
 _KW = {"page": ("titre", "message", "erreur"), "redirection": ("message", "erreur")}
 
 
 def cles_gabarits() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for f in sorted(GABARITS.rglob("*.j2")):
-        for m in _JINJA.finditer(f.read_text(encoding="utf-8")):
+        texte = f.read_text(encoding="utf-8")
+        for m in _JINJA.finditer(texte):
             brut = m.group(1) if m.group(1) is not None else m.group(2)
             out.setdefault(brut.replace('\\"', '"').replace("\\'", "'"), set()).add(f.name)
+        for m in (*_PLURIEL.finditer(texte), *_AUCUN.finditer(texte)):
+            for brut in m.groups():
+                out.setdefault(brut.replace('\\"', '"'), set()).add(f.name)
     return out
 
 
@@ -47,6 +57,9 @@ def cles_python() -> dict[str, set[str]]:
             valeurs: list[ast.expr] = []
             if nom in ("_", "traduire", "N_") and n.args:
                 valeurs.append(n.args[0])
+            if nom in ("pluriel", "accord"):
+                valeurs.extend(n.args[:2])
+                valeurs.extend(kw.value for kw in n.keywords if kw.arg == "aucun")
             for kw in n.keywords:
                 if kw.arg in _KW.get(nom or "", ()):
                     valeurs.append(kw.value)
@@ -57,7 +70,8 @@ def cles_python() -> dict[str, set[str]]:
 
 
 def cles_js() -> set[str]:
-    return {m.group(1) for m in _JS.finditer((RACINE_WEB / "static" / "app.js").read_text(encoding="utf-8"))}
+    texte = (RACINE_WEB / "static" / "app.js").read_text(encoding="utf-8")
+    return {m.group(1) for m in _JS.finditer(texte)} | {x for m in _JS_TP.finditer(texte) for x in m.groups()}
 
 
 def libelles_fixes() -> set[str]:

@@ -229,11 +229,13 @@ def test_mcp_refuse_un_acteur_non_client(monde):
 # --- garde-fous sur les pages rendues ---------------------------------------------------------------------------
 
 
-def _verifier(page) -> None:
+def _verifier(page, avertissement: bool = True) -> None:
+    """Garde-fous du texte affiché ; ``avertissement`` : l'avertissement exact est au pied (pages du client, pages
+    du fondateur qui montrent des constats) ou absent (autres pages du fondateur, pied neutre)."""
     assert page.status_code == 200, page.text[:300]
     texte = texte_visible(page.text)
     assert check_text(texte) == [], check_text(texte)[:3]
-    assert AVERTISSEMENT in texte
+    assert (AVERTISSEMENT in texte) == avertissement
 
 
 def test_garde_fous_pages_fondateur(monde):
@@ -251,9 +253,10 @@ def test_garde_fous_pages_fondateur(monde):
         "/admin/autonomie",
         "/compte/mot-de-passe",
     ]
-    urls += [f"/admin/clients/{t}/dossiers/{d}" for t in (A, B) for d in monde.ids[t]["dossier"]]
     for url in urls:
-        _verifier(f.get(url))
+        _verifier(f.get(url), avertissement=url == "/admin/validation")
+    for url in [f"/admin/clients/{t}/dossiers/{d}" for t in (A, B) for d in monde.ids[t]["dossier"]]:
+        _verifier(f.get(url))  # constats affichés : avertissement exact au pied
     assert "DONNÉES FICTIVES" in f.get(f"/admin/clients/{A}").text
 
 

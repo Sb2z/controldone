@@ -108,6 +108,10 @@ def integrer_depot(db: Database, vault: Any, depot: Depot) -> ResultatDepot:
                 "reference": depot.reference,
                 "message_id": depot.message_id,
                 **{k: v for k, v in depot.meta.items() if k in ("facture_pa_id", "controle_avant_paiement")},
+                # mêmes compteurs qu'un dépôt par l'interface (services/depot.py) : « Dépôts récents »
+                "fichiers": res.fichiers,
+                "doublons": res.doublons,
+                "refuses": res.refuses,
             }
             for f, ref in zip(reception.fichiers, refs, strict=True):
                 sc.enregistrer_fichier(f.fichier, lot_id=lot_id, coffre_ref=ref)

@@ -151,7 +151,7 @@ def test_import_apercu_puis_confirmation(monde):
     ).encode()
     t = jeton(c.get(f"{B}/importer").text)
     r = c.post(f"{B}/importer", data={"csrf": t}, files={"fichier": ("f.csv", csv_, "text/csv")})
-    assert r.status_code == 200 and "IMPORTE FICTIF" in r.text and "Importer 1 prospect(s)" in r.text
+    assert r.status_code == 200 and "IMPORTE FICTIF" in r.text and "Importer 1 prospect" in r.text
     assert "Exclu" in r.text
     contenu = re.search(r'name="contenu" value="([^"]+)"', r.text).group(1)
     r = c.post(
@@ -161,7 +161,7 @@ def test_import_apercu_puis_confirmation(monde):
         follow_redirects=False,
     )
     assert r.status_code == 303
-    assert "1 prospect(s) importé(s)" in _flash(c, r.headers["location"])
+    assert "1 prospect importé ;" in _flash(c, r.headers["location"])
     assert "IMPORTE FICTIF" in c.get(f"{B}/prospects?q=importe").text
     r = c.post(
         f"{B}/importer",
@@ -198,7 +198,7 @@ def test_recherche_par_un_double_puis_ajout(monde):
         c, page, page, {"naf": "46.49Z", "tranche": ["21", "99"], "region": "84", "departement": "69"}
     )
     assert r.status_code == 200 and "CANDIDAT FICTIF" in r.text and "LESAGE" not in r.text
-    assert "1 écarté(s)" in r.text
+    assert "1 écarté par la liste d&#39;exclusion" in r.text
     r = _poster(c, page, f"{page}/ajouter", {"siren": SIREN})
     assert r.status_code == 303 and r.headers["location"].startswith(f"{B}/prospects/prs_")
     r = _poster(c, page, f"{page}/ajouter", {"siren": "552100554"})
@@ -251,7 +251,7 @@ def test_sequence_validation_et_envoi_declare(monde, identite):
     tableau = c.get(B).text
     assert "Réponses à traiter" in tableau
     r = _poster(c, f"{B}/courriels", f"{B}/courriels/etapes")
-    assert "0 étape(s) préparée(s)" in _flash(c, f"{B}/courriels")
+    assert "Aucune étape préparée." in _flash(c, f"{B}/courriels")
 
 
 def test_actions_de_la_fiche(monde):
@@ -319,7 +319,7 @@ def test_sequences_opposition_purge_et_arret(monde, identite):
     r = _poster(c, op, op, {"adresse": "pas une adresse", "motif": "plainte"})
     assert "Adresse électronique invalide" in _flash(c, op)
     r = _poster(c, op, f"{B}/purger")
-    assert "0 prospect(s) purgé(s)" in _flash(c, op)
+    assert "Aucun prospect purgé." in _flash(c, op)
     fiche = f"{B}/prospects/prs_demo_1"
     r = _poster(c, fiche, f"{fiche}/sequence", {"contact_id": "pct_demo_1", "sequence_id": "seq_defaut"})
     assert "liste d'opposition" in _flash(c, fiche)

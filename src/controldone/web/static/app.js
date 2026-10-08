@@ -29,6 +29,12 @@
     if (params) { Object.keys(params).forEach(function (k) { t = t.split("{" + k + "}").join(String(params[k])); }); }
     return t;
   }
+  /* accord en nombre (singulier pour 0 et 1 en français, pour 1 seulement en anglais) : deux textes du catalogue */
+  function TP(n, un, plusieurs, params) {
+    var p = { n: n };
+    if (params) { Object.keys(params).forEach(function (k) { p[k] = params[k]; }); }
+    return (ANGLAIS ? n === 1 : Math.abs(n) < 2) ? T(un, p) : T(plusieurs, p);
+  }
   function anime(el, kf, opts) {
     if (bouge()) { return M.animate(el, kf, opts); }
     return null;
@@ -76,8 +82,8 @@
   function compteurs() {
     if (!bouge()) { return; }
     $$(".kpi-val, [data-compteur]").forEach(function (bloc) {
-      // seulement ce qui est visible au chargement : plus bas, la valeur exacte reste affichée (captures, impression)
-      if (bloc.getBoundingClientRect().top > window.innerHeight) { return; }
+      // seulement ce qui est visible au chargement : ailleurs, la valeur exacte reste affichée (captures, impression)
+      if (!visible(bloc)) { return; }
       var cible = bloc.querySelector("a") || bloc;
       var texte = cible.textContent.trim();
       var m = MOTIF_NOMBRE.exec(texte);
@@ -87,26 +93,64 @@
       var valeur = entier + (decimales ? (entier < 0 ? -1 : 1) * parseInt(m[3], 10) / Math.pow(10, decimales) : 0);
       if (!isFinite(valeur) || valeur === 0) { return; }
       var fmt = new Intl.NumberFormat(ANGLAIS ? "en-GB" : "fr-FR", { minimumFractionDigits: decimales, maximumFractionDigits: decimales });
+      var duree = Math.min(0.9, 0.45 + Math.log10(Math.abs(valeur) + 1) * 0.08);
+      function exacte() { cible.textContent = texte; }
       cible.textContent = m[1] + fmt.format(0) + m[4];
-      M.inView(bloc, function () {
+      try {
         M.animate(0, valeur, {
-          duration: Math.min(0.9, 0.45 + Math.log10(Math.abs(valeur) + 1) * 0.08), ease: EASE,
+          duration: duree, ease: EASE,
           onUpdate: function (v) { cible.textContent = m[1] + fmt.format(v) + m[4]; },
-          onComplete: function () { cible.textContent = texte; }
+          onComplete: exacte
         });
-      });
+      } catch (err) { exacte(); return; }
+      // filet de sécurité : la valeur exacte du serveur revient quoi qu'il arrive à l'animation
+      window.setTimeout(exacte, duree * 1000 + 400);
     });
   }
 
-  /* --- barres de proportion ------------------------------------------------------------------------------------ */
+  /* --- croissance des barres (proportions, jauges, graphiques) ----------------------------------------------------------
+     L'état final (échelle 1) est celui du HTML et du CSS : sans script ou en mouvement réduit, les barres sont pleines.
+     L'échelle 0 n'existe que pendant une animation déjà lancée, et un minuteur rétablit l'état final même si l'animation
+     est interrompue. On observe le conteneur visible (tableau, figure, piste de la jauge), jamais la barre : à l'échelle 0
+     elle n'a plus de surface et, dans un tableau qui défile, l'observateur ne la signale jamais. */
+  function visible(el) {
+    var r = el.getBoundingClientRect();
+    return r.bottom > 0 && r.top < window.innerHeight && r.width > 0 && r.height > 0;
+  }
+  function pousser(conteneur, elements, axe) {
+    if (!bouge() || !conteneur || !elements.length) { return; }
+    var lance = false;
+    function lancer() {
+      if (lance) { return; }
+      lance = true;
+      var duree = 0.6, depart = 0.1, pas = 0.04;
+      elements.forEach(function (e) { e.style.transform = axe + "(0)"; });
+      function fin() { elements.forEach(function (e) { e.style.transform = ""; }); }
+      try {
+        var a = M.animate(elements, { transform: [axe + "(0)", axe + "(1)"] }, { duration: duree, ease: EASE, delay: M.stagger(pas, { startDelay: depart }) });
+        if (a && a.finished) { a.finished.then(fin, fin); }
+      } catch (err) { fin(); return; }
+      // filet de sécurité : état final posé après la durée prévue, quoi qu'il arrive à l'animation
+      window.setTimeout(fin, (depart + duree + pas * elements.length) * 1000 + 400);
+    }
+    if (visible(conteneur)) { lancer(); return; }
+    // Plus bas dans la page : rien n'est masqué d'avance (impression, captures, observateur muet). L'animation part
+    // quand le conteneur approche du bas de l'écran (marge positive : il est encore hors de la vue).
+    M.inView(conteneur, function () { lancer(); }, { margin: "0px 0px 15% 0px" });
+  }
+
+  /* --- barres de proportion et jauges : regroupées par tableau (ou par piste hors tableau) ------------------------------ */
   function barres() {
     if (!bouge()) { return; }
-    $$(".barre > span, .jauge > span").forEach(function (b, i) {
-      b.style.transform = "scaleX(0)";
-      M.inView(b, function () {
-        M.animate(b, { transform: ["scaleX(0)", "scaleX(1)"] }, { duration: 0.6, ease: EASE, delay: 0.1 + (i % 8) * 0.04 });
-      });
+    var groupes = [];
+    $$(".barre > span, .jauge > span").forEach(function (b) {
+      var conteneur = b.closest("table") || b.parentElement;
+      var g = null;
+      groupes.forEach(function (x) { if (x.conteneur === conteneur) { g = x; } });
+      if (!g) { g = { conteneur: conteneur, elements: [] }; groupes.push(g); }
+      g.elements.push(b);
     });
+    groupes.forEach(function (g) { pousser(g.conteneur, g.elements, "scaleX"); });
   }
 
   /* --- pastille de navigation qui glisse (ressort sans rebond) ---------------------------------------------------- */
@@ -331,7 +375,7 @@
     function afficher() {
       var n = champ.files.length, total = 0;
       for (var i = 0; i < n; i++) { total += champ.files[i].size; }
-      resume.textContent = n ? T("{n} fichier(s) prêt(s) à envoyer, {taille}", { n: n, taille: taille(total) }) : "";
+      resume.textContent = n ? TP(n, "{n} fichier prêt à envoyer, {taille}", "{n} fichiers prêts à envoyer, {taille}", { taille: taille(total) }) : "";
       if (zone) { zone.classList.toggle("rempli", n > 0); }
       if (liste) {
         liste.textContent = "";
@@ -341,7 +385,7 @@
           var em = document.createElement("em"); em.textContent = taille(champ.files[j].size);
           li.appendChild(s); li.appendChild(em); liste.appendChild(li);
         }
-        if (n > 40) { var plus = document.createElement("li"); plus.textContent = T("+ {n} autre(s)", { n: n - 40 }); liste.appendChild(plus); }
+        if (n > 40) { var plus = document.createElement("li"); plus.textContent = TP(n - 40, "+ {n} autre", "+ {n} autres"); liste.appendChild(plus); }
         if (bouge() && n) {
           M.animate($$("li", liste), { opacity: [0, 1], y: [6, 0] }, { duration: D.moyenne, ease: EASE, delay: M.stagger(0.03) });
         }
@@ -356,7 +400,7 @@
       var b = form.querySelector("button[type=submit]");
       b.disabled = true; b.textContent = T("Envoi en cours…");
       if (resume && champ.files.length) {
-        resume.textContent = T("Envoi de {n} fichier(s) en cours. Gardez cette page ouverte.", { n: champ.files.length });
+        resume.textContent = TP(champ.files.length, "Envoi de {n} fichier en cours. Gardez cette page ouverte.", "Envoi de {n} fichiers en cours. Gardez cette page ouverte.");
       }
     });
   }
@@ -523,14 +567,7 @@
   function graphes() {
     if (!bouge()) { return; }
     $$(".graphe").forEach(function (fig) {
-      var rects = $$(".g-barre", fig);
-      // seulement les graphiques visibles au chargement : plus bas, ils restent tels que rendus (captures, impression)
-      if (!rects.length || fig.getBoundingClientRect().top > window.innerHeight) { return; }
-      var axe = fig.classList.contains("graphe-colonnes") ? "scaleY" : "scaleX";
-      rects.forEach(function (r) { r.style.transform = axe + "(0)"; });
-      M.inView(fig, function () {
-        M.animate(rects, { transform: [axe + "(0)", axe + "(1)"] }, { duration: 0.6, ease: EASE, delay: M.stagger(0.04) });
-      });
+      pousser(fig, $$(".g-barre", fig), fig.classList.contains("graphe-colonnes") ? "scaleY" : "scaleX");
     });
   }
 

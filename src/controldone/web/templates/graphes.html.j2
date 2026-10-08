@@ -24,7 +24,7 @@
       {% for b in g.barres %}
       <g class="g-item">
         <text class="g-lib" x="{{ b.tx }}" y="{{ b.ty }}" text-anchor="end">{{ b.court }}</text>
-        <rect class="g-fond" x="{{ b.x }}" y="{{ b.y }}" width="{{ g.largeur - 340 }}" height="{{ b.hauteur }}" rx="4"/>
+        <rect class="g-fond" x="{{ b.x }}" y="{{ b.y }}" width="{{ g.largeur_zone }}" height="{{ b.hauteur }}" rx="4"/>
         <rect class="g-barre" x="{{ b.x }}" y="{{ b.y }}" width="{{ b.largeur }}" height="{{ b.hauteur }}" rx="4"><title>{{ b.libelle }} : {{ b.texte }}</title></rect>
         <text class="g-val" x="{{ b.vx }}" y="{{ b.vy }}">{{ b.texte }}</text>
       </g>

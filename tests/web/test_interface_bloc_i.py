@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from aides_web import ADMIN_A, ADMIN_B, LECTEUR_A, connecter_client, connecter_fondateur, jeton, poster
+from francais_visible import segments_visibles
 from i18n_cles import GABARITS, cles_js, toutes
 
 from controldone.guardrails import AVERTISSEMENT, check_text
@@ -145,6 +146,21 @@ def _rendus(monkeypatch) -> set[str]:
     return vus
 
 
+#: Phrase de service du pied des pages du client (jamais sur les pages du fondateur).
+MENTION_CLIENT = (
+    "ControlDOne compare vos documents d'import entre eux et chiffre les écarts. Les relevés vous sont remis : "
+    "vous décidez seul de ce que vous en faites."
+)
+#: Pluriel « machine » à l'écran : « constat(s) », « publié(e)s », « anomaly(ies) »…
+PLURIEL_MACHINE = re.compile(r"\w\((?:e?s|ies|e|x)\)")
+
+
+def _constats_affiches(url: str) -> bool:
+    """Pages du fondateur qui montrent des constats (dossier, file de validation) : l'avertissement exact reste au
+    pied (SPEC §3.4) ; les autres pages du fondateur ont un pied neutre."""
+    return "/dossiers/" in url or url == "/admin/validation"
+
+
 @pytest.mark.parametrize("langue", ["fr", "en"])
 def test_toutes_les_pages_dans_les_deux_langues(monde, monkeypatch, langue):
     vus = _rendus(monkeypatch)
@@ -161,9 +177,16 @@ def test_toutes_les_pages_dans_les_deux_langues(monde, monkeypatch, langue):
             assert f'<html lang="{langue}">' in r.text, url
             texte = texte_visible(r.text)
             assert check_text(texte) == [], (url, check_text(texte)[:2])
-            assert AVERTISSEMENT in texte, url  # texte juridique exact, en français, dans les deux langues
+            # pied : avertissement exact et phrase de service sur les pages du client ; pied neutre chez le
+            # fondateur, sauf sur les pages qui montrent des constats (avertissement exact seul)
+            avertissement = qui == "client" or _constats_affiches(url)
+            assert (AVERTISSEMENT in texte) == avertissement, url  # texte juridique exact, en français
+            assert (traduire(MENTION_CLIENT, langue) in texte) == (qui == "client"), url
+            # aucun pluriel « machine » hors des textes des constats et du journal (régions lang="fr")
+            machines = [x for x in segments_visibles(r.text) if PLURIEL_MACHINE.search(x)]
+            assert machines == [], (url, machines[:3])
             if langue == "en":
-                assert AVERTISSEMENT_EN in texte and "Courtesy translation" in texte, url
+                assert (AVERTISSEMENT_EN in texte and "Courtesy translation" in texte) == avertissement, url
                 assert not francais_seul.search(re.sub(r'<[^>]*lang="fr"[^>]*>.*?</[^>]+>', " ", r.text)), url
             else:
                 assert AVERTISSEMENT_EN not in texte
