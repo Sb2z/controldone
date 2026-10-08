@@ -61,7 +61,8 @@
   --ombre-haute: 0 1px 2px rgba(23, 32, 42, .05), 0 24px 48px -24px rgba(23, 32, 42, .22);
   --rayon: 12px;
   --rayon-petit: 8px;
-  /* typographie (D-5202) : titres en serif, interface en Inter à chiffres tabulaires, preuves en chasse fixe */
+  /* typographie (D-5202) : titres en serif, interface en Inter (chiffres tabulaires là seulement où les nombres
+     s'alignent, voir « base »), preuves en chasse fixe */
   --serif: "Source Serif 4", "Iowan Old Style", Georgia, "Times New Roman", serif;
   --police: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -115,7 +116,7 @@ body {
   margin: 0; font-family: var(--police); font-size: 15px; line-height: 1.55; color: var(--encre);
   background: var(--fond); display: flex; flex-direction: column; min-height: 100vh;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
-  font-feature-settings: "tnum" 1, "cv11" 1; font-optical-sizing: auto;
+  font-feature-settings: "cv11" 1; font-optical-sizing: auto;
 }
 ::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--encre); }
 a { color: var(--accent); text-decoration: none; transition: color var(--duree-micro) var(--courbe-standard); }
@@ -130,6 +131,11 @@ h3 { font-family: var(--police); font-size: .95rem; font-weight: 600; letter-spa
 code { font-family: var(--mono); font-size: .82em; background: var(--surface-2); border: 1px solid var(--filet-2); padding: .08em .4em; border-radius: 5px; word-break: break-all; color: var(--encre); }
 pre { font-family: var(--mono); }
 .num, td.num, th.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+/* Chiffres tabulaires seulement où les nombres s'alignent ou défilent : colonnes numériques et indicateurs (.num),
+   montants mis en avant et compteurs animés (largeur stable pendant le défilement), chasse fixe. Pas sur le texte
+   courant : dans Inter, « tnum » donne aussi au trait d'union la largeur d'un chiffre (« FT-FIC-0501 » paraissait
+   espacé comme une coquille). */
+[data-compteur], .bilan-chiffre, .bilan-dossier dd, code, pre, kbd, samp { font-variant-numeric: tabular-nums; }
 td.num, .constat-montant .num { font-family: var(--mono); }
 td.num { font-size: .86em; }
 .discret { color: var(--encre-3); }
@@ -232,7 +238,7 @@ td.num { font-size: .86em; }
 .pied .avertissement strong { color: var(--encre-2); font-weight: 600; }
 .pied .mentions { padding-bottom: 1.5rem; }
 .pied-interne .mentions { padding-top: .8rem; padding-bottom: 1rem; }
-/* Écart certain qui ne se demande pas au transitaire : montant affiché, note « hors recouvrement » dessous */
+/* Écart certain qui ne se demande pas au transitaire : montant affiché, note « non recouvrable » dessous */
 .hors-recouvrement { display: inline-flex; flex-direction: column; align-items: flex-end; color: var(--encre-2); }
 .hors-recouvrement small { font-family: var(--police); font-size: .72rem; color: var(--encre-3); white-space: nowrap; }
 
@@ -367,10 +373,18 @@ td.vide { padding: 1.4rem .75rem; }
 .barre > span, .jauge > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); transform-origin: 0 50%; }
 .jauge-alerte > span { background: var(--verifier); }
 .jauge-stop > span { background: var(--certain); }
-.w-0 { width: 0; } .w-5 { width: 5%; } .w-10 { width: 10%; } .w-15 { width: 15%; } .w-20 { width: 20%; }
-.w-25 { width: 25%; } .w-30 { width: 30%; } .w-35 { width: 35%; } .w-40 { width: 40%; } .w-45 { width: 45%; }
-.w-50 { width: 50%; } .w-55 { width: 55%; } .w-60 { width: 60%; } .w-65 { width: 65%; } .w-70 { width: 70%; }
-.w-75 { width: 75%; } .w-80 { width: 80%; } .w-85 { width: 85%; } .w-90 { width: 90%; } .w-95 { width: 95%; } .w-100 { width: 100%; }
+/* largeur au pour cent près (w-0 à w-100) : une barre peut montrer exactement le pourcentage écrit à côté */
+.w-0 { width: 0; } .w-1 { width: 1%; } .w-2 { width: 2%; } .w-3 { width: 3%; } .w-4 { width: 4%; } .w-5 { width: 5%; } .w-6 { width: 6%; } .w-7 { width: 7%; } .w-8 { width: 8%; } .w-9 { width: 9%; }
+.w-10 { width: 10%; } .w-11 { width: 11%; } .w-12 { width: 12%; } .w-13 { width: 13%; } .w-14 { width: 14%; } .w-15 { width: 15%; } .w-16 { width: 16%; } .w-17 { width: 17%; } .w-18 { width: 18%; } .w-19 { width: 19%; }
+.w-20 { width: 20%; } .w-21 { width: 21%; } .w-22 { width: 22%; } .w-23 { width: 23%; } .w-24 { width: 24%; } .w-25 { width: 25%; } .w-26 { width: 26%; } .w-27 { width: 27%; } .w-28 { width: 28%; } .w-29 { width: 29%; }
+.w-30 { width: 30%; } .w-31 { width: 31%; } .w-32 { width: 32%; } .w-33 { width: 33%; } .w-34 { width: 34%; } .w-35 { width: 35%; } .w-36 { width: 36%; } .w-37 { width: 37%; } .w-38 { width: 38%; } .w-39 { width: 39%; }
+.w-40 { width: 40%; } .w-41 { width: 41%; } .w-42 { width: 42%; } .w-43 { width: 43%; } .w-44 { width: 44%; } .w-45 { width: 45%; } .w-46 { width: 46%; } .w-47 { width: 47%; } .w-48 { width: 48%; } .w-49 { width: 49%; }
+.w-50 { width: 50%; } .w-51 { width: 51%; } .w-52 { width: 52%; } .w-53 { width: 53%; } .w-54 { width: 54%; } .w-55 { width: 55%; } .w-56 { width: 56%; } .w-57 { width: 57%; } .w-58 { width: 58%; } .w-59 { width: 59%; }
+.w-60 { width: 60%; } .w-61 { width: 61%; } .w-62 { width: 62%; } .w-63 { width: 63%; } .w-64 { width: 64%; } .w-65 { width: 65%; } .w-66 { width: 66%; } .w-67 { width: 67%; } .w-68 { width: 68%; } .w-69 { width: 69%; }
+.w-70 { width: 70%; } .w-71 { width: 71%; } .w-72 { width: 72%; } .w-73 { width: 73%; } .w-74 { width: 74%; } .w-75 { width: 75%; } .w-76 { width: 76%; } .w-77 { width: 77%; } .w-78 { width: 78%; } .w-79 { width: 79%; }
+.w-80 { width: 80%; } .w-81 { width: 81%; } .w-82 { width: 82%; } .w-83 { width: 83%; } .w-84 { width: 84%; } .w-85 { width: 85%; } .w-86 { width: 86%; } .w-87 { width: 87%; } .w-88 { width: 88%; } .w-89 { width: 89%; }
+.w-90 { width: 90%; } .w-91 { width: 91%; } .w-92 { width: 92%; } .w-93 { width: 93%; } .w-94 { width: 94%; } .w-95 { width: 95%; } .w-96 { width: 96%; } .w-97 { width: 97%; } .w-98 { width: 98%; } .w-99 { width: 99%; }
+.w-100 { width: 100%; }
 
 /* --- badges -------------------------------------------------------------------------------------------------------- */
 .badge {
@@ -467,7 +481,8 @@ form.en-ligne { display: inline; }
 .lien { background: none; border: 0; padding: 0; font: inherit; color: var(--encre-2); cursor: pointer; }
 .lien:hover { color: var(--encre); }
 .petit-lien { font-size: .82rem; margin-left: .7rem; white-space: nowrap; font-weight: 500; text-decoration: none !important; }
-.petit-lien::after { content: " →"; display: inline-block; transition: transform var(--duree-courte) var(--courbe-entree); }
+/* écart par une marge : l'espace en tête d'un contenu inline-block est supprimé (« d'écarts→ » collé) */
+.petit-lien::after { content: "→"; margin-left: .3em; display: inline-block; transition: transform var(--duree-courte) var(--courbe-entree); }
 .petit-lien:hover::after { transform: translateX(2px); }
 .petit-lien:first-child { margin-left: 0; }
 

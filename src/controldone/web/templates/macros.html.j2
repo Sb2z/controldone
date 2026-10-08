@@ -21,8 +21,50 @@
 
 {% macro csrf_champ(csrf) -%}<input type="hidden" name="csrf" value="{{ csrf }}">{%- endmacro %}
 
+{# Colonne « Écart certain » des listes de dossiers du client : montant recouvrable certain du dossier ; pour un
+   dossier « Écart certain » sans montant recouvrable (écart de calcul sur la déclaration…), le montant de ses écarts
+   certains, marqué « non recouvrable » : il n'entre pas dans le montant recouvrable certain. #}
+{% macro montant_ecart_certain(d, hors_recouvrement) -%}
+{% if d.recouvrable_certain %}{{ d.recouvrable_certain|montant }}{% elif d.statut_code == "ecart_certain" %}{% set h = hors_recouvrement.get(d.id) %}<span class="hors-recouvrement" title="{{ _("Écart certain qui ne se demande pas au transitaire (par exemple un écart de calcul sur la déclaration) : il n'entre pas dans le montant recouvrable certain.") }}">{{ h|montant if h else "—" }}<small>{{ _("non recouvrable") }}</small></span>{% else %}—{% endif %}
+{%- endmacro %}
+
+{# Légende du montant d'un constat : un montant recouvrable n'est pas toujours une taxe refacturée (prix au-dessus
+   de la grille, facturation en double, écart de calcul sur la facture du transitaire). Correspondance tirée de la
+   liste des contrôles (controls/specs.py) ; un contrôle recouvrable non listé reçoit une légende neutre. #}
+{% macro legende_montant(c) -%}
+{% set id = c.controle_id %}
+{% if c.nature_code != "recouvrable" %}{{ _(c.nature) }}
+{%- elif id in ("C1", "C2", "C3", "C4", "C5", "G4", "G5") %}{{ _("Écart sur les droits et taxes refacturés (montant recouvrable)") }}
+{%- elif id in ("D2", "D3", "D4", "D6", "D7", "D9") %}{{ _("Écart avec la grille tarifaire (montant recouvrable)") }}
+{%- elif id in ("D5", "F3", "F4") %}{{ _("Facturation en double (montant recouvrable)") }}
+{%- elif id == "D1" %}{{ _("Écart de calcul sur la facture du transitaire (montant recouvrable)") }}
+{%- elif id == "C6" %}{{ _("Frais d'avance de fonds sur un excédent de débours (montant recouvrable)") }}
+{%- elif id == "D8" %}{{ _("TVA facturée sur une ligne de débours (montant recouvrable)") }}
+{%- elif id == "E6" %}{{ _("Reste après un avoir partiel (montant recouvrable)") }}
+{%- else %}{{ _("Écart recouvrable") }}
+{%- endif %}
+{%- endmacro %}
+
+{# Libellé d'une valeur lue sur un document selon son type (``TypeValeur``, fourni par la page) : un code ou un
+   numéro ne doit pas se lire comme un montant. Sans type connu : libellé neutre. #}
+{% macro libelle_lu(t, sur_document) -%}
+{% if t == "montant" %}{{ _("Montant lu :") }}
+{%- elif t == "taux" %}{{ _("Taux lu :") }}
+{%- elif t == "date" %}{{ _("Date lue :") }}
+{%- elif t == "quantite" %}{{ _("Quantité lue :") }}
+{%- elif t == "masse" %}{{ _("Masse lue :") }}
+{%- elif t == "unite" %}{{ _("Unité lue :") }}
+{%- elif t in ("decimal", "entier") %}{{ _("Nombre lu :") }}
+{%- elif t in ("code", "pays", "devise", "incoterm") %}{{ _("Code lu :") }}
+{%- elif t in ("reference", "tva", "siren", "eori") %}{{ _("Numéro lu :") }}
+{%- elif sur_document %}{{ _("Lu sur le document :") }}
+{%- else %}{{ _("Valeur lue :") }}
+{%- endif %}
+{%- endmacro %}
+
 {# Constat : les deux valeurs côte à côte, la tolérance, la raison, le montant, la preuve (§3.1, §7.7) #}
-{% macro constat_carte(c, extraits, base, csrf, retour, fondateur=False, tenant_id=None, client=None, dossier=None) -%}
+{# ``types`` : type de la valeur lue de chaque preuve, ``{(constat_id, index): TypeValeur}`` (facultatif). #}
+{% macro constat_carte(c, extraits, base, csrf, retour, fondateur=False, tenant_id=None, client=None, dossier=None, types=None) -%}
 <article class="constat {{ 'renvoi' if c.renvoi else c.niveau_code }}" id="constat-{{ c.id }}">
   <header class="constat-tete">
     <div class="constat-titre">
@@ -32,7 +74,7 @@
       {% if client %}<span class="contexte">· {{ client }}{% if dossier %} · {{ dossier }}{% endif %}</span>{% endif %}
     </div>
     <div class="constat-montant">
-      {% if c.montant_valeur is not none %}<span class="num">{{ c.montant_valeur|montant }}</span>{% endif %}<span class="nature">{{ _(c.nature) }}</span>
+      {% if c.montant_valeur is not none %}<span class="num">{{ c.montant_valeur|montant }}</span>{% endif %}<span class="nature">{{ legende_montant(c) }}</span>
     </div>
   </header>
   <p class="libelle" lang="fr">{{ c.libelle }}</p>
@@ -62,7 +104,7 @@
       </figcaption>
       {% set img = extraits.get((c.id, p.index)) %}
       {% if img %}<img src="data:image/png;base64,{{ img|b64 }}" alt="{{ _("Extrait de la page {n} : valeur lue {v}", n=p.page, v=p.valeur_lue or "") }}" loading="lazy">{% endif %}
-      {% if p.valeur_lue %}<div class="valeur-lue"><span>{{ _("Valeur lue :") }}</span> <code>{{ p.valeur_lue }}</code></div>{% endif %}
+      {% if p.valeur_lue %}<div class="valeur-lue"><span>{{ libelle_lu(types.get((c.id, p.index)) if types else none, p.document_id) }}</span> <code>{{ p.valeur_lue }}</code></div>{% endif %}
       {% if p.calcul %}<div class="calcul">{% if p.document_id %}<span>{{ _("Calcul :") }}</span> {% endif %}<code>{{ p.calcul }}</code></div>{% endif %}
     </figure>
     {% endfor %}

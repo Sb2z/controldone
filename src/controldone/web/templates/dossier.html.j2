@@ -26,7 +26,8 @@
   <h2 id="t-bilan-dossier">{{ _("Ce que ce dossier vous a fait récupérer") if bilan.credite > 0 else _("Suivi des écarts de ce dossier") }}</h2>
   <dl class="bilan-dossier">
     <div class="principal"><dt>{{ _("Avoirs reçus") }}</dt><dd data-compteur>{{ bilan.credite|montant }}</dd></div>
-    <div><dt>{{ _("Écarts suivis") }}</dt><dd>{{ bilan.initial|montant }}</dd></div>
+    {% if bilan.a_confirmer > 0 %}<div><dt>{{ _("Montant recouvrable") }}</dt><dd>{{ bilan.initial|montant }} <small>{{ _("dont {m} à confirmer", m=bilan.a_confirmer|montant) }}</small></dd></div>
+    {% else %}<div><dt>{{ _("Montant recouvrable certain") }}</dt><dd>{{ bilan.initial|montant }}</dd></div>{% endif %}
     <div><dt>{{ _("Reste sans avoir") }}</dt><dd>{{ bilan.reste|montant }}</dd></div>
   </dl>
   {% if bilan.reste > 0 %}<p class="discret">{{ _("Quand un avoir arrive pour ce dossier, enregistrez-le dans le suivi : le montant s'ajoutera ici.") }} <a href="/espace/recouvrement?q={{ d.reference|urlencode }}">{{ _("Ouvrir le suivi des avoirs") }}</a></p>{% endif %}
@@ -37,7 +38,7 @@
   <h2 id="t-constats">{{ _("Constats") }} {% if not fondateur %}<span class="discret">{{ _("publiés") }}</span>{% endif %} <span class="compteur">{{ lu.constats|length }}</span></h2>
   {% if fondateur %}<p class="discret">{{ _("Valider publie le constat au client. Un « à vérifier » ne devient « écart certain » qu'après correction ou confirmation de la valeur douteuse (le contrôle est relancé).") }}</p>{% endif %}
   {% for c in lu.constats %}
-    {{ constat_carte(c, img.extraits, base, csrf, retour, fondateur, client.id if fondateur else None) }}
+    {{ constat_carte(c, img.extraits, base, csrf, retour, fondateur, client.id if fondateur else None, types=types_lus if types_lus is defined else none) }}
   {% else %}
     <p class="vide carte">{% if fondateur %}{{ _("Aucun constat : tous les contrôles exécutés sont conformes, non applicables ou non vérifiables.") }}{% else %}{{ _("Aucun constat publié pour ce dossier. S'il est en relecture, il s'affichera ici.") }}{% endif %}</p>
   {% endfor %}

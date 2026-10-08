@@ -3,9 +3,10 @@
 {% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page"><h1>{{ _("Suivi des avoirs reçus") }}</h1>
-<p>{{ _("Les écarts validés et ce que vous en avez obtenu. Si vous écrivez à votre transitaire, c'est vous qui le faites. Enregistrez ici chaque avoir reçu, en montant hors taxes.") }}</p></div>
+<p>{{ _("Les écarts validés et les avoirs que vous en avez obtenus. C'est vous qui écrivez à votre transitaire, si vous le décidez : notez ici l'envoi de votre courrier, puis chaque avoir reçu avec son montant hors taxes.") }}</p></div>
 <section class="kpis" aria-label="{{ _("Totaux") }}">
-  <div class="kpi"><div class="kpi-lib">{{ _("Écarts constatés") }}</div><div class="kpi-val num">{{ totaux.initial|montant }}</div></div>
+  {% if a_confirmer > 0 %}<div class="kpi"><div class="kpi-lib">{{ _("Montant recouvrable") }}</div><div class="kpi-val num">{{ totaux.initial|montant }}</div><div class="kpi-note">{{ _("dont {m} à confirmer", m=a_confirmer|montant) }}</div></div>
+  {% else %}<div class="kpi"><div class="kpi-lib">{{ _("Montant recouvrable certain") }}</div><div class="kpi-val num">{{ totaux.initial|montant }}</div></div>{% endif %}
   <div class="kpi"><div class="kpi-lib">{{ _("Avoirs reçus") }}</div><div class="kpi-val num">{{ totaux.credite|montant }}</div></div>
   <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Reste sans avoir") }}</div><div class="kpi-val num">{{ totaux.reste|montant }}</div></div>
 </section>
@@ -36,15 +37,15 @@
   {% for x in p.elements %}
   <tr><th scope="row">{% if x.dossier_id %}<a href="/espace/dossiers/{{ x.dossier_id }}">{{ x.dossier_reference or x.dossier_id }}</a>{% else %}—{% endif %}{% if x.niveau == "a_verifier" %} <span class="badge b-verifier">{{ _("À confirmer") }}</span>{% endif %}</th>
     <td>{{ _(x.transitaire) }}</td><td>{{ _(x.composante) }}</td><td class="num">{{ x.montant_initial|montant }}</td><td class="num">{{ x.montant_credite|montant }}</td><td class="num">{{ x.reste|montant }}</td>
-    <td><span class="badge {{ {'credite': 'b-valide', 'abandonne': 'b-neutre', 'conteste': 'b-rejete', 'reclame': 'b-verifier', 'partiellement_credite': 'b-verifier'}.get(x.statut_code, 'b-propose') }}">{{ _(x.statut) }}</span>{% if x.age_jours is not none %}<br><span class="discret">{{ pluriel("envoyé il y a {n} jour", "envoyé il y a {n} jours", x.age_jours, aucun="envoyé aujourd'hui") }}{% if x.relance %} · {{ _("rappel suggéré ({n} jours)", n=x.relance.split("(")[1].split(" ")[0]) if "(" in x.relance else x.relance }}{% endif %}</span>{% endif %}</td>
+    <td><span class="badge {{ {'credite': 'b-valide', 'abandonne': 'b-neutre', 'conteste': 'b-rejete', 'reclame': 'b-verifier', 'partiellement_credite': 'b-verifier'}.get(x.statut_code, 'b-propose') }}">{{ _("Courrier envoyé") if x.statut_code == "reclame" else _(x.statut) }}</span>{% if x.age_jours is not none %}<br><span class="discret">{% if x.statut_code == "reclame" %}{{ pluriel("il y a {n} jour", "il y a {n} jours", x.age_jours, aucun="aujourd'hui") }}{% else %}{{ pluriel("courrier envoyé il y a {n} jour", "courrier envoyé il y a {n} jours", x.age_jours, aucun="courrier envoyé aujourd'hui") }}{% endif %}{% if x.relance %} · {{ _("rappel suggéré ({n} jours)", n=x.relance.split("(")[1].split(" ")[0]) if "(" in x.relance else x.relance }}{% endif %}</span>{% endif %}</td>
     {% if peut_declarer %}<td class="actions-registre">
       {% if x.statut_code in ("ouvert", "conteste") %}
-      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}"><button type="submit" class="btn btn-petit">{{ _("J'ai envoyé mon courrier") }}<span class="vh"> ({{ _("dossier {ref}", ref=x.dossier_reference or x.dossier_id) }}, {{ _(x.composante) }})</span></button></form>
+      <form method="post" action="/espace/recouvrement/{{ x.id }}/reclame" class="en-ligne">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}"><button type="submit" class="btn btn-petit">{{ _("Noter l'envoi du courrier") }}<span class="vh"> ({{ _("dossier {ref}", ref=x.dossier_reference or x.dossier_id) }}, {{ _(x.composante) }})</span></button></form>
       {% endif %}
       {% if x.statut_code not in ("credite", "abandonne") %}
       <details class="corriger"><summary>{{ _("Avoir reçu") }}<span class="vh"> ({{ _("dossier {ref}", ref=x.dossier_reference or x.dossier_id) }}, {{ _(x.composante) }})</span></summary>
       <form method="post" action="/espace/recouvrement/{{ x.id }}/avoir" class="formulaire compact">{{ csrf_champ(csrf) }}<input type="hidden" name="retour" value="{{ retour }}">
-        <label for="m-{{ x.id }}">{{ _("Montant (EUR)") }}</label><input id="m-{{ x.id }}" name="montant" inputmode="decimal" required maxlength="15">
+        <label for="m-{{ x.id }}">{{ _("Montant hors taxes (EUR)") }}</label><input id="m-{{ x.id }}" name="montant" inputmode="decimal" required maxlength="15">
         <label for="r-{{ x.id }}">{{ _("N° de l'avoir") }}</label><input id="r-{{ x.id }}" name="reference" maxlength="200">
         <button type="submit" class="btn btn-petit">{{ _("Enregistrer") }}</button></form></details>
       {% endif %}

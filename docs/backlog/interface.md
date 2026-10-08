@@ -97,3 +97,21 @@
   complète ; les libellés de graphiques (`web/graphes.py`) gardent « montant recouvrable certain ». À reprendre.
 - **Libellés des rapports.** Les objets de rapport produits par le moteur contiennent encore « — » (hors périmètre de
   l'interface, `rapport/`).
+
+## Relevé par la relecture des vidéos de démonstration (8 octobre 2026)
+
+Corrigé : nombre de fichiers d'un dépôt écrasé par le traitement (aussi pour les connecteurs), barres de graphiques
+restées vides, barres « Conversion par étape » sans rapport avec leur pourcentage, pied de page client sur les pages
+fondateur, pluriels « (s) », chiffres tabulaires qui élargissaient les traits d'union, trois noms pour un même montant,
+légende « Écart refacturé » sous les écarts de tarif, « Valeur lue » pour un code, voix mélangée du suivi des avoirs.
+
+Reste (petit) :
+- Téléphone (390 px) : `/espace/recouvrement` et `/espace/dossiers` défilent à l'horizontale (antérieur).
+- Pages fondateur (dossier, file de validation) : encore « Lu sur le document » neutre ; passer `types_preuves` depuis `routes_admin.py`.
+- Rapport PDF/HTML (`rapport/vue.py`) : légende « Écart refacturé (montant recouvrable) » sous tous les écarts, à aligner sur la page web.
+- Titres générés avec un tiret long : `services/publication.py` (« Rapport de diagnostic — … »), `litiges/` ; aujourd'hui reformatés à l'affichage.
+- `site/demo/report.html` à régénérer volontairement (titre avec tiret long).
+- Formats acceptés différents entre la page de connexion et la zone de dépôt.
+- « Tolérance appliquée » et « Seuil de certitude » sans unité sur les cartes de constat.
+- Marketing : « A qualifier » sans accent dans le graphique ; libellés de tuiles peu naturels (« envoi ou déclaration d'envoi »).
+- Démo : la référence de transport `999-12345675` utilise un préfixe de compagnie réel ; le devis `D-2026-001` ressemble au numéro de dossier.

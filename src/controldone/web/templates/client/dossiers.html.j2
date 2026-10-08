@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "macros.html.j2" import badge_niveau %}
+{% from "macros.html.j2" import badge_niveau, montant_ecart_certain %}
 {% from "listes.html.j2" import th_tri, nb_resultats, pagination, fin_filtres %}
 {% block contenu %}
 <div class="titre-page"><h1>{{ _("Dossiers") }}</h1><p>{{ _("Un dossier regroupe les documents d'un même envoi. Cherchez-le par référence, MRN ou numéro de facture.") }}</p></div>
@@ -26,7 +26,7 @@
   {% for d in p.elements %}
   <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td>
     {% for _lib, val in d.cles %}<td><code>{{ val }}</code></td>{% endfor %}
-    <td class="num">{{ d.nb_constats }}</td><td class="num">{{ d.recouvrable_certain|montant if d.recouvrable_certain else "—" }}</td></tr>
+    <td class="num">{{ d.nb_constats }}</td><td class="num">{{ montant_ecart_certain(d, hors_recouvrement) }}</td></tr>
   {% else %}<tr><td colspan="8" class="vide">{% if req.actif %}{{ _("Aucun dossier ne correspond à ces critères.") }} <a href="/espace/dossiers">{{ _("Afficher tous les dossiers") }}</a>.{% elif total_dossiers == 0 %}{{ _("Vos dossiers apparaîtront ici après votre premier dépôt.") }}{% if peut_deposer %} <a href="/espace/depot">{{ _("Déposer des documents") }}</a>{% endif %}{% else %}{{ _("Aucun dossier sur cette page.") }}{% endif %}</td></tr>{% endfor %}
   </tbody>
 </table>

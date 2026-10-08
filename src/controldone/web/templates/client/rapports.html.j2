@@ -6,7 +6,7 @@
 <section class="carte">
   <h2>{{ _("Rapports de diagnostic") }}</h2>
   {% if rapports %}
-  <ul class="liste-simple">{% for r in rapports %}<li class="rapport-ligne"><strong lang="fr">{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">{{ _("mis à disposition le {date}", date=r.envoye_le|date) }}</span><span lang="fr">{{ r.payload_effectif.get("corps") }}</span>
+  <ul class="liste-simple">{% for r in rapports %}<li class="rapport-ligne"><strong lang="fr">{{ titre_affiche(r.payload_effectif.get("objet")) }}</strong> <span class="discret">{{ _("mis à disposition le {date}", date=r.envoye_le|date) }}</span><span lang="fr">{{ r.payload_effectif.get("corps") }}</span>
     <span class="actions"><a class="petit-lien" href="/espace/rapports/{{ r.id }}/html?afficher=1">{{ _("Lire en ligne") }}</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">{{ _("Télécharger le PDF") }}</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/json">{{ _("Données JSON") }}</a></span></li>{% endfor %}</ul>
   {% else %}<p class="vide">{{ _("Votre rapport apparaîtra ici une fois les constats relus.") }}</p>{% endif %}
 </section>
@@ -14,7 +14,7 @@
   <h2>{{ _("Relevés d'écarts") }}</h2>
   <p class="discret">{{ _("Un relevé liste les écarts chiffrés avec un transitaire. Il se termine par un modèle de courrier neutre, à compléter si vous décidez d'écrire.") }} {{ _("Si vous envoyez un courrier, notez-le dans le") }} <a href="/espace/recouvrement">{{ _("suivi des avoirs reçus") }}</a>.</p>
   {% if reclamations %}
-  <ul class="liste-simple">{% for r in reclamations %}<li class="rapport-ligne"><strong lang="fr">{{ r.payload_effectif.get("objet") }}</strong> <span class="discret">{{ r.envoye_le|date }}</span>
+  <ul class="liste-simple">{% for r in reclamations %}<li class="rapport-ligne"><strong lang="fr">{{ titre_affiche(r.payload_effectif.get("objet")) }}</strong> <span class="discret">{{ r.envoye_le|date }}</span>
     <span class="actions"><a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/txt">{{ _("Texte à coller dans un courriel") }}</a></span></li>{% endfor %}</ul>
   {% else %}<p class="vide">{{ _("Aucun relevé pour l'instant. Il est préparé quand des écarts certains concernent un même transitaire.") }}</p>{% endif %}
 </section>

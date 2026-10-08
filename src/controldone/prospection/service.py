@@ -1340,12 +1340,19 @@ class ServiceProspection:
                         if e.prospect_id == p.id and e.vers in ETAPES_PIPELINE
                     ]
                 )
+        # conversion d'une étape à la suivante : « atteint / precedent » et son pourcentage entier (le même nombre
+        # sert au libellé et à la barre) ; sans prospect à l'étape précédente, pas de taux.
         conversion = []
         precedent = None
         for k, st in enumerate(ETAPES_PIPELINE):
             n = sum(1 for v in atteint.values() if v >= k)
             conversion.append(
-                {"statut": st, "atteint": n, "taux": (round(100 * n / precedent) if precedent else None)}
+                {
+                    "statut": st,
+                    "atteint": n,
+                    "precedent": precedent,
+                    "taux": (round(100 * n / precedent) if precedent else None),
+                }
             )
             precedent = n
         contactes = {e.prospect_id for e in evts if e.kind in ("envoi", "declaration_envoi")}

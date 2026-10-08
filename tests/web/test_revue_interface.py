@@ -1,7 +1,7 @@
 """Revue de l'interface (vidéo de contrôle, octobre 2026) : barres pleines sans script et animation à filet de
 sécurité, pied de page du client réservé aux pages du client, accords en nombre sans « (s) », preuves comptées
 exactement (extraits de page et calculs), libellés des graphiques sans tiret cadratin, sélecteur de statut du
-pipeline, écart certain hors recouvrement au tableau de bord du client. Données fictives."""
+pipeline, écart certain non recouvrable au tableau de bord du client. Données fictives."""
 
 from __future__ import annotations
 
@@ -213,7 +213,7 @@ def test_preuves_comptees_extraits_et_calculs():
     texte = texte_visible(html)
     assert "—" not in texte and "Calcul Calcul" not in texte
     assert "Valeur de référence Calcul forfait de 65,00 EUR" in texte
-    assert "Valeur lue : 95,00" in texte
+    assert "Lu sur le document : 95,00" in texte  # sans type de valeur connu : libellé neutre
     assert re.search(r"<summary>(.*?)</summary>", _carte(_constat([EXTRAIT, EXTRAIT])), re.S).group(1) == (
         "Preuves : 2 extraits de page"
     )
@@ -249,13 +249,13 @@ def test_selecteur_du_pipeline_ne_coupe_pas_le_libelle():
     assert re.search(r"flex:\s*1 1 9\.5rem", regles[".prosp-carte select"])
 
 
-# --- 8. écart certain hors recouvrement -----------------------------------------------------------------------------
+# --- 8. écart certain non recouvrable -------------------------------------------------------------------------------
 
 
-def test_ecart_certain_hors_recouvrement_au_tableau_de_bord(monde):
+def test_ecart_certain_non_recouvrable_au_tableau_de_bord(monde):
     """Dossier « Écart certain » dont l'écart certain ne se demande pas au transitaire (B1 : écart de calcul sur la
-    déclaration, démonstration du site Nord) : le montant s'affiche avec la note « hors recouvrement », et les
-    totaux recouvrables ne changent pas."""
+    déclaration, démonstration du site Nord) : le montant s'affiche avec la note « non recouvrable », et le
+    montant recouvrable certain ne change pas."""
     with monde.pf.db.tenant(B, Acteur.systeme("t"), lecture=True) as s:
         versions = {d.id: (d.version, d.reference) for d in s.lister(Dossier)}
         courants = [c for c in s.lister(Constat) if versions[c.dossier_id][0] == c.dossier_version]
@@ -270,7 +270,7 @@ def test_ecart_certain_hors_recouvrement_au_tableau_de_bord(monde):
     assert not [x for x in courants if x.dossier_id == cible.dossier_id and x.nature_montant == "recouvrable"]
     c = monde.client()
     connecter_client(c, monde, ADMIN_B)
-    kpi = re.compile(r"Écarts certains</div><div class=\"kpi-val num\">([^<]*)</div>")
+    kpi = re.compile(r"Montant recouvrable certain</div><div class=\"kpi-val num\">([^<]*)</div>")
     avant = kpi.search(c.get("/espace").text)
     f = monde.client()
     connecter_fondateur(f, monde)
@@ -281,7 +281,7 @@ def test_ecart_certain_hors_recouvrement_au_tableau_de_bord(monde):
     assert ligne is not None
     texte = texte_visible(ligne.group(0))
     montant = f"{cible.montant_en_jeu:.2f}".replace(".", ",")
-    assert "Écart certain" in texte and montant in texte and "hors recouvrement" in texte, texte
+    assert "Écart certain" in texte and montant in texte and "non recouvrable" in texte, texte
     # les totaux recouvrables n'en tiennent pas compte
     apres = kpi.search(page)
     assert avant is not None and apres is not None and apres.group(1) == avant.group(1)

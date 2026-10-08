@@ -10,7 +10,7 @@
 .prosp-statut::before { display: none; }
 
 .prosp-score { display: inline-flex; min-width: 2.4rem; justify-content: center; padding: .1rem .45rem; border-radius: 999px;
-  border: 1px solid var(--filet-fort); color: var(--encre-2); font-weight: 600; font-size: .85rem; }
+  border: 1px solid var(--filet-fort); color: var(--encre-2); font-weight: 600; font-size: .85rem; font-variant-numeric: tabular-nums; }
 .prosp-score-moyen { border-color: var(--verifier-filet); color: var(--verifier); }
 .prosp-score-haut { border-color: var(--conforme-filet); color: var(--conforme); }
 
@@ -34,8 +34,11 @@
 .prosp-carte form { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
 .prosp-carte select { flex: 1 1 9.5rem; min-width: 0; font-size: .8rem; padding: .2rem .3rem; }
 
-/* Entonnoir de conversion */
-.prosp-entonnoir td.barre-col { width: 45%; }
+/* Entonnoir de conversion : pour chaque étape, effectif « atteint / étape précédente », son pourcentage et une barre
+   de la même valeur (classe w-N au pour cent près). L'effectif reste lisible à côté du taux : 100 % peut être 2 / 2. */
+.prosp-entonnoir td.barre-col { width: 40%; }
+.prosp-entonnoir td.prosp-sur { color: var(--encre-3); padding-right: .2rem; }
+.prosp-entonnoir td.prosp-taux { padding-left: .2rem; }
 /* en-têtes longs (« Depuis l'étape précédente ») : sur plusieurs lignes plutôt qu'un tableau trop large sur téléphone */
 @media (max-width: 760px) { table.donnees.prosp-entonnoir thead th { white-space: normal; } }
 

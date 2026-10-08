@@ -97,6 +97,74 @@ def _certains_hors_recouvrement(scope: Any, dossiers: list[Any]) -> dict[str, De
     return out
 
 
+def _a_confirmer(scope: Any) -> Decimal:
+    """Affichage seulement : part du suivi des avoirs dont le constat publié est « à vérifier » (badge « À
+    confirmer »). Quand elle est nulle, le total du suivi est le montant recouvrable certain et porte le même nom
+    qu'au tableau de bord ; sinon il est présenté comme « Montant recouvrable », dont cette part. Aucun total
+    n'est modifié."""
+    from controldone.storage.models import Constat, Ecart
+
+    ids = [c.id for c in scope.lister(Constat, niveau="a_verifier")]
+    if not ids:
+        return Decimal(0)
+    return sum(
+        (e.montant_initial or Decimal(0) for e in scope.lister_parmi(Ecart, "constat_id", ids)), Decimal(0)
+    )
+
+
+def types_preuves(scope: Any, lu: Any) -> dict[tuple[str, int], str]:
+    """Affichage seulement : type de la valeur lue de chaque preuve (``{(constat_id, index): TypeValeur}``), pour
+    que la carte du constat dise « Code lu : 1008 » et non « Valeur lue », qui se lirait comme un montant. Lu dans
+    le constat (valeur sourcée citée) et dans le document, au sein du périmètre déjà ouvert ; une preuve sans
+    valeur sourcée (calcul) n'y figure pas et garde un libellé neutre."""
+    from controldone.model.documents import Document as DocumentModele
+    from controldone.storage.models import Constat, Document
+
+    valeurs: dict[str, dict[str, str]] = {}
+    out: dict[tuple[str, int], str] = {}
+    for c in lu.constats:
+        try:
+            brutes = (scope.obtenir(Constat, c.id).contenu or {}).get("preuves") or []
+        except AccesRefuse:
+            continue
+        for p in c.preuves:
+            if p.document_id is None or p.index >= len(brutes):
+                continue
+            vs_id = brutes[p.index].get("valeur_sourcee_id")
+            if not vs_id:
+                continue
+            if p.document_id not in valeurs:
+                try:
+                    doc = DocumentModele.model_validate(scope.obtenir(Document, p.document_id).contenu)
+                    valeurs[p.document_id] = {v.id: v.type.value for v in doc.valeurs()}
+                except AccesRefuse:
+                    valeurs[p.document_id] = {}
+            if t := valeurs[p.document_id].get(vs_id):
+                out[(c.id, p.index)] = t
+    return out
+
+
+#: Titres générés avec un tiret cadratin pour séparateur (« Rapport de diagnostic — Société »), déjà enregistrés
+#: dans les actions publiées : affichés avec « · ». Seuls ces débuts connus sont repris ; le reste du titre
+#: (raison sociale, numéros de facture) s'affiche tel quel.
+DEBUTS_TITRES = ("Rapport de diagnostic", "Votre relevé d'écarts est prêt", "Relevé d'écarts entre documents")
+
+
+def titre_affiche(objet: Any) -> str:
+    """Titre d'un rapport ou d'un relevé tel qu'affiché dans l'espace du client (séparateur « · »)."""
+    reste = str(objet or "")
+    debuts: list[str] = []
+    while True:
+        for debut in DEBUTS_TITRES:
+            if reste.startswith(debut + " — "):
+                debuts.append(debut)
+                reste = reste[len(debut) + 3 :]
+                break
+        else:
+            break
+    return " · ".join([*debuts, reste]) if debuts else reste
+
+
 @routeur.get("")
 def tableau(request: Request) -> Response:
     a = _client(request)
@@ -135,6 +203,7 @@ def tableau(request: Request) -> Response:
         kpi=kpi,
         rapports=rapports[-3:],
         graphes=graphes,
+        titre_affiche=titre_affiche,
         demo=info["demo"],
         **_contexte(a),
     )
@@ -279,6 +348,7 @@ def dossiers(request: Request) -> Response:
     with _pf(request).db.tenant(a.tenant_id, a, lecture=True) as scope:
         info = client_info(scope)
         p, total_dossiers = page_dossiers(scope, req)  # filtres, tri et pagination en SQL (D-3801)
+        hors_recouvrement = _certains_hors_recouvrement(scope, p.elements)
     return page(
         request,
         "client/dossiers.html.j2",
@@ -288,6 +358,7 @@ def dossiers(request: Request) -> Response:
         req=req,
         statuts=STATUTS_DOSSIER,
         total_dossiers=total_dossiers,
+        hors_recouvrement=hors_recouvrement,
         info=info,
         demo=info["demo"],
         **_contexte(a),
@@ -295,8 +366,9 @@ def dossiers(request: Request) -> Response:
 
 
 def _bilan_dossier(scope: Any, lu: Any) -> dict[str, Any]:
-    """Ce que le dossier a permis d'obtenir (D-5205) : écarts suivis, avoirs enregistrés par le client et reste, lus
-    dans le suivi des avoirs pour les seuls constats publiés de ce dossier. Rien n'est estimé."""
+    """Ce que le dossier a permis d'obtenir (D-5205) : montant recouvrable (dont la part à confirmer), avoirs
+    enregistrés par le client et reste, lus dans le suivi des avoirs pour les seuls constats publiés de ce dossier.
+    Rien n'est estimé."""
     from controldone.services.reclamations import registre
     from controldone.storage.models import Ecart
 
@@ -306,6 +378,8 @@ def _bilan_dossier(scope: Any, lu: Any) -> dict[str, Any]:
     return {
         "n": len(lignes),
         "initial": sum((x.montant_initial for x in lignes), Decimal(0)),
+        # part « à confirmer » (constat publié « à vérifier ») : nomme le total comme au suivi des avoirs
+        "a_confirmer": sum((x.montant_initial for x in lignes if x.niveau == "a_verifier"), Decimal(0)),
         "credite": sum((x.montant_credite for x in lignes), Decimal(0)),
         "reste": sum((x.reste for x in lignes if x.statut_code not in ("credite", "abandonne")), Decimal(0)),
     }
@@ -320,6 +394,7 @@ def dossier(request: Request, dossier_id: str) -> Response:
         lu = detail_dossier(scope, dossier_id)
         images = images_dossier(pf.vault, scope, lu)
         bilan = _bilan_dossier(scope, lu)
+        types_lus = types_preuves(scope, lu)
     return page(
         request,
         "dossier.html.j2",
@@ -331,6 +406,7 @@ def dossier(request: Request, dossier_id: str) -> Response:
         client=info,
         fondateur=False,
         bilan=bilan,
+        types_lus=types_lus,
         demo=info["demo"],
         retour=request.url.path,
         **_contexte(a),
@@ -377,6 +453,7 @@ def rapports(request: Request) -> Response:
         nav="rapports",
         rapports=liste,
         reclamations=dossiers_rec,
+        titre_affiche=titre_affiche,
         info=info,
         demo=info["demo"],
         **_contexte(a),
@@ -399,6 +476,7 @@ def recouvrement(request: Request) -> Response:
         transitaires = transitaires_registre(scope)
         req = lire_requete(request, params_registre(transitaires), TRIS_REGISTRE, "-reste")
         totaux, total_lignes = totaux_registre(scope)
+        a_confirmer = _a_confirmer(scope)
         p = page_registre(scope, req, transitaires)  # filtres, tri et pagination en SQL (D-3801)
     return page(
         request,
@@ -411,6 +489,7 @@ def recouvrement(request: Request) -> Response:
         transitaires=sorted(transitaires.items(), key=lambda t: t[1]),
         total_lignes=total_lignes,
         totaux=totaux,
+        a_confirmer=a_confirmer,
         info=info,
         demo=info["demo"],
         retour=retour_sur("/espace/recouvrement" + req.url(), "/espace/recouvrement"),

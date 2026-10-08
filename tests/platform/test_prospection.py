@@ -540,6 +540,29 @@ def test_sequence_complete_avec_horloge_simulee(svc, db, horloge):
     assert len(t["a_valider"]) == 1 and FileSortante(db).obtenir(a3, F).statut is StatutAction.brouillon
 
 
+def test_conversion_par_etape_effectif_et_taux_depuis_l_etape_precedente(svc):
+    """Peu de prospects : chaque étape porte l'effectif de l'étape précédente et le taux entier qui en découle
+    (« 1 / 1 » donne 100 %, alors que seul un prospect sur trois a atteint l'étape) ; pas de taux sans prospect à
+    l'étape précédente. Un prospect perdu compte pour les étapes de son historique."""
+    a = _prospect(svc, raison_sociale="ALPHA FICTIF SAS")
+    b = _prospect(svc, raison_sociale="BETA FICTIF SAS")
+    _prospect(svc, raison_sociale="GAMMA FICTIF SAS")  # reste « à qualifier »
+    for vers in ("qualifie", "contacte", "a_repondu"):
+        svc.changer_statut(F, a, vers)
+    svc.changer_statut(F, b, "qualifie")
+    svc.changer_statut(F, b, "perdu")
+    conversion = svc.tableau(F)["conversion"]
+    assert [(c["statut"], c["atteint"], c["precedent"], c["taux"]) for c in conversion] == [
+        ("a_qualifier", 3, None, None),
+        ("qualifie", 2, 3, 67),
+        ("contacte", 1, 2, 50),
+        ("a_repondu", 1, 1, 100),
+        ("rendez_vous", 0, 1, 0),
+        ("essai", 0, 0, None),
+        ("client", 0, 0, None),
+    ]
+
+
 def test_sequence_arretee_si_brouillon_refuse_ou_changement_de_statut(svc, db, horloge):
     pid, cid = _qualifie(svc)
     q = svc.sequences(F)[0]

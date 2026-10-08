@@ -37,11 +37,14 @@
   <div class="defilement">
   <table class="donnees compacte prosp-entonnoir">
     <caption class="vh">{{ _("Prospects ayant atteint chaque étape, et part de l'étape précédente") }}</caption>
-    <thead><tr><th scope="col">{{ _("Étape") }}</th><th scope="col" class="num">{{ _("Atteinte") }}</th><th scope="col" class="num">{{ _("Depuis l'étape précédente") }}</th><th scope="col" class="barre-col"><span class="vh">{{ _("Proportion") }}</span></th></tr></thead>
+    {# la barre montre le même taux que le pourcentage écrit juste avant elle, avec l'effectif qui le fonde (« 2 / 3 ») #}
+    <thead><tr><th scope="col">{{ _("Étape") }}</th><th scope="col" class="num">{{ _("Atteinte") }}</th><th scope="col" colspan="3">{{ _("Depuis l'étape précédente") }}</th></tr></thead>
     <tbody>
     {% for c in t.conversion %}
-      <tr><td>{{ badge_statut(c.statut, libelles_statut) }}</td><td class="num">{{ c.atteint }}</td><td class="num">{% if c.taux is none %}—{% else %}{{ c.taux }} %{% endif %}</td>
-      <td class="barre-col"><span class="barre"><span class="w-{{ ((c.atteint * 20 / t.total)|round|int) * 5 }}"></span></span></td></tr>
+      <tr><td>{{ badge_statut(c.statut, libelles_statut) }}</td><td class="num">{{ c.atteint }}</td>
+      {% if c.taux is none %}<td class="num prosp-sur"></td><td class="num prosp-taux">—</td><td class="barre-col"></td>
+      {% else %}<td class="num prosp-sur">{{ c.atteint }} / {{ c.precedent }}</td><td class="num prosp-taux">{{ c.taux }} %</td>
+      <td class="barre-col"><span class="barre" aria-hidden="true"><span class="w-{{ c.taux }}"></span></span></td>{% endif %}</tr>
     {% endfor %}
     </tbody>
   </table>

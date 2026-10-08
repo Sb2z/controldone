@@ -1,5 +1,5 @@
 {% extends "base.html.j2" %}
-{% from "macros.html.j2" import badge_niveau, badge_suivi %}
+{% from "macros.html.j2" import badge_niveau, badge_suivi, montant_ecart_certain %}
 {% from "graphes.html.j2" import graphe %}
 {% block contenu %}
 {# Montants affichés : uniquement ceux calculés sur les données du client (indicateurs, suivi des avoirs) ; aucun
@@ -14,13 +14,13 @@
 <div class="bilan">
   <section class="bilan-valeur" aria-labelledby="t-bilan">
   {% if kpi.credite > 0 %}
-    <h2 id="t-bilan" class="etiquette">{{ _("Avoirs obtenus") }}</h2>
+    <h2 id="t-bilan" class="etiquette">{{ _("Avoirs reçus") }}</h2>
     <span class="bilan-chiffre" data-compteur>{{ kpi.credite|montant }}</span>
-    <p class="bilan-phrase">{{ _("Montant hors taxes des avoirs que vous avez enregistrés après les relevés d'écarts, sur {m} d'écarts certains relevés.", m=kpi.certain|montant) }}</p>
+    <p class="bilan-phrase">{{ _("Total hors taxes des avoirs que vous avez enregistrés dans le suivi, pour un montant recouvrable certain de {m}.", m=kpi.certain|montant) }}</p>
   {% elif kpi.certain > 0 %}
-    <h2 id="t-bilan" class="etiquette">{{ _("Écarts certains relevés") }}</h2>
+    <h2 id="t-bilan" class="etiquette">{{ _("Montant recouvrable certain") }}</h2>
     <span class="bilan-chiffre" data-compteur>{{ kpi.certain|montant }}</span>
-    <p class="bilan-phrase">{{ _("Montant validé dans vos dossiers. Quand un avoir arrive, enregistrez-le dans le suivi : il s'affichera ici.") }}</p>
+    <p class="bilan-phrase">{{ _("Écarts certains relus et validés dans vos dossiers. Quand un avoir arrive, enregistrez-le dans le suivi : il s'affichera ici.") }}</p>
   {% elif kpi.dossiers > 0 %}
     <h2 id="t-bilan" class="etiquette">{{ _("Résultat à ce jour") }}</h2>
     <p class="bilan-phrase">{{ _("Aucun écart certain dans les constats publiés. Un dossier sans écart est un résultat : le rapport l'indique comme tel.") }}</p>
@@ -51,13 +51,13 @@
     <p>{{ _("Le dépôt est réservé aux administrateurs de votre société. Les dossiers s'afficheront ici dès le premier envoi.") }}</p>
     {% endif %}
   {% elif kpi.reste > 0 %}
-    <h2 id="t-prochaine">{{ _("{m} d'écarts sans avoir reçu", m=kpi.reste|montant) }}</h2>
+    <h2 id="t-prochaine">{{ _("Reste sans avoir : {m}", m=kpi.reste|montant) }}</h2>
     <p>{{ _("Chaque relevé d'écarts se termine par un modèle de courrier neutre. Si vous écrivez à votre transitaire, notez-le dans le suivi pour garder une trace.") }}</p>
     <a class="btn btn-principal" href="/espace/recouvrement">{{ _("Ouvrir le suivi des avoirs") }} <span class="fleche" aria-hidden="true">→</span></a>
     <a class="petit-lien" href="/espace/rapports">{{ _("Voir les relevés d'écarts") }}</a>
   {% elif dernier_rapport %}
     <h2 id="t-prochaine">{{ _("Votre dernier rapport est prêt") }}</h2>
-    <p><span lang="fr">{{ dernier_rapport.payload_effectif.get("objet") }}</span>, {{ dernier_rapport.envoye_le|date(false) }}.</p>
+    <p><span lang="fr">{{ titre_affiche(dernier_rapport.payload_effectif.get("objet")) }}</span>, {{ dernier_rapport.envoye_le|date(false) }}.</p>
     <a class="btn btn-principal" href="/espace/rapports/{{ dernier_rapport.id }}/html?afficher=1">{{ _("Lire le rapport") }} <span class="fleche" aria-hidden="true">→</span></a>
     {% if peut_deposer %}<a class="petit-lien" href="/espace/depot">{{ _("Déposer d'autres documents") }}</a>{% endif %}
   {% else %}
@@ -70,9 +70,9 @@
 
 <section class="kpis" aria-label="{{ _("Indicateurs") }}">
   <div class="kpi"><div class="kpi-lib">{{ _("Dossiers contrôlés") }}</div><div class="kpi-val num"><a href="/espace/dossiers">{{ kpi.dossiers }}</a></div><div class="kpi-note">{{ pluriel("{n} constat publié", "{n} constats publiés", kpi.constats, aucun="aucun constat publié") }}</div></div>
-  <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Écarts certains") }}</div><div class="kpi-val num">{{ kpi.certain|montant }}</div><div class="kpi-note">{{ _("relus et validés") }}</div></div>
-  <div class="kpi"><div class="kpi-lib">{{ _("À vérifier") }}</div><div class="kpi-val num">{{ kpi.a_verifier|montant }}</div><div class="kpi-note">{{ _("affiché à part, jamais additionné") }}</div></div>
-  <div class="kpi"><div class="kpi-lib">{{ _("Sans avoir reçu") }}</div><div class="kpi-val num"><a href="/espace/recouvrement">{{ kpi.reste|montant }}</a></div><div class="kpi-note">{{ _("avoirs reçus : {m}", m=kpi.credite|montant) }}</div></div>
+  <div class="kpi kpi-accent"><div class="kpi-lib">{{ _("Montant recouvrable certain") }}</div><div class="kpi-val num">{{ kpi.certain|montant }}</div><div class="kpi-note">{{ _("écarts relus et validés") }}</div></div>
+  <div class="kpi"><div class="kpi-lib">{{ _("Montant recouvrable à vérifier") }}</div><div class="kpi-val num">{{ kpi.a_verifier|montant }}</div><div class="kpi-note">{{ _("affiché à part, jamais additionné") }}</div></div>
+  <div class="kpi"><div class="kpi-lib">{{ _("Reste sans avoir") }}</div><div class="kpi-val num"><a href="/espace/recouvrement">{{ kpi.reste|montant }}</a></div><div class="kpi-note">{{ _("avoirs reçus : {m}", m=kpi.credite|montant) }}</div></div>
 </section>
 
 <div class="grille-2 grille-large-etroite">
@@ -83,7 +83,7 @@
     <thead><tr><th scope="col">{{ _("Dossier") }}</th><th scope="col">{{ _("Statut") }}</th><th scope="col">MRN</th><th scope="col" class="num">{{ _("Écart certain") }}</th></tr></thead>
     <tbody>
     {% for d in dossiers %}
-    <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td class="num">{% if d.recouvrable_certain %}{{ d.recouvrable_certain|montant }}{% elif d.statut_code == "ecart_certain" %}{% set h = hors_recouvrement.get(d.id) %}<span class="hors-recouvrement" title="{{ _("Écart certain qui ne se demande pas au transitaire (par exemple un écart de calcul sur la déclaration) : il n'entre pas dans les montants recouvrables.") }}">{{ h|montant if h else "—" }}<small>{{ _("hors recouvrement") }}</small></span>{% else %}—{% endif %}</td></tr>
+    <tr><th scope="row"><a href="/espace/dossiers/{{ d.id }}">{{ d.reference }}</a></th><td>{{ badge_niveau(d.statut_code, d.statut) }}</td><td><code>{{ d.cles[2][1] }}</code></td><td class="num">{{ montant_ecart_certain(d, hors_recouvrement) }}</td></tr>
     {% else %}<tr><td colspan="4" class="vide">{{ _("Vos dossiers apparaîtront ici après votre premier dépôt.") }}{% if peut_deposer %} <a href="/espace/depot">{{ _("Déposer des documents") }}</a>{% endif %}</td></tr>{% endfor %}
     </tbody>
   </table>
@@ -92,7 +92,7 @@
 <section class="carte" aria-labelledby="t-rapports">
   <h2 id="t-rapports">{{ _("Rapports") }}</h2>
   {% if rapports %}
-  <ul class="liste-simple">{% for r in rapports|reverse %}<li class="rapport-ligne"><span lang="fr">{{ r.payload_effectif.get("objet") }}</span> <span class="discret">{{ r.envoye_le|date(false) }}</span>
+  <ul class="liste-simple">{% for r in rapports|reverse %}<li class="rapport-ligne"><span lang="fr">{{ titre_affiche(r.payload_effectif.get("objet")) }}</span> <span class="discret">{{ r.envoye_le|date(false) }}</span>
     <span class="actions"><a class="petit-lien" href="/espace/rapports/{{ r.id }}/html?afficher=1">{{ _("Lire en ligne") }}</a><a class="petit-lien" href="/espace/rapports/{{ r.id }}/pdf">PDF</a></span></li>{% endfor %}</ul>
   {% else %}<p class="vide">{{ _("Votre rapport apparaîtra ici une fois les constats relus.") }}</p>{% endif %}
   <h2>{{ _("Derniers dépôts") }}</h2>
